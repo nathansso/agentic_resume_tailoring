@@ -1,6 +1,9 @@
 # Environment variables
 .env
 
+# Database
+art.db
+
 # Python
 __pycache__/
 *.py[cod]

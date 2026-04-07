@@ -2,7 +2,8 @@ from sqlmodel import SQLModel, create_engine, Session
 from config import DATABASE_URL
 from database.models import * # Import all models to register them
 
-engine = create_engine(DATABASE_URL)
+# connect_args needed for SQLite to allow usage across threads
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 
 def init_db():
     print("Initializing Database...")
