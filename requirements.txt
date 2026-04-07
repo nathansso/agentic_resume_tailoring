@@ -5,6 +5,7 @@ sqlmodel
 psycopg2-binary
 langchain
 langchain-openai
+langchain-ollama
 langgraph
 requests
 python-docx

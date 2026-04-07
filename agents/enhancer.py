@@ -2,11 +2,10 @@ import logging
 import json
 from typing import List
 from sqlmodel import Session, select
-from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 
-from config import MODEL_NAME, OPENAI_API_KEY
+from llm import get_llm
 from database.db import engine
 from database.models import Project, ProjectBlurb
 
@@ -14,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 class ProjectEnhancerAgent:
     def __init__(self):
-        self.llm = ChatOpenAI(model=MODEL_NAME, temperature=0.7, api_key=OPENAI_API_KEY)
+        self.llm = get_llm(temperature=0.7)
 
     def enhance_all_projects(self):
         """
