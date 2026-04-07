@@ -75,7 +75,7 @@ def cmd_ingest_github(args):
 
     print(f"Found {len(repos)} repos. Parsing into database...")
 
-    # Build a text summary of all repos for the parser to extract skills/projects
+    # Build a rich text summary of all repos for the parser to extract skills/projects
     lines = []
     for repo in repos:
         desc = repo.get('description') or 'No description'
@@ -84,6 +84,17 @@ def cmd_ingest_github(args):
         lines.append(f"Description: {desc}")
         lines.append(f"Languages: {langs}")
         lines.append(f"URL: {repo.get('url', '')}")
+
+        # Include README content for deeper analysis
+        readme = repo.get('readme')
+        if readme:
+            lines.append(f"README:\n{readme}")
+
+        # Include dependency files for library/framework extraction
+        deps = repo.get('dependencies', {})
+        for dep_file, dep_content in deps.items():
+            lines.append(f"{dep_file}:\n{dep_content}")
+
         lines.append("")
 
     combined_text = '\n'.join(lines)
@@ -159,6 +170,7 @@ def cmd_tailor(args):
         "matched_skills": {},
         "missing_skills": [],
         "tailored_content": {},
+        "formatted_resume": "",
         "status": "",
     })
 
@@ -187,6 +199,13 @@ def cmd_tailor(args):
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(result["tailored_content"], f, indent=2)
         print(f"\nTailored content saved to: {output_path}")
+
+        # Save formatted markdown resume
+        if result.get("formatted_resume"):
+            md_path = Path("tailored_resume.md")
+            with open(md_path, "w", encoding="utf-8") as f:
+                f.write(result["formatted_resume"])
+            print(f"Formatted resume saved to: {md_path}")
 
         # Also print a summary
         tc = result["tailored_content"]

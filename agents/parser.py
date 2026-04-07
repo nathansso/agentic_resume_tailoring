@@ -38,8 +38,11 @@ class ResumeParserAgent:
         projects = self._extract_projects(raw_text)
         self._save_projects(projects, source_file)
 
-        # 3. Extract Skills
-        skills = self._extract_skills(raw_text)
+        # 3. Extract Skills — use specialized prompt for GitHub repos
+        if is_github:
+            skills = self._extract_repo_skills(raw_text)
+        else:
+            skills = self._extract_skills(raw_text)
         self._save_skills(skills, source_file)
 
         logger.info("Parsing complete and saved to DB.")
@@ -78,6 +81,42 @@ class ResumeParserAgent:
             return chain.invoke({"text": text})
         except Exception as e:
             logger.error(f"Skill extraction failed: {e}")
+            return []
+
+    def _extract_repo_skills(self, text: str) -> List[Dict]:
+        """Specialized skill extraction for GitHub repo data.
+        
+        Analyzes README content, dependency files (requirements.txt, etc.),
+        and project descriptions to extract specific libraries, frameworks,
+        tools, and techniques actually used in code.
+        """
+        prompt = ChatPromptTemplate.from_messages([
+            ("system",
+             "You are an expert software engineer analyzing GitHub repositories. "
+             "Your task is to extract EVERY specific technical skill, library, framework, "
+             "tool, and technique used in these projects.\n\n"
+             "Pay special attention to:\n"
+             "- Libraries listed in requirements.txt, setup.py, pyproject.toml, package.json, etc.\n"
+             "- Specific ML/AI libraries (e.g. xgboost, lightgbm, scikit-learn, pytorch, tensorflow)\n"
+             "- Data processing tools (e.g. pandas, numpy, spark, dask)\n"
+             "- Techniques described in READMEs (e.g. feature engineering, ensemble methods, NLP)\n"
+             "- Infrastructure/DevOps tools (e.g. docker, kubernetes, AWS, GCP)\n"
+             "- Databases and data stores mentioned\n"
+             "- Programming languages used\n\n"
+             "Extract individual libraries as separate skills, NOT grouped. "
+             "For example, list 'xgboost', 'lightgbm', 'scikit-learn' separately, not 'ML libraries'."),
+            ("user",
+             "GitHub Repository Data:\n{text}\n\n"
+             "Return a JSON list of objects. Each object must have:\n"
+             "- name: the specific skill/library/tool name (e.g. 'XGBoost', 'Feature Engineering', 'pandas')\n"
+             "- category: one of 'Language', 'Library', 'Framework', 'Tool', 'Technique', 'Database', 'Cloud'\n"
+             "- proficiency: 1-5 estimate (3 if used in a project, 4 if used extensively)")
+        ])
+        chain = prompt | self.llm | JsonOutputParser()
+        try:
+            return chain.invoke({"text": text})
+        except Exception as e:
+            logger.error(f"Repo skill extraction failed: {e}")
             return []
 
     def _save_experiences(self, data: List[Dict], source: str):

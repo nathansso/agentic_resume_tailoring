@@ -27,6 +27,7 @@ from agents.parser import ResumeParserAgent
 from agents.job_analyzer import JobAnalyzerAgent
 from agents.matcher import SkillMatcherAgent
 from agents.tailor import ResumeTailorAgent
+from agents.formatter import ResumeFormatterAgent
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,7 @@ class PipelineState(TypedDict):
     matched_skills: Dict
     missing_skills: List[str]
     tailored_content: Dict
+    formatted_resume: str      # Final markdown resume
     status: str                # Current pipeline status message
 
 
@@ -58,6 +60,7 @@ def build_pipeline() -> StateGraph:
     graph.add_node("analyze_job", analyze_job_node)
     graph.add_node("match_skills", match_skills_node)
     graph.add_node("tailor_resume", tailor_resume_node)
+    graph.add_node("format_resume", format_resume_node)
 
     graph.set_entry_point("ingest_resume")
 
@@ -70,7 +73,8 @@ def build_pipeline() -> StateGraph:
     graph.add_edge("ingest_job", "analyze_job")
     graph.add_edge("analyze_job", "match_skills")
     graph.add_edge("match_skills", "tailor_resume")
-    graph.add_edge("tailor_resume", END)
+    graph.add_edge("tailor_resume", "format_resume")
+    graph.add_edge("format_resume", END)
 
     return graph.compile()
 
@@ -168,6 +172,20 @@ def tailor_resume_node(state: PipelineState) -> PipelineState:
     )
     state["tailored_content"] = tailored
     state["status"] = "Resume tailored"
+    return state
+
+
+def format_resume_node(state: PipelineState) -> PipelineState:
+    """Convert tailored JSON into formatted markdown resume."""
+    if not state.get("tailored_content") or "error" in state.get("tailored_content", {}):
+        state["formatted_resume"] = ""
+        state["status"] = "Skipped formatting — no tailored content"
+        return state
+
+    formatter = ResumeFormatterAgent(user_id=UUID(state["user_id"]))
+    md = formatter.format_markdown(state["tailored_content"])
+    state["formatted_resume"] = md
+    state["status"] = "Resume formatted"
     return state
 
 
