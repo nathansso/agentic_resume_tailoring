@@ -1,0 +1,17 @@
+docling
+openai
+python-dotenv
+sqlmodel
+psycopg2-binary
+langchain
+langchain-openai
+langgraph
+requests
+python-docx
+pydantic
+sentence-transformers
+# For resume-matcher logic
+nltk
+scikit-learn
+# Optional but good for graph
+networkx

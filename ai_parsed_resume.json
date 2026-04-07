@@ -1,0 +1,244 @@
+{
+  "skills": [
+    {
+      "name": "Python",
+      "source": [
+        49
+      ]
+    },
+    {
+      "name": "pandas",
+      "source": [
+        49
+      ]
+    },
+    {
+      "name": "NumPy",
+      "source": [
+        49
+      ]
+    },
+    {
+      "name": "scikit-learn",
+      "source": [
+        49
+      ]
+    },
+    {
+      "name": "Matplotlib",
+      "source": [
+        49
+      ]
+    },
+    {
+      "name": "PyTorch",
+      "source": [
+        49
+      ]
+    },
+    {
+      "name": "R",
+      "source": [
+        49
+      ]
+    },
+    {
+      "name": "SQL",
+      "source": [
+        49
+      ]
+    },
+    {
+      "name": "Regression modeling",
+      "source": [
+        51
+      ]
+    },
+    {
+      "name": "Classification",
+      "source": [
+        51
+      ]
+    },
+    {
+      "name": "Time-Series Analysis",
+      "source": [
+        51
+      ]
+    },
+    {
+      "name": "Feature Engineering",
+      "source": [
+        51
+      ]
+    },
+    {
+      "name": "Prompt Engineering",
+      "source": [
+        51
+      ]
+    },
+    {
+      "name": "Model Evaluation",
+      "source": [
+        51
+      ]
+    },
+    {
+      "name": "A/B Testing",
+      "source": [
+        51
+      ]
+    },
+    {
+      "name": "PAIR Framework",
+      "source": [
+        51
+      ]
+    },
+    {
+      "name": "AWS S3",
+      "source": [
+        53
+      ]
+    },
+    {
+      "name": "PostgreSQL",
+      "source": [
+        53
+      ]
+    },
+    {
+      "name": "MongoDB",
+      "source": [
+        53
+      ]
+    },
+    {
+      "name": "Version Control",
+      "source": [
+        55
+      ]
+    },
+    {
+      "name": "Git",
+      "source": [
+        55
+      ]
+    },
+    {
+      "name": "ChatGPT",
+      "source": [
+        55
+      ]
+    },
+    {
+      "name": "Opencode",
+      "source": [
+        55
+      ]
+    },
+    {
+      "name": "QGIS",
+      "source": [
+        30
+      ]
+    },
+    {
+      "name": "Stata",
+      "source": [
+        28
+      ]
+    },
+    {
+      "name": "Exploratory Data Analysis",
+      "source": [
+        30
+      ]
+    },
+    {
+      "name": "Time-Series Analysis",
+      "source": [
+        36
+      ]
+    },
+    {
+      "name": "Breakpoint Analysis",
+      "source": [
+        36
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "Interactive Data Visualization for Impact of Sex on Mice",
+      "bullets": [
+        "Partnered with a UCSD Biomedical research to create an interactive website that allows users to explore the dataset.",
+        "Conducted EDA(Python) on biological data taken from mice to analyze sex-based differences in mice temperature and activity patterns.",
+        "Developed an interactive web application(JS, D3) to analyze and visualize high-resolution circadian time-series data from mouse experiments, with interactive visualizations, allowing users to explore individual-level temperature and activity traces and uncover biological sex-based differences through fine-grained temporal analysis."
+      ],
+      "source": []
+    }
+  ],
+  "experience": [
+    {
+      "role_header": "Undergraduate Research Assistant, UCSD Department of Economics, September 2024 \u2013 June 2025",
+      "bullets": [
+        "Worked closely with post-graduate researchers to aid their personal research projects.",
+        "Sourced, aggregated, and tidied large economic datasets from UNHCR, UMPS, USCIS using R and Stata by mapping entries, assessing missingness, and engineering features.",
+        "Conducted Exploratory Data Analysis on refugee presence and crop prices in Sub-Saharan Africa (QGIS, Stata) as well as demographic impact on cohabitation across the US (R, Python).",
+        "Used Regression and DiD Analysis (Stata) to segment farming populations in Africa and determine if refugee presence increased crop prices.",
+        "Utilized Time-Series and Breakpoint Analysis (R, Python) to identify statistically-significant structural changes in cohabitation behavior in the US from 2007 to 2024 in major metropolitan areas, while using regression analysis to determine the most significant demographic factors in these changes."
+      ],
+      "source": [
+        23,
+        24,
+        25,
+        27,
+        30,
+        33,
+        36
+      ]
+    },
+    {
+      "role_header": "Financial Assistant/Student Lead, UCSD Student Life Business Office (SLBO), September 2023 \u2013 June 2025",
+      "bullets": [
+        "SLBO provides financial and HR management, event coordination, and transaction processing and reporting for student organizations.",
+        "Trained and managed a team of 3 students by creating a curriculum for the accounting and event planning applications, assigning work, and reporting progress to Student Fund Managers.",
+        "Worked with 200+ Student Organizations by planning, placing purchase orders, and managing transactions/account balances on their behalf."
+      ],
+      "source": [
+        38,
+        39,
+        40,
+        42,
+        45
+      ]
+    }
+  ],
+  "education": [
+    {
+      "institution": "University of California- San Diego",
+      "degrees": [
+        "M.S. Data Science"
+      ],
+      "source": [
+        "Expected June 2027"
+      ]
+    },
+    {
+      "institution": "University of California- San Diego",
+      "degrees": [
+        "B.S. Mathematics & Economics",
+        "Minor in Data Science"
+      ],
+      "source": [
+        "June 2025"
+      ]
+    }
+  ],
+  "meta": {
+    "source": "resume",
+    "method": "llm"
+  }
+}
