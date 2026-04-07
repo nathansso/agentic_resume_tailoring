@@ -27,9 +27,12 @@ class ResumeParserAgent:
         
         logger.info(f"Parsing resume content from {source_file}...")
 
-        # 1. Extract Experiences
-        experiences = self._extract_experiences(raw_text)
-        self._save_experiences(experiences, source_file)
+        # Skip experience extraction for non-resume sources (e.g. GitHub)
+        is_github = source_file.startswith("github:")
+        if not is_github:
+            # 1. Extract Experiences
+            experiences = self._extract_experiences(raw_text)
+            self._save_experiences(experiences, source_file)
 
         # 2. Extract Projects
         projects = self._extract_projects(raw_text)
@@ -80,12 +83,25 @@ class ResumeParserAgent:
     def _save_experiences(self, data: List[Dict], source: str):
         with Session(engine) as session:
             for item in data:
-                # Check for duplicate? (Simple check by company/title)
-                # For now just insert
+                title = item.get("title", "Unknown")
+                company = item.get("company", "Unknown")
+
+                # Dedup by title + company for this user
+                existing = session.exec(
+                    select(Experience).where(
+                        Experience.user_id == self.user.user_id,
+                        Experience.title == title,
+                        Experience.company == company,
+                    )
+                ).first()
+                if existing:
+                    logger.debug(f"Skipping duplicate experience: {title} at {company}")
+                    continue
+
                 exp = Experience(
                     user_id=self.user.user_id,
-                    title=item.get("title", "Unknown"),
-                    company=item.get("company", "Unknown"),
+                    title=title,
+                    company=company,
                     start_date=item.get("start_date"),
                     end_date=item.get("end_date"),
                     description=item.get("description"),
@@ -97,9 +113,22 @@ class ResumeParserAgent:
     def _save_projects(self, data: List[Dict], source: str):
         with Session(engine) as session:
             for item in data:
+                name = item.get("name", "Unknown")
+
+                # Dedup by project name for this user
+                existing = session.exec(
+                    select(Project).where(
+                        Project.user_id == self.user.user_id,
+                        Project.name == name,
+                    )
+                ).first()
+                if existing:
+                    logger.debug(f"Skipping duplicate project: {name}")
+                    continue
+
                 proj = Project(
                     user_id=self.user.user_id,
-                    name=item.get("name", "Unknown"),
+                    name=name,
                     description=item.get("description"),
                     repo_url=item.get("repo_url"),
                     start_date=item.get("start_date"),
@@ -115,7 +144,7 @@ class ResumeParserAgent:
                 raw_name = item.get("name", "").strip()
                 if not raw_name: continue
                 
-                # Check if Skill exists or create
+                # Get or create the Skill node
                 skill = session.exec(select(Skill).where(Skill.name == raw_name)).first()
                 if not skill:
                     skill = Skill(name=raw_name, category=item.get("category"))
@@ -123,8 +152,24 @@ class ResumeParserAgent:
                     session.commit()
                     session.refresh(skill)
                 
-                # Link to User
-                # associated with specific evidence if you extracted that, but for now generic link
+                # Check if this exact user+skill+source edge already exists
+                existing_link = session.exec(
+                    select(UserSkill).where(
+                        UserSkill.user_id == self.user.user_id,
+                        UserSkill.skill_id == skill.skill_id,
+                        UserSkill.evidence_source == source,
+                    )
+                ).first()
+
+                if existing_link:
+                    # Same source — update proficiency if higher
+                    new_prof = item.get("proficiency", 1)
+                    if new_prof > (existing_link.proficiency or 0):
+                        existing_link.proficiency = new_prof
+                        session.add(existing_link)
+                    continue
+
+                # New evidence source — create a new edge
                 link = UserSkill(
                     user_id=self.user.user_id,
                     skill_id=skill.skill_id,

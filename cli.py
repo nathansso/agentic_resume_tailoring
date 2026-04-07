@@ -3,6 +3,8 @@ CLI for Agentic Resume Tailoring (ART)
 
 Usage:
     python cli.py ingest-resume <file>       Ingest and parse your resume
+    python cli.py ingest-github <username>   Fetch GitHub repos and extract skills/projects
+    python cli.py ingest-linkedin <pdf>      Parse LinkedIn PDF export
     python cli.py tailor <job_file_or_text>   Analyze job + match + tailor resume
     python cli.py status                      Show your profile summary
 """
@@ -48,6 +50,76 @@ def cmd_ingest_resume(args):
     parser.parse_and_save(ingestion_data)
 
     print("Resume ingested and parsed successfully.")
+
+
+def cmd_ingest_github(args):
+    """Fetch GitHub repos and parse them into the database."""
+    from database.db import init_db
+    from config import GITHUB_USERNAME
+    init_db()
+
+    username = args.username or GITHUB_USERNAME
+    if not username:
+        print("Error: Provide a username or set GITHUB_USERNAME in .env")
+        sys.exit(1)
+
+    print(f"Fetching GitHub repos for: {username}")
+
+    from ingestion.github import GitHubIngestor
+    ingestor = GitHubIngestor(username=username)
+    repos = ingestor.ingest()
+
+    if not repos:
+        print("No repos found (check username or GITHUB_TOKEN in .env).")
+        return
+
+    print(f"Found {len(repos)} repos. Parsing into database...")
+
+    # Build a text summary of all repos for the parser to extract skills/projects
+    lines = []
+    for repo in repos:
+        desc = repo.get('description') or 'No description'
+        langs = ', '.join(repo.get('languages', []))
+        lines.append(f"Project: {repo['name']}")
+        lines.append(f"Description: {desc}")
+        lines.append(f"Languages: {langs}")
+        lines.append(f"URL: {repo.get('url', '')}")
+        lines.append("")
+
+    combined_text = '\n'.join(lines)
+
+    from agents.parser import ResumeParserAgent
+    parser = ResumeParserAgent()
+    parser.parse_and_save({
+        "source_file": f"github:{username}",
+        "full_text": combined_text,
+        "parsed_sections": {},
+    })
+
+    print(f"GitHub data ingested: {len(repos)} repos parsed.")
+
+
+def cmd_ingest_linkedin(args):
+    """Parse a LinkedIn PDF export into the database."""
+    from database.db import init_db
+    init_db()
+
+    pdf_path = args.file
+    if not Path(pdf_path).exists():
+        print(f"Error: File not found: {pdf_path}")
+        sys.exit(1)
+
+    print(f"Ingesting LinkedIn profile: {pdf_path}")
+
+    from ingestion.linkedin import LinkedInIngestor
+    ingestor = LinkedInIngestor()
+    data = ingestor.ingest(pdf_path)
+
+    from agents.parser import ResumeParserAgent
+    parser = ResumeParserAgent()
+    parser.parse_and_save(data)
+
+    print("LinkedIn profile ingested and parsed successfully.")
 
 
 def cmd_tailor(args):
@@ -199,6 +271,14 @@ def main():
     p_ingest = subparsers.add_parser("ingest-resume", help="Ingest and parse your resume")
     p_ingest.add_argument("file", help="Path to resume file (PDF, DOCX, or MD)")
 
+    # ingest-github
+    p_github = subparsers.add_parser("ingest-github", help="Fetch GitHub repos and extract skills/projects")
+    p_github.add_argument("username", nargs="?", default=None, help="GitHub username (defaults to GITHUB_USERNAME in .env)")
+
+    # ingest-linkedin
+    p_linkedin = subparsers.add_parser("ingest-linkedin", help="Parse a LinkedIn PDF export")
+    p_linkedin.add_argument("file", help="Path to LinkedIn PDF export")
+
     # tailor
     p_tailor = subparsers.add_parser("tailor", help="Analyze a job and tailor your resume")
     p_tailor.add_argument("job", help="Path to job description file, or paste the text directly")
@@ -211,6 +291,10 @@ def main():
 
     if args.command == "ingest-resume":
         cmd_ingest_resume(args)
+    elif args.command == "ingest-github":
+        cmd_ingest_github(args)
+    elif args.command == "ingest-linkedin":
+        cmd_ingest_linkedin(args)
     elif args.command == "tailor":
         cmd_tailor(args)
     elif args.command == "status":

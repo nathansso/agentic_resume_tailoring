@@ -2,7 +2,6 @@ docling
 openai
 python-dotenv
 sqlmodel
-psycopg2-binary
 langchain
 langchain-openai
 langchain-ollama
