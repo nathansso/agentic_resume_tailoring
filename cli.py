@@ -3,8 +3,9 @@ CLI for Agentic Resume Tailoring (ART)
 
 Usage:
     python cli.py ingest-resume <file>       Ingest and parse your resume
-    python cli.py ingest-github <username>   Fetch GitHub repos and extract skills/projects
-    python cli.py ingest-linkedin <pdf>      Parse LinkedIn PDF export
+    python cli.py ingest-github [username]   Fetch GitHub repos and extract skills/projects
+    python cli.py ingest-linkedin <url>      Scrape LinkedIn profile via browser
+    python cli.py ingest-linkedin-pdf <pdf>  Parse LinkedIn PDF export (fallback)
     python cli.py tailor <job_file_or_text>   Analyze job + match + tailor resume
     python cli.py status                      Show your profile summary
 """
@@ -67,13 +68,14 @@ def cmd_ingest_github(args):
 
     from ingestion.github import GitHubIngestor
     ingestor = GitHubIngestor(username=username)
-    repos = ingestor.ingest()
+    force = getattr(args, 'force', False)
+    repos = ingestor.ingest(force=force)
 
     if not repos:
-        print("No repos found (check username or GITHUB_TOKEN in .env).")
+        print("No new or updated repos to process.")
         return
 
-    print(f"Found {len(repos)} repos. Parsing into database...")
+    print(f"Found {len(repos)} new/updated repos. Parsing into database...")
 
     # Build a rich text summary of all repos for the parser to extract skills/projects
     lines = []
@@ -111,7 +113,31 @@ def cmd_ingest_github(args):
 
 
 def cmd_ingest_linkedin(args):
-    """Parse a LinkedIn PDF export into the database."""
+    """Scrape a LinkedIn profile via Playwright browser automation."""
+    from database.db import init_db
+    init_db()
+
+    profile_url = args.url
+    print(f"Scraping LinkedIn profile: {profile_url}")
+
+    from ingestion.linkedin import LinkedInIngestor
+    ingestor = LinkedInIngestor()
+
+    try:
+        data = ingestor.ingest_web(profile_url)
+    except RuntimeError as e:
+        print(f"\nError: {e}")
+        sys.exit(1)
+
+    from agents.parser import ResumeParserAgent
+    parser = ResumeParserAgent()
+    parser.parse_and_save(data)
+
+    print("LinkedIn profile scraped and parsed successfully.")
+
+
+def cmd_ingest_linkedin_pdf(args):
+    """Parse a LinkedIn PDF export into the database (fallback)."""
     from database.db import init_db
     init_db()
 
@@ -120,17 +146,17 @@ def cmd_ingest_linkedin(args):
         print(f"Error: File not found: {pdf_path}")
         sys.exit(1)
 
-    print(f"Ingesting LinkedIn profile: {pdf_path}")
+    print(f"Ingesting LinkedIn PDF: {pdf_path}")
 
     from ingestion.linkedin import LinkedInIngestor
     ingestor = LinkedInIngestor()
-    data = ingestor.ingest(pdf_path)
+    data = ingestor.ingest_pdf(pdf_path)
 
     from agents.parser import ResumeParserAgent
     parser = ResumeParserAgent()
     parser.parse_and_save(data)
 
-    print("LinkedIn profile ingested and parsed successfully.")
+    print("LinkedIn PDF ingested and parsed successfully.")
 
 
 def cmd_tailor(args):
@@ -293,10 +319,15 @@ def main():
     # ingest-github
     p_github = subparsers.add_parser("ingest-github", help="Fetch GitHub repos and extract skills/projects")
     p_github.add_argument("username", nargs="?", default=None, help="GitHub username (defaults to GITHUB_USERNAME in .env)")
+    p_github.add_argument("--force", action="store_true", help="Re-scan all repos even if unchanged since last scan")
 
-    # ingest-linkedin
-    p_linkedin = subparsers.add_parser("ingest-linkedin", help="Parse a LinkedIn PDF export")
-    p_linkedin.add_argument("file", help="Path to LinkedIn PDF export")
+    # ingest-linkedin (web scraping)
+    p_linkedin = subparsers.add_parser("ingest-linkedin", help="Scrape your LinkedIn profile via browser")
+    p_linkedin.add_argument("url", help="LinkedIn profile URL or username (e.g. https://linkedin.com/in/username)")
+
+    # ingest-linkedin-pdf (fallback)
+    p_linkedin_pdf = subparsers.add_parser("ingest-linkedin-pdf", help="Parse a LinkedIn PDF export (fallback)")
+    p_linkedin_pdf.add_argument("file", help="Path to LinkedIn PDF export")
 
     # tailor
     p_tailor = subparsers.add_parser("tailor", help="Analyze a job and tailor your resume")
@@ -306,6 +337,9 @@ def main():
     # status
     subparsers.add_parser("status", help="Show your profile summary")
 
+    # tui
+    subparsers.add_parser("tui", help="Launch interactive TUI")
+
     args = parser.parse_args()
 
     if args.command == "ingest-resume":
@@ -314,10 +348,15 @@ def main():
         cmd_ingest_github(args)
     elif args.command == "ingest-linkedin":
         cmd_ingest_linkedin(args)
+    elif args.command == "ingest-linkedin-pdf":
+        cmd_ingest_linkedin_pdf(args)
     elif args.command == "tailor":
         cmd_tailor(args)
     elif args.command == "status":
         cmd_status(args)
+    elif args.command == "tui":
+        from tui.app import main as tui_main
+        tui_main()
     else:
         parser.print_help()
 

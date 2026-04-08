@@ -27,3 +27,14 @@ Thumbs.db
 
 # Jupyter
 .ipynb_checkpoints/
+
+# LinkedIn session (contains auth cookies)
+.linkedin_session/
+
+# GitHub scan cache
+.github_cache.json
+
+# Output files
+tailored_output.json
+tailored_resume.md
+knowledge_graph.png

@@ -10,14 +10,34 @@ Produces markdown matching the user's resume style:
 """
 import logging
 import json
+import re
 from typing import Dict, Any, List, Optional
 from uuid import UUID
 from sqlmodel import Session, select
 
 from database.db import engine
 from database.models import User, Experience, Skill, UserSkill
+from agents.skill_postprocessor import should_reject_skill, normalize_skill_name
 
 logger = logging.getLogger(__name__)
+
+
+def sanitize_text(text: str) -> str:
+    """Replace problematic Unicode characters with ASCII-safe equivalents."""
+    replacements = {
+        "\u2013": "-",   # en dash
+        "\u2014": "-",   # em dash
+        "\u2018": "'",   # left single quote
+        "\u2019": "'",   # right single quote (apostrophe)
+        "\u201c": '"',   # left double quote
+        "\u201d": '"',   # right double quote
+        "\u2026": "...", # ellipsis
+        "\u00a0": " ",   # non-breaking space
+        "\u200b": "",    # zero-width space
+    }
+    for char, replacement in replacements.items():
+        text = text.replace(char, replacement)
+    return text
 
 
 class ResumeFormatterAgent:
@@ -64,7 +84,7 @@ class ResumeFormatterAgent:
         if skills:
             sections.append(skills)
 
-        return "\n".join(sections)
+        return sanitize_text("\n".join(sections))
 
     def _build_header(self) -> str:
         """Build the resume header from user profile."""
@@ -128,7 +148,7 @@ class ResumeFormatterAgent:
             company = exp.get("company", "Unknown Company")
             start = exp.get("start_date", "")
             end = exp.get("end_date", "")
-            date_range = f"{start} – {end}" if start else ""
+            date_range = f"{start} - {end}" if start else ""
 
             lines.append(f"**{title},** {company}\t{date_range}")
 
@@ -160,13 +180,17 @@ class ResumeFormatterAgent:
                 ).first()
                 if not skill:
                     continue
+                # Filter out noise skills
+                if should_reject_skill(skill.name):
+                    continue
+                canonical_name = normalize_skill_name(skill.name)
                 cat = skill.category or "Other"
                 # Normalize category names
                 cat = self._normalize_category(cat)
                 if cat not in categories:
                     categories[cat] = []
-                if skill.name not in categories[cat]:
-                    categories[cat].append(skill.name)
+                if canonical_name not in categories[cat]:
+                    categories[cat].append(canonical_name)
 
         if not categories:
             return ""

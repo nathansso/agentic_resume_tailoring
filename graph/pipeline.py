@@ -21,7 +21,6 @@ from langgraph.graph import StateGraph, END
 from database.db import engine
 from database.models import User, Experience, UserSkill, JobDescription, UserJobResult
 from database.user_utils import get_or_create_default_user
-from ingestion.resume import ResumeIngestor
 from ingestion.job import JobIngestor
 from agents.parser import ResumeParserAgent
 from agents.job_analyzer import JobAnalyzerAgent
@@ -110,6 +109,7 @@ def ingest_resume_node(state: PipelineState) -> PipelineState:
             }
             state["resume_text"] = text
         else:
+            from ingestion.resume import ResumeIngestor
             ingestor = ResumeIngestor()
             ingestion_data = ingestor.ingest(path)
             state["resume_text"] = ingestion_data.get("full_text", "")
