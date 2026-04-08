@@ -2,6 +2,7 @@ import logging
 from typing import Dict, List, Tuple
 from uuid import UUID
 from sqlmodel import Session, select
+import numpy as np
 
 from database.db import engine
 from database.models import (
@@ -9,16 +10,32 @@ from database.models import (
     Experience, Project,
 )
 from knowledge_graph.builder import SkillGraphBuilder
+from config import EMBEDDING_MODEL
 
 logger = logging.getLogger(__name__)
+
+# Lazy-loaded embedding model
+_embedding_model = None
+
+
+def get_embedding_model():
+    """Lazy-load the sentence-transformer model."""
+    global _embedding_model
+    if _embedding_model is None:
+        from sentence_transformers import SentenceTransformer
+        logger.info(f"Loading embedding model: {EMBEDDING_MODEL}")
+        _embedding_model = SentenceTransformer(EMBEDDING_MODEL)
+    return _embedding_model
 
 
 class SkillMatcherAgent:
     """
     Compares a user's skill profile against a job description's requirements.
-    Uses both direct matching and knowledge-graph-based indirect matching
-    to produce an ATS-style score and detailed skill breakdown.
+    Uses direct matching, semantic similarity, and knowledge-graph-based
+    indirect matching to produce an ATS-style score and detailed skill breakdown.
     """
+
+    SEMANTIC_THRESHOLD = 0.65  # Cosine similarity threshold for semantic match
 
     def __init__(self):
         self.graph_builder = SkillGraphBuilder()
@@ -37,11 +54,22 @@ class SkillMatcherAgent:
             user_skill_ids = {us.skill_id for us in user_skills}
 
             # Load user skill names for matching
-            user_skill_names = set()
+            user_skill_map = {}  # lowercase -> original name
             for us in user_skills:
                 skill = session.exec(select(Skill).where(Skill.skill_id == us.skill_id)).first()
                 if skill:
-                    user_skill_names.add(skill.name.lower().strip())
+                    user_skill_map[skill.name.lower().strip()] = skill.name
+            user_skill_names = set(user_skill_map.keys())
+
+            # Pre-compute user skill embeddings for semantic matching
+            user_skill_names_list = list(user_skill_map.values())
+            user_embeddings = None
+            try:
+                model = get_embedding_model()
+                if user_skill_names_list:
+                    user_embeddings = model.encode(user_skill_names_list, normalize_embeddings=True)
+            except Exception as e:
+                logger.warning(f"Semantic embedding failed, falling back to exact match: {e}")
 
             # Load job skills
             job_skills = session.exec(
@@ -93,6 +121,21 @@ class SkillMatcherAgent:
                     matched_weight += js.weight * 0.5
                     continue
 
+                # Semantic match via embeddings
+                semantic_match = self._check_semantic_match(
+                    skill_name, user_skill_names_list, user_embeddings, model if user_embeddings is not None else None
+                )
+                if semantic_match:
+                    matched_skills[skill_name] = {
+                        "match_type": "semantic",
+                        "matched_to": semantic_match[0],
+                        "similarity": round(semantic_match[1], 3),
+                        "required": js.required,
+                        "weight": js.weight * 0.75,  # 75% credit for semantic
+                    }
+                    matched_weight += js.weight * 0.75
+                    continue
+
                 missing_skills.append(skill_name)
 
             # Calculate score
@@ -135,3 +178,29 @@ class SkillMatcherAgent:
             logger.debug(f"Indirect match check failed: {e}")
 
         return ""
+
+    def _check_semantic_match(self, job_skill_name: str, user_skill_names: List[str],
+                               user_embeddings, model) -> Tuple[str, float]:
+        """
+        Check if a job skill semantically matches any user skill using embeddings.
+        
+        Returns (matched_skill_name, similarity_score) if above threshold, else empty tuple.
+        """
+        if model is None or user_embeddings is None or not user_skill_names:
+            return ()
+
+        try:
+            job_embedding = model.encode([job_skill_name], normalize_embeddings=True)
+            # Cosine similarity (already normalized, so dot product = cosine sim)
+            similarities = np.dot(user_embeddings, job_embedding.T).flatten()
+            best_idx = int(np.argmax(similarities))
+            best_score = float(similarities[best_idx])
+
+            if best_score >= self.SEMANTIC_THRESHOLD:
+                matched_name = user_skill_names[best_idx]
+                logger.debug(f"Semantic match: '{job_skill_name}' -> '{matched_name}' ({best_score:.3f})")
+                return (matched_name, best_score)
+        except Exception as e:
+            logger.debug(f"Semantic match check failed: {e}")
+
+        return ()

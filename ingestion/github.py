@@ -1,11 +1,16 @@
 import logging
+import json
 import requests
 import os
 import base64
 from typing import Dict, List, Any, Optional
-from config import GITHUB_TOKEN
+from pathlib import Path
+from config import GITHUB_TOKEN, BASE_DIR
 
 logger = logging.getLogger(__name__)
+
+# Cache file to track when repos were last scanned
+GITHUB_CACHE_FILE = BASE_DIR / ".github_cache.json"
 
 # Files to fetch from repos for deeper skill extraction
 DEPENDENCY_FILES = [
@@ -21,15 +26,34 @@ DEPENDENCY_FILES = [
 
 
 class GitHubIngestor:
+    REQUEST_TIMEOUT = 15  # seconds per API call
+
     def __init__(self, username: str, token: str = GITHUB_TOKEN):
         self.username = username
         self.headers = {"Authorization": f"token {token}"} if token else {}
         self.api_url = "https://api.github.com"
+        self._cache = self._load_cache()
 
-    def ingest(self) -> List[Dict[str, Any]]:
+    def _load_cache(self) -> Dict[str, str]:
+        """Load the repo scan cache (repo_name -> updated_at timestamp)."""
+        if GITHUB_CACHE_FILE.exists():
+            try:
+                return json.loads(GITHUB_CACHE_FILE.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                logger.warning("Corrupted GitHub cache — starting fresh")
+        return {}
+
+    def _save_cache(self):
+        """Persist the repo scan cache to disk."""
+        GITHUB_CACHE_FILE.write_text(
+            json.dumps(self._cache, indent=2), encoding="utf-8"
+        )
+
+    def ingest(self, force: bool = False) -> List[Dict[str, Any]]:
         """
         Fetches all repos for the user (including private if token has access),
         along with dependency files and README content for deeper skill extraction.
+        Skips repos that haven't been updated since the last scan (use force=True to override).
         """
         logger.info(f"Fetching GitHub repos for {self.username}")
 
@@ -40,11 +64,13 @@ class GitHubIngestor:
             repos_url = f"{self.api_url}/users/{self.username}/repos?per_page=100&sort=updated"
         
         try:
-            response = requests.get(repos_url, headers=self.headers)
+            response = requests.get(repos_url, headers=self.headers, timeout=self.REQUEST_TIMEOUT)
             response.raise_for_status()
             repos = response.json()
+            logger.info(f"Found {len(repos)} total repos (before filtering)")
             
             project_data = []
+            skipped = 0
             for repo in repos:
                 if repo.get("fork"): continue
 
@@ -54,10 +80,19 @@ class GitHubIngestor:
                     continue
 
                 repo_name = repo["name"]
+                updated_at = repo["updated_at"]
+
+                # Skip repos that haven't changed since last scan
+                if not force and self._cache.get(repo_name) == updated_at:
+                    logger.info(f"Skipping repo (unchanged): {repo_name}")
+                    skipped += 1
+                    continue
+
+                logger.info(f"Processing repo: {repo_name}")
 
                 # Fetch languages
                 lang_url = repo["languages_url"]
-                lang_resp = requests.get(lang_url, headers=self.headers)
+                lang_resp = requests.get(lang_url, headers=self.headers, timeout=self.REQUEST_TIMEOUT)
                 languages = lang_resp.json() if lang_resp.status_code == 200 else {}
                 lang_list = list(languages.keys())
 
@@ -76,12 +111,21 @@ class GitHubIngestor:
                     "description": repo.get("description"),
                     "url": repo["html_url"],
                     "stars": repo["stargazers_count"],
-                    "updated_at": repo["updated_at"],
+                    "updated_at": updated_at,
                     "languages": lang_list,
                     "readme": readme_text,
                     "dependencies": dependencies,
                 }
                 project_data.append(project_info)
+
+                # Update cache with this repo's timestamp
+                self._cache[repo_name] = updated_at
+
+            # Persist cache after processing all repos
+            self._save_cache()
+
+            if skipped:
+                logger.info(f"Skipped {skipped} unchanged repos, scanned {len(project_data)} new/updated repos")
                 
             return project_data
 
@@ -93,7 +137,7 @@ class GitHubIngestor:
         """Fetch the README content for a repo (decoded from base64)."""
         url = f"{self.api_url}/repos/{self.username}/{repo_name}/readme"
         try:
-            resp = requests.get(url, headers=self.headers)
+            resp = requests.get(url, headers=self.headers, timeout=self.REQUEST_TIMEOUT)
             if resp.status_code == 200:
                 data = resp.json()
                 content = data.get("content", "")
@@ -113,7 +157,7 @@ class GitHubIngestor:
         for filename in DEPENDENCY_FILES:
             url = f"{self.api_url}/repos/{self.username}/{repo_name}/contents/{filename}"
             try:
-                resp = requests.get(url, headers=self.headers)
+                resp = requests.get(url, headers=self.headers, timeout=self.REQUEST_TIMEOUT)
                 if resp.status_code == 200:
                     data = resp.json()
                     content = data.get("content", "")
@@ -146,7 +190,7 @@ class GitHubIngestor:
         """Recursively scan a directory for Python/notebook files."""
         url = f"{self.api_url}/repos/{self.username}/{repo_name}/contents/{path}"
         try:
-            resp = requests.get(url, headers=self.headers)
+            resp = requests.get(url, headers=self.headers, timeout=self.REQUEST_TIMEOUT)
             if resp.status_code != 200:
                 return
 
@@ -177,7 +221,7 @@ class GitHubIngestor:
         """Extract import statements from a Python file."""
         url = f"{self.api_url}/repos/{self.username}/{repo_name}/contents/{filename}"
         try:
-            resp = requests.get(url, headers=self.headers)
+            resp = requests.get(url, headers=self.headers, timeout=self.REQUEST_TIMEOUT)
             if resp.status_code != 200:
                 return []
             data = resp.json()
@@ -194,7 +238,7 @@ class GitHubIngestor:
         import json as json_mod
         url = f"{self.api_url}/repos/{self.username}/{repo_name}/contents/{filename}"
         try:
-            resp = requests.get(url, headers=self.headers)
+            resp = requests.get(url, headers=self.headers, timeout=self.REQUEST_TIMEOUT)
             if resp.status_code != 200:
                 return []
             data = resp.json()

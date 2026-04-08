@@ -10,6 +10,7 @@ from llm import get_llm
 from database.db import engine
 from database.models import User, Skill, UserSkill, Experience, Project
 from database.user_utils import get_or_create_default_user
+from agents.skill_postprocessor import postprocess_skills, normalize_skill_name
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,9 @@ class ResumeParserAgent:
             skills = self._extract_repo_skills(raw_text)
         else:
             skills = self._extract_skills(raw_text)
+        
+        # Post-process: filter noise, normalize names, deduplicate
+        skills = postprocess_skills(skills)
         self._save_skills(skills, source_file)
 
         logger.info("Parsing complete and saved to DB.")
@@ -179,8 +183,8 @@ class ResumeParserAgent:
     def _save_skills(self, data: List[Dict], source: str):
         with Session(engine) as session:
             for item in data:
-                # Normalize name
-                raw_name = item.get("name", "").strip()
+                # Normalize name via alias map
+                raw_name = normalize_skill_name(item.get("name", "").strip())
                 if not raw_name: continue
                 
                 # Get or create the Skill node
