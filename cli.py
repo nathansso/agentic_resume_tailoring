@@ -212,12 +212,12 @@ def cmd_tailor(args):
         for skill, info in result["matched_skills"].items():
             match_type = info.get("match_type", "unknown")
             req = "Required" if info.get("required") else "Preferred"
-            print(f"  ✓ {skill} [{match_type}, {req}]")
+            print(f"  [OK] {skill} [{match_type}, {req}]")
 
     if result["missing_skills"]:
         print(f"\nMissing Skills ({len(result['missing_skills'])}):")
         for skill in result["missing_skills"]:
-            print(f"  ✗ {skill}")
+            print(f"  [MISS] {skill}")
 
     if result["tailored_content"] and "error" not in result["tailored_content"]:
         # Save tailored output to file

@@ -18,7 +18,7 @@ Run: python -m tui.app  OR  python cli.py tui
 """
 import json
 import logging
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -150,6 +150,7 @@ class ArtApp(App):
     def __init__(self):
         super().__init__()
         self.chat_agent = None  # Lazy-init to avoid slow import at startup
+        self._job_item_to_uuid: dict[str, str] = {}
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -340,6 +341,7 @@ class ArtApp(App):
     def _load_jobs_sidebar(self) -> None:
         job_list = self.query_one("#job-list", ListView)
         job_list.clear()
+        self._job_item_to_uuid.clear()
         with Session(engine) as session:
             jobs = session.exec(select(JobDescription)).all()
             for job in jobs:
@@ -350,27 +352,42 @@ class ArtApp(App):
                 if results:
                     best = max(r.ats_score for r in results)
                     score = f" [{best:.0f}%]"
+
+                # Use a unique widget ID every render to avoid duplicate-ID races
+                # when ListView items are reloaded rapidly.
+                item_id = f"job-item-{uuid4().hex}"
+                self._job_item_to_uuid[item_id] = str(job.job_id)
                 item = ListItem(
                     Label(f"{job.title}\n{job.company}{score}"),
-                    id=f"job-{job.job_id}",
+                    id=item_id,
                 )
                 job_list.append(item)
 
     def _save_new_job(self) -> None:
         title = self.query_one("#job-title-input", Input).value.strip()
         company = self.query_one("#job-company-input", Input).value.strip()
+        scroll = self.query_one("#chat-scroll", VerticalScroll)
         if not title or not company:
+            scroll.mount(Static("Please enter both job title and company.", classes="system-msg"))
+            scroll.scroll_end()
             return
-        with Session(engine) as session:
-            job = JobDescription(title=title, company=company, description="")
-            session.add(job)
-            session.commit()
+
+        try:
+            with Session(engine) as session:
+                job = JobDescription(title=title, company=company, description="")
+                session.add(job)
+                session.commit()
+        except Exception as e:
+            logger.exception("Failed to save new job")
+            scroll.mount(Static(f"Failed to save job: {e}", classes="system-msg"))
+            scroll.scroll_end()
+            return
+
         self.query_one("#job-title-input", Input).value = ""
         self.query_one("#job-company-input", Input).value = ""
         self._hide_job_input()
         self._load_jobs_sidebar()
         # Confirm in chat
-        scroll = self.query_one("#chat-scroll", VerticalScroll)
         scroll.mount(Static(f"Job saved: {title} @ {company}", classes="bot-msg"))
         scroll.scroll_end()
 
@@ -380,9 +397,17 @@ class ArtApp(App):
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         if event.list_view.id == "job-list":
             item_id = event.item.id or ""
-            if item_id.startswith("job-"):
-                job_uuid = item_id[4:]
-                self._show_job_details(job_uuid)
+            job_uuid = self._job_item_to_uuid.get(item_id)
+            if not job_uuid:
+                return
+            try:
+                UUID(job_uuid)
+            except ValueError:
+                scroll = self.query_one("#chat-scroll", VerticalScroll)
+                scroll.mount(Static("Selected job has invalid ID.", classes="system-msg"))
+                scroll.scroll_end()
+                return
+            self._show_job_details(job_uuid)
 
     def _show_job_details(self, job_uuid: str) -> None:
         self._switch_to_chat()

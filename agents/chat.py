@@ -5,6 +5,7 @@ query the knowledge graph, and run tailoring pipelines conversationally.
 """
 import re
 import logging
+from difflib import SequenceMatcher
 from typing import Dict, List
 from sqlmodel import Session, select
 
@@ -219,6 +220,50 @@ SHORTCUTS = {
 }
 
 
+# Broader command phrase map for semantic-ish matching.
+COMMAND_PHRASES = {
+    "query_skills": [
+        "show my skills",
+        "show skills",
+        "list skills",
+        "skills",
+        "what skills do i have",
+        "display all my skills",
+    ],
+    "query_experiences": [
+        "show my experience",
+        "show experiences",
+        "list experiences",
+        "work experience",
+        "my experience",
+    ],
+    "query_projects": [
+        "show projects",
+        "list projects",
+        "my projects",
+        "project list",
+    ],
+    "query_graph_stats": [
+        "graph",
+        "graph stats",
+        "knowledge graph",
+        "graph summary",
+    ],
+    "list_jobs": [
+        "show jobs",
+        "list jobs",
+        "my jobs",
+        "saved jobs",
+    ],
+    "get_profile_summary": [
+        "profile",
+        "status",
+        "profile summary",
+        "show profile",
+    ],
+}
+
+
 # ── Chat Agent ──────────────────────────────────────────────
 
 SYSTEM_PROMPT = """You are ART Assistant, a helpful resume tailoring chatbot.
@@ -251,22 +296,101 @@ class ChatAgent:
     """
 
     def __init__(self):
-        self.llm = get_llm(temperature=0.3)
+        self.llm = get_llm(temperature=0.2)
         self.history: List[Dict[str, str]] = []
+
+    @staticmethod
+    def _normalize(text: str) -> str:
+        return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9\s]", " ", text.lower())).strip()
+
+    def _semantic_command_match(self, user_message: str) -> str | None:
+        """Return command/tool response for near-match command text, else None."""
+        normalized = self._normalize(user_message)
+        if not normalized:
+            return None
+
+        # 1) Exact shortcut hit (fast path).
+        if normalized in SHORTCUTS:
+            return SHORTCUTS[normalized]()
+
+        # 2) Dedicated skill evidence parser.
+        evidence_match = re.search(
+            r"(?:evidence|proof|support)\s+(?:for|of)\s+([a-z0-9\-\+\.# ]+)$",
+            normalized,
+        )
+        if evidence_match:
+            skill_name = evidence_match.group(1).strip()
+            if skill_name:
+                return query_skill_evidence(skill_name)
+
+        # 3) Phrase + fuzzy similarity routing.
+        best_tool = None
+        best_score = 0.0
+
+        for tool_name, phrases in COMMAND_PHRASES.items():
+            for phrase in phrases:
+                if phrase in normalized or normalized in phrase:
+                    score = 1.0
+                else:
+                    score = SequenceMatcher(None, normalized, phrase).ratio()
+                if score > best_score:
+                    best_score = score
+                    best_tool = tool_name
+
+        # 4) Token-based fallback for common asks.
+        tokens = set(normalized.split())
+
+        def _has_token_close_to(targets: set[str], threshold: float = 0.8) -> bool:
+            for tok in tokens:
+                for target in targets:
+                    if tok == target:
+                        return True
+                    if SequenceMatcher(None, tok, target).ratio() >= threshold:
+                        return True
+            return False
+
+        action_words = {"show", "list", "display", "all", "my"}
+        has_action = bool(tokens & action_words) or _has_token_close_to({"show", "list", "display"}, 0.75)
+
+        if _has_token_close_to({"skill", "skills"}, 0.78) and has_action:
+            return query_skills()
+        if _has_token_close_to({"experience", "experiences"}, 0.8) and has_action:
+            return query_experiences()
+        if _has_token_close_to({"project", "projects"}, 0.8) and has_action:
+            return query_projects()
+
+        # Slightly permissive threshold to catch typos/non-exact phrasing.
+        if best_tool and best_score >= 0.72:
+            if best_tool == "query_skills":
+                return query_skills()
+            if best_tool == "query_experiences":
+                return query_experiences()
+            if best_tool == "query_projects":
+                return query_projects()
+            if best_tool == "query_graph_stats":
+                return query_graph_stats()
+            if best_tool == "list_jobs":
+                return list_jobs()
+            if best_tool == "get_profile_summary":
+                return get_profile_summary()
+
+        return None
 
     def chat(self, user_message: str) -> str:
         """Process a user message and return a response."""
-        # Check for direct shortcuts first
-        lower = user_message.lower().strip()
-        if lower in SHORTCUTS:
-            return SHORTCUTS[lower]()
+        # Route command-like queries directly for speed and full-fidelity output.
+        routed = self._semantic_command_match(user_message)
+        if routed is not None:
+            self.history.append({"role": "user", "content": user_message})
+            self.history.append({"role": "assistant", "content": routed})
+            return routed
 
         self.history.append({"role": "user", "content": user_message})
 
         # Build messages for LLM
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-        # Keep last 20 messages for context window
-        messages.extend(self.history[-20:])
+        # Keep smaller window for lower latency while preserving context.
+        messages.extend(self.history[-12:])
 
         try:
             response = self.llm.invoke(messages)
@@ -279,23 +403,10 @@ class ChatAgent:
         resolved = self._resolve_tool_calls(text)
 
         if resolved != text:
-            # Tool was called — send result back for natural summary
             self.history.append({"role": "assistant", "content": text})
-            self.history.append(
-                {"role": "system", "content": f"Tool result:\n{resolved}"}
-            )
-            summary_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-            summary_messages.extend(self.history[-20:])
-            summary_messages.append(
-                {"role": "user", "content": "Summarize the tool result for the user. Be concise."}
-            )
-            try:
-                response2 = self.llm.invoke(summary_messages)
-                final = response2.content if hasattr(response2, "content") else str(response2)
-            except Exception:
-                final = resolved
-            self.history.append({"role": "assistant", "content": final})
-            return final
+            # Return tool output directly (faster and preserves full lists).
+            self.history.append({"role": "assistant", "content": resolved})
+            return resolved
         else:
             self.history.append({"role": "assistant", "content": text})
             return text
