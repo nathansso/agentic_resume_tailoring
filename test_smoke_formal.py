@@ -204,6 +204,21 @@ def test_fast_path_help_command(isolated_engine, monkeypatch):
     assert "ingest" in response.lower() or "F1" in response
 
 
+def test_fast_path_short_unrecognized(isolated_engine, monkeypatch):
+    """agent.chat('hmm') returns clarification without calling the LLM."""
+    class ShouldNotBeCalledLLM:
+        def invoke(self, *_args, **_kwargs):
+            raise AssertionError("LLM must not be called for short unrecognized input")
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: ShouldNotBeCalledLLM())
+
+    agent = chat_module.ChatAgent()
+    response = agent.chat("hmm")
+
+    assert len(response) > 0
+    assert "?" in response or "not sure" in response.lower() or "try" in response.lower()
+
+
 @pytest.mark.integration
 @pytest.mark.slow
 def test_full_cli_ingestion_and_tailor_pipeline():
