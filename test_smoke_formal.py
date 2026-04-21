@@ -243,6 +243,24 @@ def test_get_llm_roles(monkeypatch):
             assert isinstance(model, BaseChatModel), f"Expected BaseChatModel for provider={provider} role={role}"
 
 
+def test_chat_ingest_resume_fast_path(isolated_engine, monkeypatch):
+    """agent.chat('ingest resume test.md') calls service without LLM."""
+    import tui.services as svc
+    monkeypatch.setattr(svc, "ingest_resume_file", lambda path: f"Resume ingested: {path}")
+
+    class ShouldNotBeCalledLLM:
+        def invoke(self, *_a, **_kw):
+            raise AssertionError("LLM must not be called for ingest resume")
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: ShouldNotBeCalledLLM())
+
+    agent = chat_module.ChatAgent()
+    response = agent.chat("ingest resume my_resume.md")
+
+    assert "my_resume.md" in response
+    assert "LLM" not in response
+
+
 @pytest.mark.integration
 @pytest.mark.slow
 def test_full_cli_ingestion_and_tailor_pipeline():
