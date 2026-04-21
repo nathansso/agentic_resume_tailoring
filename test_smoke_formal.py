@@ -163,6 +163,31 @@ def test_refresh_app_state_empty_and_with_skills(isolated_engine):
     asyncio.run(_run())
 
 
+def test_status_panel_updates_with_state(isolated_engine):
+    """Status bar text matches app state."""
+    async def _run():
+        app = tui_module.ArtApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            from textual.widgets import Static
+
+            status = app.query_one("#status-bar", Static)
+
+            def get_text():
+                return str(status._Static__content)
+
+            app._refresh_app_state()
+            text = get_text()
+            assert "F1" in text or "ingest" in text.lower()
+
+            _seed_user_and_skill(isolated_engine)
+            app._refresh_app_state()
+            text = get_text()
+            assert "job" in text.lower() or "Ctrl+N" in text
+
+    asyncio.run(_run())
+
+
 @pytest.mark.integration
 @pytest.mark.slow
 def test_full_cli_ingestion_and_tailor_pipeline():
