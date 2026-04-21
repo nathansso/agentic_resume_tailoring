@@ -65,7 +65,7 @@ def test_chat_semantic_routing_uses_tool_and_is_fast(isolated_engine, monkeypatc
         def invoke(self, *_args, **_kwargs):
             raise AssertionError("LLM should not be called for command-like skill query")
 
-    monkeypatch.setattr(chat_module, "get_llm", lambda temperature=0.2: ShouldNotBeCalledLLM())
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.2: ShouldNotBeCalledLLM())
 
     agent = chat_module.ChatAgent()
 
@@ -186,6 +186,22 @@ def test_status_panel_updates_with_state(isolated_engine):
             assert "job" in text.lower() or "Ctrl+N" in text
 
     asyncio.run(_run())
+
+
+def test_fast_path_help_command(isolated_engine, monkeypatch):
+    """agent.chat('help') returns without calling LLM and contains command list."""
+    class ShouldNotBeCalledLLM:
+        def invoke(self, *_args, **_kwargs):
+            raise AssertionError("LLM must not be called for 'help'")
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: ShouldNotBeCalledLLM())
+
+    agent = chat_module.ChatAgent()
+    response = agent.chat("help")
+
+    assert "skills" in response.lower()
+    assert "projects" in response.lower()
+    assert "ingest" in response.lower() or "F1" in response
 
 
 @pytest.mark.integration
