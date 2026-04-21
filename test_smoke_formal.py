@@ -261,6 +261,45 @@ def test_chat_ingest_resume_fast_path(isolated_engine, monkeypatch):
     assert "LLM" not in response
 
 
+def test_chat_ingest_github_fast_path(isolated_engine, monkeypatch):
+    """agent.chat('ingest github') calls service without LLM."""
+    import tui.services as svc
+    monkeypatch.setattr(svc, "ingest_github", lambda username="": f"GitHub ingested for {username or 'default'}")
+
+    class ShouldNotBeCalledLLM:
+        def invoke(self, *_a, **_kw):
+            raise AssertionError("LLM must not be called for ingest github")
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: ShouldNotBeCalledLLM())
+
+    agent = chat_module.ChatAgent()
+    response = agent.chat("ingest github")
+    assert "github" in response.lower()
+
+
+def test_chat_tailor_fast_path(isolated_engine, monkeypatch):
+    """agent.chat('tailor <job>') calls run_tailor without LLM."""
+    monkeypatch.setattr(chat_module, "run_tailor", lambda job: f"Tailored for: {job}")
+
+    class ShouldNotBeCalledLLM:
+        def invoke(self, *_a, **_kw):
+            raise AssertionError("LLM must not be called for tailor fast-path")
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: ShouldNotBeCalledLLM())
+
+    agent = chat_module.ChatAgent()
+    response = agent.chat("tailor Senior Engineer at Acme Corp")
+    assert "Senior Engineer at Acme Corp" in response
+
+
+def test_ingest_resume_file_missing_path(isolated_engine):
+    """ingest_resume_file returns error string for missing file, does not raise."""
+    import tui.services as svc
+    result = svc.ingest_resume_file("definitely_does_not_exist_12345.md")
+    assert "not found" in result.lower() or "error" in result.lower()
+    assert isinstance(result, str)
+
+
 @pytest.mark.integration
 @pytest.mark.slow
 def test_full_cli_ingestion_and_tailor_pipeline():
