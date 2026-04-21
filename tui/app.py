@@ -16,8 +16,8 @@ Layout:
 
 Run: python -m tui.app  OR  python cli.py tui
 """
-import json
 import logging
+from typing import Optional
 from uuid import UUID, uuid4
 
 from textual.app import App, ComposeResult
@@ -30,13 +30,18 @@ from textual.widgets import (
 from textual import work
 
 from database.db import init_db, engine
-from database.models import (
-    User, Skill, UserSkill, Experience, Project,
-    JobDescription, UserJobResult,
-)
+from database.models import JobDescription, Skill, User, UserJobResult, UserSkill
 from sqlmodel import Session, select
+from tui import services
 
 logger = logging.getLogger(__name__)
+
+
+class AppState:
+    SETUP = "setup"
+    PROFILE_READY = "profile_ready"
+    JOB_SELECTED = "job_selected"
+    TAILORING_COMPLETE = "tailoring_complete"
 
 
 # ───────────────────────────────────────────────────────────
@@ -53,6 +58,14 @@ class ArtApp(App):
 
     #main-container {
         height: 1fr;
+    }
+
+    /* ── Status Bar ── */
+    #status-bar {
+        height: 1;
+        background: $boost;
+        padding: 0 2;
+        color: $accent;
     }
 
     /* ── Sidebar ── */
@@ -151,9 +164,13 @@ class ArtApp(App):
         super().__init__()
         self.chat_agent = None  # Lazy-init to avoid slow import at startup
         self._job_item_to_uuid: dict[str, str] = {}
+        self.app_state: str = AppState.SETUP
+        self._selected_job_id: Optional[str] = None
+        self._selected_job_label: str = ""
 
     def compose(self) -> ComposeResult:
         yield Header()
+        yield Static("", id="status-bar")
         with Horizontal(id="main-container"):
             # ── Sidebar: Job List ──
             with Vertical(id="sidebar"):
@@ -217,6 +234,7 @@ class ArtApp(App):
 
     def on_mount(self) -> None:
         init_db()
+        self._refresh_app_state()
         self._load_jobs_sidebar()
         self._load_data_tables()
         self._load_viz()
@@ -230,6 +248,35 @@ class ArtApp(App):
             from agents.chat import ChatAgent
             self.chat_agent = ChatAgent()
         return self.chat_agent
+
+    # ───────────────────────────────────────────────────────
+    #  App State
+    # ───────────────────────────────────────────────────────
+
+    def _refresh_app_state(self) -> str:
+        db_state = services.compute_app_state()
+        if db_state == AppState.SETUP:
+            self.app_state = AppState.SETUP
+            self._selected_job_id = None
+            self._selected_job_label = ""
+        elif self._selected_job_id is not None:
+            self.app_state = AppState.JOB_SELECTED
+        else:
+            self.app_state = db_state
+        self._update_status_bar()
+        return self.app_state
+
+    def _update_status_bar(self) -> None:
+        msgs = {
+            AppState.SETUP: "No profile yet -- press F1 to ingest your resume",
+            AppState.PROFILE_READY: "Profile ready -- select a job or press Ctrl+N to create one",
+            AppState.JOB_SELECTED: f"Job selected: {self._selected_job_label} -- press F3 to tailor",
+            AppState.TAILORING_COMPLETE: "Tailoring complete -- view results in the sidebar",
+        }
+        try:
+            self.query_one("#status-bar", Static).update(msgs.get(self.app_state, ""))
+        except Exception:
+            pass
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id == "chat-input":
@@ -342,26 +389,15 @@ class ArtApp(App):
         job_list = self.query_one("#job-list", ListView)
         job_list.clear()
         self._job_item_to_uuid.clear()
-        with Session(engine) as session:
-            jobs = session.exec(select(JobDescription)).all()
-            for job in jobs:
-                results = session.exec(
-                    select(UserJobResult).where(UserJobResult.job_id == job.job_id)
-                ).all()
-                score = ""
-                if results:
-                    best = max(r.ats_score for r in results)
-                    score = f" [{best:.0f}%]"
-
-                # Use a unique widget ID every render to avoid duplicate-ID races
-                # when ListView items are reloaded rapidly.
-                item_id = f"job-item-{uuid4().hex}"
-                self._job_item_to_uuid[item_id] = str(job.job_id)
-                item = ListItem(
-                    Label(f"{job.title}\n{job.company}{score}"),
-                    id=item_id,
-                )
-                job_list.append(item)
+        for job in services.get_jobs():
+            # Use a unique widget ID every render to avoid duplicate-ID races
+            # when ListView items are reloaded rapidly.
+            item_id = f"job-item-{uuid4().hex}"
+            self._job_item_to_uuid[item_id] = job["job_id"]
+            job_list.append(ListItem(
+                Label(f"{job['title']}\n{job['company']}{job['score']}"),
+                id=item_id,
+            ))
 
     def _save_new_job(self) -> None:
         title = self.query_one("#job-title-input", Input).value.strip()
@@ -387,7 +423,7 @@ class ArtApp(App):
         self.query_one("#job-company-input", Input).value = ""
         self._hide_job_input()
         self._load_jobs_sidebar()
-        # Confirm in chat
+        self._refresh_app_state()
         scroll.mount(Static(f"Job saved: {title} @ {company}", classes="bot-msg"))
         scroll.scroll_end()
 
@@ -412,27 +448,23 @@ class ArtApp(App):
     def _show_job_details(self, job_uuid: str) -> None:
         self._switch_to_chat()
         scroll = self.query_one("#chat-scroll", VerticalScroll)
-        with Session(engine) as session:
-            job = session.get(JobDescription, UUID(job_uuid))
-            if not job:
-                return
-            results = session.exec(
-                select(UserJobResult).where(UserJobResult.job_id == job.job_id)
-            ).all()
-            lines = [f"{job.title} @ {job.company}"]
-            if results:
-                latest = max(results, key=lambda r: r.created_at)
-                lines.append(f"\nLatest ATS Score: {latest.ats_score}%")
-                if latest.matched_skills:
-                    matched = list(latest.matched_skills.keys())[:10]
-                    lines.append(f"Matched: {', '.join(matched)}")
-                if latest.missing_skills:
-                    missing = latest.missing_skills[:10]
-                    lines.append(f"Missing: {', '.join(missing)}")
-            else:
-                lines.append("\nNo tailoring results yet. Press F3 to tailor.")
-            scroll.mount(Static("\n".join(lines), classes="bot-msg"))
-            scroll.scroll_end()
+        detail = services.get_job_details(job_uuid)
+        if not detail:
+            return
+        lines = [f"{detail['title']} @ {detail['company']}"]
+        if "ats_score" in detail:
+            lines.append(f"\nLatest ATS Score: {detail['ats_score']}%")
+            if detail.get("matched_skills"):
+                lines.append(f"Matched: {', '.join(detail['matched_skills'])}")
+            if detail.get("missing_skills"):
+                lines.append(f"Missing: {', '.join(detail['missing_skills'])}")
+        else:
+            lines.append("\nNo tailoring results yet. Press F3 to tailor.")
+        scroll.mount(Static("\n".join(lines), classes="bot-msg"))
+        scroll.scroll_end()
+        self._selected_job_id = job_uuid
+        self._selected_job_label = f"{detail['title']} @ {detail['company']}"
+        self._refresh_app_state()
 
     # ───────────────────────────────────────────────────────
     #  Data Tables
@@ -448,99 +480,93 @@ class ArtApp(App):
         table = self.query_one("#skills-table", DataTable)
         table.clear(columns=True)
         table.add_columns("Skill", "Source", "Proficiency", "Confidence")
-        with Session(engine) as session:
-            user = session.exec(select(User).limit(1)).first()
-            if not user:
-                return
-            user_skills = session.exec(
-                select(UserSkill).where(UserSkill.user_id == user.user_id)
-            ).all()
-            for us in user_skills:
-                skill = session.get(Skill, us.skill_id)
-                if skill:
-                    source = (us.evidence_source or "unknown").split(":")[0]
-                    table.add_row(
-                        skill.name,
-                        source,
-                        str(us.proficiency or "N/A"),
-                        f"{us.confidence_score:.1f}",
-                    )
+        rows = services.get_skills(services.get_first_user_id())
+        if not rows:
+            table.add_row("No skills found -- ingest a resume via F1", "", "", "")
+            return
+        for row in rows:
+            table.add_row(row["name"], row["source"], row["proficiency"], row["confidence"])
 
     def _load_exp_table(self) -> None:
         table = self.query_one("#exp-table", DataTable)
         table.clear(columns=True)
         table.add_columns("Title", "Company", "Start", "End")
-        with Session(engine) as session:
-            user = session.exec(select(User).limit(1)).first()
-            if not user:
-                return
-            exps = session.exec(
-                select(Experience).where(Experience.user_id == user.user_id)
-            ).all()
-            for e in exps:
-                table.add_row(e.title, e.company, e.start_date or "?", e.end_date or "?")
+        rows = services.get_experiences(services.get_first_user_id())
+        if not rows:
+            table.add_row("No experiences found -- ingest a resume via F1", "", "", "")
+            return
+        for row in rows:
+            table.add_row(row["title"], row["company"], row["start"], row["end"])
 
     def _load_proj_table(self) -> None:
         table = self.query_one("#proj-table", DataTable)
         table.clear(columns=True)
         table.add_columns("Project", "URL", "Description")
-        with Session(engine) as session:
-            user = session.exec(select(User).limit(1)).first()
-            if not user:
-                return
-            projs = session.exec(
-                select(Project).where(Project.user_id == user.user_id)
-            ).all()
-            for p in projs:
-                desc = (p.description or "")[:60]
-                table.add_row(p.name, p.repo_url or "—", desc)
+        rows = services.get_projects(services.get_first_user_id())
+        if not rows:
+            table.add_row("No projects found -- ingest GitHub via F1", "", "")
+            return
+        for row in rows:
+            table.add_row(row["name"], row["url"], row["desc"])
 
+    @work(thread=True)
     def _load_graph_view(self) -> None:
-        log = self.query_one("#graph-log", RichLog)
-        log.clear()
+        self.call_from_thread(self._init_graph_log)
         try:
             from knowledge_graph.builder import SkillGraphBuilder
-            builder = SkillGraphBuilder()
-            G = builder.build_graph()
-
-            log.write(f"[bold]Knowledge Graph[/bold]: {G.number_of_nodes()} nodes, "
-                      f"{G.number_of_edges()} edges\n")
-
-            skills = [n for n, d in G.nodes(data=True) if d.get("type") == "Skill"]
-            projects = [n for n, d in G.nodes(data=True) if d.get("type") == "Project"]
-            experiences = [n for n, d in G.nodes(data=True) if d.get("type") == "Experience"]
-
-            log.write(f"\n[bold cyan]Skills ({len(skills)}):[/bold cyan]")
-            for s in sorted(skills):
-                name = G.nodes[s].get("name", s)
-                preds = list(G.predecessors(s))
-                if preds:
-                    sources = [G.nodes[p].get("name", p) for p in preds[:3]]
-                    log.write(f"  {name} <- {', '.join(sources)}")
-                else:
-                    log.write(f"  {name}")
-
-            log.write(f"\n[bold green]Experiences ({len(experiences)}):[/bold green]")
-            for e in sorted(experiences):
-                name = G.nodes[e].get("name", e)
-                company = G.nodes[e].get("company", "")
-                succs = list(G.successors(e))
-                skill_names = [G.nodes[s].get("name", s) for s in succs[:5]]
-                log.write(f"  {name} @ {company}")
-                if skill_names:
-                    log.write(f"    -> {', '.join(skill_names)}")
-
-            log.write(f"\n[bold yellow]Projects ({len(projects)}):[/bold yellow]")
-            for p in sorted(projects)[:20]:
-                name = G.nodes[p].get("name", p)
-                succs = list(G.successors(p))
-                skill_names = [G.nodes[s].get("name", s) for s in succs[:5]]
-                log.write(f"  {name}")
-                if skill_names:
-                    log.write(f"    -> {', '.join(skill_names)}")
-
+            G = SkillGraphBuilder().build_graph()
+            lines = self._build_graph_lines(G)
+            self.call_from_thread(self._post_graph_view, lines)
         except Exception as e:
-            log.write(f"[red]Error loading graph: {e}[/red]")
+            self.call_from_thread(self._post_graph_error, str(e))
+
+    def _init_graph_log(self) -> None:
+        log = self.query_one("#graph-log", RichLog)
+        log.clear()
+        log.write("Loading knowledge graph...")
+
+    def _build_graph_lines(self, G) -> list:
+        skills = [n for n, d in G.nodes(data=True) if d.get("type") == "Skill"]
+        projects = [n for n, d in G.nodes(data=True) if d.get("type") == "Project"]
+        experiences = [n for n, d in G.nodes(data=True) if d.get("type") == "Experience"]
+        lines = [
+            f"[bold]Knowledge Graph[/bold]: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges\n",
+            f"\n[bold cyan]Skills ({len(skills)}):[/bold cyan]",
+        ]
+        for s in sorted(skills):
+            name = G.nodes[s].get("name", s)
+            preds = list(G.predecessors(s))
+            if preds:
+                sources = [G.nodes[p].get("name", p) for p in preds[:3]]
+                lines.append(f"  {name} <- {', '.join(sources)}")
+            else:
+                lines.append(f"  {name}")
+        lines.append(f"\n[bold green]Experiences ({len(experiences)}):[/bold green]")
+        for e in sorted(experiences):
+            name = G.nodes[e].get("name", e)
+            company = G.nodes[e].get("company", "")
+            skill_names = [G.nodes[s].get("name", s) for s in list(G.successors(e))[:5]]
+            lines.append(f"  {name} @ {company}")
+            if skill_names:
+                lines.append(f"    -> {', '.join(skill_names)}")
+        lines.append(f"\n[bold yellow]Projects ({len(projects)}):[/bold yellow]")
+        for p in sorted(projects)[:20]:
+            name = G.nodes[p].get("name", p)
+            skill_names = [G.nodes[s].get("name", s) for s in list(G.successors(p))[:5]]
+            lines.append(f"  {name}")
+            if skill_names:
+                lines.append(f"    -> {', '.join(skill_names)}")
+        return lines
+
+    def _post_graph_view(self, lines: list) -> None:
+        log = self.query_one("#graph-log", RichLog)
+        log.clear()
+        for line in lines:
+            log.write(line)
+
+    def _post_graph_error(self, error: str) -> None:
+        log = self.query_one("#graph-log", RichLog)
+        log.write(f"[red]Error loading graph: {error}[/red]")
 
     # ───────────────────────────────────────────────────────
     #  Visualization
