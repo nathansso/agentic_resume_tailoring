@@ -12,6 +12,7 @@ import agents.chat as chat_module
 import database.db as db_module
 import knowledge_graph.builder as kg_builder_module
 import tui.app as tui_module
+import tui.services as services_module
 from database.models import JobDescription, Skill, User, UserSkill
 
 ROOT = Path(__file__).resolve().parent
@@ -28,6 +29,7 @@ def isolated_engine(tmp_path, monkeypatch):
     monkeypatch.setattr(chat_module, "engine", engine)
     monkeypatch.setattr(tui_module, "engine", engine)
     monkeypatch.setattr(kg_builder_module, "engine", engine)
+    monkeypatch.setattr(services_module, "engine", engine)
     monkeypatch.setattr(tui_module, "init_db", lambda: None)
 
     return engine
@@ -118,6 +120,31 @@ def test_tui_new_job_flow(isolated_engine):
 
         assert count_after_valid == count_before + 1
         assert created is not None
+
+    asyncio.run(_run())
+
+
+def test_empty_state_tables_show_placeholders(isolated_engine):
+    """Skills/exp/proj tables show placeholder rows when DB is empty."""
+    async def _run():
+        app = tui_module.ArtApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            from textual.widgets import DataTable
+            skills_table = app.query_one("#skills-table", DataTable)
+            exp_table = app.query_one("#exp-table", DataTable)
+            proj_table = app.query_one("#proj-table", DataTable)
+
+            assert skills_table.row_count == 1
+            assert exp_table.row_count == 1
+            assert proj_table.row_count == 1
+
+            skills_cell = skills_table.get_cell_at((0, 0))
+            assert "ingest" in str(skills_cell).lower()
+            exp_cell = exp_table.get_cell_at((0, 0))
+            assert "ingest" in str(exp_cell).lower()
+            proj_cell = proj_table.get_cell_at((0, 0))
+            assert "ingest" in str(proj_cell).lower() or "github" in str(proj_cell).lower()
 
     asyncio.run(_run())
 
