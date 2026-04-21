@@ -12,6 +12,7 @@ from sqlmodel import Session, select
 
 from llm import get_llm
 from database.db import engine
+from tui import services
 from database.models import (
     User, Skill, UserSkill, Experience, Project,
     JobDescription, JobSkill, UserJobResult,
@@ -161,15 +162,75 @@ def get_help_text() -> str:
     """Return a concise command listing (no LLM call)."""
     return (
         "Available commands:\n"
-        "  skills / my skills        — list all your skills\n"
-        "  experiences / my exp      — list work experience\n"
-        "  projects / my projects    — list projects\n"
-        "  graph / knowledge graph   — show graph stats\n"
-        "  jobs / current job        — list saved jobs\n"
-        "  profile / status          — show profile summary\n"
-        "  evidence for <skill>      — show evidence for a skill\n\n"
-        "Use F1–F4 in the TUI for ingest, data, tailor, and viz shortcuts."
+        "  skills / my skills              — list all your skills\n"
+        "  experiences / my exp            — list work experience\n"
+        "  projects / my projects          — list projects\n"
+        "  graph / knowledge graph         — show graph stats\n"
+        "  jobs / current job              — list saved jobs\n"
+        "  profile / status                — show profile summary\n"
+        "  evidence for <skill>            — show evidence for a skill\n\n"
+        "Ingestion commands:\n"
+        "  ingest resume <path>            — parse a resume file (MD, PDF, DOCX)\n"
+        "  ingest github                   — fetch your GitHub repos\n"
+        "  ingest github <username>        — fetch a specific user's repos\n"
+        "  ingest linkedin pdf <path>      — parse a LinkedIn PDF export\n\n"
+        "Tailoring:\n"
+        "  tailor <job description or file> — tailor your resume to a job\n\n"
+        "Use F1–F4 in the TUI for quick access to these actions."
     )
+
+
+def run_ingest_resume(file_path: str) -> str:
+    """Ingest a resume file into the profile."""
+    return services.ingest_resume_file(file_path.strip())
+
+
+def run_ingest_github(username: str = "") -> str:
+    """Fetch GitHub repos and extract skills/projects."""
+    return services.ingest_github(username.strip())
+
+
+def run_ingest_linkedin_pdf(file_path: str) -> str:
+    """Parse a LinkedIn PDF export into the profile."""
+    return services.ingest_linkedin_pdf(file_path.strip())
+
+
+def run_tailor(job_input: str) -> str:
+    """Run the full tailoring pipeline for a job description text or file path."""
+    import json
+    from pathlib import Path
+    from graph.pipeline import build_pipeline
+    job_input = job_input.strip()
+    if not job_input:
+        return "Provide a job description or file path to tailor against."
+    job_file = job_input if Path(job_input).exists() else ""
+    job_text = "" if job_file else job_input
+    try:
+        result = build_pipeline().invoke({
+            "resume_path": "", "job_text": job_text, "job_file": job_file,
+            "user_id": "", "job_id": "", "result_id": "", "resume_text": "",
+            "ats_score": 0.0, "matched_skills": {}, "missing_skills": [],
+            "tailored_content": {}, "formatted_resume": "", "status": "",
+        })
+    except Exception as e:
+        return f"Tailoring failed: {e}"
+    lines = [
+        f"Tailoring complete — ATS Score: {result['ats_score']}%",
+        f"Status: {result['status']}",
+    ]
+    matched = result.get("matched_skills", {})
+    missing = result.get("missing_skills", [])
+    if matched:
+        lines.append(f"Matched skills ({len(matched)}): {', '.join(list(matched)[:10])}")
+    if missing:
+        lines.append(f"Missing skills ({len(missing)}): {', '.join(missing[:10])}")
+    tc = result.get("tailored_content", {})
+    if tc and "error" not in tc:
+        Path("tailored_output.json").write_text(json.dumps(tc, indent=2), encoding="utf-8")
+        if result.get("formatted_resume"):
+            Path("tailored_resume.md").write_text(result["formatted_resume"], encoding="utf-8")
+        lines.append("Saved: tailored_output.json, tailored_resume.md")
+    return "\n".join(lines)
 
 
 def get_profile_summary() -> str:
@@ -214,6 +275,10 @@ TOOL_MAP = {
     "list_jobs": lambda args: list_jobs(),
     "get_profile_summary": lambda args: get_profile_summary(),
     "get_help_text": lambda args: get_help_text(),
+    "run_ingest_resume": lambda args: run_ingest_resume(args),
+    "run_ingest_github": lambda args: run_ingest_github(args),
+    "run_ingest_linkedin_pdf": lambda args: run_ingest_linkedin_pdf(args),
+    "run_tailor": lambda args: run_tailor(args),
 }
 
 # Direct-match shortcuts (bypass LLM for instant response)
@@ -242,6 +307,7 @@ SHORTCUTS = {
     "help": get_help_text,
     "what can you do": get_help_text,
     "ingest": get_help_text,
+    "ingest github": lambda: run_ingest_github(""),
 }
 
 
@@ -298,6 +364,8 @@ COMMAND_PHRASES = {
         "commands",
         "what commands",
         "show help",
+        "ingest resume",
+        "ingest linkedin",
     ],
 }
 
@@ -350,6 +418,23 @@ class ChatAgent:
         # 1) Exact shortcut hit (fast path).
         if normalized in SHORTCUTS:
             return SHORTCUTS[normalized]()
+
+        # 1b) Argument-parsing fast-paths for ingestion and tailoring.
+        m = re.match(r"^ingest resume (.+)$", normalized)
+        if m:
+            return run_ingest_resume(m.group(1).strip())
+
+        m = re.match(r"^ingest github\s*(\S*)$", normalized)
+        if m:
+            return run_ingest_github(m.group(1).strip())
+
+        m = re.match(r"^ingest linkedin(?:\s+pdf)?\s+(.+\.pdf)$", normalized)
+        if m:
+            return run_ingest_linkedin_pdf(m.group(1).strip())
+
+        m = re.match(r"^tailor\s+(.+)$", normalized)
+        if m:
+            return run_tailor(m.group(1).strip())
 
         # 2) Dedicated skill evidence parser.
         evidence_match = re.search(
