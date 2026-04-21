@@ -419,20 +419,21 @@ class ChatAgent:
         if normalized in SHORTCUTS:
             return SHORTCUTS[normalized]()
 
-        # 1b) Argument-parsing fast-paths for ingestion and tailoring.
-        m = re.match(r"^ingest resume (.+)$", normalized)
+        # 1b) Argument-parsing fast-paths — use raw message to preserve file paths.
+        raw = user_message.strip()
+        m = re.match(r"(?i)^ingest resume\s+(.+)$", raw)
         if m:
             return run_ingest_resume(m.group(1).strip())
 
-        m = re.match(r"^ingest github\s*(\S*)$", normalized)
+        m = re.match(r"(?i)^ingest github\s*(\S*)$", raw)
         if m:
             return run_ingest_github(m.group(1).strip())
 
-        m = re.match(r"^ingest linkedin(?:\s+pdf)?\s+(.+\.pdf)$", normalized)
+        m = re.match(r"(?i)^ingest linkedin(?:\s+pdf)?\s+(.+\.pdf)$", raw)
         if m:
             return run_ingest_linkedin_pdf(m.group(1).strip())
 
-        m = re.match(r"^tailor\s+(.+)$", normalized)
+        m = re.match(r"(?i)^tailor\s+(.+)$", raw)
         if m:
             return run_tailor(m.group(1).strip())
 
