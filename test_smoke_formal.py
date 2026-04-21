@@ -149,6 +149,20 @@ def test_empty_state_tables_show_placeholders(isolated_engine):
     asyncio.run(_run())
 
 
+def test_refresh_app_state_empty_and_with_skills(isolated_engine):
+    """_refresh_app_state returns 'setup' on empty DB, 'profile_ready' when user has skills."""
+    async def _run():
+        app = tui_module.ArtApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            assert app._refresh_app_state() == "setup"
+
+            _seed_user_and_skill(isolated_engine)
+            assert app._refresh_app_state() == "profile_ready"
+
+    asyncio.run(_run())
+
+
 @pytest.mark.integration
 @pytest.mark.slow
 def test_full_cli_ingestion_and_tailor_pipeline():
