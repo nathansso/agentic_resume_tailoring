@@ -1,6 +1,7 @@
 """
-DB query functions extracted from tui/app.py widget methods.
-Each function takes a user_id and returns plain data (lists/dicts), not widgets.
+DB query functions and ingestion service functions for the TUI.
+Query functions return plain data (lists/dicts) for widget rendering.
+Ingestion functions return plain-English result strings and never raise.
 """
 from typing import Optional
 from uuid import UUID
@@ -124,3 +125,85 @@ def compute_app_state() -> str:
             select(UserSkill).where(UserSkill.user_id == user.user_id).limit(1)
         ).first()
         return "profile_ready" if skill else "setup"
+
+
+# ── Ingestion service functions ─────────────────────────────
+# Each returns a plain-English result string and never raises.
+
+def ingest_resume_file(file_path: str) -> str:
+    """Parse a resume file (MD, PDF, DOCX) and save to DB."""
+    from pathlib import Path
+    path = Path(file_path)
+    if not path.exists():
+        return f"File not found: {file_path}"
+    try:
+        from database.db import init_db
+        init_db()
+        if file_path.endswith(".md"):
+            ingestion_data = {
+                "source_file": file_path,
+                "full_text": path.read_text(encoding="utf-8"),
+                "parsed_sections": {},
+            }
+        else:
+            from ingestion.resume import ResumeIngestor
+            ingestion_data = ResumeIngestor().ingest(file_path)
+        from agents.parser import ResumeParserAgent
+        ResumeParserAgent().parse_and_save(ingestion_data)
+        return f"Resume ingested: {path.name}. Your skills and experiences have been updated."
+    except Exception as e:
+        return f"Ingestion failed: {e}"
+
+
+def ingest_github(username: str = "") -> str:
+    """Fetch GitHub repos for a user and save skills/projects to DB."""
+    from config import GITHUB_USERNAME
+    target = username.strip() or GITHUB_USERNAME
+    if not target:
+        return "No GitHub username provided and GITHUB_USERNAME is not set in .env."
+    try:
+        from database.db import init_db
+        from ingestion.github import GitHubIngestor
+        from agents.parser import ResumeParserAgent
+        init_db()
+        repos = GitHubIngestor(username=target).ingest()
+        if not repos:
+            return f"No new or updated repos found for {target}."
+        lines = []
+        for repo in repos:
+            desc = repo.get("description") or "No description"
+            langs = ", ".join(repo.get("languages", []))
+            lines += [
+                f"Project: {repo['name']}", f"Description: {desc}",
+                f"Languages: {langs}", f"URL: {repo.get('url', '')}",
+            ]
+            if repo.get("readme"):
+                lines.append(f"README:\n{repo['readme']}")
+            for dep_file, dep_content in repo.get("dependencies", {}).items():
+                lines.append(f"{dep_file}:\n{dep_content}")
+            lines.append("")
+        ResumeParserAgent().parse_and_save({
+            "source_file": f"github:{target}",
+            "full_text": "\n".join(lines),
+            "parsed_sections": {},
+        })
+        return f"GitHub ingested: {len(repos)} repos parsed for {target}."
+    except Exception as e:
+        return f"GitHub ingestion failed: {e}"
+
+
+def ingest_linkedin_pdf(file_path: str) -> str:
+    """Parse a LinkedIn PDF export and save to DB."""
+    from pathlib import Path
+    if not Path(file_path).exists():
+        return f"File not found: {file_path}"
+    try:
+        from database.db import init_db
+        from ingestion.linkedin import LinkedInIngestor
+        from agents.parser import ResumeParserAgent
+        init_db()
+        data = LinkedInIngestor().ingest_pdf(file_path)
+        ResumeParserAgent().parse_and_save(data)
+        return f"LinkedIn PDF ingested: {Path(file_path).name}."
+    except Exception as e:
+        return f"LinkedIn PDF ingestion failed: {e}"
