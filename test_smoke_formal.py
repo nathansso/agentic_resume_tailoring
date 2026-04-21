@@ -219,6 +219,29 @@ def test_fast_path_short_unrecognized(isolated_engine, monkeypatch):
     assert "?" in response or "not sure" in response.lower() or "try" in response.lower()
 
 
+def test_get_llm_roles(monkeypatch):
+    """get_llm returns a BaseChatModel for each role without error."""
+    import llm as llm_module
+    from langchain_core.language_models.chat_models import BaseChatModel
+
+    class FakeModel(BaseChatModel):
+        def _generate(self, *a, **kw): pass
+        @property
+        def _llm_type(self): return "fake"
+
+    monkeypatch.setattr(llm_module, "LLM_PROVIDER", "openai")
+
+    def fake_openai(**kwargs):
+        return FakeModel()
+
+    import langchain_openai
+    monkeypatch.setattr(langchain_openai, "ChatOpenAI", fake_openai)
+
+    for role in ("chat", "extract", "tailor"):
+        model = llm_module.get_llm(role=role)
+        assert isinstance(model, BaseChatModel), f"Expected BaseChatModel for role={role}"
+
+
 @pytest.mark.integration
 @pytest.mark.slow
 def test_full_cli_ingestion_and_tailor_pipeline():
