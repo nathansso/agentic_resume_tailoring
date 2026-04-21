@@ -220,7 +220,7 @@ def test_fast_path_short_unrecognized(isolated_engine, monkeypatch):
 
 
 def test_get_llm_roles(monkeypatch):
-    """get_llm returns a BaseChatModel for each role without error."""
+    """get_llm returns a BaseChatModel for each role without error (anthropic + openai)."""
     import llm as llm_module
     from langchain_core.language_models.chat_models import BaseChatModel
 
@@ -229,17 +229,18 @@ def test_get_llm_roles(monkeypatch):
         @property
         def _llm_type(self): return "fake"
 
-    monkeypatch.setattr(llm_module, "LLM_PROVIDER", "openai")
-
-    def fake_openai(**kwargs):
+    def fake_model(**kwargs):
         return FakeModel()
 
-    import langchain_openai
-    monkeypatch.setattr(langchain_openai, "ChatOpenAI", fake_openai)
+    import langchain_anthropic, langchain_openai
+    monkeypatch.setattr(langchain_anthropic, "ChatAnthropic", fake_model)
+    monkeypatch.setattr(langchain_openai, "ChatOpenAI", fake_model)
 
-    for role in ("chat", "extract", "tailor"):
-        model = llm_module.get_llm(role=role)
-        assert isinstance(model, BaseChatModel), f"Expected BaseChatModel for role={role}"
+    for provider in ("anthropic", "openai"):
+        monkeypatch.setattr(llm_module, "LLM_PROVIDER", provider)
+        for role in ("chat", "extract", "tailor"):
+            model = llm_module.get_llm(role=role)
+            assert isinstance(model, BaseChatModel), f"Expected BaseChatModel for provider={provider} role={role}"
 
 
 @pytest.mark.integration
