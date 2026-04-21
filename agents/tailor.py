@@ -54,7 +54,7 @@ class ResumeTailorAgent:
     """
 
     def __init__(self):
-        self.llm = get_llm(temperature=0.3)
+        self.llm = get_llm(role="tailor", temperature=0.3)
         self.graph = self._build_graph()
 
     def tailor(self, user_id: UUID, job_id: UUID, result_id: UUID, resume_text: str = "") -> Dict:

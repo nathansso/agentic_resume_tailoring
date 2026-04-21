@@ -120,16 +120,24 @@ Should print a model class name without error when `OPENAI_API_KEY` is set.
 
 > Claude Code: update this section as you work. Do not delete unchecked items.
 
-**Status:** `not started`
+**Status:** `complete`
 
 ### Files Modified
-_None yet_
+- `config.py` — added CHAT/EXTRACT/TAILOR_MODEL, ANTHROPIC_API_KEY stub, changed default to openai
+- `llm.py` — rewritten with ModelRole constants and role-based get_llm()
+- `agents/chat.py` — expanded SHORTCUTS/COMMAND_PHRASES/TOOL_MAP, added get_help_text(), short-message fast-path, latency logging, role kwarg
+- `agents/parser.py` — role="extract"
+- `agents/job_analyzer.py` — role="extract"
+- `agents/tailor.py` — role="tailor"
+- `agents/enhancer.py` — role="chat"
+- `test_smoke_formal.py` — 3 new tests + monkeypatch lambda updated for role kwarg
 
 ### Files Created
-_None yet_
+_None_
 
 ### Completed Tasks
-_None yet_
+All 5 tasks complete. 8 tests pass (5 existing + 3 new).
 
 ### Notes / Deviations
-_Any decisions made that differ from the spec above_
+- Short-message fast-path triggers on messages with < 4 tokens that don't match any shortcut/phrase (spec said "under 4 tokens not recognized")
+- `test_get_llm_roles` mocks ChatOpenAI at the `langchain_openai` module level to avoid needing a real API key

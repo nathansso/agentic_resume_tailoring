@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class ResumeParserAgent:
     def __init__(self):
-        self.llm = get_llm(temperature=0.0)
+        self.llm = get_llm(role="extract", temperature=0.0)
         self.user = get_or_create_default_user()
 
     def parse_and_save(self, ingestion_data: Dict[str, Any]):

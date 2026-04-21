@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 class ProjectEnhancerAgent:
     def __init__(self):
-        self.llm = get_llm(temperature=0.7)
+        self.llm = get_llm(role="chat", temperature=0.7)
 
     def enhance_all_projects(self):
         """
