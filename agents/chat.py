@@ -1,9 +1,10 @@
 """
 Chat Agent — TUI assistant with tool-calling for ART operations.
-Uses Ollama LLM with a simple TOOL_CALL protocol to ingest data,
+Uses a role-based LLM with a simple TOOL_CALL protocol to ingest data,
 query the knowledge graph, and run tailoring pipelines conversationally.
 """
 import re
+import time
 import logging
 from difflib import SequenceMatcher
 from typing import Dict, List
@@ -156,6 +157,21 @@ def list_jobs() -> str:
         return f"Saved jobs ({len(lines)}):\n" + "\n".join(lines)
 
 
+def get_help_text() -> str:
+    """Return a concise command listing (no LLM call)."""
+    return (
+        "Available commands:\n"
+        "  skills / my skills        — list all your skills\n"
+        "  experiences / my exp      — list work experience\n"
+        "  projects / my projects    — list projects\n"
+        "  graph / knowledge graph   — show graph stats\n"
+        "  jobs / current job        — list saved jobs\n"
+        "  profile / status          — show profile summary\n"
+        "  evidence for <skill>      — show evidence for a skill\n\n"
+        "Use F1–F4 in the TUI for ingest, data, tailor, and viz shortcuts."
+    )
+
+
 def get_profile_summary() -> str:
     """Get a summary of the user's profile."""
     with Session(engine) as session:
@@ -197,6 +213,7 @@ TOOL_MAP = {
     "query_skill_evidence": lambda args: query_skill_evidence(args),
     "list_jobs": lambda args: list_jobs(),
     "get_profile_summary": lambda args: get_profile_summary(),
+    "get_help_text": lambda args: get_help_text(),
 }
 
 # Direct-match shortcuts (bypass LLM for instant response)
@@ -212,11 +229,19 @@ SHORTCUTS = {
     "my projects": query_projects,
     "graph": query_graph_stats,
     "graph stats": query_graph_stats,
+    "knowledge graph": query_graph_stats,
+    "my graph": query_graph_stats,
     "jobs": list_jobs,
     "show jobs": list_jobs,
+    "job": list_jobs,
+    "current job": list_jobs,
+    "active job": list_jobs,
     "profile": get_profile_summary,
     "status": get_profile_summary,
     "my profile": get_profile_summary,
+    "help": get_help_text,
+    "what can you do": get_help_text,
+    "ingest": get_help_text,
 }
 
 
@@ -248,18 +273,31 @@ COMMAND_PHRASES = {
         "graph stats",
         "knowledge graph",
         "graph summary",
+        "my graph",
+        "show graph",
     ],
     "list_jobs": [
         "show jobs",
         "list jobs",
         "my jobs",
         "saved jobs",
+        "job",
+        "current job",
+        "active job",
     ],
     "get_profile_summary": [
         "profile",
         "status",
         "profile summary",
         "show profile",
+    ],
+    "get_help_text": [
+        "help",
+        "what can you do",
+        "ingest",
+        "commands",
+        "what commands",
+        "show help",
     ],
 }
 
@@ -296,7 +334,7 @@ class ChatAgent:
     """
 
     def __init__(self):
-        self.llm = get_llm(temperature=0.2)
+        self.llm = get_llm(role="chat", temperature=0.2)
         self.history: List[Dict[str, str]] = []
 
     @staticmethod
@@ -378,12 +416,29 @@ class ChatAgent:
 
     def chat(self, user_message: str) -> str:
         """Process a user message and return a response."""
+        t0 = time.perf_counter()
+
         # Route command-like queries directly for speed and full-fidelity output.
         routed = self._semantic_command_match(user_message)
         if routed is not None:
+            ms = (time.perf_counter() - t0) * 1000
+            logger.debug("[chat] path=fast_path duration=%.1fms", ms)
             self.history.append({"role": "user", "content": user_message})
             self.history.append({"role": "assistant", "content": routed})
             return routed
+
+        # Short unrecognized messages — return clarification without LLM.
+        tokens = user_message.strip().split()
+        if len(tokens) < 4:
+            ms = (time.perf_counter() - t0) * 1000
+            logger.debug("[chat] path=fast_path duration=%.1fms", ms)
+            clarification = (
+                "I'm not sure what you mean. Try a command like 'skills', "
+                "'projects', or 'help' to see what I can do."
+            )
+            self.history.append({"role": "user", "content": user_message})
+            self.history.append({"role": "assistant", "content": clarification})
+            return clarification
 
         self.history.append({"role": "user", "content": user_message})
 
@@ -398,6 +453,10 @@ class ChatAgent:
         except Exception as e:
             logger.error(f"LLM error: {e}")
             return f"LLM error: {e}"
+
+        ms = (time.perf_counter() - t0) * 1000
+        from config import LLM_PROVIDER
+        logger.debug("[chat] path=llm provider=%s role=chat duration=%.1fms", LLM_PROVIDER, ms)
 
         # Resolve any TOOL_CALL lines
         resolved = self._resolve_tool_calls(text)

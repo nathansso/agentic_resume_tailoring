@@ -19,7 +19,7 @@ class JobAnalyzerAgent:
     """
 
     def __init__(self):
-        self.llm = get_llm(temperature=0.0)
+        self.llm = get_llm(role="extract", temperature=0.0)
 
     def analyze_and_save(self, job_data: Dict[str, Any]) -> JobDescription:
         """
