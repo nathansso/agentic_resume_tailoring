@@ -125,22 +125,26 @@ def test_tui_new_job_flow(isolated_engine):
 
 
 def test_empty_state_tables_show_placeholders(isolated_engine):
-    """Skills/exp/proj tables show placeholder rows when DB is empty."""
+    """Skills tree and exp/proj tables show placeholder content when DB is empty."""
     async def _run():
         app = tui_module.ArtApp()
         async with app.run_test() as pilot:
             await pilot.pause()
-            from textual.widgets import DataTable
-            skills_table = app.query_one("#skills-table", DataTable)
+            from textual.widgets import DataTable, Tree
+
+            skills_tree = app.query_one("#skills-tree", Tree)
             exp_table = app.query_one("#exp-table", DataTable)
             proj_table = app.query_one("#proj-table", DataTable)
 
-            assert skills_table.row_count == 1
+            # Skills tree should have a placeholder leaf under root
+            root_children = list(skills_tree.root.children)
+            assert len(root_children) >= 1
+            leaf_label = str(root_children[0].label)
+            assert "ingest" in leaf_label.lower() or "no skill" in leaf_label.lower()
+
             assert exp_table.row_count == 1
             assert proj_table.row_count == 1
 
-            skills_cell = skills_table.get_cell_at((0, 0))
-            assert "ingest" in str(skills_cell).lower()
             exp_cell = exp_table.get_cell_at((0, 0))
             assert "ingest" in str(exp_cell).lower()
             proj_cell = proj_table.get_cell_at((0, 0))

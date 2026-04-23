@@ -25,7 +25,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import (
     Header, Footer, Static, Input, Button, ListView,
-    ListItem, Label, TabbedContent, TabPane, DataTable, RichLog,
+    ListItem, Label, TabbedContent, TabPane, DataTable, RichLog, Tree,
 )
 from textual import work
 
@@ -128,10 +128,23 @@ class ArtApp(App):
         margin: 0 0 1 0;
     }
 
+    /* Graph Tree */
+    #graph-tree {
+        height: 1fr;
+        padding: 0 1;
+    }
+
+    /* Skills Tree */
+    #skills-tree {
+        height: 1fr;
+        padding: 0 1;
+    }
+
     /* Viz Tab */
     #viz-content {
         height: 1fr;
         padding: 1;
+        overflow-y: auto;
     }
 
     /* New Job Inputs */
@@ -214,13 +227,13 @@ class ArtApp(App):
                     with TabPane("Data", id="tab-data"):
                         with TabbedContent(id="data-subtabs"):
                             with TabPane("Skills", id="subtab-skills"):
-                                yield DataTable(id="skills-table")
+                                yield Tree("Skills", id="skills-tree")
                             with TabPane("Experiences", id="subtab-exp"):
                                 yield DataTable(id="exp-table")
                             with TabPane("Projects", id="subtab-proj"):
                                 yield DataTable(id="proj-table")
                             with TabPane("Graph", id="subtab-graph"):
-                                yield RichLog(id="graph-log", markup=True)
+                                yield Tree("Knowledge Graph", id="graph-tree")
 
                     # ── Visualization Tab ──
                     with TabPane("Viz", id="tab-viz"):
@@ -477,15 +490,39 @@ class ArtApp(App):
         self._load_graph_view()
 
     def _load_skills_table(self) -> None:
-        table = self.query_one("#skills-table", DataTable)
-        table.clear(columns=True)
-        table.add_columns("Skill", "Source", "Proficiency", "Confidence")
+        tree = self.query_one("#skills-tree", Tree)
+        tree.clear()
         rows = services.get_skills(services.get_first_user_id())
         if not rows:
-            table.add_row("No skills found -- ingest a resume via F1", "", "", "")
+            tree.root.set_label("[bold]Skills[/bold]")
+            tree.root.add_leaf("[dim]No skills found — ingest a resume via F1[/dim]")
+            tree.root.expand()
             return
+
+        # Group by category
+        by_category: dict[str, list] = {}
         for row in rows:
-            table.add_row(row["name"], row["source"], row["proficiency"], row["confidence"])
+            cat = (row.get("category") or "Uncategorized").strip() or "Uncategorized"
+            by_category.setdefault(cat, []).append(row)
+
+        tree.root.set_label(f"[bold]Skills[/bold] — {len(rows)} total")
+        for cat in sorted(by_category):
+            items = by_category[cat]
+            cat_node = tree.root.add(f"[bold cyan]{cat}[/bold cyan] ({len(items)})")
+            for row in sorted(items, key=lambda r: r["name"]):
+                label = f"[cyan]{row['name']}[/cyan]"
+                detail = []
+                if row.get("proficiency"):
+                    detail.append(f"proficiency: {row['proficiency']}")
+                if row.get("confidence"):
+                    detail.append(f"confidence: {row['confidence']}")
+                if row.get("source"):
+                    detail.append(f"source: {row['source']}")
+                if detail:
+                    label += f"  [dim]{' · '.join(detail)}[/dim]"
+                cat_node.add_leaf(label)
+            cat_node.expand()
+        tree.root.expand()
 
     def _load_exp_table(self) -> None:
         table = self.query_one("#exp-table", DataTable)
@@ -511,62 +548,118 @@ class ArtApp(App):
 
     @work(thread=True)
     def _load_graph_view(self) -> None:
-        self.call_from_thread(self._init_graph_log)
+        self.call_from_thread(self._init_graph_tree)
         try:
             from knowledge_graph.builder import SkillGraphBuilder
             G = SkillGraphBuilder().build_graph()
-            lines = self._build_graph_lines(G)
-            self.call_from_thread(self._post_graph_view, lines)
+            data = self._extract_graph_data(G)
+            self.call_from_thread(self._render_graph_tree, data)
         except Exception as e:
-            self.call_from_thread(self._post_graph_error, str(e))
+            self.call_from_thread(self._graph_tree_error, str(e))
 
-    def _init_graph_log(self) -> None:
-        log = self.query_one("#graph-log", RichLog)
-        log.clear()
-        log.write("Loading knowledge graph...")
+    def _init_graph_tree(self) -> None:
+        tree = self.query_one("#graph-tree", Tree)
+        tree.clear()
+        tree.root.set_label("Loading knowledge graph...")
 
-    def _build_graph_lines(self, G) -> list:
-        skills = [n for n, d in G.nodes(data=True) if d.get("type") == "Skill"]
-        projects = [n for n, d in G.nodes(data=True) if d.get("type") == "Project"]
-        experiences = [n for n, d in G.nodes(data=True) if d.get("type") == "Experience"]
-        lines = [
-            f"[bold]Knowledge Graph[/bold]: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges\n",
-            f"\n[bold cyan]Skills ({len(skills)}):[/bold cyan]",
-        ]
-        for s in sorted(skills):
-            name = G.nodes[s].get("name", s)
-            preds = list(G.predecessors(s))
-            if preds:
-                sources = [G.nodes[p].get("name", p) for p in preds[:3]]
-                lines.append(f"  {name} <- {', '.join(sources)}")
+    def _extract_graph_data(self, G) -> dict:
+        """Build a serializable data dict from the graph (runs in background thread)."""
+        skill_nodes = [(n, d) for n, d in G.nodes(data=True) if d.get("type") == "Skill"]
+        exp_nodes   = [(n, d) for n, d in G.nodes(data=True) if d.get("type") == "Experience"]
+        proj_nodes  = [(n, d) for n, d in G.nodes(data=True) if d.get("type") == "Project"]
+
+        skills = []
+        for node, data in sorted(skill_nodes, key=lambda x: x[1].get("name", "")):
+            preds = list(G.predecessors(node))
+            proj_srcs = [G.nodes[p].get("name", p) for p in preds if G.nodes[p].get("type") == "Project"]
+            exp_srcs  = [G.nodes[p].get("name", p) for p in preds if G.nodes[p].get("type") == "Experience"]
+            skills.append({
+                "name": data.get("name", node),
+                "category": data.get("category") or "Uncategorized",
+                "projects": proj_srcs,
+                "experiences": exp_srcs,
+            })
+
+        experiences = []
+        for node, data in sorted(exp_nodes, key=lambda x: x[1].get("name", "")):
+            skill_names = [G.nodes[s].get("name", s) for s in G.successors(node)
+                           if G.nodes[s].get("type") == "Skill"]
+            experiences.append({
+                "title": data.get("name", ""),
+                "company": data.get("company", ""),
+                "skills": sorted(skill_names),
+            })
+
+        projects = []
+        for node, data in sorted(proj_nodes, key=lambda x: x[1].get("name", "")):
+            skill_names = [G.nodes[s].get("name", s) for s in G.successors(node)
+                           if G.nodes[s].get("type") == "Skill"]
+            projects.append({"name": data.get("name", node), "skills": sorted(skill_names)})
+
+        return {
+            "nodes": G.number_of_nodes(),
+            "edges": G.number_of_edges(),
+            "skills": skills,
+            "experiences": experiences,
+            "projects": projects,
+        }
+
+    def _render_graph_tree(self, data: dict) -> None:
+        tree = self.query_one("#graph-tree", Tree)
+        tree.clear()
+        tree.root.set_label(
+            f"[bold]Knowledge Graph[/bold] — {data['nodes']} nodes · {data['edges']} edges"
+        )
+
+        # Skills branch — grouped by category
+        skills_node = tree.root.add(
+            f"[bold cyan]Skills ({len(data['skills'])})[/bold cyan]"
+        )
+        by_cat: dict[str, list] = {}
+        for s in data["skills"]:
+            by_cat.setdefault(s["category"], []).append(s)
+        for cat in sorted(by_cat):
+            cat_node = skills_node.add(f"[cyan]{cat}[/cyan] ({len(by_cat[cat])})")
+            for s in by_cat[cat]:
+                skill_node = cat_node.add(f"[bold]{s['name']}[/bold]")
+                if s["projects"]:
+                    skill_node.add_leaf(f"[dim]Projects:[/dim]  {', '.join(s['projects'])}")
+                if s["experiences"]:
+                    skill_node.add_leaf(f"[dim]Experiences:[/dim]  {', '.join(s['experiences'])}")
+                if not s["projects"] and not s["experiences"]:
+                    skill_node.add_leaf("[dim]No connections yet[/dim]")
+
+        # Experiences branch
+        exp_node = tree.root.add(
+            f"[bold green]Experiences ({len(data['experiences'])})[/bold green]"
+        )
+        for e in data["experiences"]:
+            label = f"[green]{e['title']}[/green]"
+            if e["company"]:
+                label += f"  [dim]@ {e['company']}[/dim]"
+            n = exp_node.add(label)
+            if e["skills"]:
+                n.add_leaf(f"[dim]Skills:[/dim]  {', '.join(e['skills'])}")
             else:
-                lines.append(f"  {name}")
-        lines.append(f"\n[bold green]Experiences ({len(experiences)}):[/bold green]")
-        for e in sorted(experiences):
-            name = G.nodes[e].get("name", e)
-            company = G.nodes[e].get("company", "")
-            skill_names = [G.nodes[s].get("name", s) for s in list(G.successors(e))[:5]]
-            lines.append(f"  {name} @ {company}")
-            if skill_names:
-                lines.append(f"    -> {', '.join(skill_names)}")
-        lines.append(f"\n[bold yellow]Projects ({len(projects)}):[/bold yellow]")
-        for p in sorted(projects)[:20]:
-            name = G.nodes[p].get("name", p)
-            skill_names = [G.nodes[s].get("name", s) for s in list(G.successors(p))[:5]]
-            lines.append(f"  {name}")
-            if skill_names:
-                lines.append(f"    -> {', '.join(skill_names)}")
-        return lines
+                n.add_leaf("[dim]No skills linked[/dim]")
 
-    def _post_graph_view(self, lines: list) -> None:
-        log = self.query_one("#graph-log", RichLog)
-        log.clear()
-        for line in lines:
-            log.write(line)
+        # Projects branch
+        proj_node = tree.root.add(
+            f"[bold yellow]Projects ({len(data['projects'])})[/bold yellow]"
+        )
+        for p in data["projects"]:
+            n = proj_node.add(f"[yellow]{p['name']}[/yellow]")
+            if p["skills"]:
+                n.add_leaf(f"[dim]Skills:[/dim]  {', '.join(p['skills'])}")
+            else:
+                n.add_leaf("[dim]No skills linked[/dim]")
 
-    def _post_graph_error(self, error: str) -> None:
-        log = self.query_one("#graph-log", RichLog)
-        log.write(f"[red]Error loading graph: {error}[/red]")
+        tree.root.expand()
+
+    def _graph_tree_error(self, error: str) -> None:
+        tree = self.query_one("#graph-tree", Tree)
+        tree.clear()
+        tree.root.set_label(f"[red]Error loading graph: {error}[/red]")
 
     # ───────────────────────────────────────────────────────
     #  Visualization
@@ -575,22 +668,45 @@ class ArtApp(App):
     def _load_viz(self) -> None:
         log = self.query_one("#viz-content", RichLog)
         log.clear()
+        log.write("Loading charts...")
+        self._run_viz()
+
+    @work(thread=True)
+    def _run_viz(self) -> None:
+        from rich.text import Text
+
+        def write(content: str) -> None:
+            self.call_from_thread(
+                lambda c=content: self.query_one("#viz-content", RichLog).write(Text.from_ansi(c))
+            )
 
         try:
             import plotext as plt
         except ImportError:
-            log.write("[red]plotext not installed. Run: pip install plotext[/red]")
+            self.call_from_thread(
+                lambda: self.query_one("#viz-content", RichLog).write(
+                    "[red]plotext not installed. Run: pip install plotext[/red]"
+                )
+            )
             return
+
+        CHART_W = 80
 
         with Session(engine) as session:
             user = session.exec(select(User).limit(1)).first()
             if not user:
-                log.write("[yellow]No data to visualize. Ingest your resume first.[/yellow]")
+                self.call_from_thread(
+                    lambda: self.query_one("#viz-content", RichLog).write(
+                        "[yellow]No data yet — ingest your resume first (F1)[/yellow]"
+                    )
+                )
                 return
 
             user_skills = session.exec(
                 select(UserSkill).where(UserSkill.user_id == user.user_id)
             ).all()
+
+            self.call_from_thread(lambda: self.query_one("#viz-content", RichLog).clear())
 
             # ── Chart 1: Skills by Source ──
             source_counts: dict[str, int] = {}
@@ -601,11 +717,10 @@ class ArtApp(App):
             if source_counts:
                 plt.clear_figure()
                 plt.theme("dark")
+                plt.plotsize(CHART_W, 15)
                 plt.bar(list(source_counts.keys()), list(source_counts.values()))
                 plt.title("Skills by Source")
-                plt.xlabel("Source")
-                plt.ylabel("Count")
-                log.write(plt.build())
+                write(plt.build())
 
             # ── Chart 2: Top Skills by Confidence ──
             skill_scores = []
@@ -619,26 +734,27 @@ class ArtApp(App):
             if top:
                 plt.clear_figure()
                 plt.theme("dark")
-                names = [s[0] for s in reversed(top)]
+                plt.plotsize(CHART_W, max(10, len(top) + 4))
+                names = [s[0][:25] for s in reversed(top)]
                 scores = [s[1] for s in reversed(top)]
                 plt.bar(names, scores, orientation="h")
                 plt.title("Top Skills by Confidence")
-                log.write("\n" + plt.build())
+                write("\n" + plt.build())
 
             # ── Chart 3: Knowledge Graph Connectivity ──
             try:
                 from knowledge_graph.builder import SkillGraphBuilder
-                builder = SkillGraphBuilder()
-                G = builder.build_graph()
+                G = SkillGraphBuilder().build_graph()
                 degrees = sorted(G.degree(), key=lambda x: x[1], reverse=True)[:10]
                 if degrees:
                     plt.clear_figure()
                     plt.theme("dark")
-                    names = [d[0].split(":")[-1][:20] for d in reversed(degrees)]
+                    plt.plotsize(CHART_W, 14)
+                    names = [d[0].split(":")[-1][:25] for d in reversed(degrees)]
                     counts = [d[1] for d in reversed(degrees)]
                     plt.bar(names, counts, orientation="h")
                     plt.title("Most Connected Nodes (Knowledge Graph)")
-                    log.write("\n" + plt.build())
+                    write("\n" + plt.build())
             except Exception:
                 pass
 
@@ -647,16 +763,16 @@ class ArtApp(App):
                 select(UserJobResult).where(UserJobResult.user_id == user.user_id)
             ).all()
             if results:
-                # Sort by created_at
                 results_sorted = sorted(results, key=lambda r: r.created_at)
                 plt.clear_figure()
                 plt.theme("dark")
+                plt.plotsize(CHART_W, 15)
                 dates = [r.created_at.strftime("%m/%d") for r in results_sorted]
                 scores = [r.ats_score for r in results_sorted]
                 plt.bar(dates, scores)
                 plt.title("ATS Scores Over Time")
                 plt.ylabel("Score %")
-                log.write("\n" + plt.build())
+                write("\n" + plt.build())
 
 
 # ───────────────────────────────────────────────────────────

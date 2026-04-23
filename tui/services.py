@@ -35,6 +35,7 @@ def get_skills(user_id: Optional[UUID]) -> list[dict]:
                 source = (us.evidence_source or "unknown").split(":")[0]
                 rows.append({
                     "name": skill.name,
+                    "category": skill.category or "Uncategorized",
                     "source": source,
                     "proficiency": str(us.proficiency or "N/A"),
                     "confidence": f"{us.confidence_score:.1f}",
