@@ -25,10 +25,11 @@ logger = logging.getLogger(__name__)
 
 def query_skills() -> str:
     """Get all user skills with evidence sources."""
+    from database.user_utils import get_active_profile
+    user = get_active_profile()
     with Session(engine) as session:
-        user = session.exec(select(User).limit(1)).first()
         if not user:
-            return "No user profile found. Ingest a resume first."
+            return "No active profile. Complete onboarding first."
         user_skills = session.exec(
             select(UserSkill).where(UserSkill.user_id == user.user_id)
         ).all()
@@ -49,10 +50,11 @@ def query_skills() -> str:
 
 def query_experiences() -> str:
     """Get all user experiences."""
+    from database.user_utils import get_active_profile
+    user = get_active_profile()
     with Session(engine) as session:
-        user = session.exec(select(User).limit(1)).first()
         if not user:
-            return "No user profile found."
+            return "No active profile. Complete onboarding first."
         exps = session.exec(
             select(Experience).where(Experience.user_id == user.user_id)
         ).all()
@@ -71,10 +73,11 @@ def query_experiences() -> str:
 
 def query_projects() -> str:
     """Get all user projects."""
+    from database.user_utils import get_active_profile
+    user = get_active_profile()
     with Session(engine) as session:
-        user = session.exec(select(User).limit(1)).first()
         if not user:
-            return "No user profile found."
+            return "No active profile. Complete onboarding first."
         projs = session.exec(
             select(Project).where(Project.user_id == user.user_id)
         ).all()
@@ -235,10 +238,11 @@ def run_tailor(job_input: str) -> str:
 
 def get_profile_summary() -> str:
     """Get a summary of the user's profile."""
+    from database.user_utils import get_active_profile
+    user = get_active_profile()
     with Session(engine) as session:
-        user = session.exec(select(User).limit(1)).first()
         if not user:
-            return "No user profile found. Start by ingesting your resume."
+            return "No active profile. Complete onboarding first."
         skills = session.exec(
             select(UserSkill).where(UserSkill.user_id == user.user_id)
         ).all()
