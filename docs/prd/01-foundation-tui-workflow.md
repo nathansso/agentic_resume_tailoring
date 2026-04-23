@@ -121,25 +121,3 @@ Intended user flow after this PRD:
 7. Refine via chat
 </details>
 
----
-
-## Progress
-
-> Claude Code: update this section as you work. Do not delete unchecked items.
-
-**Status:** `complete`
-
-### Files Modified
-- `tui/app.py` — AppState class, status bar, empty state tables, threaded graph view, services integration
-- `test_smoke_formal.py` — 3 new tests + patched `tui.services.engine` in fixture
-
-### Files Created
-- `tui/services.py` — DB query functions extracted from widget methods
-
-### Completed Tasks
-All 7 tasks complete. 5 tests pass (3 existing + 3 new).
-
-### Notes / Deviations
-- `_load_viz` retains direct DB access since it does complex multi-query charting not covered by task 1 scope
-- Status bar uses `--` instead of `—` (em-dash) for Windows ASCII safety
-- `_refresh_app_state()` returns the state string to enable testability without accessing `app.app_state` directly
