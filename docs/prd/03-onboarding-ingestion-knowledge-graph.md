@@ -123,16 +123,26 @@ The entire codebase currently behaves as a single-user prototype. `database/user
 
 > Claude Code: update this section as you work. Do not delete unchecked items.
 
-**Status:** `not started`
+**Status:** `complete`
 
 ### Files Modified
-_None yet_
+- `database/models.py` — added `onboarding_complete` (bool) and `onboarding_steps` (JSON) to `User`
+- `database/db.py` — added `_migrate_db()` for backward-compat SQLite column additions
+- `database/user_utils.py` — replaced `get_or_create_default_user` with `get_active_profile` / `create_profile`; kept wrapper for pipeline backward-compat
+- `tui/services.py` — updated `get_first_user_id()` to use `get_active_profile()`; added `get_graph_summary()` and `ingest_github_for_profile()`
+- `agents/chat.py` — replaced all `select(User).limit(1)` calls with `get_active_profile()`
+- `graph/pipeline.py` — `ingest_resume_node` now prefers `get_active_profile()`, falls back to `get_or_create_default_user()`
+- `tui/app.py` — `on_mount` pushes `OnboardingScreen` if no active profile; added `_on_onboarding_done` callback with GitHub offer
+- `test_smoke_formal.py` — fixture now patches `user_utils`; `_seed_user_and_skill` writes profile pointer; 4 new tests
 
 ### Files Created
-_None yet_
+- `tui/screens/onboarding.py` — `OnboardingScreen` with name/email/resume/github/linkedin form and background ingestion worker
 
 ### Completed Tasks
-_None yet_
+All 6 tasks complete. 16 tests pass.
 
 ### Notes / Deviations
-_Any decisions made that differ from the spec above_
+- `get_or_create_default_user()` kept as backward-compat wrapper (pipeline + CLI path); not removed
+- `on_mount` loads data tables before pushing onboarding so empty-state placeholders render correctly if user dismisses the screen
+- `ACTIVE_PROFILE_FILE` exposed as module-level var in `user_utils` to allow monkeypatching in tests
+- `test_onboarding_screen_mounts` wraps `OnboardingScreen` in a minimal `App` because `run_test()` is only available on `App`

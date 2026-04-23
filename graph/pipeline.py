@@ -20,7 +20,7 @@ from langgraph.graph import StateGraph, END
 
 from database.db import engine
 from database.models import User, Experience, UserSkill, JobDescription, UserJobResult
-from database.user_utils import get_or_create_default_user
+from database.user_utils import get_active_profile, get_or_create_default_user
 from ingestion.job import JobIngestor
 from agents.parser import ResumeParserAgent
 from agents.job_analyzer import JobAnalyzerAgent
@@ -82,7 +82,7 @@ def build_pipeline() -> StateGraph:
 
 def ingest_resume_node(state: PipelineState) -> PipelineState:
     """Ingest and parse resume if user has no data yet."""
-    user = get_or_create_default_user()
+    user = get_active_profile() or get_or_create_default_user()
     state["user_id"] = str(user.user_id)
 
     # Check if user already has parsed data

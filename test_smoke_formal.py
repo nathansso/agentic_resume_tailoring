@@ -10,6 +10,7 @@ from textual.widgets import Input
 
 import agents.chat as chat_module
 import database.db as db_module
+import database.user_utils as user_utils_module
 import knowledge_graph.builder as kg_builder_module
 import tui.app as tui_module
 import tui.services as services_module
@@ -24,14 +25,21 @@ def isolated_engine(tmp_path, monkeypatch):
     engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
     SQLModel.metadata.create_all(engine)
 
+    profile_file = tmp_path / "active_profile_id"
+
     # Point all modules used by these tests at the isolated DB.
     monkeypatch.setattr(db_module, "engine", engine)
     monkeypatch.setattr(chat_module, "engine", engine)
     monkeypatch.setattr(tui_module, "engine", engine)
     monkeypatch.setattr(kg_builder_module, "engine", engine)
     monkeypatch.setattr(services_module, "engine", engine)
+    monkeypatch.setattr(user_utils_module, "engine", engine)
+    monkeypatch.setattr(user_utils_module, "ACTIVE_PROFILE_FILE", profile_file)
+    monkeypatch.setattr(user_utils_module, "ART_DIR", tmp_path)
     monkeypatch.setattr(tui_module, "init_db", lambda: None)
 
+    # Expose profile_file on the engine object so helpers can write to it.
+    engine._test_profile_file = profile_file
     return engine
 
 
@@ -41,6 +49,7 @@ def _seed_user_and_skill(engine):
         session.add(user)
         session.commit()
         session.refresh(user)
+        uid = user.user_id
 
         skill = Skill(name="Python", category="language")
         session.add(skill)
@@ -48,7 +57,7 @@ def _seed_user_and_skill(engine):
         session.refresh(skill)
 
         user_skill = UserSkill(
-            user_id=user.user_id,
+            user_id=uid,
             skill_id=skill.skill_id,
             proficiency=5,
             evidence_source="resume",
@@ -56,6 +65,10 @@ def _seed_user_and_skill(engine):
         )
         session.add(user_skill)
         session.commit()
+
+    # Write the active profile pointer so get_active_profile() resolves the test user.
+    if hasattr(engine, "_test_profile_file"):
+        engine._test_profile_file.write_text(str(uid))
 
 
 def test_chat_semantic_routing_uses_tool_and_is_fast(isolated_engine, monkeypatch):
@@ -302,6 +315,66 @@ def test_ingest_resume_file_missing_path(isolated_engine):
     result = svc.ingest_resume_file("definitely_does_not_exist_12345.md")
     assert "not found" in result.lower() or "error" in result.lower()
     assert isinstance(result, str)
+
+
+def test_get_active_profile_returns_none_on_empty_db(isolated_engine):
+    """get_active_profile returns None when no profile file or DB record exists."""
+    result = user_utils_module.get_active_profile()
+    assert result is None
+
+
+def test_create_profile_persists_and_loads(isolated_engine):
+    """create_profile saves to DB and get_active_profile reloads it."""
+    user = user_utils_module.create_profile("Alice", "alice@test.com", github_username="alicecodes")
+    assert user is not None
+    assert user.name == "Alice"
+    assert isolated_engine._test_profile_file.exists()
+
+    loaded = user_utils_module.get_active_profile()
+    assert loaded is not None
+    assert loaded.user_id == user.user_id
+    assert loaded.name == "Alice"
+
+
+def test_onboarding_screen_mounts(isolated_engine):
+    """OnboardingScreen composes without error inside a minimal App."""
+    from textual.app import App, ComposeResult
+    from tui.screens.onboarding import OnboardingScreen
+
+    class _TestApp(App):
+        def on_mount(self) -> None:
+            self.push_screen(OnboardingScreen())
+
+    async def _run():
+        async with _TestApp().run_test() as pilot:
+            await pilot.pause()
+
+    asyncio.run(_run())
+
+
+def test_graph_summary_returns_structure(isolated_engine, monkeypatch):
+    """get_graph_summary returns a dict with top_skills, by_category, evidence keys."""
+    import tui.services as svc
+    monkeypatch.setattr(svc, "engine", isolated_engine)
+
+    result = svc.get_graph_summary(None)
+    assert "top_skills" in result
+    assert "by_category" in result
+    assert "evidence" in result
+
+    # Seed a user and check with a real user_id (graph will be empty but keys must exist)
+    from database.models import User
+    with Session(isolated_engine) as session:
+        user = User(name="Bob", email="bob@test.com")
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        uid = user.user_id
+
+    result2 = svc.get_graph_summary(uid)
+    assert isinstance(result2["top_skills"], list)
+    assert isinstance(result2["by_category"], dict)
+    assert isinstance(result2["evidence"], dict)
 
 
 @pytest.mark.integration

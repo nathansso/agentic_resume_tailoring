@@ -30,6 +30,7 @@ from textual.widgets import (
 from textual import work
 
 from database.db import init_db, engine
+from tui.screens.onboarding import OnboardingScreen
 from database.models import JobDescription, Skill, User, UserJobResult, UserSkill
 from sqlmodel import Session, select
 from tui import services
@@ -251,6 +252,31 @@ class ArtApp(App):
         self._load_jobs_sidebar()
         self._load_data_tables()
         self._load_viz()
+        from database.user_utils import get_active_profile
+        if get_active_profile() is None:
+            self.push_screen(OnboardingScreen(), callback=self._on_onboarding_done)
+
+    def _on_onboarding_done(self, result: dict | None) -> None:
+        self._refresh_app_state()
+        self._load_jobs_sidebar()
+        self._load_data_tables()
+        self._load_viz()
+        if not result:
+            return
+        scroll = self.query_one("#chat-scroll", VerticalScroll)
+        scroll.mount(Static(
+            f"Welcome, {result.get('name', '')}! Resume ingested successfully.\n\n"
+            f"{result.get('ingest_result', '')}",
+            classes="bot-msg",
+        ))
+        github = result.get("github_username", "")
+        if github:
+            scroll.mount(Static(
+                f"GitHub username detected ({github}).\n"
+                "Type 'ingest github' to fetch your repos and extract skills/projects.",
+                classes="bot-msg",
+            ))
+        scroll.scroll_end()
 
     # ───────────────────────────────────────────────────────
     #  Chat
@@ -692,8 +718,10 @@ class ArtApp(App):
 
         CHART_W = 80
 
+        from database.user_utils import get_active_profile
+        user = get_active_profile()
+
         with Session(engine) as session:
-            user = session.exec(select(User).limit(1)).first()
             if not user:
                 self.call_from_thread(
                     lambda: self.query_one("#viz-content", RichLog).write(

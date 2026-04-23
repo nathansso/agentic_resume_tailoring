@@ -16,9 +16,55 @@ from database.models import (
 
 
 def get_first_user_id() -> Optional[UUID]:
-    with Session(engine) as session:
-        user = session.exec(select(User).limit(1)).first()
-        return user.user_id if user else None
+    from database.user_utils import get_active_profile
+    user = get_active_profile()
+    return user.user_id if user else None
+
+
+def get_graph_summary(user_id: Optional[UUID]) -> dict:
+    """Return structured graph data: top_skills, by_category, evidence."""
+    if user_id is None:
+        return {"top_skills": [], "by_category": {}, "evidence": {}}
+    try:
+        from knowledge_graph.builder import SkillGraphBuilder
+        G = SkillGraphBuilder().build_graph()
+    except Exception:
+        return {"top_skills": [], "by_category": {}, "evidence": {}}
+
+    skill_nodes = [(n, d) for n, d in G.nodes(data=True) if d.get("type") == "Skill"]
+
+    # Top skills by in-degree (how many projects/experiences reference them)
+    scored = sorted(
+        [(d.get("name", n), G.in_degree(n)) for n, d in skill_nodes],
+        key=lambda x: x[1],
+        reverse=True,
+    )
+    top_skills = [{"name": name, "connections": count} for name, count in scored[:10]]
+
+    # Count per category
+    by_category: dict[str, int] = {}
+    for _, d in skill_nodes:
+        cat = d.get("category") or "Uncategorized"
+        by_category[cat] = by_category.get(cat, 0) + 1
+
+    # Evidence: for top 5 skills, list which projects/experiences reference them
+    evidence: dict[str, list[str]] = {}
+    for node, d in skill_nodes:
+        name = d.get("name", node)
+        if name in {s["name"] for s in top_skills[:5]}:
+            sources = [
+                G.nodes[p].get("name", p)
+                for p in G.predecessors(node)
+            ]
+            if sources:
+                evidence[name] = sources
+
+    return {"top_skills": top_skills, "by_category": by_category, "evidence": evidence}
+
+
+def ingest_github_for_profile(user_id: Optional[UUID], username: str) -> str:
+    """Ingest GitHub repos for the active profile."""
+    return ingest_github(username)
 
 
 def get_skills(user_id: Optional[UUID]) -> list[dict]:
