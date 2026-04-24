@@ -322,8 +322,6 @@ SHORTCUTS = {
     "my profile": get_profile_summary,
     "help": get_help_text,
     "what can you do": get_help_text,
-    "ingest": get_help_text,
-    "ingest github": run_ingest_github,  # will prompt for username since called with no arg via __call__ path
 }
 
 
@@ -423,10 +421,45 @@ class ChatAgent:
     def __init__(self):
         self.llm = get_llm(role="chat", temperature=0.2)
         self.history: List[Dict[str, str]] = []
+        self._pending_options: dict[str, callable] = {}
 
     @staticmethod
     def _normalize(text: str) -> str:
         return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9\s]", " ", text.lower())).strip()
+
+    def _last_bot_asked_question(self) -> bool:
+        """Return True if the most recent assistant message ended with a question mark."""
+        for msg in reversed(self.history):
+            if msg["role"] == "assistant":
+                return msg["content"].rstrip().endswith("?")
+        return False
+
+    def _ingest_github_with_options(self) -> str:
+        """Return a numbered-choice message for GitHub ingestion."""
+        from database.user_utils import get_active_profile
+        profile = get_active_profile()
+        if profile and profile.github_username:
+            username = profile.github_username
+            self._pending_options = {
+                "1": lambda u=username: services.ingest_github(u),
+                "2": lambda: (
+                    "Type `ingest github <username>` with your preferred username.\n"
+                    "Example: `ingest github nathansso`"
+                ),
+            }
+            return (
+                f"Found GitHub username in your profile: {username}\n\n"
+                f"  1. Ingest repos for {username}\n"
+                "  2. Use a different username\n\n"
+                "Reply with 1 or 2, or type `ingest github <username>` directly."
+            )
+        else:
+            return (
+                "To ingest your GitHub repos, type:\n\n"
+                "  `ingest github <username>`\n\n"
+                "Example: `ingest github nathansso`\n\n"
+                "Tip: Save your username in Profile to skip this prompt next time."
+            )
 
     def _semantic_command_match(self, user_message: str) -> str | None:
         """Return command/tool response for near-match command text, else None."""
@@ -434,7 +467,49 @@ class ChatAgent:
         if not normalized:
             return None
 
-        # 1) Exact shortcut hit (fast path).
+        tokens = set(normalized.split())
+
+        def _has_token_close_to(targets: set[str], threshold: float = 0.8) -> bool:
+            for tok in tokens:
+                for target in targets:
+                    if tok == target:
+                        return True
+                    if SequenceMatcher(None, tok, target).ratio() >= threshold:
+                        return True
+            return False
+
+        # 0) Resolve pending numbered options (user replied "1", "2", etc.).
+        stripped = user_message.strip()
+        if self._pending_options and stripped in self._pending_options:
+            fn = self._pending_options[stripped]
+            self._pending_options.clear()
+            return fn()
+
+        # 1) Exact shortcut hit (fast path). Ingestion keywords use instance methods.
+        if normalized == "ingest github":
+            return self._ingest_github_with_options()
+        if normalized == "ingest":
+            self._pending_options = {
+                "1": self._ingest_github_with_options,
+                "2": lambda: (
+                    "To ingest a resume, type:\n\n"
+                    "  `ingest resume <path>`\n\n"
+                    "Example: `ingest resume /path/to/resume.pdf`\n"
+                    "Supported formats: PDF, DOCX, MD"
+                ),
+                "3": lambda: (
+                    "To ingest a LinkedIn PDF, type:\n\n"
+                    "  `ingest linkedin pdf <path>`\n\n"
+                    "Example: `ingest linkedin pdf /path/to/linkedin.pdf`"
+                ),
+            }
+            return (
+                "What would you like to ingest?\n\n"
+                "  1. GitHub repos\n"
+                "  2. Resume (PDF, DOCX, MD)\n"
+                "  3. LinkedIn PDF export\n\n"
+                "Reply with 1, 2, or 3."
+            )
         if normalized in SHORTCUTS:
             return SHORTCUTS[normalized]()
 
@@ -444,7 +519,7 @@ class ChatAgent:
         if m:
             return run_ingest_resume(m.group(1).strip())
 
-        m = re.match(r"(?i)^ingest github\s*(\S*)$", raw)
+        m = re.match(r"(?i)^ingest github\s+(\S+)$", raw)
         if m:
             return run_ingest_github(m.group(1).strip())
 
@@ -455,6 +530,35 @@ class ChatAgent:
         m = re.match(r"(?i)^tailor\s+(.+)$", raw)
         if m:
             return run_tailor(m.group(1).strip())
+
+        # 1c) Ingestion intent from token combos — takes priority over data queries.
+        # Catches freeform phrasing like "i want to ingest skill from my github".
+        ingest_verbs = {"ingest", "import", "fetch", "pull", "add", "load", "parse", "upload"}
+        if tokens & ingest_verbs:
+            if _has_token_close_to({"github"}, 0.85):
+                m2 = re.search(r"github\s+(\S+)", normalized)
+                if m2 and m2.group(1) not in {"repos", "username", "user", "account", "profile", "my"}:
+                    return run_ingest_github(m2.group(1))
+                return self._ingest_github_with_options()
+            if _has_token_close_to({"resume", "cv"}, 0.85):
+                m2 = re.search(r"(?:resume|cv)\s+(\S+\.(?:pdf|docx?|md))", normalized)
+                if m2:
+                    return run_ingest_resume(m2.group(1))
+                return (
+                    "Please provide the resume file path:\n\n"
+                    "  `ingest resume <path>`\n\n"
+                    "Example: `ingest resume /path/to/resume.pdf`\n"
+                    "Supported formats: PDF, DOCX, MD"
+                )
+            if _has_token_close_to({"linkedin"}, 0.85):
+                m2 = re.search(r"linkedin\s+(\S+\.pdf)", normalized)
+                if m2:
+                    return run_ingest_linkedin_pdf(m2.group(1))
+                return (
+                    "Please provide the LinkedIn PDF path:\n\n"
+                    "  `ingest linkedin pdf <path>`\n\n"
+                    "Example: `ingest linkedin pdf /path/to/linkedin.pdf`"
+                )
 
         # 2) Dedicated skill evidence parser.
         evidence_match = re.search(
@@ -481,17 +585,6 @@ class ChatAgent:
                     best_tool = tool_name
 
         # 4) Token-based fallback for common asks.
-        tokens = set(normalized.split())
-
-        def _has_token_close_to(targets: set[str], threshold: float = 0.8) -> bool:
-            for tok in tokens:
-                for target in targets:
-                    if tok == target:
-                        return True
-                    if SequenceMatcher(None, tok, target).ratio() >= threshold:
-                        return True
-            return False
-
         action_words = {"show", "list", "display", "all", "my"}
         has_action = bool(tokens & action_words) or _has_token_close_to({"show", "list", "display"}, 0.75)
 
@@ -533,14 +626,25 @@ class ChatAgent:
             return routed
 
         # Short unrecognized messages — return clarification without LLM.
+        # Skip if: pending options exist (user is replying) or the bot just asked a question.
         tokens = user_message.strip().split()
-        if len(tokens) < 4:
+        if len(tokens) < 4 and not self._pending_options and not self._last_bot_asked_question():
             ms = (time.perf_counter() - t0) * 1000
             logger.debug("[chat] path=fast_path duration=%.1fms", ms)
             clarification = (
-                "I'm not sure what you mean. Try a command like 'skills', "
-                "'projects', or 'help' to see what I can do."
+                "Not sure what you mean. Pick an option or type a command:\n\n"
+                "  1. skills      — view your skills\n"
+                "  2. projects    — view your projects\n"
+                "  3. ingest      — add data from GitHub/resume/LinkedIn\n"
+                "  4. help        — see all commands\n\n"
+                "Reply with a number or type a command directly."
             )
+            self._pending_options = {
+                "1": query_skills,
+                "2": query_projects,
+                "3": self._ingest_github_with_options,
+                "4": get_help_text,
+            }
             self.history.append({"role": "user", "content": user_message})
             self.history.append({"role": "assistant", "content": clarification})
             return clarification
