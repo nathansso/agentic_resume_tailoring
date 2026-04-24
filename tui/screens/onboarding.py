@@ -125,7 +125,7 @@ class OnboardingScreen(Screen):
         from tui import services
 
         try:
-            self.call_from_thread(self._set_status, "Creating profile...")
+            self.app.call_from_thread(self._set_status, "Creating profile...")
             user = create_profile(
                 name=name,
                 email=email,
@@ -133,12 +133,12 @@ class OnboardingScreen(Screen):
                 linkedin_url=linkedin_url,
             )
 
-            self.call_from_thread(self._set_status, "Parsing resume...")
+            self.app.call_from_thread(self._set_status, "Parsing resume...")
             ingest_result = services.ingest_resume_file(resume_path)
 
-            self.call_from_thread(self._set_status, "Done -- profile created!")
+            self.app.call_from_thread(self._set_status, "Done -- profile created!")
             time.sleep(0.6)
-            self.call_from_thread(
+            self.app.call_from_thread(
                 self.dismiss,
                 {
                     "user_id": str(user.user_id),
@@ -148,7 +148,7 @@ class OnboardingScreen(Screen):
                 },
             )
         except Exception as e:
-            self.call_from_thread(self._set_status, f"Error: {e}")
-            self.call_from_thread(
+            self.app.call_from_thread(self._set_status, f"Error: {e}")
+            self.app.call_from_thread(
                 lambda: setattr(self.query_one("#submit-btn", Button), "disabled", False)
             )
