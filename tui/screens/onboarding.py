@@ -1,4 +1,4 @@
-"""OnboardingScreen — first-run profile setup."""
+"""OnboardingScreen — step-by-step first-run profile setup."""
 import time
 from pathlib import Path
 
@@ -10,8 +10,11 @@ from textual.widgets import Header, Footer, Static, Input, Button, Label
 from textual import work
 
 
+_STEPS = ["name", "resume", "github", "linkedin"]
+
+
 class OnboardingScreen(Screen):
-    """First-run screen: collect profile info and ingest the resume."""
+    """First-run screen: collect profile info one step at a time."""
 
     CSS = """
     OnboardingScreen {
@@ -33,15 +36,24 @@ class OnboardingScreen(Screen):
         padding-bottom: 1;
     }
 
-    #onboarding-subtitle {
+    #step-indicator {
         color: $text-muted;
         text-align: center;
         padding-bottom: 1;
     }
 
-    .field-label {
-        padding-top: 1;
+    #step-question {
+        text-style: bold;
+        padding-bottom: 1;
+    }
+
+    #step-hint {
         color: $text-muted;
+        padding-bottom: 1;
+    }
+
+    #step-input {
+        width: 1fr;
     }
 
     #onboarding-status {
@@ -51,66 +63,183 @@ class OnboardingScreen(Screen):
         height: 2;
     }
 
-    #submit-btn {
-        width: 100%;
-        margin-top: 2;
+    #btn-row {
+        height: auto;
+        margin-top: 1;
+    }
+
+    #next-btn {
+        width: 1fr;
+    }
+
+    #skip-btn {
+        width: 14;
+        margin-left: 1;
+    }
+
+    .hidden {
+        display: none;
     }
     """
 
     BINDINGS = [Binding("ctrl+q", "app.quit", "Quit")]
 
+    # Step metadata: (question, hint, placeholder, skippable)
+    _STEP_META = {
+        "name": (
+            "What's your name?",
+            "This will appear on your profile.",
+            "Your full name",
+            False,
+        ),
+        "resume": (
+            "Upload your resume.",
+            "Accepted formats: PDF, DOCX, MD — paste the full file path or click Upload.",
+            "Path to resume file",
+            False,
+        ),
+        "github": (
+            "What's your GitHub username?",
+            "We'll fetch your public repos to extract skills and projects.",
+            "github-username  (optional)",
+            True,
+        ),
+        "linkedin": (
+            "What's your LinkedIn profile URL?",
+            "Optional — used for profile enrichment.",
+            "https://linkedin.com/in/...  (optional)",
+            True,
+        ),
+    }
+
+    def __init__(self):
+        super().__init__()
+        self._step_index = 0
+        self._answers: dict[str, str] = {}
+
+    @property
+    def _current_step(self) -> str:
+        return _STEPS[self._step_index]
+
     def compose(self) -> ComposeResult:
         yield Header()
         with Vertical(id="onboarding-panel"):
             yield Static("ART -- Agentic Resume Tailoring", id="onboarding-title")
-            yield Static("Create your profile to get started.", id="onboarding-subtitle")
-            yield Label("Name *", classes="field-label")
-            yield Input(placeholder="Your full name", id="name-input")
-            yield Label("Email *", classes="field-label")
-            yield Input(placeholder="your@email.com", id="email-input")
-            yield Label("Resume file path *", classes="field-label")
-            yield Input(placeholder="path/to/resume.md  (.md, .pdf, .docx)", id="resume-input")
-            yield Label("GitHub username (optional)", classes="field-label")
-            yield Input(placeholder="github-username", id="github-input")
-            yield Label("LinkedIn URL (optional)", classes="field-label")
-            yield Input(placeholder="https://linkedin.com/in/...", id="linkedin-input")
-            yield Button("Create Profile & Ingest Resume", variant="primary", id="submit-btn")
+            yield Static("", id="step-indicator")
+            yield Static("", id="step-question")
+            yield Static("", id="step-hint")
+            with Horizontal(id="input-row"):
+                yield Input(placeholder="", id="step-input")
+                yield Button("Upload", id="upload-btn", classes="hidden")
             yield Static("", id="onboarding-status")
+            with Horizontal(id="btn-row"):
+                yield Button("Next", variant="primary", id="next-btn")
+                yield Button("Skip", id="skip-btn", classes="hidden")
         yield Footer()
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "submit-btn":
-            self._submit()
+    def on_mount(self) -> None:
+        self._render_step()
 
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        if event.input.id == "resume-input":
-            self._submit()
+    def _render_step(self) -> None:
+        step = self._current_step
+        question, hint, placeholder, skippable = self._STEP_META[step]
+        total = len(_STEPS)
+        current = self._step_index + 1
+
+        self.query_one("#step-indicator", Static).update(f"Step {current} of {total}")
+        self.query_one("#step-question", Static).update(question)
+        self.query_one("#step-hint", Static).update(hint)
+        self.query_one("#onboarding-status", Static).update("")
+
+        inp = self.query_one("#step-input", Input)
+        inp.placeholder = placeholder
+        inp.value = self._answers.get(step, "")
+
+        upload_btn = self.query_one("#upload-btn", Button)
+        skip_btn = self.query_one("#skip-btn", Button)
+
+        if step == "resume":
+            upload_btn.remove_class("hidden")
+        else:
+            upload_btn.add_class("hidden")
+
+        if skippable:
+            skip_btn.remove_class("hidden")
+        else:
+            skip_btn.add_class("hidden")
+
+        inp.focus()
 
     def _set_status(self, msg: str) -> None:
         self.query_one("#onboarding-status", Static).update(msg)
 
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "step-input":
+            self._advance(skip=False)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "next-btn":
+            self._advance(skip=False)
+        elif event.button.id == "skip-btn":
+            self._advance(skip=True)
+        elif event.button.id == "upload-btn":
+            self._open_file_dialog()
+
+    def _open_file_dialog(self) -> None:
+        """Open a native file-picker and put the chosen path in the input."""
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            path = filedialog.askopenfilename(
+                title="Select your resume",
+                filetypes=[
+                    ("Resume files", "*.pdf *.docx *.doc *.md"),
+                    ("All files", "*.*"),
+                ],
+            )
+            root.destroy()
+            if path:
+                self.query_one("#step-input", Input).value = path
+        except Exception as e:
+            self._set_status(f"File picker unavailable: {e}")
+
+    def _advance(self, skip: bool) -> None:
+        step = self._current_step
+        value = "" if skip else self.query_one("#step-input", Input).value.strip()
+
+        # Validate required steps
+        if not skip:
+            if step == "name" and not value:
+                self._set_status("Name is required.")
+                return
+            if step == "resume":
+                if not value:
+                    self._set_status("Resume path is required.")
+                    return
+                if not Path(value).exists():
+                    self._set_status(f"File not found: {value}")
+                    return
+
+        self._answers[step] = value
+        self._step_index += 1
+
+        if self._step_index >= len(_STEPS):
+            self._submit()
+        else:
+            self._render_step()
+
     def _submit(self) -> None:
-        name   = self.query_one("#name-input",    Input).value.strip()
-        email  = self.query_one("#email-input",   Input).value.strip()
-        resume = self.query_one("#resume-input",  Input).value.strip()
-        github = self.query_one("#github-input",  Input).value.strip()
-        linkedin = self.query_one("#linkedin-input", Input).value.strip()
-
-        if not name:
-            self._set_status("Name is required.")
-            return
-        if not email:
-            self._set_status("Email is required.")
-            return
-        if not resume:
-            self._set_status("Resume file path is required.")
-            return
-        if not Path(resume).exists():
-            self._set_status(f"File not found: {resume}")
-            return
-
-        self.query_one("#submit-btn", Button).disabled = True
-        self._run_onboarding(name, email, resume, github, linkedin)
+        self.query_one("#next-btn", Button).disabled = True
+        self._run_onboarding(
+            name=self._answers.get("name", ""),
+            email="",
+            resume_path=self._answers.get("resume", ""),
+            github_username=self._answers.get("github", ""),
+            linkedin_url=self._answers.get("linkedin", ""),
+        )
 
     @work(thread=True)
     def _run_onboarding(
@@ -150,5 +279,5 @@ class OnboardingScreen(Screen):
         except Exception as e:
             self.app.call_from_thread(self._set_status, f"Error: {e}")
             self.app.call_from_thread(
-                lambda: setattr(self.query_one("#submit-btn", Button), "disabled", False)
+                lambda: setattr(self.query_one("#next-btn", Button), "disabled", False)
             )

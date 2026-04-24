@@ -174,12 +174,12 @@ def get_help_text() -> str:
         "  evidence for <skill>            — show evidence for a skill\n\n"
         "Ingestion commands:\n"
         "  ingest resume <path>            — parse a resume file (MD, PDF, DOCX)\n"
-        "  ingest github                   — fetch your GitHub repos\n"
-        "  ingest github <username>        — fetch a specific user's repos\n"
+        "  ingest github <username>        — fetch a GitHub user's repos\n"
         "  ingest linkedin pdf <path>      — parse a LinkedIn PDF export\n\n"
         "Tailoring:\n"
         "  tailor <job description or file> — tailor your resume to a job\n\n"
-        "Use F1–F4 in the TUI for quick access to these actions."
+        "TUI shortcuts (type in chat):\n"
+        "  /ingest  /data  /tailor  /viz"
     )
 
 
@@ -190,7 +190,18 @@ def run_ingest_resume(file_path: str) -> str:
 
 def run_ingest_github(username: str = "") -> str:
     """Fetch GitHub repos and extract skills/projects."""
-    return services.ingest_github(username.strip())
+    username = username.strip()
+    if not username:
+        from database.user_utils import get_active_profile
+        profile = get_active_profile()
+        suggestion = f"`ingest github {profile.github_username}`" if (profile and profile.github_username) else "`ingest github <your-username>`"
+        return (
+            f"Please provide your GitHub username explicitly.\n\n"
+            f"Type: {suggestion}\n\n"
+            "To include private repos, ensure GITHUB_TOKEN is set in your .env file.\n"
+            "Without a token, only public repos will be fetched."
+        )
+    return services.ingest_github(username)
 
 
 def run_ingest_linkedin_pdf(file_path: str) -> str:
@@ -311,7 +322,7 @@ SHORTCUTS = {
     "help": get_help_text,
     "what can you do": get_help_text,
     "ingest": get_help_text,
-    "ingest github": lambda: run_ingest_github(""),
+    "ingest github": run_ingest_github,  # will prompt for username since called with no arg via __call__ path
 }
 
 
@@ -364,12 +375,9 @@ COMMAND_PHRASES = {
     "get_help_text": [
         "help",
         "what can you do",
-        "ingest",
         "commands",
         "what commands",
         "show help",
-        "ingest resume",
-        "ingest linkedin",
     ],
 }
 
@@ -391,9 +399,15 @@ Available tools:
 - query_skill_evidence(skill_name) — Show evidence for a specific skill
 - list_jobs() — List all saved job descriptions
 - get_profile_summary() — Get profile overview
+- run_ingest_resume(file_path) — Ingest a resume file (PDF, DOCX, MD)
+- run_ingest_github(username) — Fetch GitHub repos for a username and extract skills/projects
+- run_ingest_linkedin_pdf(file_path) — Parse a LinkedIn PDF export
+- run_tailor(job_description_or_path) — Tailor the resume to a job description
 
 Rules:
 - For data queries, call the appropriate tool
+- For ingestion requests, ALWAYS call the appropriate tool — never describe what to do instead
+- run_ingest_github requires a username argument; if the user hasn't provided one, ask for it
 - Be concise and conversational
 - If the user just wants to chat about their career, respond naturally
 - You can call multiple tools by putting each TOOL_CALL on its own line"""

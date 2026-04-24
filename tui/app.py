@@ -166,10 +166,6 @@ class ArtApp(App):
     SUB_TITLE = "Hybrid Chat + Tools"
 
     BINDINGS = [
-        Binding("f1", "ingest", "Ingest"),
-        Binding("f2", "show_data", "Data"),
-        Binding("f3", "tailor", "Tailor"),
-        Binding("f4", "show_viz", "Viz"),
         Binding("ctrl+n", "new_job", "New Job"),
         Binding("ctrl+q", "quit", "Quit"),
     ]
@@ -213,13 +209,13 @@ class ArtApp(App):
                                 " * View your skills, experiences, and projects\n"
                                 " * Analyze job descriptions and find skill gaps\n"
                                 " * Tailor your resume for specific roles\n\n"
-                                "Type a message below, or use F1-F4 for shortcuts.\n"
-                                "Try: 'show my skills' or 'profile'",
+                                "Slash commands: /ingest  /data  /tailor  /viz\n"
+                                "Try: 'show my skills', 'profile', or /ingest",
                                 classes="bot-msg",
                             )
                         with Horizontal(id="chat-input-row"):
                             yield Input(
-                                placeholder="Type a message... (F1=Ingest F2=Data F3=Tailor F4=Viz)",
+                                placeholder="Type a message or /ingest, /data, /tailor, /viz ...",
                                 id="chat-input",
                             )
                             yield Button("Send", variant="primary", id="send-btn")
@@ -273,7 +269,7 @@ class ArtApp(App):
         if github:
             scroll.mount(Static(
                 f"GitHub username detected ({github}).\n"
-                "Type 'ingest github' to fetch your repos and extract skills/projects.",
+                f"Type `ingest github {github}` to fetch your repos and extract skills/projects.",
                 classes="bot-msg",
             ))
         scroll.scroll_end()
@@ -307,9 +303,9 @@ class ArtApp(App):
 
     def _update_status_bar(self) -> None:
         msgs = {
-            AppState.SETUP: "No profile yet -- press F1 to ingest your resume",
+            AppState.SETUP: "No profile yet -- type /ingest to add your resume",
             AppState.PROFILE_READY: "Profile ready -- select a job or press Ctrl+N to create one",
-            AppState.JOB_SELECTED: f"Job selected: {self._selected_job_label} -- press F3 to tailor",
+            AppState.JOB_SELECTED: f"Job selected: {self._selected_job_label} -- type /tailor to tailor",
             AppState.TAILORING_COMPLETE: "Tailoring complete -- view results in the sidebar",
         }
         try:
@@ -339,6 +335,25 @@ class ArtApp(App):
     def _handle_chat_input(self, text: str) -> None:
         text = text.strip()
         if not text:
+            return
+        # Slash commands — handled locally, never sent to the chat agent.
+        if text.startswith("/"):
+            cmd = text[1:].lower().strip()
+            if cmd == "ingest":
+                self.action_ingest()
+            elif cmd == "data":
+                self.action_show_data()
+            elif cmd == "tailor":
+                self.action_tailor()
+            elif cmd == "viz":
+                self.action_show_viz()
+            else:
+                scroll = self.query_one("#chat-scroll", VerticalScroll)
+                scroll.mount(Static(
+                    f"Unknown command: {text}\nAvailable: /ingest  /data  /tailor  /viz",
+                    classes="system-msg",
+                ))
+                scroll.scroll_end()
             return
         scroll = self.query_one("#chat-scroll", VerticalScroll)
         scroll.mount(Static(f"You: {text}", classes="user-msg"))
@@ -521,7 +536,7 @@ class ArtApp(App):
         rows = services.get_skills(services.get_first_user_id())
         if not rows:
             tree.root.set_label("[bold]Skills[/bold]")
-            tree.root.add_leaf("[dim]No skills found — ingest a resume via F1[/dim]")
+            tree.root.add_leaf("[dim]No skills found — type /ingest to add your resume[/dim]")
             tree.root.expand()
             return
 
@@ -556,7 +571,7 @@ class ArtApp(App):
         table.add_columns("Title", "Company", "Start", "End")
         rows = services.get_experiences(services.get_first_user_id())
         if not rows:
-            table.add_row("No experiences found -- ingest a resume via F1", "", "", "")
+            table.add_row("No experiences found -- type /ingest to add your resume", "", "", "")
             return
         for row in rows:
             table.add_row(row["title"], row["company"], row["start"], row["end"])
@@ -567,7 +582,7 @@ class ArtApp(App):
         table.add_columns("Project", "URL", "Description")
         rows = services.get_projects(services.get_first_user_id())
         if not rows:
-            table.add_row("No projects found -- ingest GitHub via F1", "", "")
+            table.add_row("No projects found -- type `ingest github <username>` to add GitHub repos", "", "")
             return
         for row in rows:
             table.add_row(row["name"], row["url"], row["desc"])
@@ -725,7 +740,7 @@ class ArtApp(App):
             if not user:
                 self.call_from_thread(
                     lambda: self.query_one("#viz-content", RichLog).write(
-                        "[yellow]No data yet — ingest your resume first (F1)[/yellow]"
+                        "[yellow]No data yet — type /ingest to add your resume[/yellow]"
                     )
                 )
                 return
