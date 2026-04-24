@@ -400,6 +400,84 @@ def test_query_skills_vs_jobs_with_job_result(isolated_engine):
     assert "Go" in result
 
 
+def test_ingestion_diff_shows_new_skills(isolated_engine):
+    """ingest_resume_file diff lists only skills not previously on the profile."""
+    import uuid
+    from database.user_utils import create_profile
+    from database.models import Skill, UserSkill
+    from database.db import engine as db_engine
+    from sqlmodel import Session as S
+
+    user = create_profile("Diff User", "diffuser@local")
+
+    # Pre-seed one skill so it shows as existing, not new
+    with S(db_engine) as sess:
+        existing_skill = Skill(name="Python", category="language")
+        sess.add(existing_skill)
+        sess.commit()
+        sess.refresh(existing_skill)
+        sess.add(UserSkill(
+            user_id=user.user_id,
+            skill_id=existing_skill.skill_id,
+            evidence_source="resume",
+            confidence_score=0.9,
+        ))
+        sess.commit()
+
+    # Simulate ingestion adding a new skill by directly inserting after snapshot
+    pre = services_module._snapshot_user_data(user.user_id)
+
+    with S(db_engine) as sess:
+        new_skill = Skill(name="Rust", category="language")
+        sess.add(new_skill)
+        sess.commit()
+        sess.refresh(new_skill)
+        sess.add(UserSkill(
+            user_id=user.user_id,
+            skill_id=new_skill.skill_id,
+            evidence_source="resume",
+            confidence_score=0.8,
+        ))
+        sess.commit()
+
+    result = services_module._format_ingestion_diff(
+        user.user_id, pre[0], pre[1], pre[2], "test_resume.pdf"
+    )
+
+    assert "Rust" in result
+    assert "Python" not in result.split("New skills")[1].split("\n")[0]
+    assert "New skills (1)" in result
+    assert "New experiences (0)" in result
+
+
+def test_ingestion_diff_no_new_content(isolated_engine):
+    """When nothing new is added, diff reports zero changes."""
+    from database.user_utils import create_profile
+
+    user = create_profile("Same User", "sameuser@local")
+    pre = services_module._snapshot_user_data(user.user_id)
+    result = services_module._format_ingestion_diff(
+        user.user_id, pre[0], pre[1], pre[2], "repeat_resume.pdf"
+    )
+
+    assert "New skills (0)" in result
+    assert "already on your profile" in result
+
+
+def test_suppress_output_restores_streams():
+    """_suppress_output context manager restores sys.stdout/stderr after exiting."""
+    import sys
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+
+    with services_module._suppress_output():
+        assert sys.stdout is not original_stdout
+        assert sys.stderr is not original_stderr
+
+    assert sys.stdout is original_stdout
+    assert sys.stderr is original_stderr
+
+
 def test_get_llm_roles(monkeypatch):
     """get_llm returns a BaseChatModel for each role without error (anthropic + openai)."""
     import llm as llm_module
