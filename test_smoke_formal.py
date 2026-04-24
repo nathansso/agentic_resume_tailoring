@@ -236,6 +236,96 @@ def test_fast_path_short_unrecognized(isolated_engine, monkeypatch):
     assert "?" in response or "not sure" in response.lower() or "try" in response.lower()
 
 
+def test_short_message_passes_through_when_bot_asked_question(isolated_engine, monkeypatch):
+    """Short reply after the bot asked a question goes to the LLM (not fast-path)."""
+    llm_called = []
+
+    class TrackingLLM:
+        def invoke(self, *_args, **_kwargs):
+            llm_called.append(True)
+            class Resp:
+                content = "Got it."
+            return Resp()
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.2: TrackingLLM())
+
+    agent = chat_module.ChatAgent()
+    # Seed history so the last assistant turn ends with a question mark.
+    agent.history.append({"role": "user", "content": "ingest my github"})
+    agent.history.append({"role": "assistant", "content": "What is your GitHub username?"})
+
+    agent.chat("nathansso")
+
+    assert llm_called, "LLM should be called when the bot previously asked a question"
+
+
+def test_ingest_keyword_returns_numbered_options(isolated_engine, monkeypatch):
+    """Typing 'ingest' alone returns numbered ingestion choices, not generic help."""
+    class ShouldNotBeCalledLLM:
+        def invoke(self, *_a, **_kw):
+            raise AssertionError("LLM must not be called for 'ingest'")
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: ShouldNotBeCalledLLM())
+
+    agent = chat_module.ChatAgent()
+    response = agent.chat("ingest")
+
+    assert "1" in response and "2" in response and "3" in response
+    assert "github" in response.lower()
+    assert "resume" in response.lower()
+    assert "linkedin" in response.lower()
+    # Pending options should be populated for the three choices.
+    assert agent._pending_options, "pending_options should be set after offering choices"
+
+
+def test_pending_option_resolved_by_digit_reply(isolated_engine, monkeypatch):
+    """Replying '1' after numbered options are presented resolves the option without LLM."""
+    import tui.services as svc
+    monkeypatch.setattr(svc, "ingest_github", lambda username="": f"GitHub ingested for {username}")
+
+    class ShouldNotBeCalledLLM:
+        def invoke(self, *_a, **_kw):
+            raise AssertionError("LLM must not be called when resolving a pending option")
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: ShouldNotBeCalledLLM())
+
+    from database.user_utils import create_profile
+    user = create_profile("Test User", "testuser@local")
+    # Set a github_username so option 1 triggers the ingestion.
+    from database.db import engine as db_engine
+    from sqlmodel import Session as S
+    with S(db_engine) as sess:
+        u = sess.get(type(user), user.user_id)
+        u.github_username = "myghuser"
+        sess.add(u)
+        sess.commit()
+
+    agent = chat_module.ChatAgent()
+    # First message presents the options.
+    agent.chat("ingest github")
+    assert agent._pending_options, "pending_options should be set after 'ingest github'"
+    # Second message picks option 1.
+    response = agent.chat("1")
+    assert "myghuser" in response or "GitHub ingested" in response
+
+
+def test_ingest_token_combo_routes_to_github(isolated_engine, monkeypatch):
+    """'i want to ingest skill from my github' routes to GitHub ingestion, not query_skills."""
+    class ShouldNotBeCalledLLM:
+        def invoke(self, *_a, **_kw):
+            raise AssertionError("LLM must not be called for ingest+github token combo")
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: ShouldNotBeCalledLLM())
+
+    agent = chat_module.ChatAgent()
+    response = agent.chat("i want to ingest skill from my github")
+
+    assert "github" in response.lower()
+    assert "ingest github" in response.lower() or "username" in response.lower()
+    # Must NOT return the skills list.
+    assert "Your skills" not in response
+
+
 def test_get_llm_roles(monkeypatch):
     """get_llm returns a BaseChatModel for each role without error (anthropic + openai)."""
     import llm as llm_module
