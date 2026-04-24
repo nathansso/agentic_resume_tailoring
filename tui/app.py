@@ -31,6 +31,7 @@ from textual import work
 
 from database.db import init_db, engine
 from tui.screens.onboarding import OnboardingScreen
+from tui.screens.profile import ProfileScreen, _initials
 from database.models import JobDescription, Skill, User, UserJobResult, UserSkill
 from sqlmodel import Session, select
 from tui import services
@@ -62,11 +63,26 @@ class ArtApp(App):
     }
 
     /* ── Status Bar ── */
-    #status-bar {
+    #status-bar-row {
         height: 1;
         background: $boost;
-        padding: 0 2;
+        padding: 0 0 0 2;
+    }
+    #status-bar {
+        width: 1fr;
+        height: 1;
         color: $accent;
+        content-align: left middle;
+    }
+    #avatar-btn {
+        width: 6;
+        min-width: 6;
+        height: 1;
+        background: $accent;
+        color: $background;
+        text-style: bold;
+        border: none;
+        padding: 0 1;
     }
 
     /* ── Sidebar ── */
@@ -166,6 +182,7 @@ class ArtApp(App):
     SUB_TITLE = "Hybrid Chat + Tools"
 
     BINDINGS = [
+        Binding("ctrl+c", "noop", show=False),   # prevent quit on copy attempt
         Binding("ctrl+n", "new_job", "New Job"),
         Binding("ctrl+q", "quit", "Quit"),
     ]
@@ -180,7 +197,9 @@ class ArtApp(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Static("", id="status-bar")
+        with Horizontal(id="status-bar-row"):
+            yield Static("", id="status-bar")
+            yield Button("?", id="avatar-btn")
         with Horizontal(id="main-container"):
             # ── Sidebar: Job List ──
             with Vertical(id="sidebar"):
@@ -209,8 +228,8 @@ class ArtApp(App):
                                 " * View your skills, experiences, and projects\n"
                                 " * Analyze job descriptions and find skill gaps\n"
                                 " * Tailor your resume for specific roles\n\n"
-                                "Slash commands: /ingest  /data  /tailor  /viz\n"
-                                "Try: 'show my skills', 'profile', or /ingest",
+                                "Slash commands: /ingest  /data  /tailor  /viz  /profile\n"
+                                "Try: 'show my skills' or /ingest",
                                 classes="bot-msg",
                             )
                         with Horizontal(id="chat-input-row"):
@@ -278,6 +297,9 @@ class ArtApp(App):
     #  Chat
     # ───────────────────────────────────────────────────────
 
+    def action_noop(self) -> None:
+        """Absorb ctrl+c so it doesn't quit the app while the user is copying text."""
+
     def _get_agent(self):
         if self.chat_agent is None:
             from agents.chat import ChatAgent
@@ -312,6 +334,13 @@ class ArtApp(App):
             self.query_one("#status-bar", Static).update(msgs.get(self.app_state, ""))
         except Exception:
             pass
+        try:
+            from database.user_utils import get_active_profile
+            user = get_active_profile()
+            initials = _initials(user.name) if user else "?"
+            self.query_one("#avatar-btn", Button).label = initials
+        except Exception:
+            pass
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id == "chat-input":
@@ -325,12 +354,22 @@ class ArtApp(App):
             if chat_input.value.strip():
                 self._handle_chat_input(chat_input.value)
                 chat_input.value = ""
+        elif btn == "avatar-btn":
+            self._open_profile()
         elif btn == "new-job-btn":
             self.action_new_job()
         elif btn == "save-job-btn":
             self._save_new_job()
         elif btn == "cancel-job-btn":
             self._hide_job_input()
+
+    def _open_profile(self) -> None:
+        self.push_screen(ProfileScreen(), callback=self._on_profile_done)
+
+    def _on_profile_done(self, result: dict | None) -> None:
+        if result and result.get("name"):
+            self._update_status_bar()
+            self._refresh_app_state()
 
     def _handle_chat_input(self, text: str) -> None:
         text = text.strip()
@@ -347,10 +386,12 @@ class ArtApp(App):
                 self.action_tailor()
             elif cmd == "viz":
                 self.action_show_viz()
+            elif cmd == "profile":
+                self._open_profile()
             else:
                 scroll = self.query_one("#chat-scroll", VerticalScroll)
                 scroll.mount(Static(
-                    f"Unknown command: {text}\nAvailable: /ingest  /data  /tailor  /viz",
+                    f"Unknown command: {text}\nAvailable: /ingest  /data  /tailor  /viz  /profile",
                     classes="system-msg",
                 ))
                 scroll.scroll_end()

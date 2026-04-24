@@ -62,6 +62,56 @@ def get_graph_summary(user_id: Optional[UUID]) -> dict:
     return {"top_skills": top_skills, "by_category": by_category, "evidence": evidence}
 
 
+def get_profile_data() -> Optional[dict]:
+    """Return the active profile's editable fields and stats, or None if no profile."""
+    from database.user_utils import get_active_profile
+    user = get_active_profile()
+    if not user:
+        return None
+    with Session(engine) as session:
+        skill_count = len(session.exec(
+            select(UserSkill).where(UserSkill.user_id == user.user_id)
+        ).all())
+        exp_count = len(session.exec(
+            select(Experience).where(Experience.user_id == user.user_id)
+        ).all())
+        proj_count = len(session.exec(
+            select(Project).where(Project.user_id == user.user_id)
+        ).all())
+        sources: set[str] = set()
+        for us in session.exec(
+            select(UserSkill).where(UserSkill.user_id == user.user_id)
+        ).all():
+            if us.evidence_source:
+                sources.add(us.evidence_source.split(":")[0])
+    return {
+        "user_id": user.user_id,
+        "name": user.name or "",
+        "github_username": user.github_username or "",
+        "linkedin_url": user.linkedin_url or "",
+        "skills": skill_count,
+        "experiences": exp_count,
+        "projects": proj_count,
+        "sources": sorted(sources),
+    }
+
+
+def update_profile(user_id: UUID, name: str, github_username: str, linkedin_url: str) -> str:
+    """Update the active profile's personal info fields."""
+    from datetime import datetime
+    with Session(engine) as session:
+        user = session.get(User, user_id)
+        if not user:
+            return "Profile not found."
+        user.name = name.strip() or user.name
+        user.github_username = github_username.strip() or None
+        user.linkedin_url = linkedin_url.strip() or None
+        user.updated_at = datetime.utcnow()
+        session.add(user)
+        session.commit()
+    return "Profile updated."
+
+
 def ingest_github_for_profile(user_id: Optional[UUID], username: str) -> str:
     """Ingest GitHub repos for the active profile."""
     return ingest_github(username)
