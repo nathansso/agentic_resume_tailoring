@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest test_smoke_formal.py -q -k \"not integration and not slow\" --tb=short)",
+      "Bash(python -m pip show pytest)",
+      "Bash(where pytest *)",
+      "Bash(.venv/Scripts/python -c \"from textual.widgets import Static; s = Static\\('hello'\\); print\\([a for a in dir\\(s\\) if not a.startswith\\('__'\\)]\\)\")",
+      "Bash(.venv/Scripts/python -c \"from textual.widgets import Static; s = Static\\('hello world'\\); print\\(type\\(s._Static__content\\)\\); print\\(s._Static__content\\)\")",
+      "Bash(.venv/Scripts/python -m pytest test_smoke_formal.py -q -k \"not integration and not slow\" --tb=short)"
+    ]
+  }
+}
