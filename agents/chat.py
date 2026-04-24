@@ -179,7 +179,7 @@ def get_help_text() -> str:
         "Tailoring:\n"
         "  tailor <job description or file> — tailor your resume to a job\n\n"
         "TUI shortcuts (type in chat):\n"
-        "  /ingest  /data  /tailor  /viz"
+        "  /ingest  /data  /tailor  /viz  /profile"
     )
 
 
