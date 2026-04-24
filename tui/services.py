@@ -3,6 +3,9 @@ DB query functions and ingestion service functions for the TUI.
 Query functions return plain data (lists/dicts) for widget rendering.
 Ingestion functions return plain-English result strings and never raise.
 """
+import contextlib
+import io
+import sys
 from typing import Optional
 from uuid import UUID
 
@@ -13,6 +16,105 @@ from database.models import (
     Experience, JobDescription, Project,
     Skill, User, UserJobResult, UserSkill,
 )
+
+
+@contextlib.contextmanager
+def _suppress_output():
+    """Redirect stdout/stderr during heavy ingestion to prevent TUI corruption."""
+    buf = io.StringIO()
+    old_stdout, old_stderr = sys.stdout, sys.stderr
+    sys.stdout = buf
+    sys.stderr = buf
+    try:
+        yield
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+
+
+def _snapshot_user_data(user_id: UUID) -> tuple[set, set, set]:
+    """Return (skill_ids, exp_ids, proj_ids) for the user before ingestion."""
+    with Session(engine) as session:
+        skill_ids = {us.skill_id for us in session.exec(
+            select(UserSkill).where(UserSkill.user_id == user_id)
+        ).all()}
+        exp_ids = {str(e.experience_id) for e in session.exec(
+            select(Experience).where(Experience.user_id == user_id)
+        ).all()}
+        proj_ids = {str(p.project_id) for p in session.exec(
+            select(Project).where(Project.user_id == user_id)
+        ).all()}
+    return skill_ids, exp_ids, proj_ids
+
+
+def _format_ingestion_diff(
+    user_id: UUID,
+    pre_skill_ids: set,
+    pre_exp_ids: set,
+    pre_proj_ids: set,
+    label: str,
+) -> str:
+    """Return a human-readable summary of what was added during ingestion."""
+    with Session(engine) as session:
+        # New skills: skill_ids not seen before this ingestion
+        new_skill_names = []
+        for us in session.exec(
+            select(UserSkill).where(UserSkill.user_id == user_id)
+        ).all():
+            if us.skill_id not in pre_skill_ids:
+                skill = session.get(Skill, us.skill_id)
+                if skill and skill.name not in new_skill_names:
+                    new_skill_names.append(skill.name)
+                pre_skill_ids.add(us.skill_id)  # dedupe within this diff
+
+        # New experiences
+        new_exps = []
+        for e in session.exec(
+            select(Experience).where(Experience.user_id == user_id)
+        ).all():
+            if str(e.experience_id) not in pre_exp_ids:
+                new_exps.append(f"{e.title} @ {e.company}")
+
+        # New projects
+        new_projs = []
+        for p in session.exec(
+            select(Project).where(Project.user_id == user_id)
+        ).all():
+            if str(p.project_id) not in pre_proj_ids:
+                new_projs.append(p.name)
+
+        total_skills = len(session.exec(
+            select(UserSkill).where(UserSkill.user_id == user_id)
+        ).all())
+        total_exps = len(session.exec(
+            select(Experience).where(Experience.user_id == user_id)
+        ).all())
+        total_projs = len(session.exec(
+            select(Project).where(Project.user_id == user_id)
+        ).all())
+
+    lines = [f"Ingested: {label}", ""]
+
+    if new_skill_names:
+        preview = ", ".join(new_skill_names[:12])
+        if len(new_skill_names) > 12:
+            preview += f" (+{len(new_skill_names) - 12} more)"
+        lines.append(f"New skills ({len(new_skill_names)}): {preview}")
+    else:
+        lines.append("New skills (0): all skills already on your profile")
+
+    if new_exps:
+        lines.append(f"New experiences ({len(new_exps)}): " + ", ".join(new_exps[:5]))
+    else:
+        lines.append("New experiences (0): none")
+
+    if new_projs:
+        lines.append(f"New projects ({len(new_projs)}): " + ", ".join(new_projs[:5]))
+    else:
+        lines.append("New projects (0): none")
+
+    lines.append(f"\nProfile total: {total_skills} skills · {total_exps} experiences · {total_projs} projects")
+    return "\n".join(lines)
 
 
 def get_first_user_id() -> Optional[UUID]:
@@ -235,19 +337,25 @@ def ingest_resume_file(file_path: str) -> str:
         return f"File not found: {file_path}"
     try:
         from database.db import init_db
+        from database.user_utils import get_active_profile
         init_db()
-        if file_path.endswith(".md"):
-            ingestion_data = {
-                "source_file": file_path,
-                "full_text": path.read_text(encoding="utf-8"),
-                "parsed_sections": {},
-            }
-        else:
-            from ingestion.resume import ResumeIngestor
-            ingestion_data = ResumeIngestor().ingest(file_path)
-        from agents.parser import ResumeParserAgent
-        ResumeParserAgent().parse_and_save(ingestion_data)
-        return f"Resume ingested: {path.name}. Your skills and experiences have been updated."
+        user = get_active_profile()
+        pre = _snapshot_user_data(user.user_id) if user else (set(), set(), set())
+        with _suppress_output():
+            if file_path.endswith(".md"):
+                ingestion_data = {
+                    "source_file": file_path,
+                    "full_text": path.read_text(encoding="utf-8"),
+                    "parsed_sections": {},
+                }
+            else:
+                from ingestion.resume import ResumeIngestor
+                ingestion_data = ResumeIngestor().ingest(file_path)
+            from agents.parser import ResumeParserAgent
+            ResumeParserAgent().parse_and_save(ingestion_data)
+        if user:
+            return _format_ingestion_diff(user.user_id, pre[0], pre[1], pre[2], path.name)
+        return f"Resume ingested: {path.name}."
     except Exception as e:
         return f"Ingestion failed: {e}"
 
@@ -260,30 +368,36 @@ def ingest_github(username: str = "") -> str:
         return "No GitHub username provided and GITHUB_USERNAME is not set in .env."
     try:
         from database.db import init_db
+        from database.user_utils import get_active_profile
         from ingestion.github import GitHubIngestor
         from agents.parser import ResumeParserAgent
         init_db()
-        repos = GitHubIngestor(username=target).ingest()
-        if not repos:
-            return f"No new or updated repos found for {target}."
-        lines = []
-        for repo in repos:
-            desc = repo.get("description") or "No description"
-            langs = ", ".join(repo.get("languages", []))
-            lines += [
-                f"Project: {repo['name']}", f"Description: {desc}",
-                f"Languages: {langs}", f"URL: {repo.get('url', '')}",
-            ]
-            if repo.get("readme"):
-                lines.append(f"README:\n{repo['readme']}")
-            for dep_file, dep_content in repo.get("dependencies", {}).items():
-                lines.append(f"{dep_file}:\n{dep_content}")
-            lines.append("")
-        ResumeParserAgent().parse_and_save({
-            "source_file": f"github:{target}",
-            "full_text": "\n".join(lines),
-            "parsed_sections": {},
-        })
+        user = get_active_profile()
+        pre = _snapshot_user_data(user.user_id) if user else (set(), set(), set())
+        with _suppress_output():
+            repos = GitHubIngestor(username=target).ingest()
+            if not repos:
+                return f"No new or updated repos found for {target}."
+            lines = []
+            for repo in repos:
+                desc = repo.get("description") or "No description"
+                langs = ", ".join(repo.get("languages", []))
+                lines += [
+                    f"Project: {repo['name']}", f"Description: {desc}",
+                    f"Languages: {langs}", f"URL: {repo.get('url', '')}",
+                ]
+                if repo.get("readme"):
+                    lines.append(f"README:\n{repo['readme']}")
+                for dep_file, dep_content in repo.get("dependencies", {}).items():
+                    lines.append(f"{dep_file}:\n{dep_content}")
+                lines.append("")
+            ResumeParserAgent().parse_and_save({
+                "source_file": f"github:{target}",
+                "full_text": "\n".join(lines),
+                "parsed_sections": {},
+            })
+        if user:
+            return _format_ingestion_diff(user.user_id, pre[0], pre[1], pre[2], f"github:{target} ({len(repos)} repos)")
         return f"GitHub ingested: {len(repos)} repos parsed for {target}."
     except Exception as e:
         return f"GitHub ingestion failed: {e}"
@@ -296,11 +410,17 @@ def ingest_linkedin_pdf(file_path: str) -> str:
         return f"File not found: {file_path}"
     try:
         from database.db import init_db
+        from database.user_utils import get_active_profile
         from ingestion.linkedin import LinkedInIngestor
         from agents.parser import ResumeParserAgent
         init_db()
-        data = LinkedInIngestor().ingest_pdf(file_path)
-        ResumeParserAgent().parse_and_save(data)
+        user = get_active_profile()
+        pre = _snapshot_user_data(user.user_id) if user else (set(), set(), set())
+        with _suppress_output():
+            data = LinkedInIngestor().ingest_pdf(file_path)
+            ResumeParserAgent().parse_and_save(data)
+        if user:
+            return _format_ingestion_diff(user.user_id, pre[0], pre[1], pre[2], Path(file_path).name)
         return f"LinkedIn PDF ingested: {Path(file_path).name}."
     except Exception as e:
         return f"LinkedIn PDF ingestion failed: {e}"

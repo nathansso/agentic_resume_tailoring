@@ -721,7 +721,11 @@ class ArtApp(App):
         }
 
     def _render_graph_tree(self, data: dict) -> None:
-        tree = self.query_one("#graph-tree", Tree)
+        from textual.css.query import NoMatches
+        try:
+            tree = self.query_one("#graph-tree", Tree)
+        except NoMatches:
+            return
         tree.clear()
         tree.root.set_label(
             f"[bold]Knowledge Graph[/bold] — {data['nodes']} nodes · {data['edges']} edges"
@@ -773,7 +777,11 @@ class ArtApp(App):
         tree.root.expand()
 
     def _graph_tree_error(self, error: str) -> None:
-        tree = self.query_one("#graph-tree", Tree)
+        from textual.css.query import NoMatches
+        try:
+            tree = self.query_one("#graph-tree", Tree)
+        except NoMatches:
+            return
         tree.clear()
         tree.root.set_label(f"[red]Error loading graph: {error}[/red]")
 
