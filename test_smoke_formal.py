@@ -604,6 +604,23 @@ def test_ctrl_c_bound_to_noop():
     assert keys["ctrl+c"] == "noop", f"ctrl+c bound to {keys['ctrl+c']!r} instead of 'noop'"
 
 
+def test_slash_copy_posts_result_to_chat(isolated_engine, monkeypatch):
+    """/copy calls _copy_chat_to_clipboard and posts a result message without reaching the agent."""
+    copied = []
+
+    async def _run():
+        app = tui_module.ArtApp()
+        monkeypatch.setattr(app.__class__, "_copy_chat_to_clipboard",
+                            lambda self: copied.append("called"))
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app._handle_chat_input("/copy")
+            await pilot.pause()
+            assert copied == ["called"], "_copy_chat_to_clipboard was not called"
+
+    asyncio.run(_run())
+
+
 @pytest.mark.integration
 @pytest.mark.slow
 def test_full_cli_ingestion_and_tailor_pipeline():

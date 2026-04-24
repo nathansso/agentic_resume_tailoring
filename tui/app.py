@@ -228,8 +228,8 @@ class ArtApp(App):
                                 " * View your skills, experiences, and projects\n"
                                 " * Analyze job descriptions and find skill gaps\n"
                                 " * Tailor your resume for specific roles\n\n"
-                                "Slash commands: /ingest  /data  /tailor  /viz  /profile\n"
-                                "Try: 'show my skills' or /ingest",
+                                "Slash commands: /ingest  /data  /tailor  /viz  /profile  /copy\n"
+                                "Try: 'show my skills' or /ingest  —  use /copy to copy chat",
                                 classes="bot-msg",
                             )
                         with Horizontal(id="chat-input-row"):
@@ -299,6 +299,37 @@ class ArtApp(App):
 
     def action_noop(self) -> None:
         """Absorb ctrl+c so it doesn't quit the app while the user is copying text."""
+
+    def _copy_chat_to_clipboard(self) -> None:
+        """Collect visible chat messages and copy them to the Windows clipboard."""
+        import re
+        import subprocess
+        scroll = self.query_one("#chat-scroll", VerticalScroll)
+        lines = []
+        for widget in scroll.query(Static):
+            raw = str(widget._Static__content)
+            # Strip Rich markup tags e.g. [bold], [/bold], [dim cyan]…
+            text = re.sub(r"\[/?[^\]]*\]", "", raw).strip()
+            if not text:
+                continue
+            classes = widget.classes
+            if "user-msg" in classes:
+                lines.append(text)          # already prefixed "You: …"
+            elif "bot-msg" in classes:
+                lines.append(f"ART: {text}")
+            # skip system-msg (thinking indicators, etc.)
+        if not lines:
+            self._post_chat_response("Nothing in chat to copy.")
+            return
+        content = "\n\n".join(lines)
+        try:
+            proc = subprocess.Popen(
+                "clip", stdin=subprocess.PIPE, shell=True, stderr=subprocess.DEVNULL
+            )
+            proc.communicate(input=content.encode("utf-16-le"))
+            self._post_chat_response(f"Copied {len(lines)} messages to clipboard.")
+        except Exception as e:
+            self._post_chat_response(f"Copy failed: {e}")
 
     def _get_agent(self):
         if self.chat_agent is None:
@@ -388,10 +419,13 @@ class ArtApp(App):
                 self.action_show_viz()
             elif cmd == "profile":
                 self._open_profile()
+            elif cmd == "copy":
+                self._copy_chat_to_clipboard()
             else:
                 scroll = self.query_one("#chat-scroll", VerticalScroll)
                 scroll.mount(Static(
-                    f"Unknown command: {text}\nAvailable: /ingest  /data  /tailor  /viz  /profile",
+                    f"Unknown command: {text}\n"
+                    "Available: /ingest  /data  /tailor  /viz  /profile  /copy",
                     classes="system-msg",
                 ))
                 scroll.scroll_end()
@@ -864,6 +898,10 @@ class ArtApp(App):
 # ───────────────────────────────────────────────────────────
 
 def main():
+    import signal
+    # Suppress SIGINT (ctrl+c) at the OS level so PowerShell cannot kill the
+    # process mid-session.  ctrl+q remains the quit binding inside the app.
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
     app = ArtApp()
     app.run()
 
