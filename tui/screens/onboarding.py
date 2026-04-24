@@ -232,10 +232,15 @@ class OnboardingScreen(Screen):
             self._render_step()
 
     def _submit(self) -> None:
+        import uuid as _uuid
+        name = self._answers.get("name", "")
+        # Email is required by the DB schema but not collected — generate a unique local placeholder.
+        slug = name.lower().replace(" ", ".") or "user"
+        email = f"{slug}.{_uuid.uuid4().hex[:8]}@local"
         self.query_one("#next-btn", Button).disabled = True
         self._run_onboarding(
-            name=self._answers.get("name", ""),
-            email="",
+            name=name,
+            email=email,
             resume_path=self._answers.get("resume", ""),
             github_username=self._answers.get("github", ""),
             linkedin_url=self._answers.get("linkedin", ""),

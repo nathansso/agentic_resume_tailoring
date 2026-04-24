@@ -278,11 +278,8 @@ def test_chat_ingest_resume_fast_path(isolated_engine, monkeypatch):
     assert "LLM" not in response
 
 
-def test_chat_ingest_github_fast_path(isolated_engine, monkeypatch):
-    """agent.chat('ingest github') calls service without LLM."""
-    import tui.services as svc
-    monkeypatch.setattr(svc, "ingest_github", lambda username="": f"GitHub ingested for {username or 'default'}")
-
+def test_chat_ingest_github_no_username_returns_prompt(isolated_engine, monkeypatch):
+    """agent.chat('ingest github') with no username returns a prompt, not a service call."""
     class ShouldNotBeCalledLLM:
         def invoke(self, *_a, **_kw):
             raise AssertionError("LLM must not be called for ingest github")
@@ -291,7 +288,24 @@ def test_chat_ingest_github_fast_path(isolated_engine, monkeypatch):
 
     agent = chat_module.ChatAgent()
     response = agent.chat("ingest github")
-    assert "github" in response.lower()
+    assert "username" in response.lower()
+    assert "ingest github" in response.lower()
+
+
+def test_chat_ingest_github_with_username_calls_service(isolated_engine, monkeypatch):
+    """agent.chat('ingest github <user>') calls the service without the LLM."""
+    import tui.services as svc
+    monkeypatch.setattr(svc, "ingest_github", lambda username="": f"GitHub ingested for {username}")
+
+    class ShouldNotBeCalledLLM:
+        def invoke(self, *_a, **_kw):
+            raise AssertionError("LLM must not be called for ingest github <user>")
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: ShouldNotBeCalledLLM())
+
+    agent = chat_module.ChatAgent()
+    response = agent.chat("ingest github nathansso")
+    assert "nathansso" in response
 
 
 def test_chat_tailor_fast_path(isolated_engine, monkeypatch):
