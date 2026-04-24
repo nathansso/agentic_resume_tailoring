@@ -179,7 +179,8 @@ def get_help_text() -> str:
         "Tailoring:\n"
         "  tailor <job description or file> — tailor your resume to a job\n\n"
         "TUI shortcuts (type in chat):\n"
-        "  /ingest  /data  /tailor  /viz  /profile"
+        "  /ingest  /data  /tailor  /viz  /profile  /copy\n\n"
+        "Note: use ctrl+q to quit. ctrl+c is disabled to allow copy/paste."
     )
 
 
