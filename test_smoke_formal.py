@@ -72,24 +72,23 @@ def _seed_user_and_skill(engine):
 
 
 def test_chat_semantic_routing_uses_tool_and_is_fast(isolated_engine, monkeypatch):
+    """Fuzzy skill queries now reach the LLM (fast-path removed); LLM resolves via TOOL_CALL."""
     _seed_user_and_skill(isolated_engine)
 
-    class ShouldNotBeCalledLLM:
+    class FakeLLM:
         def invoke(self, *_args, **_kwargs):
-            raise AssertionError("LLM should not be called for command-like skill query")
+            class Resp:
+                content = "TOOL_CALL: query_skills_vs_jobs()"
+            return Resp()
 
-    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.2: ShouldNotBeCalledLLM())
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.2: FakeLLM())
 
     agent = chat_module.ChatAgent()
-
-    start = time.perf_counter()
     response = agent.chat("could you please shwo me all my skils")
-    duration = time.perf_counter() - start
 
-    assert response.startswith("Your skills (")
-    assert "Python" in response
-    assert "| source:" in response
-    assert duration < 1.0
+    # LLM is called and its TOOL_CALL is resolved — no jobs seeded so guidance message returned.
+    assert response  # non-empty
+    assert "tailor" in response.lower() or "no jobs" in response.lower() or "skills" in response.lower()
 
 
 def test_tui_new_job_flow(isolated_engine):
@@ -221,19 +220,24 @@ def test_fast_path_help_command(isolated_engine, monkeypatch):
     assert "ingest" in response.lower() or "F1" in response
 
 
-def test_fast_path_short_unrecognized(isolated_engine, monkeypatch):
-    """agent.chat('hmm') returns clarification without calling the LLM."""
-    class ShouldNotBeCalledLLM:
-        def invoke(self, *_args, **_kwargs):
-            raise AssertionError("LLM must not be called for short unrecognized input")
+def test_short_message_now_reaches_llm(isolated_engine, monkeypatch):
+    """Short/unrecognized messages pass through to the LLM now that fast-path guard is removed."""
+    llm_called = []
 
-    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: ShouldNotBeCalledLLM())
+    class TrackingLLM:
+        def invoke(self, *_args, **_kwargs):
+            llm_called.append(True)
+            class Resp:
+                content = "I can help with that."
+            return Resp()
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.2: TrackingLLM())
 
     agent = chat_module.ChatAgent()
     response = agent.chat("hmm")
 
-    assert len(response) > 0
-    assert "?" in response or "not sure" in response.lower() or "try" in response.lower()
+    assert llm_called, "Short unrecognized messages should now reach the LLM"
+    assert response == "I can help with that."
 
 
 def test_short_message_passes_through_when_bot_asked_question(isolated_engine, monkeypatch):
@@ -322,8 +326,78 @@ def test_ingest_token_combo_routes_to_github(isolated_engine, monkeypatch):
 
     assert "github" in response.lower()
     assert "ingest github" in response.lower() or "username" in response.lower()
-    # Must NOT return the skills list.
     assert "Your skills" not in response
+
+
+def test_ingest_token_combo_routes_to_resume(isolated_engine, monkeypatch):
+    """'can you fetch my resume' routes to resume ingestion instructions without LLM."""
+    class ShouldNotBeCalledLLM:
+        def invoke(self, *_a, **_kw):
+            raise AssertionError("LLM must not be called for ingest+resume token combo")
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: ShouldNotBeCalledLLM())
+
+    agent = chat_module.ChatAgent()
+    response = agent.chat("can you fetch my resume and add it")
+
+    assert "ingest resume" in response.lower()
+    assert "path" in response.lower() or "file" in response.lower()
+
+
+def test_ingest_token_combo_routes_to_linkedin(isolated_engine, monkeypatch):
+    """'load my linkedin data' routes to LinkedIn ingestion instructions without LLM."""
+    class ShouldNotBeCalledLLM:
+        def invoke(self, *_a, **_kw):
+            raise AssertionError("LLM must not be called for ingest+linkedin token combo")
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: ShouldNotBeCalledLLM())
+
+    agent = chat_module.ChatAgent()
+    response = agent.chat("load my linkedin data")
+
+    assert "linkedin" in response.lower()
+    assert "ingest linkedin" in response.lower() or "pdf" in response.lower()
+
+
+def test_query_skills_vs_jobs_no_jobs(isolated_engine):
+    """query_skills_vs_jobs returns helpful guidance when no jobs are saved."""
+    from database.user_utils import create_profile
+    create_profile("Test User", "test@local")
+
+    result = chat_module.query_skills_vs_jobs()
+    assert "no jobs" in result.lower() or "tailor" in result.lower()
+
+
+def test_query_skills_vs_jobs_with_job_result(isolated_engine):
+    """query_skills_vs_jobs shows match score and skill breakdown when results exist."""
+    import uuid
+    from datetime import datetime
+    from database.user_utils import create_profile
+    from database.models import JobDescription, UserJobResult
+    from database.db import engine as db_engine
+    from sqlmodel import Session as S
+
+    user = create_profile("Match User", "matchuser@local")
+    job_id = uuid.uuid4()
+    with S(db_engine) as sess:
+        sess.add(JobDescription(
+            job_id=job_id, title="ML Engineer", company="Acme",
+            description="Build models.", created_at=datetime.utcnow(),
+        ))
+        sess.add(UserJobResult(
+            result_id=uuid.uuid4(), user_id=user.user_id, job_id=job_id,
+            ats_score=78.5,
+            matched_skills={"Python": 1, "PyTorch": 1},
+            missing_skills=["Go", "Kubernetes"],
+            created_at=datetime.utcnow(),
+        ))
+        sess.commit()
+
+    result = chat_module.query_skills_vs_jobs()
+    assert "ML Engineer" in result
+    assert "78%" in result or "78" in result
+    assert "Python" in result
+    assert "Go" in result
 
 
 def test_get_llm_roles(monkeypatch):

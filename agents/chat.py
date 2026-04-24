@@ -280,10 +280,49 @@ def get_profile_summary() -> str:
         )
 
 
+def query_skills_vs_jobs() -> str:
+    """Show how the user's skills match each saved job description."""
+    from database.user_utils import get_active_profile
+    user = get_active_profile()
+    if not user:
+        return "No active profile. Complete onboarding first."
+    with Session(engine) as session:
+        jobs = session.exec(select(JobDescription)).all()
+        if not jobs:
+            skill_count = len(session.exec(
+                select(UserSkill).where(UserSkill.user_id == user.user_id)
+            ).all())
+            return (
+                f"You have {skill_count} skills on your profile, but no jobs have been added yet.\n\n"
+                "Run `tailor <job description>` to score your skills against a job\n"
+                "and see exactly what you match and what's missing."
+            )
+        lines = []
+        for job in jobs:
+            results = session.exec(
+                select(UserJobResult).where(UserJobResult.job_id == job.job_id)
+            ).all()
+            if not results:
+                lines.append(f"\n{job.title} @ {job.company}\n  No match results yet — run `tailor` to score.")
+                continue
+            latest = max(results, key=lambda r: r.created_at)
+            matched = list(latest.matched_skills.keys()) if latest.matched_skills else []
+            missing = latest.missing_skills or []
+            matched_str = ", ".join(matched[:8]) + (f" (+{len(matched)-8} more)" if len(matched) > 8 else "")
+            missing_str = ", ".join(missing[:5]) + (f" (+{len(missing)-5} more)" if len(missing) > 5 else "")
+            lines.append(
+                f"\n{job.title} @ {job.company} — {latest.ats_score:.0f}% match\n"
+                + (f"  Matched: {matched_str}\n" if matched else "  Matched: (none)\n")
+                + (f"  Missing: {missing_str}\n" if missing else "  Missing: (none)\n")
+            )
+        return "Your skills vs saved jobs:" + "".join(lines)
+
+
 # ── Tool Registry ───────────────────────────────────────────
 
 TOOL_MAP = {
     "query_skills": lambda args: query_skills(),
+    "query_skills_vs_jobs": lambda args: query_skills_vs_jobs(),
     "query_experiences": lambda args: query_experiences(),
     "query_projects": lambda args: query_projects(),
     "query_graph_stats": lambda args: query_graph_stats(),
@@ -297,87 +336,13 @@ TOOL_MAP = {
     "run_tailor": lambda args: run_tailor(args),
 }
 
-# Direct-match shortcuts (bypass LLM for instant response)
+# Direct-match shortcuts — only help and ingestion entry-points bypass the LLM.
+# Data queries (skills, experiences, projects, jobs, graph) are handled via LLM TOOL_CALL.
 SHORTCUTS = {
-    "skills": query_skills,
-    "show skills": query_skills,
-    "my skills": query_skills,
-    "experiences": query_experiences,
-    "show experiences": query_experiences,
-    "my experiences": query_experiences,
-    "projects": query_projects,
-    "show projects": query_projects,
-    "my projects": query_projects,
-    "graph": query_graph_stats,
-    "graph stats": query_graph_stats,
-    "knowledge graph": query_graph_stats,
-    "my graph": query_graph_stats,
-    "jobs": list_jobs,
-    "show jobs": list_jobs,
-    "job": list_jobs,
-    "current job": list_jobs,
-    "active job": list_jobs,
-    "profile": get_profile_summary,
-    "status": get_profile_summary,
-    "my profile": get_profile_summary,
     "help": get_help_text,
     "what can you do": get_help_text,
-}
-
-
-# Broader command phrase map for semantic-ish matching.
-COMMAND_PHRASES = {
-    "query_skills": [
-        "show my skills",
-        "show skills",
-        "list skills",
-        "skills",
-        "what skills do i have",
-        "display all my skills",
-    ],
-    "query_experiences": [
-        "show my experience",
-        "show experiences",
-        "list experiences",
-        "work experience",
-        "my experience",
-    ],
-    "query_projects": [
-        "show projects",
-        "list projects",
-        "my projects",
-        "project list",
-    ],
-    "query_graph_stats": [
-        "graph",
-        "graph stats",
-        "knowledge graph",
-        "graph summary",
-        "my graph",
-        "show graph",
-    ],
-    "list_jobs": [
-        "show jobs",
-        "list jobs",
-        "my jobs",
-        "saved jobs",
-        "job",
-        "current job",
-        "active job",
-    ],
-    "get_profile_summary": [
-        "profile",
-        "status",
-        "profile summary",
-        "show profile",
-    ],
-    "get_help_text": [
-        "help",
-        "what can you do",
-        "commands",
-        "what commands",
-        "show help",
-    ],
+    "commands": get_help_text,
+    "show help": get_help_text,
 }
 
 
@@ -391,7 +356,8 @@ When the user asks you to do something, respond with a TOOL_CALL on its own line
 TOOL_CALL: tool_name(arg)
 
 Available tools:
-- query_skills() — Show all user skills with evidence sources
+- query_skills_vs_jobs() — Show user skills scored against each saved job (PREFERRED for skill queries)
+- query_skills() — Raw skill list with evidence sources (use when the user explicitly wants all skills)
 - query_experiences() — Show all user experiences
 - query_projects() — Show all user projects
 - query_graph_stats() — Show knowledge graph statistics
@@ -404,6 +370,7 @@ Available tools:
 - run_tailor(job_description_or_path) — Tailor the resume to a job description
 
 Rules:
+- For skill queries, prefer query_skills_vs_jobs() — it shows match context, not just a flat list
 - For data queries, call the appropriate tool
 - For ingestion requests, ALWAYS call the appropriate tool — never describe what to do instead
 - run_ingest_github requires a username argument; if the user hasn't provided one, ask for it
@@ -570,46 +537,6 @@ class ChatAgent:
             if skill_name:
                 return query_skill_evidence(skill_name)
 
-        # 3) Phrase + fuzzy similarity routing.
-        best_tool = None
-        best_score = 0.0
-
-        for tool_name, phrases in COMMAND_PHRASES.items():
-            for phrase in phrases:
-                if phrase in normalized or normalized in phrase:
-                    score = 1.0
-                else:
-                    score = SequenceMatcher(None, normalized, phrase).ratio()
-                if score > best_score:
-                    best_score = score
-                    best_tool = tool_name
-
-        # 4) Token-based fallback for common asks.
-        action_words = {"show", "list", "display", "all", "my"}
-        has_action = bool(tokens & action_words) or _has_token_close_to({"show", "list", "display"}, 0.75)
-
-        if _has_token_close_to({"skill", "skills"}, 0.78) and has_action:
-            return query_skills()
-        if _has_token_close_to({"experience", "experiences"}, 0.8) and has_action:
-            return query_experiences()
-        if _has_token_close_to({"project", "projects"}, 0.8) and has_action:
-            return query_projects()
-
-        # Slightly permissive threshold to catch typos/non-exact phrasing.
-        if best_tool and best_score >= 0.72:
-            if best_tool == "query_skills":
-                return query_skills()
-            if best_tool == "query_experiences":
-                return query_experiences()
-            if best_tool == "query_projects":
-                return query_projects()
-            if best_tool == "query_graph_stats":
-                return query_graph_stats()
-            if best_tool == "list_jobs":
-                return list_jobs()
-            if best_tool == "get_profile_summary":
-                return get_profile_summary()
-
         return None
 
     def chat(self, user_message: str) -> str:
@@ -624,30 +551,6 @@ class ChatAgent:
             self.history.append({"role": "user", "content": user_message})
             self.history.append({"role": "assistant", "content": routed})
             return routed
-
-        # Short unrecognized messages — return clarification without LLM.
-        # Skip if: pending options exist (user is replying) or the bot just asked a question.
-        tokens = user_message.strip().split()
-        if len(tokens) < 4 and not self._pending_options and not self._last_bot_asked_question():
-            ms = (time.perf_counter() - t0) * 1000
-            logger.debug("[chat] path=fast_path duration=%.1fms", ms)
-            clarification = (
-                "Not sure what you mean. Pick an option or type a command:\n\n"
-                "  1. skills      — view your skills\n"
-                "  2. projects    — view your projects\n"
-                "  3. ingest      — add data from GitHub/resume/LinkedIn\n"
-                "  4. help        — see all commands\n\n"
-                "Reply with a number or type a command directly."
-            )
-            self._pending_options = {
-                "1": query_skills,
-                "2": query_projects,
-                "3": self._ingest_github_with_options,
-                "4": get_help_text,
-            }
-            self.history.append({"role": "user", "content": user_message})
-            self.history.append({"role": "assistant", "content": clarification})
-            return clarification
 
         self.history.append({"role": "user", "content": user_message})
 
