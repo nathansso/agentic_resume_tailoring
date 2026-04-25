@@ -403,6 +403,76 @@ def ingest_github(username: str = "") -> str:
         return f"GitHub ingestion failed: {e}"
 
 
+def parse_github_repo_ref(repo_ref: str) -> "tuple[str, str] | None":
+    """Parse a GitHub repo ref into (owner, repo_name). Accepts owner/repo or full GitHub URLs."""
+    import re
+    ref = repo_ref.strip().rstrip("/")
+    m = re.match(r'^https?://github\.com/([^/\s]+)/([^/\s]+?)(?:\.git)?$', ref)
+    if m:
+        return m.group(1), m.group(2)
+    m = re.match(r'^([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)$', ref)
+    if m:
+        return m.group(1), m.group(2)
+    return None
+
+
+def ingest_github_repo(repo_ref: str) -> str:
+    """Fetch a single GitHub repo and save to DB. Returns a plain-English summary string and never raises."""
+    parsed = parse_github_repo_ref(repo_ref)
+    if not parsed:
+        return (
+            f"Invalid GitHub repo ref: '{repo_ref}'. "
+            "Use owner/repo (e.g. openai/evals) or https://github.com/owner/repo."
+        )
+    owner, repo_name = parsed
+    try:
+        from database.db import init_db
+        from database.user_utils import get_active_profile
+        from ingestion.github import GitHubIngestor
+        from agents.parser import ResumeParserAgent
+        init_db()
+        user = get_active_profile()
+        pre = _snapshot_user_data(user.user_id) if user else (set(), set(), set())
+        with _suppress_output():
+            repo = GitHubIngestor.fetch_repo(owner, repo_name)
+            if not repo:
+                return f"Could not fetch {owner}/{repo_name}. Check the owner/repo name and your network connection."
+            langs = ", ".join(repo.get("languages", [])) or "unknown"
+            lines = [
+                f"Project: {repo['name']}",
+                f"Description: {repo.get('description') or 'No description'}",
+                f"Languages: {langs}",
+                f"URL: {repo.get('url', '')}",
+            ]
+            if repo.get("readme"):
+                lines.append(f"README:\n{repo['readme']}")
+            for dep_file, dep_content in repo.get("dependencies", {}).items():
+                lines.append(f"{dep_file}:\n{dep_content}")
+            ResumeParserAgent().parse_and_save({
+                "source_file": f"github:{owner}/{repo_name}",
+                "full_text": "\n".join(lines),
+                "parsed_sections": {},
+            })
+        has_readme = "yes" if repo.get("readme") else "no"
+        has_deps = "yes" if repo.get("dependencies") else "no"
+        if user:
+            diff = _format_ingestion_diff(
+                user.user_id, pre[0], pre[1], pre[2],
+                f"single repo: {owner}/{repo_name}",
+            )
+            return (
+                f"Single repo ingest: {owner}/{repo_name}\n"
+                f"Owner: {owner} | Languages: {langs} | README: {has_readme} | Dependency files: {has_deps}\n\n"
+                + diff
+            )
+        return (
+            f"Single repo ingested: {owner}/{repo_name}\n"
+            f"Owner: {owner} | Languages: {langs} | README: {has_readme} | Dependency files: {has_deps}"
+        )
+    except Exception as e:
+        return f"Repo ingestion failed: {e}"
+
+
 def ingest_linkedin_pdf(file_path: str) -> str:
     """Parse a LinkedIn PDF export and save to DB."""
     from pathlib import Path

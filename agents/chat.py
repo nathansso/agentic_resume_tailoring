@@ -174,7 +174,9 @@ def get_help_text() -> str:
         "  evidence for <skill>            — show evidence for a skill\n\n"
         "Ingestion commands:\n"
         "  ingest resume <path>            — parse a resume file (MD, PDF, DOCX)\n"
-        "  ingest github <username>        — fetch a GitHub user's repos\n"
+        "  ingest github <username>        — fetch ALL repos for a GitHub user\n"
+        "  ingest github repo owner/repo   — fetch a single GitHub repo\n"
+        "  ingest <github-url>             — fetch a single repo from a GitHub URL\n"
         "  ingest linkedin pdf <path>      — parse a LinkedIn PDF export\n\n"
         "Tailoring:\n"
         "  tailor <job description or file> — tailor your resume to a job\n\n"
@@ -208,6 +210,19 @@ def run_ingest_github(username: str = "") -> str:
 def run_ingest_linkedin_pdf(file_path: str) -> str:
     """Parse a LinkedIn PDF export into the profile."""
     return services.ingest_linkedin_pdf(file_path.strip())
+
+
+def run_ingest_github_repo(repo_ref: str) -> str:
+    """Ingest a single GitHub repo by owner/repo or GitHub URL."""
+    repo_ref = repo_ref.strip()
+    if not repo_ref:
+        return (
+            "Please provide the GitHub repo you want to ingest.\n\n"
+            "  `ingest github repo owner/repo`\n\n"
+            "Example: `ingest github repo openai/evals`\n"
+            "Or paste a GitHub URL: `ingest https://github.com/openai/evals`"
+        )
+    return services.ingest_github_repo(repo_ref)
 
 
 def run_tailor(job_input: str) -> str:
@@ -332,6 +347,7 @@ TOOL_MAP = {
     "get_help_text": lambda args: get_help_text(),
     "run_ingest_resume": lambda args: run_ingest_resume(args),
     "run_ingest_github": lambda args: run_ingest_github(args),
+    "run_ingest_github_repo": lambda args: run_ingest_github_repo(args),
     "run_ingest_linkedin_pdf": lambda args: run_ingest_linkedin_pdf(args),
     "run_tailor": lambda args: run_tailor(args),
 }
@@ -348,35 +364,66 @@ SHORTCUTS = {
 
 # ── Chat Agent ──────────────────────────────────────────────
 
-SYSTEM_PROMPT = """You are ART Assistant, a helpful resume tailoring chatbot.
-You help users manage their professional profile and tailor resumes to job descriptions.
+def build_router_prompt(
+    has_profile: bool = False,
+    profile_name: str | None = None,
+    github_username: str | None = None,
+    waiting_for_clarification: bool = False,
+) -> str:
+    """Build the router system prompt with current runtime state injected."""
+    state_lines = []
+    if has_profile and profile_name:
+        state_lines.append(f"- Profile: {profile_name} (active)")
+    else:
+        state_lines.append("- Profile: none (user has not completed onboarding)")
+    state_lines.append(f"- GitHub username on file: {github_username or 'none'}")
+    state_lines.append("- Active job: none")
+    state_lines.append(
+        "- Status: waiting for clarification or option reply" if waiting_for_clarification else "- Status: ready"
+    )
+    state_block = "\n".join(state_lines)
+    gh_hint = github_username or "myusername"
 
-When the user asks you to do something, respond with a TOOL_CALL on its own line:
+    return f"""## Role
+ART routes user messages to tools. Choose exactly one action per turn.
 
-TOOL_CALL: tool_name(arg)
+## Current state
+{state_block}
 
-Available tools:
-- query_skills_vs_jobs() — Show user skills scored against each saved job (PREFERRED for skill queries)
-- query_skills() — Raw skill list with evidence sources (use when the user explicitly wants all skills)
-- query_experiences() — Show all user experiences
-- query_projects() — Show all user projects
-- query_graph_stats() — Show knowledge graph statistics
-- query_skill_evidence(skill_name) — Show evidence for a specific skill
-- list_jobs() — List all saved job descriptions
-- get_profile_summary() — Get profile overview
-- run_ingest_resume(file_path) — Ingest a resume file (PDF, DOCX, MD)
-- run_ingest_github(username) — Fetch GitHub repos for a username and extract skills/projects
-- run_ingest_linkedin_pdf(file_path) — Parse a LinkedIn PDF export
-- run_tailor(job_description_or_path) — Tailor the resume to a job description
+## Allowed actions
+  TOOL_CALL: tool_name(arg)
+  CLARIFY: <single concise question>
+  RESPONSE: <plain conversational answer>
 
 Rules:
-- For skill queries, prefer query_skills_vs_jobs() — it shows match context, not just a flat list
-- For data queries, call the appropriate tool
-- For ingestion requests, ALWAYS call the appropriate tool — never describe what to do instead
-- run_ingest_github requires a username argument; if the user hasn't provided one, ask for it
-- Be concise and conversational
-- If the user just wants to chat about their career, respond naturally
-- You can call multiple tools by putting each TOOL_CALL on its own line"""
+- When a required argument is missing, use CLARIFY: instead of guessing.
+- Never combine CLARIFY: and TOOL_CALL: in the same turn.
+- Use RESPONSE: for career questions with no matching tool.
+
+## Tool guide
+query_skills_vs_jobs()             — skills matched against saved jobs (prefer for skill queries)
+query_skills()                     — raw skill list with evidence sources
+query_experiences()                — work experience list
+query_projects()                   — project list
+query_graph_stats()                — knowledge graph statistics
+query_skill_evidence(skill_name)   — evidence for a specific skill; arg: skill name
+list_jobs()                        — saved job descriptions
+get_profile_summary()              — profile overview
+run_ingest_resume(file_path)       — ingest resume file; CLARIFY: if path missing
+run_ingest_github(username)        — ingest ALL repos for a GitHub account; saved username: {gh_hint}; CLARIFY: if username unknown; do NOT use for single-repo requests
+run_ingest_github_repo(repo_ref)   — ingest ONE repo by owner/repo or GitHub URL; CLARIFY: if ref missing; do NOT call run_ingest_github for single-repo requests
+run_ingest_linkedin_pdf(file_path) — parse LinkedIn PDF; CLARIFY: if path missing
+run_tailor(job)                    — tailor resume to a job description
+
+## Examples
+"ingest my GitHub" → TOOL_CALL: run_ingest_github({gh_hint})
+"ingest github repo openai/evals" → TOOL_CALL: run_ingest_github_repo(openai/evals)
+"ingest https://github.com/openai/evals" → TOOL_CALL: run_ingest_github_repo(https://github.com/openai/evals)
+"can you pull in the repo torvalds/linux" → TOOL_CALL: run_ingest_github_repo(torvalds/linux)
+"ingest a repo" → CLARIFY: Which repo? Provide owner/repo (e.g. openai/evals) or a GitHub URL.
+"show my projects" → TOOL_CALL: query_projects()
+"what skills do I have?" → TOOL_CALL: query_skills_vs_jobs()
+"should I apply to this job?" → RESPONSE: Based on your profile ..."""
 
 
 class ChatAgent:
@@ -389,6 +436,19 @@ class ChatAgent:
         self.llm = get_llm(role="chat", temperature=0.2)
         self.history: List[Dict[str, str]] = []
         self._pending_options: dict[str, callable] = {}
+
+    @staticmethod
+    def _parse_envelope(text: str) -> "tuple[str, str]":
+        """Parse the router envelope prefix. Returns (type, content).
+        type is 'TOOL_CALL', 'CLARIFY', 'RESPONSE', or 'RAW' for malformed output."""
+        stripped = text.strip()
+        if stripped.startswith("TOOL_CALL:"):
+            return "TOOL_CALL", stripped
+        if stripped.startswith("CLARIFY:"):
+            return "CLARIFY", stripped[len("CLARIFY:"):].strip()
+        if stripped.startswith("RESPONSE:"):
+            return "RESPONSE", stripped[len("RESPONSE:"):].strip()
+        return "RAW", stripped
 
     @staticmethod
     def _normalize(text: str) -> str:
@@ -405,6 +465,11 @@ class ChatAgent:
         """Return a numbered-choice message for GitHub ingestion."""
         from database.user_utils import get_active_profile
         profile = get_active_profile()
+        _repo_hint = (
+            "Type `ingest github repo owner/repo` or paste a GitHub URL.\n"
+            "Example: `ingest github repo openai/evals`\n"
+            "Or: `ingest https://github.com/openai/evals`"
+        )
         if profile and profile.github_username:
             username = profile.github_username
             self._pending_options = {
@@ -413,19 +478,28 @@ class ChatAgent:
                     "Type `ingest github <username>` with your preferred username.\n"
                     "Example: `ingest github nathansso`"
                 ),
+                "3": lambda: _repo_hint,
             }
             return (
                 f"Found GitHub username in your profile: {username}\n\n"
-                f"  1. Ingest repos for {username}\n"
-                "  2. Use a different username\n\n"
-                "Reply with 1 or 2, or type `ingest github <username>` directly."
+                f"  1. Ingest all repos for {username}\n"
+                "  2. Use a different username\n"
+                "  3. Ingest a specific repo\n\n"
+                "Reply with 1, 2, or 3, or type `ingest github <username>` directly."
             )
         else:
+            self._pending_options = {
+                "1": lambda: (
+                    "Type `ingest github <username>` with your GitHub username.\n"
+                    "Example: `ingest github nathansso`"
+                ),
+                "2": lambda: _repo_hint,
+            }
             return (
-                "To ingest your GitHub repos, type:\n\n"
-                "  `ingest github <username>`\n\n"
-                "Example: `ingest github nathansso`\n\n"
-                "Tip: Save your username in Profile to skip this prompt next time."
+                "To ingest your GitHub data, choose an option:\n\n"
+                "  1. Ingest all repos for a username\n"
+                "  2. Ingest a specific repo\n\n"
+                "Reply with 1 or 2, or type `ingest github <username>` directly."
             )
 
     def _semantic_command_match(self, user_message: str) -> str | None:
@@ -480,11 +554,33 @@ class ChatAgent:
         if normalized in SHORTCUTS:
             return SHORTCUTS[normalized]()
 
-        # 1b) Argument-parsing fast-paths — use raw message to preserve file paths.
+        # 1b) Argument-parsing fast-paths — use raw message to preserve file paths and URLs.
         raw = user_message.strip()
         m = re.match(r"(?i)^ingest resume\s+(.+)$", raw)
         if m:
             return run_ingest_resume(m.group(1).strip())
+
+        # Repo fast-paths — must come before the generic `ingest github <arg>` pattern.
+        m = re.match(r"(?i)^ingest\s+github\s+repo\s+(\S+)$", raw)
+        if m:
+            return run_ingest_github_repo(m.group(1).strip())
+
+        m = re.match(r"(?i)^ingest\s+repo\s+(\S+)$", raw)
+        if m:
+            return run_ingest_github_repo(m.group(1).strip())
+
+        m = re.match(r"(?i)^ingest\s+(https?://github\.com/\S+)$", raw)
+        if m:
+            return run_ingest_github_repo(m.group(1).strip())
+
+        # "ingest github repo" or "ingest repo" with no ref → repo-specific clarification.
+        if re.match(r"(?i)^ingest\s+(?:github\s+)?repo$", raw):
+            return (
+                "Please provide the GitHub repo you want to ingest.\n\n"
+                "  `ingest github repo owner/repo`\n\n"
+                "Example: `ingest github repo openai/evals`\n"
+                "Or paste a GitHub URL: `ingest https://github.com/openai/evals`"
+            )
 
         m = re.match(r"(?i)^ingest github\s+(\S+)$", raw)
         if m:
@@ -502,7 +598,23 @@ class ChatAgent:
         # Catches freeform phrasing like "i want to ingest skill from my github".
         ingest_verbs = {"ingest", "import", "fetch", "pull", "add", "load", "parse", "upload"}
         if tokens & ingest_verbs:
+            # GitHub URL anywhere in the raw message → single-repo ingestion.
+            url_m = re.search(r'(https?://github\.com/[^/\s]+/[^/\s]+)', raw)
+            if url_m:
+                return run_ingest_github_repo(url_m.group(1).rstrip("/"))
+
             if _has_token_close_to({"github"}, 0.85):
+                # "repo" keyword signals single-repo intent, not account-level ingestion.
+                if "repo" in tokens:
+                    ref_m = re.search(r'\b([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)\b', raw)
+                    if ref_m:
+                        return run_ingest_github_repo(ref_m.group(1))
+                    return (
+                        "Please provide the GitHub repo you want to ingest.\n\n"
+                        "  `ingest github repo owner/repo`\n\n"
+                        "Example: `ingest github repo openai/evals`\n"
+                        "Or paste a GitHub URL: `ingest https://github.com/openai/evals`"
+                    )
                 m2 = re.search(r"github\s+(\S+)", normalized)
                 if m2 and m2.group(1) not in {"repos", "username", "user", "account", "profile", "my"}:
                     return run_ingest_github(m2.group(1))
@@ -554,9 +666,17 @@ class ChatAgent:
 
         self.history.append({"role": "user", "content": user_message})
 
-        # Build messages for LLM
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-        # Keep smaller window for lower latency while preserving context.
+        # Build per-request system prompt with current runtime state.
+        from database.user_utils import get_active_profile
+        _profile = get_active_profile()
+        system_prompt = build_router_prompt(
+            has_profile=_profile is not None,
+            profile_name=_profile.name if _profile else None,
+            github_username=_profile.github_username if _profile else None,
+            waiting_for_clarification=bool(self._pending_options) or self._last_bot_asked_question(),
+        )
+        messages = [{"role": "system", "content": system_prompt}]
+        # Keep a smaller window for lower latency while preserving context.
         messages.extend(self.history[-12:])
 
         try:
@@ -570,17 +690,18 @@ class ChatAgent:
         from config import LLM_PROVIDER
         logger.debug("[chat] path=llm provider=%s role=chat duration=%.1fms", LLM_PROVIDER, ms)
 
-        # Resolve any TOOL_CALL lines
-        resolved = self._resolve_tool_calls(text)
+        # Handle router envelope: TOOL_CALL, CLARIFY, RESPONSE, or fall back for malformed output.
+        envelope_type, clean_content = self._parse_envelope(text)
 
-        if resolved != text:
+        if envelope_type == "TOOL_CALL":
+            resolved = self._resolve_tool_calls(text)
             self.history.append({"role": "assistant", "content": text})
-            # Return tool output directly (faster and preserves full lists).
             self.history.append({"role": "assistant", "content": resolved})
             return resolved
         else:
-            self.history.append({"role": "assistant", "content": text})
-            return text
+            # CLARIFY, RESPONSE, or RAW (malformed) — strip envelope prefix and return.
+            self.history.append({"role": "assistant", "content": clean_content})
+            return clean_content
 
     def _resolve_tool_calls(self, text: str) -> str:
         """Parse TOOL_CALL lines and execute them."""

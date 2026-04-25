@@ -863,6 +863,134 @@ def test_slash_copy_posts_result_to_chat(isolated_engine, monkeypatch):
     asyncio.run(_run())
 
 
+# ── PRD 06.1 — router prompt hardening and repo-scoped ingestion ─────────────
+
+def test_build_router_prompt_contains_state(isolated_engine):
+    """build_router_prompt injects runtime state into the system prompt."""
+    prompt = chat_module.build_router_prompt(
+        has_profile=True,
+        profile_name="Alice",
+        github_username="alicecodes",
+        waiting_for_clarification=False,
+    )
+    assert "Role" in prompt
+    assert "Current state" in prompt
+    assert "Allowed actions" in prompt
+    assert "Alice" in prompt
+    assert "alicecodes" in prompt
+    assert "TOOL_CALL:" in prompt
+    assert "CLARIFY:" in prompt
+    assert "RESPONSE:" in prompt
+    assert "run_ingest_github_repo" in prompt
+
+    # No-profile branch
+    prompt_no_profile = chat_module.build_router_prompt(has_profile=False)
+    assert "none" in prompt_no_profile.lower()
+
+
+def test_malformed_router_output_falls_back_safely(isolated_engine, monkeypatch):
+    """LLM returning gibberish is treated as plain text without raising."""
+    class GibberishLLM:
+        def invoke(self, *_a, **_kw):
+            class Resp:
+                content = "I dunno lol just do stuff maybe??"
+            return Resp()
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.2: GibberishLLM())
+
+    agent = chat_module.ChatAgent()
+    response = agent.chat("what is the meaning of life")
+    # Must not raise; malformed output is returned as-is.
+    assert response == "I dunno lol just do stuff maybe??"
+
+
+def test_ingest_repo_owner_repo_fast_path(isolated_engine, monkeypatch):
+    """agent.chat('ingest github repo owner/repo') calls the repo service without the LLM."""
+    import tui.services as svc
+    monkeypatch.setattr(svc, "ingest_github_repo", lambda ref: f"Single repo ingested: {ref}")
+
+    class ShouldNotBeCalledLLM:
+        def invoke(self, *_a, **_kw):
+            raise AssertionError("LLM must not be called for repo fast-path")
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: ShouldNotBeCalledLLM())
+
+    agent = chat_module.ChatAgent()
+    response = agent.chat("ingest github repo openai/evals")
+    assert "openai/evals" in response
+    assert "LLM" not in response
+
+
+def test_ingest_github_url_fast_path(isolated_engine, monkeypatch):
+    """agent.chat('ingest https://github.com/owner/repo') routes to the repo service without LLM."""
+    import tui.services as svc
+    monkeypatch.setattr(svc, "ingest_github_repo", lambda ref: f"Single repo ingested: {ref}")
+
+    class ShouldNotBeCalledLLM:
+        def invoke(self, *_a, **_kw):
+            raise AssertionError("LLM must not be called for GitHub URL fast-path")
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: ShouldNotBeCalledLLM())
+
+    agent = chat_module.ChatAgent()
+    response = agent.chat("ingest https://github.com/openai/evals")
+    assert "openai" in response or "evals" in response
+    assert "LLM" not in response
+
+
+def test_ingest_new_github_repo_returns_clarification(isolated_engine, monkeypatch):
+    """'ingest a new github repo' returns a repo-specific clarification, not account-wide ingestion."""
+    class ShouldNotBeCalledLLM:
+        def invoke(self, *_a, **_kw):
+            raise AssertionError("LLM must not be called for repo clarification fast-path")
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: ShouldNotBeCalledLLM())
+
+    agent = chat_module.ChatAgent()
+    response = agent.chat("ingest a new github repo")
+
+    # Must ask for a repo ref, not trigger account-level ingestion prompt.
+    assert "owner/repo" in response.lower() or "github url" in response.lower() or "provide" in response.lower()
+    # Must NOT look like an account-level ingestion prompt.
+    assert "ingest github <username>" not in response
+
+
+def test_ingest_github_repo_invalid_ref(isolated_engine):
+    """services.ingest_github_repo with an invalid ref returns an error string and does not raise."""
+    result = services_module.ingest_github_repo("not-a-valid-ref")
+    assert isinstance(result, str)
+    assert "invalid" in result.lower() or "error" in result.lower()
+    assert "not-a-valid-ref" in result
+
+
+def test_ingest_github_repo_summary_mentions_single_repo(isolated_engine, monkeypatch):
+    """ingest_github_repo summary clearly says 'single repo', not account-level ingestion."""
+    import ingestion.github as gh_module
+    import agents.parser as parser_module
+    from database.user_utils import create_profile
+
+    create_profile("Test User", "test@local")
+
+    fake_repo = {
+        "name": "evals",
+        "description": "Evals for LLMs",
+        "url": "https://github.com/openai/evals",
+        "stars": 10,
+        "updated_at": "2024-01-01T00:00:00Z",
+        "languages": ["Python"],
+        "readme": "# evals",
+        "dependencies": {},
+        "owner": "openai",
+    }
+    monkeypatch.setattr(gh_module.GitHubIngestor, "fetch_repo", lambda owner, repo_name, token="": fake_repo)
+    monkeypatch.setattr(parser_module.ResumeParserAgent, "parse_and_save", lambda self, data: None)
+
+    result = services_module.ingest_github_repo("openai/evals")
+    assert "single repo" in result.lower()
+    assert "openai" in result
+    assert "evals" in result
+
+
 @pytest.mark.integration
 @pytest.mark.slow
 def test_full_cli_ingestion_and_tailor_pipeline():
