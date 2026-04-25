@@ -26,6 +26,8 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 CHAT_MODEL = os.getenv("CHAT_MODEL", "claude-haiku-4-5-20251001")
 EXTRACT_MODEL = os.getenv("EXTRACT_MODEL", "claude-haiku-4-5-20251001")
 TAILOR_MODEL = os.getenv("TAILOR_MODEL", "claude-sonnet-4-6")
+EVAL_MODEL = os.getenv("EVAL_MODEL", CHAT_MODEL)
+REVIEW_MODEL = os.getenv("REVIEW_MODEL", TAILOR_MODEL)
 
 # Global Config
 MODEL_NAME = "gpt-4o-mini"  # legacy alias for openai fallback

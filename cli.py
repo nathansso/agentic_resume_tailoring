@@ -305,6 +305,101 @@ def cmd_status(args):
         print()
 
 
+def cmd_chat_eval(args):
+    """Run the synthetic chat evaluation harness against one or all scenarios."""
+    import tempfile
+    from pathlib import Path
+    from sqlmodel import SQLModel, create_engine, Session
+    from database import db as db_module
+    from database import user_utils as uu_module
+    import agents.chat as chat_module
+    import tui.services as services_module
+    import knowledge_graph.builder as kg_module
+    import tui.app as tui_module_ref
+
+    # Use an isolated in-memory DB so eval runs never touch the user's real data.
+    tmp_db = tempfile.mktemp(suffix=".db", prefix="art_eval_")
+    eval_engine = create_engine(
+        f"sqlite:///{tmp_db}", connect_args={"check_same_thread": False}
+    )
+    SQLModel.metadata.create_all(eval_engine)
+
+    # Patch module-level engines to the isolated DB.
+    import database.db as _db_mod
+    import database.user_utils as _uu_mod
+    _db_mod.engine = eval_engine
+    chat_module.engine = eval_engine
+    services_module.engine = eval_engine
+    kg_module.engine = eval_engine
+    _uu_mod.engine = eval_engine
+
+    # Point active profile file to a temp location.
+    import uuid as _uuid_mod
+    profile_tmp = Path(tmp_db).parent / f"active_profile_{_uuid_mod.uuid4().hex}"
+    _uu_mod.ACTIVE_PROFILE_FILE = profile_tmp
+
+    from verification.chat_eval.scenario_loader import load_scenario, load_all_scenarios, seed_scenario_db
+    from verification.chat_eval.synthetic_user import SyntheticUserAgent
+    from verification.chat_eval.runner import EvalRunner
+
+    output_dir = Path(args.output_dir) if getattr(args, "output_dir", None) else None
+
+    # Resolve scenarios to run.
+    if getattr(args, "scenario", None):
+        try:
+            scenarios = [load_scenario(args.scenario)]
+        except FileNotFoundError as exc:
+            print(f"Error: {exc}")
+            sys.exit(1)
+    else:
+        scenarios = load_all_scenarios()
+
+    if not scenarios:
+        print("No scenarios found.")
+        sys.exit(0)
+
+    mode = getattr(args, "mode", "canonical")
+    n_variants = max(1, getattr(args, "variants", 1))
+    stub = not getattr(args, "live", False)
+
+    print(f"Running {len(scenarios)} scenario(s) | mode={mode} variants={n_variants} stub={stub}")
+
+    all_results = []
+    with EvalRunner(stub=stub, output_dir=output_dir or Path.home() / ".art" / "evals") as runner:
+        for scenario in scenarios:
+            # Re-seed the DB for each scenario.
+            seed_scenario_db(scenario)
+
+            agent_obj = SyntheticUserAgent(scenario, mode=mode)
+            variants = agent_obj.generate_variants(n=n_variants)
+
+            for i, turns in enumerate(variants):
+                vid = f"v{i+1}" if len(variants) > 1 else ""
+                label = f"{scenario['scenario_id']}{vid}"
+                print(f"  {label} ({len(turns)} turn(s)) ...", end=" ", flush=True)
+                result = runner.run_scenario(scenario, turns)
+                result["variant_id"] = vid
+                result["scenario_id"] = label
+                all_results.append(result)
+                status = "PASS" if result["score"]["passed"] else "FAIL"
+                print(status)
+
+        run_dir = runner.write_artifacts(all_results)
+
+    passed = sum(1 for r in all_results if r["score"]["passed"])
+    print(f"\n{passed}/{len(all_results)} passed — artifacts: {run_dir}")
+
+    # Cleanup temp DB.
+    try:
+        Path(tmp_db).unlink(missing_ok=True)
+        profile_tmp.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+    if passed < len(all_results):
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="art",
@@ -340,6 +435,19 @@ def main():
     # tui
     subparsers.add_parser("tui", help="Launch interactive TUI")
 
+    # chat-eval
+    p_eval = subparsers.add_parser("chat-eval", help="Run synthetic chat evaluation harness")
+    p_eval.add_argument("--scenario", default=None, help="Run a single scenario by ID")
+    p_eval.add_argument("--variants", type=int, default=1, help="Number of paraphrase variants per scenario")
+    p_eval.add_argument("--mode", choices=["canonical", "synthetic", "mixed"], default="canonical",
+                        help="Turn generation mode")
+    p_eval.add_argument("--stubbed", dest="stubbed", action="store_true", default=True,
+                        help="Stub heavy side effects (default)")
+    p_eval.add_argument("--live", dest="live", action="store_true", default=False,
+                        help="Run with real services (no stubs)")
+    p_eval.add_argument("--output-dir", dest="output_dir", default=None,
+                        help="Override artifact output directory")
+
     args = parser.parse_args()
 
     if args.command == "ingest-resume":
@@ -357,6 +465,8 @@ def main():
     elif args.command == "tui":
         from tui.app import main as tui_main
         tui_main()
+    elif args.command == "chat-eval":
+        cmd_chat_eval(args)
     else:
         parser.print_help()
 

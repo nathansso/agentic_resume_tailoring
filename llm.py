@@ -8,7 +8,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from config import (
     LLM_PROVIDER,
     OLLAMA_MODEL, OLLAMA_BASE_URL,
-    CHAT_MODEL, EXTRACT_MODEL, TAILOR_MODEL,
+    CHAT_MODEL, EXTRACT_MODEL, TAILOR_MODEL, EVAL_MODEL, REVIEW_MODEL,
     OPENAI_API_KEY, ANTHROPIC_API_KEY,
 )
 
@@ -19,12 +19,16 @@ class ModelRole:
     CHAT = "chat"
     EXTRACT = "extract"
     TAILOR = "tailor"
+    EVAL = "eval"
+    REVIEW = "review"
 
 
 _ROLE_MODELS = {
     ModelRole.CHAT: CHAT_MODEL,
     ModelRole.EXTRACT: EXTRACT_MODEL,
     ModelRole.TAILOR: TAILOR_MODEL,
+    ModelRole.EVAL: EVAL_MODEL,
+    ModelRole.REVIEW: REVIEW_MODEL,
 }
 
 

@@ -333,8 +333,16 @@ class ArtApp(App):
 
     def _get_agent(self):
         if self.chat_agent is None:
+            import os
             from agents.chat import ChatAgent
-            self.chat_agent = ChatAgent()
+            trace_sink = None
+            if os.environ.get("ART_LOG_CHAT_EVAL") == "1":
+                try:
+                    from verification.chat_eval.artifacts import make_live_session_sink
+                    trace_sink = make_live_session_sink()
+                except Exception as exc:
+                    logger.warning("Could not create eval trace sink: %s", exc)
+            self.chat_agent = ChatAgent(trace_sink=trace_sink)
         return self.chat_agent
 
     # ───────────────────────────────────────────────────────
