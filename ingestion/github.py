@@ -256,6 +256,43 @@ class GitHubIngestor:
             logger.debug(f"Could not read notebook {filename}: {e}")
         return []
 
+    @classmethod
+    def fetch_repo(cls, owner: str, repo_name: str, token: str = GITHUB_TOKEN) -> Optional[Dict[str, Any]]:
+        """Fetch a single repo by owner/repo. Returns a payload shaped like ingest() items, or None on failure."""
+        instance = cls(username=owner, token=token)
+        api_url = f"{instance.api_url}/repos/{owner}/{repo_name}"
+        try:
+            resp = requests.get(api_url, headers=instance.headers, timeout=cls.REQUEST_TIMEOUT)
+            if resp.status_code != 200:
+                logger.warning(f"Repo {owner}/{repo_name} not found (HTTP {resp.status_code})")
+                return None
+            repo = resp.json()
+
+            lang_url = repo["languages_url"]
+            lang_resp = requests.get(lang_url, headers=instance.headers, timeout=cls.REQUEST_TIMEOUT)
+            lang_list = list(lang_resp.json().keys()) if lang_resp.status_code == 200 else []
+
+            scannable_langs = {"Python", "Jupyter Notebook", "R", "TypeScript", "JavaScript"}
+            should_deep_scan = bool(set(lang_list) & scannable_langs)
+
+            readme_text = instance._fetch_readme(repo_name) if should_deep_scan else None
+            dependencies = instance._fetch_dependency_files(repo_name) if should_deep_scan else {}
+
+            return {
+                "name": repo_name,
+                "description": repo.get("description"),
+                "url": repo["html_url"],
+                "stars": repo.get("stargazers_count", 0),
+                "updated_at": repo.get("updated_at"),
+                "languages": lang_list,
+                "readme": readme_text,
+                "dependencies": dependencies,
+                "owner": owner,
+            }
+        except Exception as e:
+            logger.error(f"fetch_repo failed for {owner}/{repo_name}: {e}")
+            return None
+
     @staticmethod
     def _parse_imports(code: str) -> List[str]:
         """Extract top-level package names from Python import statements."""
