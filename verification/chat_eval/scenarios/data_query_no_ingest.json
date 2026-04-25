@@ -1,0 +1,24 @@
+{
+  "scenario_id": "data_query_no_ingest",
+  "description": "User asks about skills — must use a query tool, not ingestion tools",
+  "tags": ["query", "llm_path", "negative"],
+  "profile_fixture": {
+    "name": "Query Eval User",
+    "email": "query@test.local",
+    "github_username": ""
+  },
+  "canonical_turns": [
+    {"user": "what are my top skills and how do they match current jobs?"}
+  ],
+  "max_turns": 2,
+  "must_call_tools": [],
+  "forbidden_tools": ["run_ingest_github", "run_ingest_resume", "run_ingest_linkedin_pdf", "run_ingest_github_repo"],
+  "required_response_substrings": [],
+  "success_conditions": {
+    "route_must_be_any": ["tool_call", "llm", "fast_path"],
+    "forbidden_tools_not_called": true
+  },
+  "failure_labels": {
+    "ingestion_triggered": "wrong_tool"
+  }
+}

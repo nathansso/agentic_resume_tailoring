@@ -1,0 +1,22 @@
+{
+  "scenario_id": "github_missing_username",
+  "description": "User without a saved GitHub username asks to ingest GitHub",
+  "tags": ["github", "ingestion", "fast_path", "clarification"],
+  "profile_fixture": {
+    "name": "New Eval User",
+    "email": "neweval@test.local",
+    "github_username": ""
+  },
+  "canonical_turns": [
+    {"user": "ingest my github repos"}
+  ],
+  "max_turns": 3,
+  "must_call_tools": [],
+  "forbidden_tools": [],
+  "required_response_substrings": ["github"],
+  "success_conditions": {
+    "route_must_be_any": ["fast_path", "pending_option"],
+    "response_must_contain_any": ["username", "ingest github", "option"]
+  },
+  "failure_labels": {}
+}

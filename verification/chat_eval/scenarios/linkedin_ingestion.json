@@ -1,0 +1,22 @@
+{
+  "scenario_id": "linkedin_ingestion",
+  "description": "User provides a LinkedIn PDF path via fast-path command",
+  "tags": ["linkedin", "ingestion", "fast_path"],
+  "profile_fixture": {
+    "name": "LinkedIn Eval User",
+    "email": "linkedin@test.local",
+    "github_username": ""
+  },
+  "canonical_turns": [
+    {"user": "ingest linkedin profile.pdf"}
+  ],
+  "max_turns": 2,
+  "must_call_tools": [],
+  "forbidden_tools": ["run_ingest_github", "run_ingest_resume"],
+  "required_response_substrings": [],
+  "success_conditions": {
+    "route_must_be_any": ["fast_path"],
+    "response_must_contain_any": ["linkedin", "STUBBED", "pdf", "error", "not found", "failed"]
+  },
+  "failure_labels": {}
+}

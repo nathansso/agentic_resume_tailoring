@@ -1,0 +1,22 @@
+{
+  "scenario_id": "resume_ingestion",
+  "description": "User provides a file path to ingest a resume via fast-path command",
+  "tags": ["resume", "ingestion", "fast_path"],
+  "profile_fixture": {
+    "name": "Resume Eval User",
+    "email": "resume@test.local",
+    "github_username": ""
+  },
+  "canonical_turns": [
+    {"user": "ingest resume /tmp/my_resume.md"}
+  ],
+  "max_turns": 2,
+  "must_call_tools": [],
+  "forbidden_tools": ["run_ingest_github", "run_ingest_linkedin_pdf"],
+  "required_response_substrings": [],
+  "success_conditions": {
+    "route_must_be_any": ["fast_path"],
+    "response_must_contain_any": ["resume", "STUBBED", "ingested", "not found", "error", "failed"]
+  },
+  "failure_labels": {}
+}
