@@ -1,0 +1,26 @@
+{
+  "scenario_id": "followup_after_question",
+  "description": "User replies with a GitHub username after the bot asked for one — LLM should route to ingestion",
+  "tags": ["followup", "llm_path"],
+  "profile_fixture": {
+    "name": "Followup Eval User",
+    "email": "followup@test.local",
+    "github_username": ""
+  },
+  "initial_chat_history": [
+    {"role": "user", "content": "ingest my github"},
+    {"role": "assistant", "content": "What is your GitHub username?"}
+  ],
+  "canonical_turns": [
+    {"user": "nathansso"}
+  ],
+  "max_turns": 2,
+  "must_call_tools": [],
+  "forbidden_tools": [],
+  "required_response_substrings": [],
+  "success_conditions": {
+    "route_must_be_any": ["llm", "tool_call", "fast_path"],
+    "response_must_contain_any": ["github", "nathansso", "ingest", "STUBBED", "username", "repos"]
+  },
+  "failure_labels": {}
+}

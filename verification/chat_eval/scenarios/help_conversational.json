@@ -1,0 +1,22 @@
+{
+  "scenario_id": "help_conversational",
+  "description": "New user asks for help in conversational language — response must mention capabilities",
+  "tags": ["help", "fast_path_or_llm"],
+  "profile_fixture": {
+    "name": "Help Eval User",
+    "email": "help@test.local",
+    "github_username": ""
+  },
+  "canonical_turns": [
+    {"user": "what can you do? im new here"}
+  ],
+  "max_turns": 2,
+  "must_call_tools": [],
+  "forbidden_tools": [],
+  "required_response_substrings": [],
+  "success_conditions": {
+    "route_must_be_any": ["fast_path", "tool_call", "llm"],
+    "response_must_contain_any": ["ingest", "skills", "tailor", "resume", "github", "help", "commands"]
+  },
+  "failure_labels": {}
+}

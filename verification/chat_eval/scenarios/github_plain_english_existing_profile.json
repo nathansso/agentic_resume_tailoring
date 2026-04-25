@@ -1,0 +1,24 @@
+{
+  "scenario_id": "github_plain_english_existing_profile",
+  "description": "User with saved GitHub username asks to ingest GitHub in plain English",
+  "tags": ["github", "ingestion", "fast_path"],
+  "profile_fixture": {
+    "name": "Eval User",
+    "email": "eval@test.local",
+    "github_username": "testuser"
+  },
+  "canonical_turns": [
+    {"user": "please ingest my github data"}
+  ],
+  "max_turns": 3,
+  "must_call_tools": [],
+  "forbidden_tools": ["run_ingest_resume", "run_ingest_linkedin_pdf"],
+  "required_response_substrings": ["github"],
+  "success_conditions": {
+    "route_must_be_any": ["fast_path", "tool_call", "pending_option"],
+    "response_must_contain_any": ["github", "ingest"]
+  },
+  "failure_labels": {
+    "missing_github_reference": "response_clarity_failure"
+  }
+}

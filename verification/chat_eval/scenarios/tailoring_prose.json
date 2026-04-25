@@ -1,0 +1,25 @@
+{
+  "scenario_id": "tailoring_prose",
+  "description": "User asks to tailor resume using prose — must route to tailor, not ingestion",
+  "tags": ["tailor", "llm_path"],
+  "profile_fixture": {
+    "name": "Tailor Eval User",
+    "email": "tailor@test.local",
+    "github_username": ""
+  },
+  "canonical_turns": [
+    {"user": "can you tailor my resume for a software engineer position at Acme Corp?"}
+  ],
+  "max_turns": 3,
+  "must_call_tools": [],
+  "forbidden_tools": ["run_ingest_github", "run_ingest_resume", "run_ingest_linkedin_pdf"],
+  "required_response_substrings": [],
+  "success_conditions": {
+    "route_must_be_any": ["fast_path", "tool_call", "llm"],
+    "forbidden_tools_not_called": true,
+    "response_must_contain_any": ["tailor", "job", "STUBBED", "resume", "acme", "software", "engineer"]
+  },
+  "failure_labels": {
+    "ingest_called_instead": "wrong_tool"
+  }
+}
