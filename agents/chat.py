@@ -5,9 +5,10 @@ query the knowledge graph, and run tailoring pipelines conversationally.
 """
 import re
 import time
+import uuid
 import logging
 from difflib import SequenceMatcher
-from typing import Dict, List
+from typing import Callable, Dict, List, Optional, TypedDict
 from sqlmodel import Session, select
 
 from llm import get_llm
@@ -19,6 +20,23 @@ from database.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class ChatTurnTrace(TypedDict):
+    """Structured record for one agent turn — used by the eval harness and opt-in logging."""
+    session_id: str
+    turn_index: int
+    user_message: str
+    normalized_message: str
+    route_kind: str           # 'pending_option' | 'fast_path' | 'llm' | 'tool_call' | 'error'
+    matched_fast_path: Optional[str]
+    tool_calls_requested: List[str]
+    tool_calls_executed: List[str]
+    response_text: str
+    duration_ms: float
+    llm_provider: str
+    llm_role: str
+    error: Optional[str]
 
 
 # ── Tool Functions ──────────────────────────────────────────
@@ -432,10 +450,18 @@ class ChatAgent:
     or answers questions about the user's profile/skills/jobs.
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        trace_sink: Optional[Callable[[ChatTurnTrace], None]] = None,
+        session_id: Optional[str] = None,
+    ):
         self.llm = get_llm(role="chat", temperature=0.2)
         self.history: List[Dict[str, str]] = []
         self._pending_options: dict[str, callable] = {}
+        self._trace_sink = trace_sink
+        self._session_id = session_id or str(uuid.uuid4())
+        self._turn_index = 0
+        self.last_trace: Optional[ChatTurnTrace] = None
 
     @staticmethod
     def _parse_envelope(text: str) -> "tuple[str, str]":
@@ -449,6 +475,49 @@ class ChatAgent:
         if stripped.startswith("RESPONSE:"):
             return "RESPONSE", stripped[len("RESPONSE:"):].strip()
         return "RAW", stripped
+
+    def _emit_trace(self, **kwargs: object) -> None:
+        from config import LLM_PROVIDER
+        trace: ChatTurnTrace = {
+            "session_id": self._session_id,
+            "turn_index": self._turn_index,
+            "user_message": str(kwargs.get("user_message", "")),
+            "normalized_message": self._normalize(str(kwargs.get("user_message", ""))),
+            "route_kind": str(kwargs.get("route_kind", "unknown")),
+            "matched_fast_path": kwargs.get("matched_fast_path"),  # type: ignore[assignment]
+            "tool_calls_requested": list(kwargs.get("tool_calls_requested", [])),  # type: ignore[arg-type]
+            "tool_calls_executed": list(kwargs.get("tool_calls_executed", [])),  # type: ignore[arg-type]
+            "response_text": str(kwargs.get("response_text", "")),
+            "duration_ms": float(kwargs.get("duration_ms", 0.0)),
+            "llm_provider": LLM_PROVIDER,
+            "llm_role": "chat",
+            "error": kwargs.get("error"),  # type: ignore[assignment]
+        }
+        self.last_trace = trace
+        if self._trace_sink is not None:
+            try:
+                self._trace_sink(trace)
+            except Exception as exc:
+                logger.debug("trace_sink error: %s", exc)
+
+    def _infer_fast_path(self, user_message: str, pending_keys: set) -> str:
+        """Infer a descriptive fast-path label from the message, used only for tracing."""
+        raw = user_message.strip()
+        n = self._normalize(raw)
+        if raw in pending_keys:
+            return "pending_option"
+        if re.match(r"(?i)^ingest\s+github\s+repo\s+\S+", raw): return "ingest_repo"
+        if re.match(r"(?i)^ingest\s+repo\s+\S+", raw): return "ingest_repo"
+        if re.match(r"(?i)^ingest\s+https?://github", raw): return "ingest_github_url"
+        if re.match(r"(?i)^ingest\s+(?:github\s+)?repo$", raw): return "ingest_repo_clarification"
+        if re.match(r"(?i)^ingest\s+github\s+\S+$", raw): return "ingest_github_username"
+        if re.match(r"(?i)^ingest\s+github$", raw): return "ingest_github_menu"
+        if re.match(r"(?i)^ingest\s+resume", raw): return "ingest_resume"
+        if re.match(r"(?i)^ingest\s+linkedin", raw): return "ingest_linkedin"
+        if re.match(r"(?i)^ingest$", raw): return "ingest_menu"
+        if re.match(r"(?i)^tailor\s+", raw): return "tailor"
+        if n in SHORTCUTS: return f"shortcut:{n}"
+        return "token_combo_or_evidence"
 
     @staticmethod
     def _normalize(text: str) -> str:
@@ -655,13 +724,28 @@ class ChatAgent:
         """Process a user message and return a response."""
         t0 = time.perf_counter()
 
+        # Snapshot pending keys before matching so _infer_fast_path can identify option resolution.
+        pending_keys = set(self._pending_options.keys())
+
         # Route command-like queries directly for speed and full-fidelity output.
         routed = self._semantic_command_match(user_message)
         if routed is not None:
             ms = (time.perf_counter() - t0) * 1000
-            logger.debug("[chat] path=fast_path duration=%.1fms", ms)
+            fp_label = self._infer_fast_path(user_message, pending_keys)
+            route_kind = "pending_option" if fp_label == "pending_option" else "fast_path"
+            logger.debug("[chat] path=%s duration=%.1fms", route_kind, ms)
             self.history.append({"role": "user", "content": user_message})
             self.history.append({"role": "assistant", "content": routed})
+            self._emit_trace(
+                user_message=user_message,
+                route_kind=route_kind,
+                matched_fast_path=fp_label,
+                tool_calls_requested=[],
+                tool_calls_executed=[],
+                response_text=routed,
+                duration_ms=ms,
+            )
+            self._turn_index += 1
             return routed
 
         self.history.append({"role": "user", "content": user_message})
@@ -683,7 +767,19 @@ class ChatAgent:
             response = self.llm.invoke(messages)
             text = response.content if hasattr(response, "content") else str(response)
         except Exception as e:
-            logger.error(f"LLM error: {e}")
+            ms = (time.perf_counter() - t0) * 1000
+            logger.error("LLM error: %s", e)
+            self._emit_trace(
+                user_message=user_message,
+                route_kind="error",
+                matched_fast_path=None,
+                tool_calls_requested=[],
+                tool_calls_executed=[],
+                response_text=f"LLM error: {e}",
+                duration_ms=ms,
+                error=str(e),
+            )
+            self._turn_index += 1
             return f"LLM error: {e}"
 
         ms = (time.perf_counter() - t0) * 1000
@@ -694,32 +790,59 @@ class ChatAgent:
         envelope_type, clean_content = self._parse_envelope(text)
 
         if envelope_type == "TOOL_CALL":
-            resolved = self._resolve_tool_calls(text)
+            rendered, requested, executed = self._resolve_tool_calls(text)
             self.history.append({"role": "assistant", "content": text})
-            self.history.append({"role": "assistant", "content": resolved})
-            return resolved
+            self.history.append({"role": "assistant", "content": rendered})
+            self._emit_trace(
+                user_message=user_message,
+                route_kind="tool_call",
+                matched_fast_path=None,
+                tool_calls_requested=requested,
+                tool_calls_executed=executed,
+                response_text=rendered,
+                duration_ms=ms,
+            )
+            self._turn_index += 1
+            return rendered
         else:
             # CLARIFY, RESPONSE, or RAW (malformed) — strip envelope prefix and return.
             self.history.append({"role": "assistant", "content": clean_content})
+            self._emit_trace(
+                user_message=user_message,
+                route_kind="llm",
+                matched_fast_path=None,
+                tool_calls_requested=[],
+                tool_calls_executed=[],
+                response_text=clean_content,
+                duration_ms=ms,
+            )
+            self._turn_index += 1
             return clean_content
 
-    def _resolve_tool_calls(self, text: str) -> str:
-        """Parse TOOL_CALL lines and execute them."""
+    def _resolve_tool_calls(self, text: str) -> tuple:
+        """Parse TOOL_CALL lines and execute them.
+
+        Returns (rendered_text, requested_names, executed_names).
+        rendered_text is the joined tool output (or original text if no matches).
+        """
         pattern = r"TOOL_CALL:\s*(\w+)\(([^)]*)\)"
         matches = re.findall(pattern, text)
         if not matches:
-            return text
+            return text, [], []
 
+        requested = [m[0] for m in matches]
         results = []
+        executed = []
         for tool_name, args in matches:
             args = args.strip().strip("'\"")
             if tool_name in TOOL_MAP:
                 try:
                     result = TOOL_MAP[tool_name](args)
                     results.append(result)
+                    executed.append(tool_name)
                 except Exception as e:
                     results.append(f"[{tool_name}] Error: {e}")
             else:
                 results.append(f"Unknown tool: {tool_name}")
 
-        return "\n\n".join(results)
+        return "\n\n".join(results), requested, executed
