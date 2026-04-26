@@ -797,24 +797,64 @@ class ChatAgent:
                 return msg["content"].rstrip().endswith("?")
         return False
 
+    def _await_github_username_then_menu(self) -> str:
+        """Prompt for a GitHub username, then show an all-repos/specific-repo sub-menu."""
+        def _handle(username: str) -> str:
+            username = username.strip()
+            if not username or " " in username:
+                return (
+                    "That doesn't look like a valid GitHub username.\n"
+                    "Type `ingest github <username>` to try again."
+                )
+            self._pending_options = {
+                "1": lambda u=username: run_ingest_github(u),
+                "2": lambda: self._await_repo_ref(),
+            }
+            return (
+                f"GitHub username: {username}\n\n"
+                f"  1. Ingest all repos for {username}\n"
+                "  2. Ingest a specific repo\n\n"
+                "Reply with 1 or 2."
+            )
+        self._pending_options = {"__free_input": _handle}
+        return "What is your GitHub username?"
+
+    def _await_github_username_for_ingest(self) -> str:
+        """Prompt for a GitHub username, then ingest all repos directly."""
+        def _handle(username: str) -> str:
+            username = username.strip()
+            if not username or " " in username:
+                return (
+                    "That doesn't look like a valid GitHub username.\n"
+                    "Type `ingest github <username>` to try again."
+                )
+            return run_ingest_github(username)
+        self._pending_options = {"__free_input": _handle}
+        return "What is your GitHub username?"
+
+    def _await_repo_ref(self) -> str:
+        """Prompt for an owner/repo slug or GitHub URL, then ingest the single repo."""
+        def _handle(ref: str) -> str:
+            ref = ref.strip()
+            if not ref:
+                return "No repo provided. Type `ingest github repo owner/repo` to try again."
+            return run_ingest_github_repo(ref)
+        self._pending_options = {"__free_input": _handle}
+        return (
+            "Which repo? Enter `owner/repo` or paste a GitHub URL.\n"
+            "Example: `openai/evals`  or  `https://github.com/openai/evals`"
+        )
+
     def _ingest_github_with_options(self) -> str:
         """Return a numbered-choice message for GitHub ingestion."""
         from database.user_utils import get_active_profile
         profile = get_active_profile()
-        _repo_hint = (
-            "Type `ingest github repo owner/repo` or paste a GitHub URL.\n"
-            "Example: `ingest github repo openai/evals`\n"
-            "Or: `ingest https://github.com/openai/evals`"
-        )
         if profile and profile.github_username:
             username = profile.github_username
             self._pending_options = {
-                "1": lambda u=username: services.ingest_github(u),
-                "2": lambda: (
-                    "Type `ingest github <username>` with your preferred username.\n"
-                    "Example: `ingest github nathansso`"
-                ),
-                "3": lambda: _repo_hint,
+                "1": lambda u=username: run_ingest_github(u),
+                "2": lambda: self._await_github_username_then_menu(),
+                "3": lambda: self._await_repo_ref(),
             }
             return (
                 f"Found GitHub username in your profile: {username}\n\n"
@@ -825,15 +865,12 @@ class ChatAgent:
             )
         else:
             self._pending_options = {
-                "1": lambda: (
-                    "Type `ingest github <username>` with your GitHub username.\n"
-                    "Example: `ingest github nathansso`"
-                ),
-                "2": lambda: _repo_hint,
+                "1": lambda: self._await_github_username_for_ingest(),
+                "2": lambda: self._await_repo_ref(),
             }
             return (
                 "To ingest your GitHub data, choose an option:\n\n"
-                "  1. Ingest all repos for a username\n"
+                "  1. Ingest all repos for a GitHub username\n"
                 "  2. Ingest a specific repo\n\n"
                 "Reply with 1 or 2, or type `ingest github <username>` directly."
             )
@@ -861,6 +898,12 @@ class ChatAgent:
             fn = self._pending_options[stripped]
             self._pending_options.clear()
             return fn()
+
+        # 0b) Free-input catch-all: bot was awaiting a username, repo ref, or other text.
+        if self._pending_options and "__free_input" in self._pending_options:
+            fn = self._pending_options.pop("__free_input")
+            self._pending_options.clear()
+            return fn(stripped)
 
         # 1) Exact shortcut hit (fast path). Ingestion keywords use instance methods.
         if normalized == "ingest github":

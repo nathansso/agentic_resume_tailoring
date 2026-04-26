@@ -4,6 +4,30 @@ All completed PRD deliveries are recorded here. PRDs remain as pure forward-look
 
 ---
 
+## PRD 05 — Desktop Productization, Cloud Models, And Data Security
+**Status:** complete | **Tests:** 64 pass
+
+Moved app data to `~/.art/`, wired startup config validation, added Windows launchers, and documented the install process.
+
+### What shipped
+- `config.py` — `APP_DATA_DIR = Path.home() / ".art"`, `EXPORTS_DIR`, `UPLOADS_DIR`, `LOGS_DIR`; `DATABASE_URL` moved from `{root}/art.db` to `~/.art/art.db`; `ensure_app_dirs(base_dir=None)` for idempotent directory creation
+- `config_validator.py` — **created**; `validate_config() -> list[str]` checks `LLM_PROVIDER` value, API key presence for chosen provider, Ollama reachability, and `APP_DATA_DIR` writability
+- `database/db.py` — `_migrate_db_location()` runs before engine creation; copies `{project_root}/art.db` → `~/.art/art.db` once, non-destructively, and logs the migration
+- `tui/app.py` — `on_mount` calls `ensure_app_dirs()` then `validate_config()`; config errors shown in status bar as `[CONFIG ERROR] ...`
+- `cli.py` — `_check_config()` helper added; called at top of every command; prints errors and exits with code 1 on failure
+- `launch.bat` — **created**; Windows CMD launcher
+- `launch.ps1` — **created**; PowerShell launcher
+- `.env.example` — **created**; all recognized env vars with comments
+- `INSTALL.md` — **created**; install guide covering clone → venv → pip → `.env` → launch
+- `tests/test_prd05.py` — 5 tests: missing API key (OpenAI), missing API key (Anthropic), unknown provider, `ensure_app_dirs` subdirectory creation, no secrets in logs
+
+### Deviations from spec
+- `validate_config()` accepts `"anthropic"` as a valid `LLM_PROVIDER` (not listed in the PRD spec but is the current default)
+- `ensure_app_dirs()` accepts an optional `base_dir` parameter to keep tests hermetic
+- Disabling ingestion/tailoring buttons on config error deferred — status bar error message is the signal; button disabling requires TUI-layer changes beyond PRD 05 scope
+
+---
+
 ## Session — Chat Routing Overhaul, TUI Polish, Profile Overlay
 **Status:** complete | **Tests:** 38 pass
 
