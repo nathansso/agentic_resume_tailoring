@@ -545,8 +545,246 @@ class ChatAgent:
         if re.match(r"(?i)^ingest\s+linkedin", raw): return "ingest_linkedin"
         if re.match(r"(?i)^ingest$", raw): return "ingest_menu"
         if re.match(r"(?i)^tailor\s+", raw): return "tailor"
+        if n == "analyze": return "analyze_active_job"
+        if n in {"tailor", "tailor resume", "run tailoring"}: return "tailor_active_job"
+        if n in {"export", "export resume", "save resume"}: return "export_active_job"
+        if len(raw) > 100 and self.active_job_id: return "job_description_paste"
         if n in SHORTCUTS: return f"shortcut:{n}"
         return "token_combo_or_evidence"
+
+    # ── Active job lifecycle ────────────────────────────────────────────────
+
+    def set_active_job(self, job_id: str) -> None:
+        """Set the active job for this session (not persisted across restarts)."""
+        self.active_job_id = job_id
+
+    def _get_active_job(self) -> Optional[JobDescription]:
+        if not self.active_job_id:
+            return None
+        with Session(engine) as session:
+            return session.get(JobDescription, UUID(self.active_job_id))
+
+    def _analyze_active_job(self, args: str) -> str:
+        """Extract skills from the active job description and save JobSkill records."""
+        from datetime import datetime
+        from agents.job_analyzer import JobAnalyzerAgent
+
+        job = self._get_active_job()
+        if not job:
+            return "No active job selected. Select a job from the sidebar first."
+        if not job.description:
+            return 'Active job has no description yet. Paste the job description in chat first.'
+
+        try:
+            analyzer = JobAnalyzerAgent()
+            skills = analyzer._extract_skills(job.description)
+
+            with Session(engine) as session:
+                job_db = session.get(JobDescription, job.job_id)
+                # Clear stale links before re-extracting
+                existing = session.exec(
+                    select(JobSkill).where(JobSkill.job_id == job_db.job_id)
+                ).all()
+                for link in existing:
+                    session.delete(link)
+                session.flush()
+
+                for item in skills:
+                    skill_name = (item.get("name") or "").strip()
+                    if not skill_name:
+                        continue
+                    skill = session.exec(
+                        select(Skill).where(Skill.name == skill_name)
+                    ).first()
+                    if not skill:
+                        skill = Skill(name=skill_name, category=item.get("category"))
+                        session.add(skill)
+                        session.flush()
+                    session.add(JobSkill(
+                        job_id=job_db.job_id,
+                        skill_id=skill.skill_id,
+                        required=item.get("required", True),
+                        weight=item.get("weight", 1.0),
+                    ))
+
+                job_db.status = "analyzed"
+                job_db.updated_at = datetime.utcnow()
+                session.add(job_db)
+                session.commit()
+
+            required = [s for s in skills if s.get("required", True)]
+            preferred = [s for s in skills if not s.get("required", True)]
+            lines = [
+                f"Job analyzed: {job.title} @ {job.company}",
+                f"Extracted {len(skills)} skills: {len(required)} required, {len(preferred)} preferred.",
+            ]
+            if required:
+                lines.append("Required: " + ", ".join(s.get("name", "") for s in required[:12]))
+            if preferred:
+                lines.append("Preferred: " + ", ".join(s.get("name", "") for s in preferred[:8]))
+            lines.append('\nType "tailor" to tailor your resume to this job.')
+            return "\n".join(lines)
+        except Exception as e:
+            logger.error("_analyze_active_job failed: %s", e)
+            return f"Analysis failed: {e}"
+
+    def _tailor_active_job(self, args: str) -> str:
+        """Run match → tailor → format pipeline nodes for the active job."""
+        from datetime import datetime
+        from database.user_utils import get_active_profile
+        import graph.pipeline as _pipeline
+
+        job = self._get_active_job()
+        if not job:
+            return "No active job selected. Select a job from the sidebar first."
+
+        user = get_active_profile()
+        if not user:
+            return "No active profile. Complete onboarding first."
+
+        with Session(engine) as session:
+            job_skills_count = len(session.exec(
+                select(JobSkill).where(JobSkill.job_id == job.job_id)
+            ).all())
+
+        if job_skills_count == 0:
+            return 'No skills extracted yet. Type "analyze" first to extract job requirements.'
+
+        try:
+            state = {
+                "resume_path": "", "job_text": job.description or "",
+                "job_file": "", "user_id": str(user.user_id),
+                "job_id": str(job.job_id), "result_id": "",
+                "resume_text": "", "ats_score": 0.0,
+                "matched_skills": {}, "missing_skills": [],
+                "tailored_content": {}, "formatted_resume": "", "status": "",
+            }
+
+            state = _pipeline.match_skills_node(state)
+            state = _pipeline.tailor_resume_node(state)
+            state = _pipeline.format_resume_node(state)
+
+            with Session(engine) as session:
+                job_db = session.get(JobDescription, job.job_id)
+                if job_db:
+                    job_db.status = "tailored"
+                    job_db.updated_at = datetime.utcnow()
+                    session.add(job_db)
+                    session.commit()
+
+            matched = state.get("matched_skills", {})
+            missing = state.get("missing_skills", [])
+            ats = state.get("ats_score", 0.0)
+
+            evidence_backed, emphasized, inferred = [], [], []
+            for skill_name, data in matched.items():
+                if not isinstance(data, dict):
+                    evidence_backed.append(skill_name)
+                    continue
+                match_type = data.get("match_type", "")
+                similarity = data.get("similarity", 0.0)
+                if match_type in ("direct", "name_match"):
+                    evidence_backed.append(skill_name)
+                elif match_type == "semantic" and similarity >= 0.8:
+                    matched_to = data.get("matched_to", "")
+                    emphasized.append(f"{skill_name} (≈{matched_to})" if matched_to else skill_name)
+                else:
+                    inferred.append(skill_name)
+
+            # Store explainability in the result record
+            result_id = state.get("result_id")
+            if result_id:
+                with Session(engine) as session:
+                    result = session.get(UserJobResult, UUID(result_id))
+                    if result:
+                        merged = dict(result.matched_skills or {})
+                        merged["_explainability"] = {
+                            "matched": evidence_backed,
+                            "emphasized": emphasized,
+                            "inferred": inferred,
+                            "missing": list(missing),
+                            "ats_score": ats,
+                        }
+                        result.matched_skills = merged
+                        session.add(result)
+                        session.commit()
+
+            lines = [
+                f"Tailoring complete — ATS Score: {ats:.1f}%", "",
+                "Matched (evidence-backed):",
+                "  " + (", ".join(evidence_backed[:10]) or "(none)"), "",
+                "Emphasized:",
+                "  " + (", ".join(emphasized[:8]) or "(none)"), "",
+                "Inferred (low evidence):",
+                "  " + (", ".join(inferred[:8]) or "(none)"), "",
+                "Missing:",
+                "  " + (", ".join(list(missing)[:10]) or "(none)"), "",
+                'Type "export" to save the tailored resume to ~/.art/exports/',
+            ]
+            return "\n".join(lines)
+        except Exception as e:
+            logger.error("_tailor_active_job failed: %s", e)
+            return f"Tailoring failed: {e}"
+
+    def _export_active_job(self, args: str) -> str:
+        """Write the tailored resume to ~/.art/exports/ and return the path."""
+        import re as _re
+        from pathlib import Path
+        from datetime import datetime
+        from database.user_utils import get_active_profile
+
+        job = self._get_active_job()
+        if not job:
+            return "No active job selected. Select a job from the sidebar first."
+
+        user = get_active_profile()
+        if not user:
+            return "No active profile. Complete onboarding first."
+
+        with Session(engine) as session:
+            results = session.exec(
+                select(UserJobResult).where(
+                    UserJobResult.job_id == job.job_id,
+                    UserJobResult.user_id == user.user_id,
+                )
+            ).all()
+
+        if not results:
+            return 'No tailoring results yet. Type "tailor" first.'
+
+        latest = max(results, key=lambda r: r.created_at)
+        if not latest.tailored_resume_content:
+            return 'No tailored content found. Type "tailor" first.'
+
+        try:
+            from agents.formatter import ResumeFormatterAgent
+            formatter = ResumeFormatterAgent(user_id=user.user_id)
+            md = formatter.format_markdown(latest.tailored_resume_content)
+        except Exception:
+            md = str(latest.tailored_resume_content)
+
+        exports_dir = Path.home() / ".art" / "exports"
+        exports_dir.mkdir(parents=True, exist_ok=True)
+
+        safe_title = _re.sub(r"[^a-zA-Z0-9_-]", "_", job.title)[:40]
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"tailored_resume_{safe_title}_{timestamp}.md"
+        export_path = exports_dir / filename
+        export_path.write_text(md, encoding="utf-8")
+
+        with Session(engine) as session:
+            result = session.get(UserJobResult, latest.result_id)
+            if result:
+                result.export_path = str(export_path)
+                session.add(result)
+                job_db = session.get(JobDescription, job.job_id)
+                if job_db:
+                    job_db.status = "exported"
+                    job_db.updated_at = datetime.utcnow()
+                    session.add(job_db)
+                session.commit()
+
+        return f"Resume exported to: {export_path}"
 
     @staticmethod
     def _normalize(text: str) -> str:
@@ -688,6 +926,14 @@ class ChatAgent:
         if m:
             return run_ingest_linkedin_pdf(m.group(1).strip())
 
+        # Job lifecycle shortcuts — exact normalized match takes priority over freeform tailor.
+        if normalized == "analyze":
+            return self._analyze_active_job("")
+        if normalized in {"tailor", "tailor resume", "run tailoring"}:
+            return self._tailor_active_job("")
+        if normalized in {"export", "export resume", "save resume"}:
+            return self._export_active_job("")
+
         m = re.match(r"(?i)^tailor\s+(.+)$", raw)
         if m:
             return run_tailor(m.group(1).strip())
@@ -747,6 +993,23 @@ class ChatAgent:
             if skill_name:
                 return query_skill_evidence(skill_name)
 
+        # JD paste: long freeform text when active job is in "created" state with no description.
+        if len(user_message) > 100 and self.active_job_id:
+            job = self._get_active_job()
+            if job and getattr(job, "status", "created") == "created" and not job.description:
+                from datetime import datetime
+                with Session(engine) as session:
+                    job_db = session.get(JobDescription, job.job_id)
+                    if job_db:
+                        job_db.description = user_message
+                        job_db.updated_at = datetime.utcnow()
+                        session.add(job_db)
+                        session.commit()
+                return (
+                    f'Job description saved for "{job.title} @ {job.company}".\n\n'
+                    'Type "analyze" to extract required skills from this description.'
+                )
+
         return None
 
     def chat(self, user_message: str) -> str:
@@ -782,11 +1045,24 @@ class ChatAgent:
         # Build per-request system prompt with current runtime state.
         from database.user_utils import get_active_profile
         _profile = get_active_profile()
+        _active_job = self._get_active_job() if self.active_job_id else None
+        _active_job_ats: Optional[float] = None
+        if _active_job:
+            with Session(engine) as _s:
+                _job_results = _s.exec(
+                    select(UserJobResult).where(UserJobResult.job_id == _active_job.job_id)
+                ).all()
+                if _job_results:
+                    _active_job_ats = max(r.ats_score for r in _job_results)
         system_prompt = build_router_prompt(
             has_profile=_profile is not None,
             profile_name=_profile.name if _profile else None,
             github_username=_profile.github_username if _profile else None,
             waiting_for_clarification=bool(self._pending_options) or self._last_bot_asked_question(),
+            active_job_title=_active_job.title if _active_job else None,
+            active_job_company=_active_job.company if _active_job else None,
+            active_job_status=getattr(_active_job, "status", None) if _active_job else None,
+            active_job_ats=_active_job_ats,
         )
         messages = [{"role": "system", "content": system_prompt}]
         # Keep a smaller window for lower latency while preserving context.
@@ -864,9 +1140,9 @@ class ChatAgent:
         executed = []
         for tool_name, args in matches:
             args = args.strip().strip("'\"")
-            if tool_name in TOOL_MAP:
+            if tool_name in self._tool_map:
                 try:
-                    result = TOOL_MAP[tool_name](args)
+                    result = self._tool_map[tool_name](args)
                     results.append(result)
                     executed.append(tool_name)
                 except Exception as e:
