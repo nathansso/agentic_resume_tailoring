@@ -531,8 +531,10 @@ class ArtApp(App):
             # when ListView items are reloaded rapidly.
             item_id = f"job-item-{uuid4().hex}"
             self._job_item_to_uuid[item_id] = job["job_id"]
+            status = job.get("status", "created")
+            status_tag = f" [{status}]" if status != "created" else ""
             job_list.append(ListItem(
-                Label(f"{job['title']}\n{job['company']}{job['score']}"),
+                Label(f"{job['title']}\n{job['company']}{job['score']}{status_tag}"),
                 id=item_id,
             ))
 
@@ -588,15 +590,31 @@ class ArtApp(App):
         detail = services.get_job_details(job_uuid)
         if not detail:
             return
-        lines = [f"{detail['title']} @ {detail['company']}"]
+
+        # Wire active job into the chat agent for this session.
+        self._get_agent().set_active_job(job_uuid)
+
+        status = detail.get("status", "created")
+        lines = [f"{detail['title']} @ {detail['company']}  [{status}]"]
         if "ats_score" in detail:
             lines.append(f"\nLatest ATS Score: {detail['ats_score']}%")
             if detail.get("matched_skills"):
                 lines.append(f"Matched: {', '.join(detail['matched_skills'])}")
             if detail.get("missing_skills"):
                 lines.append(f"Missing: {', '.join(detail['missing_skills'])}")
+
+        # Status-aware CTA
+        if status == "created":
+            lines.append('\nPaste the job description in chat, then type "analyze".')
+        elif status == "analyzed":
+            lines.append('\nSkills extracted. Type "tailor" to tailor your resume.')
+        elif status == "tailored":
+            lines.append('\nTailoring complete. Type "export" to save the tailored resume.')
+        elif status == "exported":
+            lines.append("\nResume exported. Select another job or iterate further.")
         else:
             lines.append("\nNo tailoring results yet. Press F3 to tailor.")
+
         scroll.mount(Static("\n".join(lines), classes="bot-msg"))
         scroll.scroll_end()
         self._selected_job_id = job_uuid
