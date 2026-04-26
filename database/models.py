@@ -96,8 +96,9 @@ class JobDescription(SQLModel, table=True):
     job_id: UUID = Field(default_factory=uuid4, primary_key=True)
     title: str
     company: str
-    description: str # Raw text
+    description: str = Field(default="")  # Raw text
     source_url: Optional[str] = None
+    status: str = Field(default="created")  # created, analyzed, tailored, exported
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -126,7 +127,9 @@ class UserJobResult(SQLModel, table=True):
     matched_skills: Dict = Field(default={}, sa_column=Column(JSON))
     missing_skills: List[str] = Field(default=[], sa_column=Column(JSON))
     tailored_resume_content: Dict = Field(default={}, sa_column=Column(JSON)) # The JSON structure of the new resume
-    
+    revision_notes: Optional[str] = None
+    export_path: Optional[str] = None
+
     verification_status: str = "pending" # approved, rejected
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
