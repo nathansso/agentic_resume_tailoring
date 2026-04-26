@@ -29,8 +29,14 @@ def _migrate_db() -> None:
     """Apply incremental column additions for existing DBs (SQLite, no Alembic)."""
     from sqlalchemy import text
     migrations = [
+        # PRD 03
         "ALTER TABLE user ADD COLUMN onboarding_complete INTEGER DEFAULT 0",
         "ALTER TABLE user ADD COLUMN onboarding_steps TEXT DEFAULT '{}'",
+        # PRD 04
+        "ALTER TABLE jobdescription ADD COLUMN status TEXT DEFAULT 'created'",
+        "ALTER TABLE jobdescription ADD COLUMN description TEXT DEFAULT ''",
+        "ALTER TABLE userjobresult ADD COLUMN revision_notes TEXT",
+        "ALTER TABLE userjobresult ADD COLUMN export_path TEXT",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
