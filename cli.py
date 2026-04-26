@@ -21,8 +21,21 @@ from config import logger as root_logger
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
 
+def _check_config() -> None:
+    """Ensure app dirs exist and validate config; exit with error messages if critical issues found."""
+    from config import ensure_app_dirs
+    ensure_app_dirs()
+    from config_validator import validate_config
+    errors = validate_config()
+    if errors:
+        for err in errors:
+            print(f"[CONFIG ERROR] {err}", file=sys.stderr)
+        sys.exit(1)
+
+
 def cmd_ingest_resume(args):
     """Ingest and parse a resume file into the database."""
+    _check_config()
     from database.db import init_db
     init_db()
 
@@ -55,6 +68,7 @@ def cmd_ingest_resume(args):
 
 def cmd_ingest_github(args):
     """Fetch GitHub repos and parse them into the database."""
+    _check_config()
     from database.db import init_db
     from config import GITHUB_USERNAME
     init_db()
@@ -114,6 +128,7 @@ def cmd_ingest_github(args):
 
 def cmd_ingest_linkedin(args):
     """Scrape a LinkedIn profile via Playwright browser automation."""
+    _check_config()
     from database.db import init_db
     init_db()
 
@@ -138,6 +153,7 @@ def cmd_ingest_linkedin(args):
 
 def cmd_ingest_linkedin_pdf(args):
     """Parse a LinkedIn PDF export into the database (fallback)."""
+    _check_config()
     from database.db import init_db
     init_db()
 
@@ -161,6 +177,7 @@ def cmd_ingest_linkedin_pdf(args):
 
 def cmd_tailor(args):
     """Run the full tailoring pipeline: analyze job → match skills → tailor resume."""
+    _check_config()
     from database.db import init_db
     init_db()
 
@@ -253,6 +270,7 @@ def cmd_tailor(args):
 
 def cmd_status(args):
     """Show the current user profile summary."""
+    _check_config()
     from database.db import init_db, engine
     from sqlmodel import Session, select
     from database.models import User, UserSkill, Skill, Experience, Project, UserJobResult

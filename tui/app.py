@@ -262,7 +262,22 @@ class ArtApp(App):
     # ───────────────────────────────────────────────────────
 
     def on_mount(self) -> None:
+        from config import ensure_app_dirs
+        ensure_app_dirs()
         init_db()
+
+        from config_validator import validate_config
+        config_errors = validate_config()
+        if config_errors:
+            for err in config_errors:
+                logger.warning("Config error: %s", err)
+            try:
+                self.query_one("#status-bar", Static).update(
+                    f"[CONFIG ERROR] {config_errors[0]}"
+                )
+            except Exception:
+                pass
+
         self._refresh_app_state()
         self._load_jobs_sidebar()
         self._load_data_tables()
