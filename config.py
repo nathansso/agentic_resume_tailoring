@@ -8,8 +8,21 @@ load_dotenv()
 # Base Paths
 BASE_DIR = Path(__file__).resolve().parent
 
-# Database Config — SQLite (zero setup, single file)
-DATABASE_URL = f"sqlite:///{BASE_DIR / 'art.db'}"
+# App data directory — all user data lives under ~/.art/
+APP_DATA_DIR = Path.home() / ".art"
+EXPORTS_DIR = APP_DATA_DIR / "exports"
+UPLOADS_DIR = APP_DATA_DIR / "uploads"
+LOGS_DIR    = APP_DATA_DIR / "logs"
+
+# Database Config — SQLite at ~/.art/art.db
+DATABASE_URL = f"sqlite:///{APP_DATA_DIR / 'art.db'}"
+
+
+def ensure_app_dirs(base_dir: Path | None = None) -> None:
+    """Create all required application directories. Idempotent."""
+    base = base_dir or APP_DATA_DIR
+    for sub in ("", "exports", "uploads", "logs"):
+        (base / sub if sub else base).mkdir(parents=True, exist_ok=True)
 
 # API Keys
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
