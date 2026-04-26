@@ -9,6 +9,7 @@ import uuid
 import logging
 from difflib import SequenceMatcher
 from typing import Callable, Dict, List, Optional, TypedDict
+from uuid import UUID
 from sqlmodel import Session, select
 
 from llm import get_llm
@@ -196,7 +197,10 @@ def get_help_text() -> str:
         "  ingest github repo owner/repo   — fetch a single GitHub repo\n"
         "  ingest <github-url>             — fetch a single repo from a GitHub URL\n"
         "  ingest linkedin pdf <path>      — parse a LinkedIn PDF export\n\n"
-        "Tailoring:\n"
+        "Job workflow (select a job from the sidebar first):\n"
+        "  analyze                         — extract skills from the active job description\n"
+        "  tailor                          — tailor your resume to the active job\n"
+        "  export                          — save tailored resume to ~/.art/exports/\n"
         "  tailor <job description or file> — tailor your resume to a job\n\n"
         "TUI shortcuts (type in chat):\n"
         "  /ingest  /data  /tailor  /viz  /profile  /copy\n\n"
@@ -387,6 +391,10 @@ def build_router_prompt(
     profile_name: str | None = None,
     github_username: str | None = None,
     waiting_for_clarification: bool = False,
+    active_job_title: str | None = None,
+    active_job_company: str | None = None,
+    active_job_status: str | None = None,
+    active_job_ats: float | None = None,
 ) -> str:
     """Build the router system prompt with current runtime state injected."""
     state_lines = []
@@ -395,7 +403,15 @@ def build_router_prompt(
     else:
         state_lines.append("- Profile: none (user has not completed onboarding)")
     state_lines.append(f"- GitHub username on file: {github_username or 'none'}")
-    state_lines.append("- Active job: none")
+    if active_job_title:
+        job_ctx = f"{active_job_title} @ {active_job_company or 'Unknown'}"
+        if active_job_status:
+            job_ctx += f" | Status: {active_job_status}"
+        if active_job_ats is not None:
+            job_ctx += f" | ATS: {active_job_ats:.0f}%"
+        state_lines.append(f"- Active job: {job_ctx}")
+    else:
+        state_lines.append("- Active job: none")
     state_lines.append(
         "- Status: waiting for clarification or option reply" if waiting_for_clarification else "- Status: ready"
     )
@@ -431,7 +447,10 @@ run_ingest_resume(file_path)       — ingest resume file; CLARIFY: if path miss
 run_ingest_github(username)        — ingest ALL repos for a GitHub account; saved username: {gh_hint}; CLARIFY: if username unknown; do NOT use for single-repo requests
 run_ingest_github_repo(repo_ref)   — ingest ONE repo by owner/repo or GitHub URL; CLARIFY: if ref missing; do NOT call run_ingest_github for single-repo requests
 run_ingest_linkedin_pdf(file_path) — parse LinkedIn PDF; CLARIFY: if path missing
-run_tailor(job)                    — tailor resume to a job description
+run_tailor(job)                    — tailor resume to a job description (freeform, no active job needed)
+analyze_active_job()               — extract skills from active job description; requires active job selected
+tailor_active_job()                — run tailoring pipeline for active job; requires active job with skills extracted
+export_active_job()                — export tailored resume to file; requires tailoring complete
 
 ## Examples
 "ingest my GitHub" → TOOL_CALL: run_ingest_github({gh_hint})
@@ -441,6 +460,9 @@ run_tailor(job)                    — tailor resume to a job description
 "ingest a repo" → CLARIFY: Which repo? Provide owner/repo (e.g. openai/evals) or a GitHub URL.
 "show my projects" → TOOL_CALL: query_projects()
 "what skills do I have?" → TOOL_CALL: query_skills_vs_jobs()
+"analyze this job" → TOOL_CALL: analyze_active_job()
+"tailor my resume to this job" → TOOL_CALL: tailor_active_job()
+"export my resume" → TOOL_CALL: export_active_job()
 "should I apply to this job?" → RESPONSE: Based on your profile ..."""
 
 
@@ -462,6 +484,13 @@ class ChatAgent:
         self._session_id = session_id or str(uuid.uuid4())
         self._turn_index = 0
         self.last_trace: Optional[ChatTurnTrace] = None
+        self.active_job_id: Optional[str] = None
+        self._tool_map: Dict = {
+            **TOOL_MAP,
+            "analyze_active_job": lambda args: self._analyze_active_job(args),
+            "tailor_active_job": lambda args: self._tailor_active_job(args),
+            "export_active_job": lambda args: self._export_active_job(args),
+        }
 
     @staticmethod
     def _parse_envelope(text: str) -> "tuple[str, str]":

@@ -293,6 +293,7 @@ def get_jobs() -> list[dict]:
                 "title": job.title,
                 "company": job.company,
                 "score": score,
+                "status": getattr(job, "status", "created"),
             })
         return result
 
@@ -305,7 +306,12 @@ def get_job_details(job_uuid: str) -> Optional[dict]:
         results = session.exec(
             select(UserJobResult).where(UserJobResult.job_id == job.job_id)
         ).all()
-        detail: dict = {"title": job.title, "company": job.company}
+        detail: dict = {
+            "title": job.title,
+            "company": job.company,
+            "status": getattr(job, "status", "created"),
+            "description": job.description or "",
+        }
         if results:
             latest = max(results, key=lambda r: r.created_at)
             detail["ats_score"] = latest.ats_score
