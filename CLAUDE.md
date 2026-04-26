@@ -83,17 +83,37 @@ When adding more guidance, prefer updating one of those local files over expandi
 Run this before and after behavior changes:
 
 ```bash
-python -m pytest test_smoke_formal.py -q
+python run_tests.py          # full suite (integration tests excluded)
+python run_tests.py -k chat  # filter by keyword
+python run_tests.py --integration  # include slow/network tests
 ```
 
+Or directly:
+
+```bash
+python -m pytest tests/ -q
+```
+
+Test layout:
+- All tests live under `tests/` — one file per concern.
+- `tests/conftest.py` — shared `isolated_engine` fixture and `_seed_user_and_skill` helper.
+- `tests/test_chat.py` — chat routing, fast-path, trace tests.
+- `tests/test_tui.py` — TUI screens, slash commands, service boundaries.
+- `tests/test_services.py` — services, ingestion diff, profile.
+- `tests/test_db.py` — DB and user-utils tests.
+- `tests/test_llm.py` — LLM factory tests.
+- `tests/test_eval.py` — PRD 06 eval harness tests.
+- `tests/test_prd04.py` — PRD 04 job lifecycle and tailoring tests.
+- `tests/test_integration.py` — full pipeline (marked `@pytest.mark.integration`).
+
 Testing conventions:
-- All tests live in `test_smoke_formal.py`.
 - Use the `isolated_engine` fixture for DB-related tests.
 - Wrap async Textual tests in `asyncio.run(_run())`.
 - Access Textual `Static` content with `str(widget._Static__content)`.
 - Mark slow or network-dependent tests with `@pytest.mark.integration` and `@pytest.mark.slow`.
+- Import `_seed_user_and_skill` from `conftest` when tests need a seeded user+skill.
 
 Definition of done:
 1. The feature works.
 2. At least one test covers the new behavior.
-3. `python -m pytest test_smoke_formal.py -q` passes in full.
+3. `python run_tests.py` passes in full.
