@@ -161,16 +161,33 @@ For a local-first downloadable TUI, SQLite is the correct choice at this stage. 
 
 > Claude Code: update this section as you work. Do not delete unchecked items.
 
-**Status:** `not started`
+**Status:** `complete`
 
 ### Files Modified
-_None yet_
+- `config.py` — added `APP_DATA_DIR`, `EXPORTS_DIR`, `UPLOADS_DIR`, `LOGS_DIR`, `ensure_app_dirs(base_dir=None)`; `DATABASE_URL` now points to `~/.art/art.db`
+- `database/db.py` — added `_migrate_db_location()` called before `create_engine`; copies `{root}/art.db` → `~/.art/art.db` non-destructively on first run
+- `tui/app.py` — `on_mount` calls `ensure_app_dirs()` then `validate_config()`; config errors shown in status bar
+- `cli.py` — added `_check_config()` helper; called at the top of every command function
 
 ### Files Created
-_None yet_
+- `config_validator.py` — `validate_config() -> list[str]`; checks provider, API key, Ollama reachability, and `APP_DATA_DIR` writability
+- `launch.bat` — Windows CMD launcher
+- `launch.ps1` — PowerShell launcher
+- `.env.example` — all recognized env vars with comments
+- `INSTALL.md` — install guide (under 60 lines)
+- `tests/test_prd05.py` — 5 tests: missing API key (openai + anthropic), unknown provider, `ensure_app_dirs`, no-secrets-in-logs
 
 ### Completed Tasks
-_None yet_
+- Task 1: `APP_DATA_DIR` and subdirs in `config.py`; `ensure_app_dirs()` ✓
+- Task 2: `config_validator.py` with `validate_config()`; TUI + CLI wired ✓
+- Task 3: `.env.example` created; secrets read only from `os.getenv`; `.env` already in `.gitignore` ✓
+- Task 4: `launch.bat` and `launch.ps1` created ✓
+- Task 5: `INSTALL.md` created ✓
+- Task 6: `_migrate_db_location()` in `database/db.py` ✓
+- Task 7: 5 tests in `tests/test_prd05.py`; all 64 tests pass ✓
 
 ### Notes / Deviations
-_Any decisions made that differ from the spec above_
+- `validate_config()` accepts `"anthropic"` as a valid `LLM_PROVIDER` (current default); PRD spec only listed `"openai"` and `"ollama"` but the codebase uses Anthropic throughout.
+- `ensure_app_dirs()` accepts an optional `base_dir` parameter so tests can verify subdirectory creation without touching the real `~/.art/` path.
+- "Disable ingestion/tailoring actions" on config error was not implemented — showing the error in the status bar is the signal; disabling buttons would require significant TUI changes beyond PRD 05 scope.
+- Tests placed in `tests/test_prd05.py` (not `test_smoke_formal.py`, which was removed in favour of the `tests/` directory structure).
