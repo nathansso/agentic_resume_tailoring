@@ -242,3 +242,59 @@ def test_ingest_github_repo_summary_mentions_single_repo(isolated_engine, monkey
     assert "single repo" in result.lower()
     assert "openai" in result
     assert "evals" in result
+
+
+# ── PRD 10 — Persistent chat history ──────────────────────────────────────────
+
+def test_save_and_load_chat_history_for_job(isolated_engine):
+    """save_chat_message + load_chat_history round-trip for a specific job."""
+    from sqlmodel import Session as S
+    from database.models import JobDescription
+
+    with S(isolated_engine) as session:
+        job = JobDescription(title="Test Job", company="Co", description="")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = str(job.job_id)
+
+    services_module.save_chat_message(job_id, "user", "Hello agent")
+    services_module.save_chat_message(job_id, "assistant", "Hello user")
+
+    history = services_module.load_chat_history(job_id)
+    assert len(history) == 2
+    assert history[0] == {"role": "user", "content": "Hello agent"}
+    assert history[1] == {"role": "assistant", "content": "Hello user"}
+
+
+def test_load_chat_history_landing_context(isolated_engine):
+    """load_chat_history with job_id=None returns landing-context messages."""
+    services_module.save_chat_message(None, "user", "landing message")
+    services_module.save_chat_message(None, "assistant", "landing reply")
+
+    history = services_module.load_chat_history(None)
+    assert len(history) == 2
+    assert history[0] == {"role": "user", "content": "landing message"}
+    assert history[1] == {"role": "assistant", "content": "landing reply"}
+
+
+def test_load_chat_history_limit(isolated_engine):
+    """load_chat_history with limit=2 returns only the 2 most recent messages, oldest-first."""
+    from sqlmodel import Session as S
+    from database.models import JobDescription
+
+    with S(isolated_engine) as session:
+        job = JobDescription(title="Limit Test", company="Ltd", description="")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = str(job.job_id)
+
+    for i in range(4):
+        services_module.save_chat_message(job_id, "user", f"msg {i}")
+
+    history = services_module.load_chat_history(job_id, limit=2)
+    assert len(history) == 2
+    # Should be the 2 most recent (msg 2 and msg 3), in oldest-first order.
+    assert history[0]["content"] == "msg 2"
+    assert history[1]["content"] == "msg 3"
