@@ -155,6 +155,38 @@ def test_ingest_github_repo_invalid_ref(isolated_engine):
     assert "not-a-valid-ref" in result
 
 
+def test_github_token_round_trip(tmp_path, monkeypatch):
+    """get_github_token / save_github_token round-trip via a temp .env file."""
+    env_file = tmp_path / ".env"
+    monkeypatch.setattr(services_module, "_ENV_PATH", env_file)
+
+    assert services_module.get_github_token() == ""
+
+    services_module.save_github_token("ghp_testtoken123")
+    assert services_module.get_github_token() == "ghp_testtoken123"
+
+    services_module.save_github_token("")
+    assert services_module.get_github_token() == ""
+
+
+def test_update_resume_path_and_delete_resume(isolated_engine):
+    """update_resume_path sets the path; delete_resume clears it without touching skills."""
+    _seed_user_and_skill(isolated_engine)
+    data = services_module.get_profile_data()
+    assert data is not None
+    user_id = data["user_id"]
+
+    services_module.update_resume_path(user_id, "/path/to/my_resume.pdf")
+    assert services_module.get_resume_path(user_id) == "/path/to/my_resume.pdf"
+
+    services_module.delete_resume(user_id)
+    assert services_module.get_resume_path(user_id) is None
+
+    # Skills must be untouched after resume delete
+    data_after = services_module.get_profile_data()
+    assert data_after["skills"] >= 1
+
+
 def test_ingest_github_repo_summary_mentions_single_repo(isolated_engine, monkeypatch):
     """ingest_github_repo summary clearly says 'single repo'."""
     import ingestion.github as gh_module

@@ -17,6 +17,7 @@ class User(SQLModel, table=True):
     github_username: Optional[str] = None
     onboarding_complete: bool = Field(default=False)
     onboarding_steps: Dict = Field(default={}, sa_column=Column(JSON))
+    resume_path: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
