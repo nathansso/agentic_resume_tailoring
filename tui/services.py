@@ -382,6 +382,27 @@ def delete_resume(user_id: UUID) -> None:
             session.commit()
 
 
+def delete_job(job_uuid: str) -> str:
+    """Delete a JobDescription and all its UserJobResult rows.
+    Returns plain-English result. Never raises."""
+    try:
+        from uuid import UUID as _UUID
+        jid = _UUID(job_uuid)
+        with Session(engine) as session:
+            for row in session.exec(
+                select(UserJobResult).where(UserJobResult.job_id == jid)
+            ).all():
+                session.delete(row)
+            session.commit()
+            job = session.get(JobDescription, jid)
+            if job:
+                session.delete(job)
+                session.commit()
+        return "Job deleted."
+    except Exception as e:
+        return f"Failed to delete job: {e}"
+
+
 # ── Ingestion service functions ─────────────────────────────
 # Each returns a plain-English result string and never raises.
 

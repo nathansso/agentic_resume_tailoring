@@ -38,6 +38,17 @@ from tui import services
 
 logger = logging.getLogger(__name__)
 
+_WELCOME_MSG = (
+    "Welcome to ART! I'm your resume tailoring assistant.\n\n"
+    "I can help you:\n"
+    " * Ingest your resume, GitHub, or LinkedIn data\n"
+    " * View your skills, experiences, and projects\n"
+    " * Analyze job descriptions and find skill gaps\n"
+    " * Tailor your resume for specific roles\n\n"
+    "Slash commands: /ingest  /data  /tailor  /viz  /profile  /copy\n"
+    "Try: 'show my skills' or /ingest  —  use /copy to copy chat"
+)
+
 
 class AppState:
     SETUP = "setup"
@@ -176,6 +187,36 @@ class ArtApp(App):
     #job-input-area.visible {
         display: block;
     }
+
+    /* ── Job list delete button ── */
+    .job-item-row {
+        height: auto;
+        width: 100%;
+    }
+    .job-label {
+        width: 1fr;
+    }
+    .job-del-btn {
+        width: 3;
+        min-width: 3;
+        height: 1;
+        border: none;
+        background: transparent;
+        color: $error;
+        padding: 0;
+        margin: 0;
+    }
+
+    /* ── Delete confirmation row ── */
+    #job-delete-confirm {
+        height: auto;
+        padding: 0 1;
+        color: $accent;
+    }
+    #job-delete-confirm Button {
+        margin-left: 1;
+        min-width: 6;
+    }
     """
 
     TITLE = "ART — Agentic Resume Tailoring"
@@ -194,6 +235,9 @@ class ArtApp(App):
         self.app_state: str = AppState.SETUP
         self._selected_job_id: Optional[str] = None
         self._selected_job_label: str = ""
+        self._job_chat_cache: dict[str, list[tuple[str, str]]] = {}
+        self._active_context_key: str = "landing"
+        self._pending_delete_job_uuid: Optional[str] = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -221,17 +265,7 @@ class ArtApp(App):
                     # ── Chat Tab ──
                     with TabPane("Chat", id="tab-chat"):
                         with VerticalScroll(id="chat-scroll"):
-                            yield Static(
-                                "Welcome to ART! I'm your resume tailoring assistant.\n\n"
-                                "I can help you:\n"
-                                " * Ingest your resume, GitHub, or LinkedIn data\n"
-                                " * View your skills, experiences, and projects\n"
-                                " * Analyze job descriptions and find skill gaps\n"
-                                " * Tailor your resume for specific roles\n\n"
-                                "Slash commands: /ingest  /data  /tailor  /viz  /profile  /copy\n"
-                                "Try: 'show my skills' or /ingest  —  use /copy to copy chat",
-                                classes="bot-msg",
-                            )
+                            yield Static(_WELCOME_MSG, classes="bot-msg")
                         with Horizontal(id="chat-input-row"):
                             yield Input(
                                 placeholder="Type a message or /ingest, /data, /tailor, /viz ...",
@@ -265,6 +299,7 @@ class ArtApp(App):
         from config import ensure_app_dirs
         ensure_app_dirs()
         init_db()
+        self._job_chat_cache["landing"] = [("bot-msg", _WELCOME_MSG)]
 
         from config_validator import validate_config
         config_errors = validate_config()
@@ -416,6 +451,19 @@ class ArtApp(App):
             self._save_new_job()
         elif btn == "cancel-job-btn":
             self._hide_job_input()
+        elif btn and btn.startswith("del-"):
+            item_id = btn[4:]
+            job_uuid = self._job_item_to_uuid.get(item_id)
+            if job_uuid:
+                self._delete_job(job_uuid)
+        elif btn == "confirm-delete-job-btn":
+            self._execute_delete_job()
+        elif btn == "cancel-delete-job-btn":
+            self._pending_delete_job_uuid = None
+            try:
+                self.query_one("#job-delete-confirm").remove()
+            except Exception:
+                pass
 
     def _open_profile(self) -> None:
         self.push_screen(ProfileScreen(), callback=self._on_profile_done)
@@ -455,6 +503,9 @@ class ArtApp(App):
             return
         scroll = self.query_one("#chat-scroll", VerticalScroll)
         scroll.mount(Static(f"You: {text}", classes="user-msg"))
+        self._job_chat_cache.setdefault(self._active_context_key, []).append(
+            ("user-msg", f"You: {text}")
+        )
         scroll.mount(Static("Thinking...", classes="system-msg", id="thinking"))
         scroll.scroll_end()
         self._run_chat(text)
@@ -474,6 +525,9 @@ class ArtApp(App):
         for t in scroll.query("#thinking"):
             t.remove()
         scroll.mount(Static(response, classes="bot-msg"))
+        self._job_chat_cache.setdefault(self._active_context_key, []).append(
+            ("bot-msg", response)
+        )
         scroll.scroll_end()
 
     # ───────────────────────────────────────────────────────
@@ -549,7 +603,14 @@ class ArtApp(App):
             status = job.get("status", "created")
             status_tag = f" [{status}]" if status != "created" else ""
             job_list.append(ListItem(
-                Label(f"{job['title']}\n{job['company']}{job['score']}{status_tag}"),
+                Horizontal(
+                    Label(
+                        f"{job['title']}\n{job['company']}{job['score']}{status_tag}",
+                        classes="job-label",
+                    ),
+                    Button("×", id=f"del-{item_id}", classes="job-del-btn"),
+                    classes="job-item-row",
+                ),
                 id=item_id,
             ))
 
@@ -584,6 +645,61 @@ class ArtApp(App):
     def _hide_job_input(self) -> None:
         self.query_one("#job-input-area").remove_class("visible")
 
+    def _delete_job(self, job_uuid: str) -> None:
+        """Show a confirmation prompt in the chat scroll before deleting the job."""
+        if self._pending_delete_job_uuid is not None:
+            return  # another confirmation already in progress
+        detail = services.get_job_details(job_uuid)
+        if not detail:
+            return
+        title = f"{detail['title']} @ {detail['company']}"
+        self._pending_delete_job_uuid = job_uuid
+        self._switch_to_chat()
+        scroll = self.query_one("#chat-scroll", VerticalScroll)
+        scroll.mount(
+            Horizontal(
+                Static(f"Delete '{title}'? This cannot be undone.  "),
+                Button("Yes", id="confirm-delete-job-btn", variant="error"),
+                Button("No", id="cancel-delete-job-btn"),
+                id="job-delete-confirm",
+            )
+        )
+        scroll.scroll_end()
+
+    def _execute_delete_job(self) -> None:
+        """Execute the confirmed job deletion."""
+        job_uuid = self._pending_delete_job_uuid
+        if not job_uuid:
+            return
+        self._pending_delete_job_uuid = None
+
+        services.delete_job(job_uuid)
+        self._job_chat_cache.pop(job_uuid, None)
+
+        # Keep _job_item_to_uuid consistent
+        for k in [k for k, v in self._job_item_to_uuid.items() if v == job_uuid]:
+            del self._job_item_to_uuid[k]
+
+        try:
+            self.query_one("#job-delete-confirm").remove()
+        except Exception:
+            pass
+
+        if self._selected_job_id == job_uuid:
+            self._selected_job_id = None
+            self._selected_job_label = ""
+            self._active_context_key = "landing"
+            if self.chat_agent:
+                self.chat_agent.set_active_job(None)
+            scroll = self.query_one("#chat-scroll", VerticalScroll)
+            scroll.remove_children()
+            for css_class, text in self._job_chat_cache.get("landing", []):
+                scroll.mount(Static(text, classes=css_class))
+            scroll.scroll_end()
+
+        self._load_jobs_sidebar()
+        self._refresh_app_state()
+
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         if event.list_view.id == "job-list":
             item_id = event.item.id or ""
@@ -602,38 +718,54 @@ class ArtApp(App):
     def _show_job_details(self, job_uuid: str) -> None:
         self._switch_to_chat()
         scroll = self.query_one("#chat-scroll", VerticalScroll)
-        detail = services.get_job_details(job_uuid)
-        if not detail:
-            return
+        self._active_context_key = job_uuid
+        scroll.remove_children()
 
-        # Wire active job into the chat agent for this session.
-        self._get_agent().set_active_job(job_uuid)
+        agent = self._get_agent()
 
-        status = detail.get("status", "created")
-        lines = [f"{detail['title']} @ {detail['company']}  [{status}]"]
-        if "ats_score" in detail:
-            lines.append(f"\nLatest ATS Score: {detail['ats_score']}%")
-            if detail.get("matched_skills"):
-                lines.append(f"Matched: {', '.join(detail['matched_skills'])}")
-            if detail.get("missing_skills"):
-                lines.append(f"Missing: {', '.join(detail['missing_skills'])}")
-
-        # Status-aware CTA
-        if status == "created":
-            lines.append('\nPaste the job description in chat, then type "analyze".')
-        elif status == "analyzed":
-            lines.append('\nSkills extracted. Type "tailor" to tailor your resume.')
-        elif status == "tailored":
-            lines.append('\nTailoring complete. Type "export" to save the tailored resume.')
-        elif status == "exported":
-            lines.append("\nResume exported. Select another job or iterate further.")
+        if job_uuid in self._job_chat_cache:
+            # Returning to a previously visited job — replay the cached messages.
+            for css_class, text in self._job_chat_cache[job_uuid]:
+                scroll.mount(Static(text, classes=css_class))
+            agent.set_active_job(job_uuid)
+            detail = services.get_job_details(job_uuid)
+            if detail:
+                self._selected_job_label = f"{detail['title']} @ {detail['company']}"
         else:
-            lines.append("\nNo tailoring results yet. Press F3 to tailor.")
+            # First visit this session — show the job detail card.
+            detail = services.get_job_details(job_uuid)
+            if not detail:
+                return
 
-        scroll.mount(Static("\n".join(lines), classes="bot-msg"))
+            agent.set_active_job(job_uuid)
+
+            status = detail.get("status", "created")
+            lines = [f"{detail['title']} @ {detail['company']}  [{status}]"]
+            if "ats_score" in detail:
+                lines.append(f"\nLatest ATS Score: {detail['ats_score']}%")
+                if detail.get("matched_skills"):
+                    lines.append(f"Matched: {', '.join(detail['matched_skills'])}")
+                if detail.get("missing_skills"):
+                    lines.append(f"Missing: {', '.join(detail['missing_skills'])}")
+
+            if status == "created":
+                lines.append('\nPaste the job description in chat, then type "analyze".')
+            elif status == "analyzed":
+                lines.append('\nSkills extracted. Type "tailor" to tailor your resume.')
+            elif status == "tailored":
+                lines.append('\nTailoring complete. Type "export" to save the tailored resume.')
+            elif status == "exported":
+                lines.append("\nResume exported. Select another job or iterate further.")
+            else:
+                lines.append("\nNo tailoring results yet. Press F3 to tailor.")
+
+            detail_text = "\n".join(lines)
+            scroll.mount(Static(detail_text, classes="bot-msg"))
+            self._job_chat_cache[job_uuid] = [("bot-msg", detail_text)]
+            self._selected_job_label = f"{detail['title']} @ {detail['company']}"
+
         scroll.scroll_end()
         self._selected_job_id = job_uuid
-        self._selected_job_label = f"{detail['title']} @ {detail['company']}"
         self._refresh_app_state()
 
     # ───────────────────────────────────────────────────────
