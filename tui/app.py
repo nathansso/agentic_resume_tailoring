@@ -5,13 +5,13 @@ Layout:
   ┌─────────────────────────────────────────────────────┐
   │  Header                                             │
   ├────────────┬────────────────────────────────────────┤
-  │  Jobs      │  [Chat] [Data] [Viz]                   │
+  │  Jobs      │  [Chat] [Data]                         │
   │  sidebar   │                                        │
-  │            │  Chat messages / data tables / charts  │
+  │            │  Chat messages / data tables           │
   │            │                                        │
   │  + New Job │  [input box]                           │
   ├────────────┴────────────────────────────────────────┤
-  │  Footer (F1=Ingest F2=Data F3=Tailor F4=Viz)       │
+  │  Footer (F1=Ingest F2=Data F3=Tailor)               │
   └─────────────────────────────────────────────────────┘
 
 Run: python -m tui.app  OR  python cli.py tui
@@ -25,7 +25,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import (
     Header, Footer, Static, Input, Button, ListView,
-    ListItem, Label, TabbedContent, TabPane, DataTable, RichLog, Tree,
+    ListItem, Label, TabbedContent, TabPane, DataTable, Tree,
 )
 from textual import work
 
@@ -45,7 +45,7 @@ _WELCOME_MSG = (
     " * View your skills, experiences, and projects\n"
     " * Analyze job descriptions and find skill gaps\n"
     " * Tailor your resume for specific roles\n\n"
-    "Slash commands: /ingest  /data  /tailor  /viz  /profile  /copy\n"
+    "Slash commands: /ingest  /data  /tailor  /profile  /copy\n"
     "Try: 'show my skills' or /ingest  —  use /copy to copy chat"
 )
 
@@ -168,13 +168,6 @@ class ArtApp(App):
         padding: 0 1;
     }
 
-    /* Viz Tab */
-    #viz-content {
-        height: 1fr;
-        padding: 1;
-        overflow-y: auto;
-    }
-
     /* New Job Inputs */
     #job-title-input, #job-company-input {
         margin-bottom: 1;
@@ -186,6 +179,12 @@ class ArtApp(App):
     }
     #job-input-area.visible {
         display: block;
+    }
+
+    /* ── Project cards ── */
+    .proj-card {
+        padding: 1 2;
+        border-bottom: solid $primary 30%;
     }
 
     /* ── Job list delete button ── */
@@ -268,7 +267,7 @@ class ArtApp(App):
                             yield Static(_WELCOME_MSG, classes="bot-msg")
                         with Horizontal(id="chat-input-row"):
                             yield Input(
-                                placeholder="Type a message or /ingest, /data, /tailor, /viz ...",
+                                placeholder="Type a message or /ingest, /data, /tailor ...",
                                 id="chat-input",
                             )
                             yield Button("Send", variant="primary", id="send-btn")
@@ -281,13 +280,10 @@ class ArtApp(App):
                             with TabPane("Experiences", id="subtab-exp"):
                                 yield DataTable(id="exp-table")
                             with TabPane("Projects", id="subtab-proj"):
-                                yield DataTable(id="proj-table")
+                                with VerticalScroll(id="proj-scroll"):
+                                    pass
                             with TabPane("Graph", id="subtab-graph"):
                                 yield Tree("Knowledge Graph", id="graph-tree")
-
-                    # ── Visualization Tab ──
-                    with TabPane("Viz", id="tab-viz"):
-                        yield RichLog(id="viz-content", markup=True)
 
         yield Footer()
 
@@ -316,7 +312,6 @@ class ArtApp(App):
         self._refresh_app_state()
         self._load_jobs_sidebar()
         self._load_data_tables()
-        self._load_viz()
         from database.user_utils import get_active_profile
         if get_active_profile() is None:
             self.push_screen(OnboardingScreen(), callback=self._on_onboarding_done)
@@ -325,7 +320,6 @@ class ArtApp(App):
         self._refresh_app_state()
         self._load_jobs_sidebar()
         self._load_data_tables()
-        self._load_viz()
         if not result:
             return
         scroll = self.query_one("#chat-scroll", VerticalScroll)
@@ -486,8 +480,6 @@ class ArtApp(App):
                 self.action_show_data()
             elif cmd == "tailor":
                 self.action_tailor()
-            elif cmd == "viz":
-                self.action_show_viz()
             elif cmd == "profile":
                 self._open_profile()
             elif cmd == "copy":
@@ -496,7 +488,7 @@ class ArtApp(App):
                 scroll = self.query_one("#chat-scroll", VerticalScroll)
                 scroll.mount(Static(
                     f"Unknown command: {text}\n"
-                    "Available: /ingest  /data  /tailor  /viz  /profile  /copy",
+                    "Available: /ingest  /data  /tailor  /profile  /copy",
                     classes="system-msg",
                 ))
                 scroll.scroll_end()
@@ -569,12 +561,6 @@ class ArtApp(App):
         ))
         scroll.scroll_end()
         self.query_one("#chat-input", Input).focus()
-
-    def action_show_viz(self) -> None:
-        """F4 — Switch to viz tab and refresh."""
-        self._load_viz()
-        tabs = self.query_one("#chat-tabs", TabbedContent)
-        tabs.active = "tab-viz"
 
     def action_new_job(self) -> None:
         """Ctrl+N — Toggle the inline add-job form."""
@@ -775,7 +761,7 @@ class ArtApp(App):
     def _load_data_tables(self) -> None:
         self._load_skills_table()
         self._load_exp_table()
-        self._load_proj_table()
+        self._load_proj_cards()
         self._load_graph_view()
 
     def _load_skills_table(self) -> None:
@@ -824,16 +810,26 @@ class ArtApp(App):
         for row in rows:
             table.add_row(row["title"], row["company"], row["start"], row["end"])
 
-    def _load_proj_table(self) -> None:
-        table = self.query_one("#proj-table", DataTable)
-        table.clear(columns=True)
-        table.add_columns("Project", "URL", "Description")
+    def _load_proj_cards(self) -> None:
+        scroll = self.query_one("#proj-scroll", VerticalScroll)
+        scroll.remove_children()
         rows = services.get_projects(services.get_first_user_id())
         if not rows:
-            table.add_row("No projects found -- type `ingest github <username>` to add GitHub repos", "", "")
+            scroll.mount(Static(
+                "No projects found — type `ingest github <username>` to add GitHub repos",
+                classes="system-msg",
+            ))
             return
         for row in rows:
-            table.add_row(row["name"], row["url"], row["desc"])
+            desc = row["desc"]
+            if len(desc) > 120:
+                desc = desc[:120] + "..."
+            scroll.mount(Static(
+                f"[bold]{row['name']}[/bold]\n"
+                f"[dim]URL:[/dim]   {row['url']}\n"
+                f"[dim]Desc:[/dim]  {desc}",
+                classes="proj-card",
+            ))
 
     @work(thread=True)
     def _load_graph_view(self) -> None:
@@ -957,121 +953,6 @@ class ArtApp(App):
             return
         tree.clear()
         tree.root.set_label(f"[red]Error loading graph: {error}[/red]")
-
-    # ───────────────────────────────────────────────────────
-    #  Visualization
-    # ───────────────────────────────────────────────────────
-
-    def _load_viz(self) -> None:
-        log = self.query_one("#viz-content", RichLog)
-        log.clear()
-        log.write("Loading charts...")
-        self._run_viz()
-
-    @work(thread=True)
-    def _run_viz(self) -> None:
-        from rich.text import Text
-
-        def write(content: str) -> None:
-            self.call_from_thread(
-                lambda c=content: self.query_one("#viz-content", RichLog).write(Text.from_ansi(c))
-            )
-
-        try:
-            import plotext as plt
-        except ImportError:
-            self.call_from_thread(
-                lambda: self.query_one("#viz-content", RichLog).write(
-                    "[red]plotext not installed. Run: pip install plotext[/red]"
-                )
-            )
-            return
-
-        CHART_W = 80
-
-        from database.user_utils import get_active_profile
-        user = get_active_profile()
-
-        with Session(engine) as session:
-            if not user:
-                self.call_from_thread(
-                    lambda: self.query_one("#viz-content", RichLog).write(
-                        "[yellow]No data yet — type /ingest to add your resume[/yellow]"
-                    )
-                )
-                return
-
-            user_skills = session.exec(
-                select(UserSkill).where(UserSkill.user_id == user.user_id)
-            ).all()
-
-            self.call_from_thread(lambda: self.query_one("#viz-content", RichLog).clear())
-
-            # ── Chart 1: Skills by Source ──
-            source_counts: dict[str, int] = {}
-            for us in user_skills:
-                src = (us.evidence_source or "unknown").split(":")[0]
-                source_counts[src] = source_counts.get(src, 0) + 1
-
-            if source_counts:
-                plt.clear_figure()
-                plt.theme("dark")
-                plt.plotsize(CHART_W, 15)
-                plt.bar(list(source_counts.keys()), list(source_counts.values()))
-                plt.title("Skills by Source")
-                write(plt.build())
-
-            # ── Chart 2: Top Skills by Confidence ──
-            skill_scores = []
-            for us in user_skills:
-                skill = session.get(Skill, us.skill_id)
-                if skill and us.confidence_score > 0:
-                    skill_scores.append((skill.name, us.confidence_score))
-            skill_scores.sort(key=lambda x: x[1], reverse=True)
-            top = skill_scores[:15]
-
-            if top:
-                plt.clear_figure()
-                plt.theme("dark")
-                plt.plotsize(CHART_W, max(10, len(top) + 4))
-                names = [s[0][:25] for s in reversed(top)]
-                scores = [s[1] for s in reversed(top)]
-                plt.bar(names, scores, orientation="h")
-                plt.title("Top Skills by Confidence")
-                write("\n" + plt.build())
-
-            # ── Chart 3: Knowledge Graph Connectivity ──
-            try:
-                from knowledge_graph.builder import SkillGraphBuilder
-                G = SkillGraphBuilder().build_graph()
-                degrees = sorted(G.degree(), key=lambda x: x[1], reverse=True)[:10]
-                if degrees:
-                    plt.clear_figure()
-                    plt.theme("dark")
-                    plt.plotsize(CHART_W, 14)
-                    names = [d[0].split(":")[-1][:25] for d in reversed(degrees)]
-                    counts = [d[1] for d in reversed(degrees)]
-                    plt.bar(names, counts, orientation="h")
-                    plt.title("Most Connected Nodes (Knowledge Graph)")
-                    write("\n" + plt.build())
-            except Exception:
-                pass
-
-            # ── Chart 4: ATS Score History ──
-            results = session.exec(
-                select(UserJobResult).where(UserJobResult.user_id == user.user_id)
-            ).all()
-            if results:
-                results_sorted = sorted(results, key=lambda r: r.created_at)
-                plt.clear_figure()
-                plt.theme("dark")
-                plt.plotsize(CHART_W, 15)
-                dates = [r.created_at.strftime("%m/%d") for r in results_sorted]
-                scores = [r.ats_score for r in results_sorted]
-                plt.bar(dates, scores)
-                plt.title("ATS Scores Over Time")
-                plt.ylabel("Score %")
-                write("\n" + plt.build())
 
 
 # ───────────────────────────────────────────────────────────
