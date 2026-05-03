@@ -56,7 +56,9 @@ def test_tui_new_job_flow(isolated_engine):
 
 
 def test_empty_state_tables_show_placeholders(isolated_engine):
-    """Skills tree and exp/proj tables show placeholder content when DB is empty."""
+    """Skills tree and exp table show placeholder content when DB is empty."""
+    from textual.containers import VerticalScroll
+
     async def _run():
         app = tui_module.ArtApp()
         async with app.run_test() as pilot:
@@ -64,7 +66,6 @@ def test_empty_state_tables_show_placeholders(isolated_engine):
 
             skills_tree = app.query_one("#skills-tree", Tree)
             exp_table = app.query_one("#exp-table", DataTable)
-            proj_table = app.query_one("#proj-table", DataTable)
 
             root_children = list(skills_tree.root.children)
             assert len(root_children) >= 1
@@ -72,12 +73,14 @@ def test_empty_state_tables_show_placeholders(isolated_engine):
             assert "ingest" in leaf_label.lower() or "no skill" in leaf_label.lower()
 
             assert exp_table.row_count == 1
-            assert proj_table.row_count == 1
-
             exp_cell = exp_table.get_cell_at((0, 0))
             assert "ingest" in str(exp_cell).lower()
-            proj_cell = proj_table.get_cell_at((0, 0))
-            assert "ingest" in str(proj_cell).lower() or "github" in str(proj_cell).lower()
+
+            proj_scroll = app.query_one("#proj-scroll", VerticalScroll)
+            proj_statics = list(proj_scroll.query(Static))
+            assert len(proj_statics) == 1
+            proj_text = str(proj_statics[0]._Static__content)
+            assert "ingest" in proj_text.lower() or "github" in proj_text.lower()
 
     asyncio.run(_run())
 
@@ -319,5 +322,39 @@ def test_slash_copy_posts_result_to_chat(isolated_engine, monkeypatch):
             app._handle_chat_input("/copy")
             await pilot.pause()
             assert copied == ["called"], "_copy_chat_to_clipboard was not called"
+
+    asyncio.run(_run())
+
+
+# ── PRD 09 — Viz removal and project card layout ───────────────────────────────
+
+def test_viz_tab_does_not_exist(isolated_engine):
+    """tab-viz widget must not exist after removing the Visualization tab."""
+    from textual.css.query import NoMatches
+
+    async def _run():
+        app = tui_module.ArtApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            with pytest.raises(NoMatches):
+                app.query_one("#tab-viz")
+
+    asyncio.run(_run())
+
+
+def test_proj_scroll_exists_proj_table_does_not(isolated_engine):
+    """#proj-table (DataTable) is gone; #proj-scroll (VerticalScroll) exists instead."""
+    from textual.containers import VerticalScroll
+    from textual.css.query import NoMatches
+
+    async def _run():
+        app = tui_module.ArtApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            # proj-scroll must be present
+            app.query_one("#proj-scroll", VerticalScroll)
+            # proj-table must be absent
+            with pytest.raises(NoMatches):
+                app.query_one("#proj-table")
 
     asyncio.run(_run())
