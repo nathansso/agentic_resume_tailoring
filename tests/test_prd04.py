@@ -176,3 +176,40 @@ def test_export_creates_file(isolated_engine, monkeypatch, tmp_path):
     if export_path and export_path.exists():
         content = export_path.read_text(encoding="utf-8")
         assert "Tailored Resume" in content
+
+
+def test_set_active_job_new_job_has_empty_history(isolated_engine):
+    """Selecting a brand-new job yields an empty agent history."""
+    job = _make_job(isolated_engine, title="Brand New", company="Fresh Co")
+    agent = ChatAgent()
+    agent.history = [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "hi"}]
+
+    agent.set_active_job(str(job.job_id))
+
+    assert agent.history == []
+    assert agent.active_job_id == str(job.job_id)
+
+
+def test_set_active_job_restores_prior_history(isolated_engine):
+    """Returning to a previously visited job restores the cached agent history."""
+    job1 = _make_job(isolated_engine, title="Job One", company="Alpha")
+    job2 = _make_job(isolated_engine, title="Job Two", company="Beta")
+    agent = ChatAgent()
+
+    # First visit to job1, accumulate history
+    agent.set_active_job(str(job1.job_id))
+    agent.history = [
+        {"role": "user", "content": "analyze"},
+        {"role": "assistant", "content": "done"},
+    ]
+
+    # Switch to job2 — should start with an empty history
+    agent.set_active_job(str(job2.job_id))
+    assert agent.history == []
+
+    # Return to job1 — history must be restored
+    agent.set_active_job(str(job1.job_id))
+    assert agent.history == [
+        {"role": "user", "content": "analyze"},
+        {"role": "assistant", "content": "done"},
+    ]

@@ -485,6 +485,8 @@ class ChatAgent:
         self._turn_index = 0
         self.last_trace: Optional[ChatTurnTrace] = None
         self.active_job_id: Optional[str] = None
+        self._job_histories: dict[str | None, list] = {}
+        self._active_job_id: str | None = None
         self._tool_map: Dict = {
             **TOOL_MAP,
             "analyze_active_job": lambda args: self._analyze_active_job(args),
@@ -554,9 +556,12 @@ class ChatAgent:
 
     # ── Active job lifecycle ────────────────────────────────────────────────
 
-    def set_active_job(self, job_id: str) -> None:
-        """Set the active job for this session (not persisted across restarts)."""
-        self.active_job_id = job_id
+    def set_active_job(self, job_id: str | None) -> None:
+        """Save current history under current job key, then switch to job_id."""
+        self._job_histories[self._active_job_id] = list(self.history)
+        self._active_job_id = job_id
+        self.active_job_id = job_id  # backward-compat attribute
+        self.history = list(self._job_histories.get(job_id, []))
 
     def _get_active_job(self) -> Optional[JobDescription]:
         if not self.active_job_id:

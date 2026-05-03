@@ -155,6 +155,35 @@ def test_ingest_github_repo_invalid_ref(isolated_engine):
     assert "not-a-valid-ref" in result
 
 
+def test_delete_job_removes_job_and_results(isolated_engine):
+    """delete_job removes the JobDescription and all its UserJobResult rows."""
+    from sqlmodel import Session as S
+    from database.models import JobDescription, UserJobResult
+    from conftest import _seed_user_and_skill
+
+    user = _seed_user_and_skill(isolated_engine)
+
+    with S(isolated_engine) as session:
+        job = JobDescription(title="Delete Me", company="Goner Inc", description="")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        jid = job.job_id
+        session.add(UserJobResult(user_id=user.user_id, job_id=jid, ats_score=55.0))
+        session.commit()
+
+    msg = services_module.delete_job(str(jid))
+    assert "deleted" in msg.lower()
+
+    with S(isolated_engine) as session:
+        assert session.get(JobDescription, jid) is None
+        from sqlmodel import select as sel
+        leftovers = session.exec(
+            sel(UserJobResult).where(UserJobResult.job_id == jid)
+        ).all()
+        assert len(leftovers) == 0
+
+
 def test_github_token_round_trip(tmp_path, monkeypatch):
     """get_github_token / save_github_token round-trip via a temp .env file."""
     env_file = tmp_path / ".env"
