@@ -6,8 +6,11 @@ Ingestion functions return plain-English result strings and never raise.
 import contextlib
 import io
 import sys
+from pathlib import Path
 from typing import Optional
 from uuid import UUID
+
+_ENV_PATH = Path(__file__).parent.parent / ".env"
 
 from sqlmodel import Session, select
 
@@ -330,6 +333,53 @@ def compute_app_state() -> str:
             select(UserSkill).where(UserSkill.user_id == user.user_id).limit(1)
         ).first()
         return "profile_ready" if skill else "setup"
+
+
+# ── GitHub token (stored in .env, never in SQLite) ──────────
+
+def get_github_token() -> str:
+    """Read GITHUB_TOKEN from .env. Returns '' if not set."""
+    from dotenv import dotenv_values
+    return dotenv_values(_ENV_PATH).get("GITHUB_TOKEN", "") or ""
+
+
+def save_github_token(token: str) -> None:
+    """Write GITHUB_TOKEN to .env via dotenv. If token is '', remove the key. Never log the value."""
+    from dotenv import set_key, unset_key
+    _ENV_PATH.touch()
+    if token:
+        set_key(str(_ENV_PATH), "GITHUB_TOKEN", token)  # token value intentionally not logged
+    else:
+        unset_key(str(_ENV_PATH), "GITHUB_TOKEN")
+
+
+# ── Resume path (stored on User row) ────────────────────────
+
+def get_resume_path(user_id: UUID) -> Optional[str]:
+    """Return resume_path for the given user, or None."""
+    with Session(engine) as session:
+        user = session.get(User, user_id)
+        return user.resume_path if user else None
+
+
+def update_resume_path(user_id: UUID, path: str) -> None:
+    """Set resume_path on the User row."""
+    with Session(engine) as session:
+        user = session.get(User, user_id)
+        if user:
+            user.resume_path = path
+            session.add(user)
+            session.commit()
+
+
+def delete_resume(user_id: UUID) -> None:
+    """Clear resume_path on the User row. Does not delete the file or any ingested data."""
+    with Session(engine) as session:
+        user = session.get(User, user_id)
+        if user:
+            user.resume_path = None
+            session.add(user)
+            session.commit()
 
 
 # ── Ingestion service functions ─────────────────────────────
