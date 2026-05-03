@@ -137,3 +137,11 @@ class UserJobResult(SQLModel, table=True):
 
     user: User = Relationship(back_populates="job_results")
     job: JobDescription = Relationship(back_populates="results")
+
+
+class ChatMessage(SQLModel, table=True):
+    message_id: UUID = Field(default_factory=uuid4, primary_key=True)
+    job_id: Optional[UUID] = Field(default=None, foreign_key="jobdescription.job_id")
+    role: str        # "user" | "assistant"
+    content: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)

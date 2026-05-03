@@ -562,6 +562,13 @@ class ChatAgent:
         self._active_job_id = job_id
         self.active_job_id = job_id  # backward-compat attribute
         self.history = list(self._job_histories.get(job_id, []))
+        try:
+            from tui import services as _svc
+            db_history = _svc.load_chat_history(job_id, limit=20)
+        except Exception:
+            db_history = []
+        if db_history:
+            self.history = db_history
 
     def _get_active_job(self) -> Optional[JobDescription]:
         if not self.active_job_id:
@@ -1076,6 +1083,12 @@ class ChatAgent:
             logger.debug("[chat] path=%s duration=%.1fms", route_kind, ms)
             self.history.append({"role": "user", "content": user_message})
             self.history.append({"role": "assistant", "content": routed})
+            try:
+                from tui import services as _svc
+                _svc.save_chat_message(self._active_job_id, "user", user_message)
+                _svc.save_chat_message(self._active_job_id, "assistant", routed)
+            except Exception:
+                pass
             self._emit_trace(
                 user_message=user_message,
                 route_kind=route_kind,
@@ -1089,6 +1102,11 @@ class ChatAgent:
             return routed
 
         self.history.append({"role": "user", "content": user_message})
+        try:
+            from tui import services as _svc
+            _svc.save_chat_message(self._active_job_id, "user", user_message)
+        except Exception:
+            pass
 
         # Build per-request system prompt with current runtime state.
         from database.user_utils import get_active_profile
@@ -1146,6 +1164,11 @@ class ChatAgent:
             rendered, requested, executed = self._resolve_tool_calls(text)
             self.history.append({"role": "assistant", "content": text})
             self.history.append({"role": "assistant", "content": rendered})
+            try:
+                from tui import services as _svc
+                _svc.save_chat_message(self._active_job_id, "assistant", rendered)
+            except Exception:
+                pass
             self._emit_trace(
                 user_message=user_message,
                 route_kind="tool_call",
@@ -1160,6 +1183,11 @@ class ChatAgent:
         else:
             # CLARIFY, RESPONSE, or RAW (malformed) — strip envelope prefix and return.
             self.history.append({"role": "assistant", "content": clean_content})
+            try:
+                from tui import services as _svc
+                _svc.save_chat_message(self._active_job_id, "assistant", clean_content)
+            except Exception:
+                pass
             self._emit_trace(
                 user_message=user_message,
                 route_kind="llm",

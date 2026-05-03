@@ -725,6 +725,19 @@ class ArtApp(App):
 
             agent.set_active_job(job_uuid)
 
+            # Reconstruct scroll from DB history (e.g. after an app restart).
+            db_history = services.load_chat_history(job_uuid)
+            if db_history:
+                cached = []
+                for msg in db_history:
+                    if msg["role"] == "user":
+                        css, text = "user-msg", f"You: {msg['content']}"
+                    else:
+                        css, text = "bot-msg", msg["content"]
+                    scroll.mount(Static(text, classes=css))
+                    cached.append((css, text))
+                self._job_chat_cache[job_uuid] = cached
+
             status = detail.get("status", "created")
             lines = [f"{detail['title']} @ {detail['company']}  [{status}]"]
             if "ats_score" in detail:
@@ -747,7 +760,7 @@ class ArtApp(App):
 
             detail_text = "\n".join(lines)
             scroll.mount(Static(detail_text, classes="bot-msg"))
-            self._job_chat_cache[job_uuid] = [("bot-msg", detail_text)]
+            self._job_chat_cache.setdefault(job_uuid, []).append(("bot-msg", detail_text))
             self._selected_job_label = f"{detail['title']} @ {detail['company']}"
 
         scroll.scroll_end()

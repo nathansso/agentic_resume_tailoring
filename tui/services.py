@@ -5,6 +5,7 @@ Ingestion functions return plain-English result strings and never raise.
 """
 import contextlib
 import io
+import logging
 import sys
 from pathlib import Path
 from typing import Optional
@@ -16,9 +17,11 @@ from sqlmodel import Session, select
 
 from database.db import engine
 from database.models import (
-    Experience, JobDescription, Project,
+    ChatMessage, Experience, JobDescription, Project,
     Skill, User, UserJobResult, UserSkill,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @contextlib.contextmanager
@@ -401,6 +404,37 @@ def delete_job(job_uuid: str) -> str:
         return "Job deleted."
     except Exception as e:
         return f"Failed to delete job: {e}"
+
+
+# ── Chat history (persisted per job) ────────────────────────
+
+def save_chat_message(job_id: Optional[str], role: str, content: str) -> None:
+    """Persist one message to the ChatMessage table. Never raises."""
+    try:
+        jid = UUID(job_id) if job_id else None
+        with Session(engine) as session:
+            session.add(ChatMessage(job_id=jid, role=role, content=content))
+            session.commit()
+    except Exception as e:
+        logger.warning("save_chat_message failed: %s", e)
+
+
+def load_chat_history(job_id: Optional[str], limit: int = 20) -> list[dict]:
+    """Return the last `limit` messages for this job as {role, content} dicts, oldest-first.
+    Returns [] if none found or on error."""
+    try:
+        jid = UUID(job_id) if job_id else None
+        with Session(engine) as session:
+            msgs = session.exec(
+                select(ChatMessage)
+                .where(ChatMessage.job_id == jid)
+                .order_by(ChatMessage.created_at.desc())
+                .limit(limit)
+            ).all()
+        return [{"role": m.role, "content": m.content} for m in reversed(msgs)]
+    except Exception as e:
+        logger.warning("load_chat_history failed: %s", e)
+        return []
 
 
 # ── Ingestion service functions ─────────────────────────────
