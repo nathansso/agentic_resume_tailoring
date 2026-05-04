@@ -31,6 +31,9 @@ _ROLE_MODELS = {
     ModelRole.REVIEW: REVIEW_MODEL,
 }
 
+# Models that have deprecated the temperature parameter entirely.
+_ANTHROPIC_NO_TEMPERATURE = {"claude-opus-4-7"}
+
 
 def get_llm(role: str = ModelRole.CHAT, temperature: float = 0.0) -> BaseChatModel:
     """
@@ -45,11 +48,10 @@ def get_llm(role: str = ModelRole.CHAT, temperature: float = 0.0) -> BaseChatMod
     if LLM_PROVIDER == "anthropic":
         from langchain_anthropic import ChatAnthropic
         logger.info(f"Using Anthropic model: {model_name} (role={role})")
-        return ChatAnthropic(
-            model=model_name,
-            temperature=temperature,
-            api_key=ANTHROPIC_API_KEY,
-        )
+        kwargs: dict = {"model": model_name, "api_key": ANTHROPIC_API_KEY}
+        if model_name not in _ANTHROPIC_NO_TEMPERATURE:
+            kwargs["temperature"] = temperature
+        return ChatAnthropic(**kwargs)
     elif LLM_PROVIDER == "openai":
         from langchain_openai import ChatOpenAI
         logger.info(f"Using OpenAI model: {model_name} (role={role})")
