@@ -6,7 +6,13 @@
       "Bash(where pytest *)",
       "Bash(.venv/Scripts/python -c \"from textual.widgets import Static; s = Static\\('hello'\\); print\\([a for a in dir\\(s\\) if not a.startswith\\('__'\\)]\\)\")",
       "Bash(.venv/Scripts/python -c \"from textual.widgets import Static; s = Static\\('hello world'\\); print\\(type\\(s._Static__content\\)\\); print\\(s._Static__content\\)\")",
-      "Bash(.venv/Scripts/python -m pytest test_smoke_formal.py -q -k \"not integration and not slow\" --tb=short)"
+      "Bash(.venv/Scripts/python -m pytest test_smoke_formal.py -q -k \"not integration and not slow\" --tb=short)",
+      "Bash(.venv/Scripts/python.exe run_tests.py)",
+      "Bash(.venv/Scripts/python.exe -c \"import dotenv; print\\(dotenv.__version__\\)\")",
+      "Bash(.venv/Scripts/python.exe -c \"from dotenv import dotenv_values, set_key, unset_key; print\\('ok'\\)\")",
+      "Bash(.venv/Scripts/python.exe -c ' *)",
+      "Bash(.venv\\\\Scripts\\\\python.exe run_tests.py)",
+      "Bash(git add *)"
     ]
   }
 }
