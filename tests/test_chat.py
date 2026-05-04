@@ -1,10 +1,12 @@
 """Chat agent routing, fast-paths, tool calls, and trace tests."""
+import uuid
+
 import pytest
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 import agents.chat as chat_module
 import tui.services as services_module
-from database.models import JobDescription, UserJobResult
+from database.models import ChatMessage, JobDescription, UserJobResult
 from conftest import _seed_user_and_skill
 
 
@@ -404,3 +406,78 @@ def test_chat_trace_llm_tool_call(isolated_engine, monkeypatch):
     if last["route_kind"] == "tool_call":
         assert "run_ingest_github" in last.get("tool_calls_requested", [])
         assert "run_ingest_github" in last.get("tool_calls_executed", [])
+
+
+# ── PRD 10 — Persistent chat memory integration ────────────────────────────────
+
+def test_chat_persists_user_and_assistant_messages_to_db(isolated_engine, monkeypatch):
+    """chat() writes both user and assistant ChatMessage rows when a job is active."""
+    with Session(isolated_engine) as session:
+        job = JobDescription(title="Persist Test", company="Co", description="")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = str(job.job_id)
+        job_uuid = job.job_id
+
+    class FakeLLM:
+        def invoke(self, *_a, **_kw):
+            class R:
+                content = "Here is what I know about this role."
+            return R()
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda *a, **kw: FakeLLM())
+
+    agent = chat_module.ChatAgent()
+    agent.set_active_job(job_id)
+    agent.chat("tell me about this job")
+
+    with Session(isolated_engine) as session:
+        msgs = session.exec(
+            select(ChatMessage).where(ChatMessage.job_id == job_uuid)
+        ).all()
+
+    roles = [m.role for m in msgs]
+    assert "user" in roles, "User message was not persisted"
+    assert "assistant" in roles, "Assistant message was not persisted"
+    user_msg = next(m for m in msgs if m.role == "user")
+    assert user_msg.content == "tell me about this job"
+
+
+def test_set_active_job_restores_history_from_db(isolated_engine):
+    """set_active_job() populates self.history from DB, simulating an app restart."""
+    with Session(isolated_engine) as session:
+        job = JobDescription(title="History Test", company="Co", description="")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = str(job.job_id)
+
+    services_module.save_chat_message(job_id, "user", "What roles match me?")
+    services_module.save_chat_message(job_id, "assistant", "You match SWE roles.")
+
+    agent = chat_module.ChatAgent()
+    assert agent.history == [], "Fresh agent should start with empty history"
+
+    agent.set_active_job(job_id)
+
+    assert len(agent.history) == 2
+    assert agent.history[0] == {"role": "user", "content": "What roles match me?"}
+    assert agent.history[1] == {"role": "assistant", "content": "You match SWE roles."}
+
+
+def test_chat_db_write_failure_does_not_affect_response(isolated_engine, monkeypatch):
+    """A DB failure in save_chat_message never surfaces as a chat error or exception."""
+    monkeypatch.setattr(services_module, "save_chat_message", lambda *_a, **_kw: (_ for _ in ()).throw(RuntimeError("DB is down")))
+
+    class FakeLLM:
+        def invoke(self, *_a, **_kw):
+            class R:
+                content = "Still working fine."
+            return R()
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda *a, **kw: FakeLLM())
+
+    agent = chat_module.ChatAgent()
+    response = agent.chat("hello")
+    assert response == "Still working fine."
