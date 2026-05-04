@@ -109,6 +109,82 @@ def test_handoff_generation():
     assert "tool_wrapper_failure" in md
 
 
+def test_judge_turn_skips_fast_path(monkeypatch):
+    """fast_path turns return -1 scores without invoking the LLM."""
+    import llm as llm_module
+
+    calls = []
+    monkeypatch.setattr(llm_module, "get_llm", lambda role="chat", temperature=0.0: calls.append(1))
+
+    from verification.chat_eval.judge import judge_turn
+    result = judge_turn("help", "Here are the commands...", route_kind="fast_path")
+
+    assert result["helpfulness"] == -1
+    assert result["correctness"] == -1
+    assert result["conciseness"] == -1
+    assert result["rationale"] == "skipped"
+    assert not calls
+
+
+def test_judge_turn_parses_llm_json(monkeypatch):
+    """judge_turn correctly parses a valid JSON response returned by the LLM."""
+    import llm as llm_module
+
+    class FakeLLM:
+        def invoke(self, prompt):
+            class R:
+                content = '{"helpfulness": 3, "correctness": 2, "conciseness": 3, "rationale": "clear and correct"}'
+            return R()
+
+    monkeypatch.setattr(llm_module, "get_llm", lambda role="chat", temperature=0.0: FakeLLM())
+
+    from verification.chat_eval.judge import judge_turn
+    result = judge_turn("what are my skills?", "You have Python and Go.", "llm")
+
+    assert result["helpfulness"] == 3
+    assert result["correctness"] == 2
+    assert result["conciseness"] == 3
+    assert result["rationale"] == "clear and correct"
+
+
+def test_score_transcript_reads_jsonl(tmp_path, monkeypatch):
+    """score_transcript returns one entry per JSONL line with correct judge scores."""
+    import json as _json
+    import llm as llm_module
+
+    class FakeLLM:
+        def invoke(self, prompt):
+            class R:
+                content = '{"helpfulness": 2, "correctness": 2, "conciseness": 2, "rationale": "ok"}'
+            return R()
+
+    monkeypatch.setattr(llm_module, "get_llm", lambda role="chat", temperature=0.0: FakeLLM())
+
+    transcript = tmp_path / "transcript.jsonl"
+    records = [
+        {"scenario_id": "s1", "turn_index": 0, "user_message": "help", "route_kind": "fast_path", "response_text": "Here are commands"},
+        {"scenario_id": "s1", "turn_index": 1, "user_message": "what are my skills?", "route_kind": "llm", "response_text": "You have Python and Go."},
+    ]
+    with open(transcript, "w", encoding="utf-8") as fh:
+        for r in records:
+            fh.write(_json.dumps(r) + "\n")
+
+    from verification.chat_eval.judge import score_transcript
+    results = score_transcript(transcript)
+
+    assert len(results) == 2
+    fp = next(r for r in results if r["route_kind"] == "fast_path")
+    llm_r = next(r for r in results if r["route_kind"] == "llm")
+
+    assert fp["judge_scores"]["helpfulness"] == -1
+    assert fp["judge_scores"]["correctness"] == -1
+    assert fp["judge_scores"]["conciseness"] == -1
+
+    assert llm_r["judge_scores"]["helpfulness"] == 2
+    assert llm_r["judge_scores"]["correctness"] == 2
+    assert llm_r["judge_scores"]["conciseness"] == 2
+
+
 def test_tui_logging_opt_in(isolated_engine, monkeypatch):
     """Trace sink is created only when ART_LOG_CHAT_EVAL=1; absent by default."""
     import os
