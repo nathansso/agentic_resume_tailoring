@@ -654,6 +654,7 @@ class ChatAgent:
                         skill = Skill(name=skill_name, category=item.get("category"))
                         session.add(skill)
                         session.flush()
+                    # Only JobSkill — never UserSkill; job skills must not pollute the user profile.
                     session.add(JobSkill(
                         job_id=job_db.job_id,
                         skill_id=skill.skill_id,

@@ -390,3 +390,110 @@ def test_add_skill_to_profile_empty_name_returns_error(isolated_engine):
     user = _seed_user_and_skill(isolated_engine)
     result = services_module.add_skill_to_profile(user.user_id, "")
     assert "provide" in result.lower() or "name" in result.lower()
+
+
+# ── Skills data quality (PRD 05) ──────────────────────────────────────────────
+
+def test_format_skill_source_github_repo(isolated_engine):
+    """GitHub repo sources display as 'GitHub: <repo-name>'."""
+    assert services_module._format_skill_source("github:octocat/hello-world") == "GitHub: hello-world"
+    assert services_module._format_skill_source("github:openai/evals") == "GitHub: evals"
+
+
+def test_format_skill_source_github_user_level(isolated_engine):
+    """Account-level GitHub ingestion displays as 'GitHub: <username>'."""
+    assert services_module._format_skill_source("github:myuser") == "GitHub: myuser"
+
+
+def test_format_skill_source_resume(isolated_engine):
+    """File paths and 'resume' literal are both displayed as 'resume'."""
+    assert services_module._format_skill_source("resume") == "resume"
+    assert services_module._format_skill_source("/home/user/my_resume.pdf") == "resume"
+    assert services_module._format_skill_source("C:/Users/foo/resume.docx") == "resume"
+    assert services_module._format_skill_source("") == "resume"
+
+
+def test_format_skill_source_manual(isolated_engine):
+    """Manual-added skills display as 'manual'."""
+    assert services_module._format_skill_source("manual") == "manual"
+    assert services_module._format_skill_source("manual:some-target") == "manual"
+
+
+def test_get_skills_deduplicates_by_name(isolated_engine):
+    """get_skills merges multiple UserSkill rows for the same skill into one display row."""
+    from sqlmodel import select as _sel
+    user = _seed_user_and_skill(isolated_engine)
+
+    with Session(isolated_engine) as session:
+        # Add a second UserSkill row for Python from GitHub (different source)
+        python_skill = session.exec(_sel(Skill).where(Skill.name == "Python")).first()
+        assert python_skill is not None
+        session.add(UserSkill(
+            user_id=user.user_id,
+            skill_id=python_skill.skill_id,
+            evidence_source="github:myuser/my-repo",
+            confidence_score=0.8,
+            proficiency=4,
+        ))
+        session.commit()
+
+    rows = services_module.get_skills(user.user_id)
+    python_rows = [r for r in rows if r["name"].lower() == "python"]
+
+    assert len(python_rows) == 1, f"Expected 1 merged Python row, got {len(python_rows)}"
+    merged = python_rows[0]
+    assert "resume" in merged["source"]
+    assert "GitHub: my-repo" in merged["source"]
+    # Highest confidence (0.95) wins; proficiency from that entry
+    assert float(merged["confidence"]) >= 0.8
+
+
+def test_get_skills_dedup_uses_highest_confidence_proficiency(isolated_engine):
+    """The merged skill row uses the proficiency from the highest-confidence entry."""
+    from sqlmodel import select as _sel
+    user = _seed_user_and_skill(isolated_engine)
+
+    with Session(isolated_engine) as session:
+        skill = Skill(name="Go", category="Language")
+        session.add(skill)
+        session.flush()
+        session.add(UserSkill(
+            user_id=user.user_id, skill_id=skill.skill_id,
+            evidence_source="resume", confidence_score=0.6, proficiency=2,
+        ))
+        session.add(UserSkill(
+            user_id=user.user_id, skill_id=skill.skill_id,
+            evidence_source="github:owner/repo", confidence_score=0.9, proficiency=4,
+        ))
+        session.commit()
+
+    rows = services_module.get_skills(user.user_id)
+    go_rows = [r for r in rows if r["name"].lower() == "go"]
+    assert len(go_rows) == 1
+    assert go_rows[0]["proficiency"] == "4"  # from the higher-confidence github entry
+
+
+def test_ingest_resume_normalizes_source_to_resume(isolated_engine, tmp_path, monkeypatch):
+    """ingest_resume_file passes source_file='resume' to parse_and_save for all file types."""
+    import agents.parser as parser_module
+    _seed_user_and_skill(isolated_engine)
+
+    captured = []
+
+    class _FakeParser:
+        def parse_and_save(self, data):
+            captured.append(data.get("source_file"))
+
+    monkeypatch.setattr(parser_module, "ResumeParserAgent", lambda: _FakeParser())
+
+    resume1 = tmp_path / "resume_v1.md"
+    resume1.write_text("# Resume\n- Python\n")
+    services_module.ingest_resume_file(str(resume1))
+
+    resume2 = tmp_path / "resume_v2.md"
+    resume2.write_text("# Resume v2\n- FastAPI\n")
+    services_module.ingest_resume_file(str(resume2))
+
+    assert captured == ["resume", "resume"], (
+        f"Both ingestions should use source_file='resume', got: {captured}"
+    )
