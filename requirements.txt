@@ -21,3 +21,6 @@ beautifulsoup4
 # TUI
 textual
 plotext
+# PDF export
+markdown
+xhtml2pdf

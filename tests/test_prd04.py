@@ -135,7 +135,7 @@ def test_tailoring_explainability_sections(isolated_engine, monkeypatch):
 
 
 def test_export_creates_file(isolated_engine, monkeypatch, tmp_path):
-    """_export_active_job writes a markdown file to the exports directory."""
+    """_export_active_job writes a PDF file to the exports directory."""
     from database.models import UserJobResult
     from conftest import _seed_user_and_skill
 
@@ -155,27 +155,75 @@ def test_export_creates_file(isolated_engine, monkeypatch, tmp_path):
         session.add(result)
         session.commit()
 
-    # Redirect exports to tmp_path
-    exports_dir = tmp_path / "exports"
-    monkeypatch.setattr(
-        "pathlib.Path.home", lambda: tmp_path
-    )
-
-    def fake_format_markdown(self, content):
-        return "# Tailored Resume\n\nGreat match"
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
 
     from agents import formatter as fmt_module
-    monkeypatch.setattr(fmt_module.ResumeFormatterAgent, "format_markdown", fake_format_markdown)
+    monkeypatch.setattr(
+        fmt_module.ResumeFormatterAgent,
+        "format_pdf",
+        lambda self, content, job_title="": b"%PDF-1.4 stub",
+    )
 
     agent = ChatAgent()
     agent.set_active_job(str(job.job_id))
     response = agent._export_active_job("")
 
-    assert "exported" in response.lower() or "Resume exported" in response
+    assert "exported" in response.lower() or "PDF" in response
     export_path = Path(response.split(":", 1)[-1].strip()) if ":" in response else None
-    if export_path and export_path.exists():
-        content = export_path.read_text(encoding="utf-8")
-        assert "Tailored Resume" in content
+    if export_path:
+        assert export_path.suffix == ".pdf"
+        assert export_path.exists()
+
+
+def test_export_produces_pdf_file(isolated_engine, monkeypatch, tmp_path):
+    """_export_active_job stores a .pdf path (not .md) in UserJobResult.export_path."""
+    from database.models import UserJobResult
+    from conftest import _seed_user_and_skill
+
+    user = _seed_user_and_skill(isolated_engine)
+    job = _make_job(isolated_engine, title="Engineer", company="Acme", status="tailored")
+
+    with Session(isolated_engine) as session:
+        result = UserJobResult(
+            user_id=user.user_id,
+            job_id=job.job_id,
+            ats_score=90.0,
+            matched_skills={},
+            missing_skills=[],
+            tailored_resume_content={"summary": "Great"},
+        )
+        session.add(result)
+        session.commit()
+
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+
+    from agents import formatter as fmt_module
+    monkeypatch.setattr(
+        fmt_module.ResumeFormatterAgent,
+        "format_pdf",
+        lambda self, content, job_title="": b"%PDF-1.4 stub",
+    )
+
+    agent = ChatAgent()
+    agent.set_active_job(str(job.job_id))
+    response = agent._export_active_job("")
+
+    # Response path must end with .pdf
+    assert ".pdf" in response, f"Expected .pdf in response: {response!r}"
+    export_path = Path(response.split(":", 1)[-1].strip())
+    assert export_path.suffix == ".pdf", f"Expected .pdf suffix, got: {export_path.suffix}"
+    assert export_path.exists(), "Exported file should exist on disk"
+
+    # DB record must also store the .pdf path
+    with Session(isolated_engine) as session:
+        db_result = session.exec(
+            select(UserJobResult).where(UserJobResult.user_id == user.user_id)
+        ).first()
+    assert db_result is not None
+    assert db_result.export_path is not None
+    assert db_result.export_path.endswith(".pdf"), (
+        f"DB export_path should end with .pdf, got: {db_result.export_path!r}"
+    )
 
 
 def test_set_active_job_new_job_has_empty_history(isolated_engine):

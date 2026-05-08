@@ -771,18 +771,19 @@ class ChatAgent:
         try:
             from agents.formatter import ResumeFormatterAgent
             formatter = ResumeFormatterAgent(user_id=user.user_id)
-            md = formatter.format_markdown(latest.tailored_resume_content)
-        except Exception:
-            md = str(latest.tailored_resume_content)
+            pdf_bytes = formatter.format_pdf(latest.tailored_resume_content)
+        except Exception as e:
+            logger.error("PDF export failed: %s", e)
+            return f"Export failed: {e}"
 
         exports_dir = Path.home() / ".art" / "exports"
         exports_dir.mkdir(parents=True, exist_ok=True)
 
         safe_title = _re.sub(r"[^a-zA-Z0-9_-]", "_", job.title)[:40]
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"tailored_resume_{safe_title}_{timestamp}.md"
+        filename = f"tailored_resume_{safe_title}_{timestamp}.pdf"
         export_path = exports_dir / filename
-        export_path.write_text(md, encoding="utf-8")
+        export_path.write_bytes(pdf_bytes)
 
         with Session(engine) as session:
             result = session.get(UserJobResult, latest.result_id)
@@ -796,7 +797,7 @@ class ChatAgent:
                     session.add(job_db)
                 session.commit()
 
-        return f"Resume exported to: {export_path}"
+        return f"PDF exported to: {export_path}"
 
     @staticmethod
     def _normalize(text: str) -> str:
