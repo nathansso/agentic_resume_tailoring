@@ -192,11 +192,15 @@ def get_profile_data() -> Optional[dict]:
         ).all():
             if us.evidence_source:
                 sources.add(us.evidence_source.split(":")[0])
+    default_email = "user@example.com"
     return {
         "user_id": user.user_id,
         "name": user.name or "",
         "github_username": user.github_username or "",
         "linkedin_url": user.linkedin_url or "",
+        "email": "" if (not user.email or user.email == default_email) else user.email,
+        "phone": user.phone or "",
+        "location": user.location or "",
         "skills": skill_count,
         "experiences": exp_count,
         "projects": proj_count,
@@ -204,19 +208,35 @@ def get_profile_data() -> Optional[dict]:
     }
 
 
-def update_profile(user_id: UUID, name: str, github_username: str, linkedin_url: str) -> str:
+def update_profile(
+    user_id: UUID,
+    name: str,
+    github_username: str,
+    linkedin_url: str,
+    phone: str = "",
+    email: str = "",
+    location: str = "",
+) -> str:
     """Update the active profile's personal info fields."""
     from datetime import datetime
-    with Session(engine) as session:
-        user = session.get(User, user_id)
-        if not user:
-            return "Profile not found."
-        user.name = name.strip() or user.name
-        user.github_username = github_username.strip() or None
-        user.linkedin_url = linkedin_url.strip() or None
-        user.updated_at = datetime.utcnow()
-        session.add(user)
-        session.commit()
+    try:
+        with Session(engine) as session:
+            user = session.get(User, user_id)
+            if not user:
+                return "Profile not found."
+            user.name = name.strip() or user.name
+            user.github_username = github_username.strip() or None
+            user.linkedin_url = linkedin_url.strip() or None
+            user.phone = phone.strip() or None
+            user.location = location.strip() or None
+            if email.strip() and email.strip() != "user@example.com":
+                user.email = email.strip()
+            user.updated_at = datetime.utcnow()
+            session.add(user)
+            session.commit()
+    except Exception as e:
+        logger.error("update_profile failed: %s", e)
+        return f"Failed to save profile: {e}"
     return "Profile updated."
 
 

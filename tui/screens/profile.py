@@ -130,7 +130,7 @@ class ProfileScreen(Screen):
         height: auto;
     }
 
-    #save-profile-btn {
+    #update-profile-btn {
         width: 1fr;
         margin-right: 1;
     }
@@ -161,6 +161,12 @@ class ProfileScreen(Screen):
                 yield Input(password=True, placeholder="ghp_... (optional)", id="profile-token-input")
                 yield Label("LinkedIn URL", classes="field-label")
                 yield Input(placeholder="https://linkedin.com/in/... (optional)", id="profile-linkedin-input", classes="field-input")
+                yield Label("Email", classes="field-label")
+                yield Input(placeholder="you@example.com (optional)", id="profile-email-input", classes="field-input")
+                yield Label("Phone", classes="field-label")
+                yield Input(placeholder="+1 (555) 000-0000 (optional)", id="profile-phone-input", classes="field-input")
+                yield Label("Location", classes="field-label")
+                yield Input(placeholder="City, ST (optional)", id="profile-location-input", classes="field-input")
             yield Static("", id="profile-divider")
             yield Static("", id="profile-stats")
             with Vertical(id="resume-section"):
@@ -178,8 +184,8 @@ class ProfileScreen(Screen):
                 yield Button("Confirm", id="confirm-delete-resume-btn", variant="error")
                 yield Button("Cancel", id="cancel-delete-resume-btn")
             with Horizontal(id="profile-btn-row"):
-                yield Button("Save Changes", variant="primary", id="save-profile-btn")
-                yield Button("Back to Chat", id="close-profile-btn")
+                yield Button("Update", variant="primary", id="update-profile-btn")
+                yield Button("Back", id="close-profile-btn")
 
     def on_mount(self) -> None:
         self._load_profile()
@@ -199,6 +205,9 @@ class ProfileScreen(Screen):
         self.query_one("#profile-name-input", Input).value = name
         self.query_one("#profile-github-input", Input).value = data["github_username"]
         self.query_one("#profile-linkedin-input", Input).value = data["linkedin_url"]
+        self.query_one("#profile-email-input", Input).value = data.get("email", "")
+        self.query_one("#profile-phone-input", Input).value = data.get("phone", "")
+        self.query_one("#profile-location-input", Input).value = data.get("location", "")
 
         # GitHub token — show mask if a token is stored, never the real value
         token = services.get_github_token()
@@ -219,7 +228,7 @@ class ProfileScreen(Screen):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         btn = event.button.id
-        if btn == "save-profile-btn":
+        if btn == "update-profile-btn":
             self._save()
         elif btn == "close-profile-btn":
             self.action_close()
@@ -243,7 +252,7 @@ class ProfileScreen(Screen):
             self.query_one("#profile-status").display = True
 
     def _save(self) -> None:
-        self.query_one("#save-profile-btn", Button).disabled = True
+        self.query_one("#update-profile-btn", Button).disabled = True
 
         # Handle token — only write if the user changed it
         token_value = self.query_one("#profile-token-input", Input).value
@@ -255,27 +264,34 @@ class ProfileScreen(Screen):
             name=self.query_one("#profile-name-input", Input).value.strip(),
             github=self.query_one("#profile-github-input", Input).value.strip(),
             linkedin=self.query_one("#profile-linkedin-input", Input).value.strip(),
+            email=self.query_one("#profile-email-input", Input).value.strip(),
+            phone=self.query_one("#profile-phone-input", Input).value.strip(),
+            location=self.query_one("#profile-location-input", Input).value.strip(),
         )
 
     @work(thread=True)
-    def _run_save(self, name: str, github: str, linkedin: str) -> None:
+    def _run_save(self, name: str, github: str, linkedin: str,
+                  email: str = "", phone: str = "", location: str = "") -> None:
         from tui import services
         data = services.get_profile_data()
         if not data:
             self.app.call_from_thread(
                 self.query_one("#profile-status", Static).update, "No active profile."
             )
+            self.app.call_from_thread(
+                setattr, self.query_one("#update-profile-btn", Button), "disabled", False
+            )
             return
-        services.update_profile(data["user_id"], name, github, linkedin)
+        services.update_profile(data["user_id"], name, github, linkedin,
+                                 phone=phone, email=email, location=location)
         self.app.call_from_thread(self._after_save, name)
 
     def _after_save(self, name: str) -> None:
         initials = _initials(name)
         self.query_one("#profile-avatar-large", Static).update(initials)
         self.query_one("#profile-name-display", Static).update(name)
-        self.query_one("#profile-status", Static).update("Saved.")
-        self.query_one("#save-profile-btn", Button).disabled = False
-        self.dismiss({"name": name})
+        self.query_one("#update-profile-btn", Button).disabled = False
+        self.app.notify("Profile saved.", severity="information", timeout=3)
 
     @work(thread=True)
     def _run_ingest_resume(self, path: str) -> None:
