@@ -642,27 +642,27 @@ class ChatAgent:
 
     def _tailor_active_job(self, args: str) -> str:
         """Run match → tailor → format pipeline nodes for the active job."""
-        from datetime import datetime
-        from database.user_utils import get_active_profile
-        import graph.pipeline as _pipeline
-
-        job = self._get_active_job()
-        if not job:
-            return "No active job selected. Select a job from the sidebar first."
-
-        user = get_active_profile()
-        if not user:
-            return "No active profile. Complete onboarding first."
-
-        with Session(engine) as session:
-            job_skills_count = len(session.exec(
-                select(JobSkill).where(JobSkill.job_id == job.job_id)
-            ).all())
-
-        if job_skills_count == 0:
-            return 'No skills extracted yet. Type "analyze" first to extract job requirements.'
-
         try:
+            from datetime import datetime
+            from database.user_utils import get_active_profile
+            import graph.pipeline as _pipeline
+
+            job = self._get_active_job()
+            if not job:
+                return "No active job selected. Select a job from the sidebar first."
+
+            user = get_active_profile()
+            if not user:
+                return "No active profile. Complete onboarding first."
+
+            with Session(engine) as session:
+                job_skills_count = len(session.exec(
+                    select(JobSkill).where(JobSkill.job_id == job.job_id)
+                ).all())
+
+            if job_skills_count == 0:
+                return 'No skills extracted yet. Type "analyze" first to extract job requirements.'
+
             state = {
                 "resume_path": "", "job_text": job.description or "",
                 "job_file": "", "user_id": str(user.user_id),
