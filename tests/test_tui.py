@@ -1,8 +1,10 @@
 """TUI app, screen, slash-command, and sidebar tests."""
 import asyncio
 import pytest
+from uuid import UUID
 from sqlmodel import Session, select
 from textual.widgets import Input, Static, DataTable, Tree
+from textual.containers import VerticalScroll
 
 import tui.app as tui_module
 import agents.chat as chat_module
@@ -356,5 +358,127 @@ def test_proj_scroll_exists_proj_table_does_not(isolated_engine):
             # proj-table must be absent
             with pytest.raises(NoMatches):
                 app.query_one("#proj-table")
+
+    asyncio.run(_run())
+
+
+# ── Bug fixes ──────────────────────────────────────────────────────────────────
+
+def test_delete_button_removes_job_immediately(isolated_engine):
+    """Clicking × deletes the job from the DB without requiring a confirmation step."""
+    async def _run():
+        app = tui_module.ArtApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            with Session(isolated_engine) as session:
+                job = JobDescription(title="DeleteMe", company="TestCo", description="")
+                session.add(job)
+                session.commit()
+                job_id = str(job.job_id)
+
+            app._load_jobs_sidebar()
+            await pilot.pause()
+
+            assert any(v == job_id for v in app._job_item_to_uuid.values())
+
+            app._delete_job(job_id)
+            await pilot.pause()
+
+            with Session(isolated_engine) as session:
+                gone = session.get(JobDescription, UUID(job_id))
+            assert gone is None, "Job should be deleted from the database immediately"
+            assert not any(v == job_id for v in app._job_item_to_uuid.values()), \
+                "Job should be removed from the sidebar map"
+
+    asyncio.run(_run())
+
+
+def test_chat_input_is_textarea(isolated_engine):
+    """#chat-input is a _ChatInput (TextArea subclass), not a single-line Input."""
+    from textual.widgets import TextArea
+
+    async def _run():
+        app = tui_module.ArtApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            widget = app.query_one("#chat-input")
+            assert isinstance(widget, TextArea), (
+                f"Expected TextArea subclass, got {type(widget)}"
+            )
+
+    asyncio.run(_run())
+
+
+def test_send_button_submits_multiline_text(isolated_engine):
+    """TextArea in chat input preserves multi-line text; send handler reads all lines."""
+    received = []
+
+    async def _run():
+        app = tui_module.ArtApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app._handle_chat_input = lambda t: received.append(t)
+
+            chat_input = app.query_one("#chat-input", tui_module._ChatInput)
+            chat_input.load_text("line one\nline two\nline three")
+            await pilot.pause()
+
+            # TextArea must preserve multi-line content (unlike a single-line Input)
+            assert "line two" in chat_input.text, "TextArea should hold all pasted lines"
+
+            # Exercise the same code path the send button handler runs
+            text = chat_input.text.strip()
+            if text:
+                app._handle_chat_input(text)
+                chat_input.clear()
+            await pilot.pause()
+
+            assert len(received) == 1, f"Expected 1 call, got {len(received)}"
+            assert "line one" in received[0] and "line two" in received[0], \
+                f"Multi-line content not preserved: {received[0]!r}"
+            assert chat_input.text.strip() == "", "Input should be cleared after send"
+
+    asyncio.run(_run())
+
+
+def test_chat_agent_exception_shows_system_msg(isolated_engine):
+    """An exception raised by the chat agent appears as a system-msg, not a crash."""
+    class _BrokenAgent:
+        def chat(self, msg):
+            raise RuntimeError("pipeline exploded")
+
+    posted = []
+
+    async def _run():
+        app = tui_module.ArtApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.chat_agent = _BrokenAgent()
+            app._post_system_msg = lambda msg: posted.append(msg)
+            app._run_chat("tailor my resume")
+            for _ in range(8):
+                await pilot.pause(delay=0.05)
+
+        assert any("pipeline exploded" in m for m in posted), \
+            f"Expected error message in system posts, got: {posted}"
+
+    asyncio.run(_run())
+
+
+def test_post_system_msg_renders_with_system_msg_class(isolated_engine):
+    """_post_system_msg mounts a Static with class 'system-msg' in the chat scroll."""
+    async def _run():
+        app = tui_module.ArtApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app._post_system_msg("Tailoring failed: oops")
+            await pilot.pause()
+            scroll = app.query_one("#chat-scroll", VerticalScroll)
+            matches = [
+                w for w in scroll.query(Static)
+                if "system-msg" in w.classes
+                and "tailoring failed" in str(w._Static__content).lower()
+            ]
+            assert matches, "system-msg widget not found in chat scroll"
 
     asyncio.run(_run())

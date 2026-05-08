@@ -25,9 +25,9 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import (
     Header, Footer, Static, Input, Button, ListView,
-    ListItem, Label, TabbedContent, TabPane, DataTable, Tree,
+    ListItem, Label, TabbedContent, TabPane, DataTable, Tree, TextArea,
 )
-from textual import work
+from textual import work, events
 
 from database.db import init_db, engine
 from tui.screens.onboarding import OnboardingScreen
@@ -37,6 +37,22 @@ from sqlmodel import Session, select
 from tui import services
 
 logger = logging.getLogger(__name__)
+
+
+class _ChatInput(TextArea):
+    """TextArea that submits on Enter; preserves multi-line paste."""
+
+    async def _on_key(self, event: events.Key) -> None:
+        if event.key == "enter":
+            event.stop()
+            event.prevent_default()
+            text = self.text.strip()
+            if text:
+                self.clear()
+                self.app._handle_chat_input(text)
+        else:
+            await super()._on_key(event)
+
 
 _WELCOME_MSG = (
     "Welcome to ART! I'm your resume tailoring assistant.\n\n"
@@ -131,6 +147,7 @@ class ArtApp(App):
     }
     #chat-input {
         width: 1fr;
+        height: 5;
     }
     #send-btn {
         width: 10;
@@ -206,16 +223,6 @@ class ArtApp(App):
         margin: 0;
     }
 
-    /* ── Delete confirmation row ── */
-    #job-delete-confirm {
-        height: auto;
-        padding: 0 1;
-        color: $accent;
-    }
-    #job-delete-confirm Button {
-        margin-left: 1;
-        min-width: 6;
-    }
     """
 
     TITLE = "ART — Agentic Resume Tailoring"
@@ -236,7 +243,6 @@ class ArtApp(App):
         self._selected_job_label: str = ""
         self._job_chat_cache: dict[str, list[tuple[str, str]]] = {}
         self._active_context_key: str = "landing"
-        self._pending_delete_job_uuid: Optional[str] = None
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -266,10 +272,7 @@ class ArtApp(App):
                         with VerticalScroll(id="chat-scroll"):
                             yield Static(_WELCOME_MSG, classes="bot-msg")
                         with Horizontal(id="chat-input-row"):
-                            yield Input(
-                                placeholder="Type a message or /ingest, /data, /tailor ...",
-                                id="chat-input",
-                            )
+                            yield _ChatInput(id="chat-input")
                             yield Button("Send", variant="primary", id="send-btn")
 
                     # ── Data Tab ──
@@ -425,18 +428,13 @@ class ArtApp(App):
         except Exception:
             pass
 
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        if event.input.id == "chat-input":
-            self._handle_chat_input(event.value)
-            event.input.value = ""
-
     def on_button_pressed(self, event: Button.Pressed) -> None:
         btn = event.button.id
         if btn == "send-btn":
-            chat_input = self.query_one("#chat-input", Input)
-            if chat_input.value.strip():
-                self._handle_chat_input(chat_input.value)
-                chat_input.value = ""
+            chat_input = self.query_one("#chat-input", _ChatInput)
+            if chat_input.text.strip():
+                self._handle_chat_input(chat_input.text)
+                chat_input.clear()
         elif btn == "avatar-btn":
             self._open_profile()
         elif btn == "new-job-btn":
@@ -450,14 +448,6 @@ class ArtApp(App):
             job_uuid = self._job_item_to_uuid.get(item_id)
             if job_uuid:
                 self._delete_job(job_uuid)
-        elif btn == "confirm-delete-job-btn":
-            self._execute_delete_job()
-        elif btn == "cancel-delete-job-btn":
-            self._pending_delete_job_uuid = None
-            try:
-                self.query_one("#job-delete-confirm").remove()
-            except Exception:
-                pass
 
     def _open_profile(self) -> None:
         self.push_screen(ProfileScreen(), callback=self._on_profile_done)
@@ -508,9 +498,24 @@ class ArtApp(App):
         try:
             agent = self._get_agent()
             response = agent.chat(text)
+            self.call_from_thread(self._post_chat_response, response)
         except Exception as e:
-            response = f"Error: {e}"
-        self.call_from_thread(self._post_chat_response, response)
+            logger.exception("_run_chat error")
+            try:
+                self.call_from_thread(self._post_system_msg, f"Error: {e}")
+            except Exception:
+                pass
+
+    def _post_system_msg(self, msg: str) -> None:
+        """Post an error or system notice to the chat scroll."""
+        try:
+            scroll = self.query_one("#chat-scroll", VerticalScroll)
+            for t in scroll.query("#thinking"):
+                t.remove()
+            scroll.mount(Static(msg, classes="system-msg"))
+            scroll.scroll_end()
+        except Exception:
+            pass
 
     def _post_chat_response(self, response: str) -> None:
         scroll = self.query_one("#chat-scroll", VerticalScroll)
@@ -540,7 +545,7 @@ class ArtApp(App):
             classes="bot-msg",
         ))
         scroll.scroll_end()
-        self.query_one("#chat-input", Input).focus()
+        self.query_one("#chat-input", _ChatInput).focus()
 
     def action_show_data(self) -> None:
         """F2 — Switch to data tab and refresh."""
@@ -560,7 +565,7 @@ class ArtApp(App):
             classes="bot-msg",
         ))
         scroll.scroll_end()
-        self.query_one("#chat-input", Input).focus()
+        self.query_one("#chat-input", _ChatInput).focus()
 
     def action_new_job(self) -> None:
         """Ctrl+N — Toggle the inline add-job form."""
@@ -632,45 +637,11 @@ class ArtApp(App):
         self.query_one("#job-input-area").remove_class("visible")
 
     def _delete_job(self, job_uuid: str) -> None:
-        """Show a confirmation prompt in the chat scroll before deleting the job."""
-        if self._pending_delete_job_uuid is not None:
-            return  # another confirmation already in progress
-        detail = services.get_job_details(job_uuid)
-        if not detail:
-            return
-        title = f"{detail['title']} @ {detail['company']}"
-        self._pending_delete_job_uuid = job_uuid
-        self._switch_to_chat()
-        scroll = self.query_one("#chat-scroll", VerticalScroll)
-        scroll.mount(
-            Horizontal(
-                Static(f"Delete '{title}'? This cannot be undone.  "),
-                Button("Yes", id="confirm-delete-job-btn", variant="error"),
-                Button("No", id="cancel-delete-job-btn"),
-                id="job-delete-confirm",
-            )
-        )
-        scroll.scroll_end()
-
-    def _execute_delete_job(self) -> None:
-        """Execute the confirmed job deletion."""
-        job_uuid = self._pending_delete_job_uuid
-        if not job_uuid:
-            return
-        self._pending_delete_job_uuid = None
-
+        """Delete the job immediately and reload the sidebar."""
         services.delete_job(job_uuid)
         self._job_chat_cache.pop(job_uuid, None)
-
-        # Keep _job_item_to_uuid consistent
         for k in [k for k, v in self._job_item_to_uuid.items() if v == job_uuid]:
             del self._job_item_to_uuid[k]
-
-        try:
-            self.query_one("#job-delete-confirm").remove()
-        except Exception:
-            pass
-
         if self._selected_job_id == job_uuid:
             self._selected_job_id = None
             self._selected_job_label = ""
@@ -682,7 +653,6 @@ class ArtApp(App):
             for css_class, text in self._job_chat_cache.get("landing", []):
                 scroll.mount(Static(text, classes=css_class))
             scroll.scroll_end()
-
         self._load_jobs_sidebar()
         self._refresh_app_state()
 
