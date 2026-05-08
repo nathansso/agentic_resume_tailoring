@@ -202,10 +202,50 @@ def get_help_text() -> str:
         "  tailor                          — tailor your resume to the active job\n"
         "  export                          — save tailored resume to ~/.art/exports/\n"
         "  tailor <job description or file> — tailor your resume to a job\n\n"
+        "Profile commands:\n"
+        "  add missing skill <name>        — add a skill directly to your profile\n"
+        "  add <skill> to my profile       — same as above\n\n"
         "TUI shortcuts (type in chat):\n"
         "  /ingest  /data  /tailor  /viz  /profile  /copy\n\n"
         "Note: use ctrl+q to quit. ctrl+c is disabled to allow copy/paste."
     )
+
+
+def _summarize_tailoring_changes(user_id: UUID, tailored_content: dict, missing: list) -> str:
+    """Build a 'Changes made:' bullet list appended to the tailoring response."""
+    lines = ["", "Changes made:"]
+
+    tailored_exps = tailored_content.get("experiences", [])
+    tailored_projs = tailored_content.get("projects", [])
+    skills_emph = tailored_content.get("skills_emphasized", [])
+
+    with Session(engine) as session:
+        db_exps = session.exec(select(Experience).where(Experience.user_id == user_id)).all()
+
+    db_bullet_map = {(e.title or "").lower(): len(e.bullets or []) for e in db_exps}
+
+    rewrote_count = sum(
+        1 for exp in tailored_exps
+        if len(exp.get("bullets", [])) != db_bullet_map.get((exp.get("title") or "").lower(), -1)
+    )
+    if rewrote_count:
+        word = "entry" if rewrote_count == 1 else "entries"
+        lines.append(f"  • Rewrote bullets in {rewrote_count} experience {word}")
+
+    if tailored_projs:
+        n = len(tailored_projs)
+        word = "entry" if n == 1 else "entries"
+        lines.append(f"  • Tailored {n} project {word}")
+
+    if skills_emph:
+        lines.append(f"  • Emphasized: {', '.join(skills_emph[:5])}")
+
+    if missing:
+        first = list(missing)[:3]
+        lines.append(f"  • Missing from your profile: {', '.join(first)}")
+        lines.append(f'    → Type: add missing skill {first[0]}')
+
+    return "\n".join(lines)
 
 
 def run_ingest_resume(file_path: str) -> str:
@@ -550,6 +590,8 @@ class ChatAgent:
         if n == "analyze": return "analyze_active_job"
         if n in {"tailor", "tailor resume", "run tailoring"}: return "tailor_active_job"
         if n in {"export", "export resume", "save resume"}: return "export_active_job"
+        if re.match(r"(?i)^add\s+(?:missing\s+)?skill\s+", raw): return "add_missing_skill"
+        if re.match(r"(?i)^add\s+.+\s+to\s+(?:my\s+)?(?:profile|skills)$", raw): return "add_to_profile"
         if len(raw) > 100 and self.active_job_id: return "job_description_paste"
         if n in SHORTCUTS: return f"shortcut:{n}"
         return "token_combo_or_evidence"
@@ -733,6 +775,8 @@ class ChatAgent:
                 "  " + (", ".join(list(missing)[:10]) or "(none)"), "",
                 'Type "export" to save the tailored resume to ~/.art/exports/',
             ]
+            tailored_content = state.get("tailored_content", {})
+            lines.append(_summarize_tailoring_changes(user.user_id, tailored_content, missing))
             return "\n".join(lines)
         except Exception as e:
             logger.error("_tailor_active_job failed: %s", e)
@@ -798,6 +842,14 @@ class ChatAgent:
                 session.commit()
 
         return f"PDF exported to: {export_path}"
+
+    def _add_missing_skill(self, skill_name: str, target: Optional[str] = None) -> str:
+        """Add a skill directly to the active user's profile."""
+        from database.user_utils import get_active_profile
+        user = get_active_profile()
+        if not user:
+            return "No active profile. Complete onboarding first."
+        return services.add_skill_to_profile(user.user_id, skill_name, target)
 
     @staticmethod
     def _normalize(text: str) -> str:
@@ -993,6 +1045,15 @@ class ChatAgent:
         m = re.match(r"(?i)^tailor\s+(.+)$", raw)
         if m:
             return run_tailor(m.group(1).strip())
+
+        # "add missing skill X" / "add skill X" / "add X to my profile|skills"
+        m = re.match(r"(?i)^add\s+(?:missing\s+)?skill\s+(.+)$", raw)
+        if m:
+            return self._add_missing_skill(m.group(1).strip())
+
+        m = re.match(r"(?i)^add\s+(.+?)\s+to\s+(?:my\s+)?(?:profile|skills)$", raw)
+        if m:
+            return self._add_missing_skill(m.group(1).strip())
 
         # 1c) Ingestion intent from token combos — takes priority over data queries.
         # Catches freeform phrasing like "i want to ingest skill from my github".
