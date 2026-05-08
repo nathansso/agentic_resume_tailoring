@@ -21,6 +21,98 @@ from agents.skill_postprocessor import should_reject_skill, normalize_skill_name
 
 logger = logging.getLogger(__name__)
 
+_RESUME_CSS = """\
+@page {
+    size: letter;
+    margin: 1in;
+}
+body {
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 11pt;
+    color: #111111;
+    line-height: 1.4;
+}
+h1 {
+    font-size: 18pt;
+    font-weight: bold;
+    border-bottom: 2pt solid #111111;
+    padding-bottom: 4pt;
+    margin-bottom: 6pt;
+}
+h2 {
+    font-size: 12pt;
+    font-weight: bold;
+    border-bottom: 0.5pt solid #666666;
+    padding-bottom: 2pt;
+    margin-top: 12pt;
+    margin-bottom: 4pt;
+}
+p {
+    margin-top: 2pt;
+    margin-bottom: 5pt;
+}
+ul {
+    margin-top: 2pt;
+    margin-bottom: 8pt;
+    padding-left: 16pt;
+}
+li {
+    margin-bottom: 3pt;
+}
+strong {
+    font-weight: bold;
+}
+em {
+    font-style: italic;
+}
+"""
+
+_SECTION_NAMES = frozenset({"Education", "Projects", "Experience", "Skills"})
+
+
+def _promote_section_headings(md_text: str) -> str:
+    """Promote the name line and bare section-header lines to Markdown heading levels.
+
+    format_markdown() outputs flat text (no # markers). This gives the PDF
+    renderer proper <h1>/<h2> anchors without changing the .md output contract.
+    """
+    lines = []
+    first_content_seen = False
+    for line in md_text.split("\n"):
+        stripped = line.strip()
+        if stripped in _SECTION_NAMES:
+            lines.append(f"## {stripped}")
+        elif not first_content_seen and stripped:
+            lines.append(f"# {stripped}")
+            first_content_seen = True
+        else:
+            lines.append(line)
+    return "\n".join(lines)
+
+
+def _md_to_pdf_bytes(md_text: str) -> bytes:
+    """Convert a Markdown string to PDF bytes via HTML + xhtml2pdf."""
+    import io
+    import logging as _logging
+    import markdown as _markdown
+    from xhtml2pdf import pisa
+
+    _logging.getLogger("xhtml2pdf").setLevel(_logging.ERROR)
+
+    enhanced_md = _promote_section_headings(md_text)
+    html_body = _markdown.markdown(enhanced_md, extensions=["tables"])
+    html = (
+        "<!DOCTYPE html><html><head>"
+        "<meta charset='utf-8'/>"
+        f"<style>{_RESUME_CSS}</style>"
+        f"</head><body>{html_body}</body></html>"
+    )
+    pdf_buf = io.BytesIO()
+    status = pisa.CreatePDF(html, dest=pdf_buf)
+    if status.err:
+        raise RuntimeError(f"PDF generation failed (err={status.err})")
+    return pdf_buf.getvalue()
+
 
 def sanitize_text(text: str) -> str:
     """Replace problematic Unicode characters with ASCII-safe equivalents."""
@@ -85,6 +177,11 @@ class ResumeFormatterAgent:
             sections.append(skills)
 
         return sanitize_text("\n".join(sections))
+
+    def format_pdf(self, tailored_content: Dict, job_title: str = "") -> bytes:
+        """Convert tailored_content to a styled PDF and return raw bytes."""
+        md_text = self.format_markdown(tailored_content, job_title)
+        return _md_to_pdf_bytes(md_text)
 
     def _build_header(self) -> str:
         """Build the resume header from user profile."""
