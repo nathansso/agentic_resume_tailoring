@@ -15,6 +15,8 @@ class User(SQLModel, table=True):
     email: str = Field(unique=True)
     linkedin_url: Optional[str] = None
     github_username: Optional[str] = None
+    phone: Optional[str] = None
+    location: Optional[str] = None
     onboarding_complete: bool = Field(default=False)
     onboarding_steps: Dict = Field(default={}, sa_column=Column(JSON))
     resume_path: Optional[str] = None

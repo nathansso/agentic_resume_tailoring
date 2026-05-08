@@ -3,7 +3,7 @@ import asyncio
 import pytest
 from uuid import UUID
 from sqlmodel import Session, select
-from textual.widgets import Input, Static, DataTable, Tree
+from textual.widgets import Button, Input, Static, DataTable, Tree
 from textual.containers import VerticalScroll
 
 import tui.app as tui_module
@@ -298,6 +298,83 @@ def test_profile_screen_loads_profile_data(isolated_engine):
             screen = pilot.app.screen
             name_val = screen.query_one("#profile-name-input").value
             assert name_val == "Test User"
+
+    asyncio.run(_run())
+
+
+def test_profile_screen_has_close_button(isolated_engine):
+    """ProfileScreen has a 'Back' button that dismisses the screen."""
+    from textual.app import App
+    from tui.screens.profile import ProfileScreen
+
+    dismissed = []
+
+    class _App(App):
+        def on_mount(self):
+            self.push_screen(ProfileScreen(), dismissed.append)
+
+    async def _run():
+        async with _App().run_test() as pilot:
+            await pilot.pause()
+            screen = pilot.app.screen
+            close_btn = screen.query_one("#close-profile-btn", Button)
+            assert close_btn is not None
+            close_btn.press()
+            await pilot.pause()
+            assert dismissed, "Screen should have been dismissed via close button"
+
+    asyncio.run(_run())
+
+
+def test_profile_screen_has_contact_fields(isolated_engine):
+    """ProfileScreen exposes Phone, Email, and Location input fields."""
+    from textual.app import App
+    from tui.screens.profile import ProfileScreen
+
+    class _App(App):
+        def on_mount(self):
+            self.push_screen(ProfileScreen())
+
+    async def _run():
+        async with _App().run_test() as pilot:
+            await pilot.pause()
+            screen = pilot.app.screen
+            screen.query_one("#profile-email-input", Input)
+            screen.query_one("#profile-phone-input", Input)
+            screen.query_one("#profile-location-input", Input)
+
+    asyncio.run(_run())
+
+
+def test_profile_screen_update_button_persists_contact_info(isolated_engine):
+    """Clicking Update saves phone, email, and location to the DB."""
+    from textual.app import App
+    from sqlmodel import Session, select
+    from tui.screens.profile import ProfileScreen
+    from database.models import User
+
+    _seed_user_and_skill(isolated_engine)
+
+    class _App(App):
+        def on_mount(self):
+            self.push_screen(ProfileScreen())
+
+    async def _run():
+        async with _App().run_test() as pilot:
+            await pilot.pause()
+            screen = pilot.app.screen
+
+            screen.query_one("#profile-phone-input", Input).value = "555-1234"
+            screen.query_one("#profile-location-input", Input).value = "San Diego, CA"
+
+            screen.query_one("#update-profile-btn", Button).press()
+            for _ in range(10):
+                await pilot.pause(delay=0.05)
+
+        with Session(isolated_engine) as session:
+            user = session.exec(select(User)).first()
+        assert user.phone == "555-1234", f"Expected phone '555-1234', got {user.phone!r}"
+        assert user.location == "San Diego, CA", f"Expected location 'San Diego, CA', got {user.location!r}"
 
     asyncio.run(_run())
 

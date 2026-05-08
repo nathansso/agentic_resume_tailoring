@@ -147,6 +147,40 @@ def test_update_profile_persists_changes(isolated_engine):
     assert updated["linkedin_url"] == "https://linkedin.com/in/test"
 
 
+def test_update_profile_persists_contact_fields(isolated_engine):
+    """update_profile saves phone, email, and location to the User row."""
+    from sqlmodel import select as _sel
+    _seed_user_and_skill(isolated_engine)
+    data = services_module.get_profile_data()
+    assert data is not None
+
+    msg = services_module.update_profile(
+        data["user_id"],
+        name="Test User",
+        github_username="",
+        linkedin_url="",
+        phone="555-9876",
+        email="contact@example.com",
+        location="Austin, TX",
+    )
+    assert "updated" in msg.lower(), f"Unexpected response: {msg!r}"
+
+    updated = services_module.get_profile_data()
+    assert updated["phone"] == "555-9876"
+    assert updated["email"] == "contact@example.com"
+    assert updated["location"] == "Austin, TX"
+
+
+def test_get_profile_data_returns_contact_fields(isolated_engine):
+    """get_profile_data includes email, phone, and location keys."""
+    _seed_user_and_skill(isolated_engine)
+    data = services_module.get_profile_data()
+    assert data is not None
+    assert "email" in data
+    assert "phone" in data
+    assert "location" in data
+
+
 def test_ingest_github_repo_invalid_ref(isolated_engine):
     """services.ingest_github_repo with an invalid ref returns an error string and does not raise."""
     result = services_module.ingest_github_repo("not-a-valid-ref")
