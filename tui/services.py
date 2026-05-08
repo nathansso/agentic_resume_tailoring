@@ -375,6 +375,46 @@ def update_resume_path(user_id: UUID, path: str) -> None:
             session.commit()
 
 
+def add_skill_to_profile(user_id: UUID, skill_name: str, target: Optional[str] = None) -> str:
+    """Add a skill to the user's profile. Returns plain-English result. Never raises."""
+    try:
+        skill_name = skill_name.strip()
+        if not skill_name:
+            return "Please provide a skill name."
+        with Session(engine) as session:
+            skill = session.exec(select(Skill).where(Skill.name == skill_name)).first()
+            if not skill:
+                all_skills = session.exec(select(Skill)).all()
+                skill = next((s for s in all_skills if s.name.lower() == skill_name.lower()), None)
+            if not skill:
+                skill = Skill(name=skill_name)
+                session.add(skill)
+                session.flush()
+            existing = session.exec(
+                select(UserSkill).where(
+                    UserSkill.user_id == user_id,
+                    UserSkill.skill_id == skill.skill_id,
+                )
+            ).first()
+            if existing:
+                return f"'{skill_name}' is already in your profile."
+            evidence = f"manual:{target}" if target else "manual"
+            user_skill = UserSkill(
+                user_id=user_id,
+                skill_id=skill.skill_id,
+                proficiency=3,
+                evidence_source="manual",
+                confidence_score=0.7,
+                evidence_detail=evidence,
+            )
+            session.add(user_skill)
+            session.commit()
+        return f"Added '{skill_name}' to your profile."
+    except Exception as e:
+        logger.error("add_skill_to_profile failed: %s", e)
+        return f"Failed to add skill: {e}"
+
+
 def delete_resume(user_id: UUID) -> None:
     """Clear resume_path on the User row. Does not delete the file or any ingested data."""
     with Session(engine) as session:

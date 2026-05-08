@@ -481,3 +481,153 @@ def test_chat_db_write_failure_does_not_affect_response(isolated_engine, monkeyp
     agent = chat_module.ChatAgent()
     response = agent.chat("hello")
     assert response == "Still working fine."
+
+
+# ── Change summary (Part A) ───────────────────────────────────────────────────
+
+def test_tailoring_response_includes_changes_section(isolated_engine, monkeypatch):
+    """_tailor_active_job appends a 'Changes made:' section to its response."""
+    from sqlmodel import Session
+    from database.models import JobDescription, JobSkill, Skill
+    import graph.pipeline as _pipeline
+    from conftest import _seed_user_and_skill
+
+    user = _seed_user_and_skill(isolated_engine)
+
+    with Session(isolated_engine) as session:
+        job = JobDescription(title="SWE", company="Co", description="Build software")
+        session.add(job)
+        session.flush()
+        skill = Skill(name="Python")
+        session.add(skill)
+        session.flush()
+        session.add(JobSkill(job_id=job.job_id, skill_id=skill.skill_id, required=True, weight=1.0))
+        session.commit()
+        job_id = str(job.job_id)
+
+    def fake_match(state):
+        state["matched_skills"] = {"Python": {"match_type": "direct"}}
+        state["missing_skills"] = ["Kubernetes"]
+        state["ats_score"] = 80.0
+        return state
+
+    def fake_tailor(state):
+        state["tailored_content"] = {
+            "experiences": [{"title": "Dev", "company": "Acme", "bullets": ["Built thing"]}],
+            "projects": [{"name": "Proj", "bullets": ["Did stuff"]}],
+            "skills_emphasized": ["Python", "FastAPI"],
+        }
+        state["result_id"] = ""
+        return state
+
+    def fake_format(state):
+        state["formatted_resume"] = "# Resume"
+        return state
+
+    monkeypatch.setattr(_pipeline, "match_skills_node", fake_match)
+    monkeypatch.setattr(_pipeline, "tailor_resume_node", fake_tailor)
+    monkeypatch.setattr(_pipeline, "format_resume_node", fake_format)
+
+    agent = chat_module.ChatAgent()
+    agent.set_active_job(job_id)
+    response = agent._tailor_active_job("")
+
+    assert "Changes made:" in response
+    assert "Kubernetes" in response
+    assert "add missing skill" in response.lower()
+
+
+def test_changes_section_shows_emphasized_skills(isolated_engine, monkeypatch):
+    """'Changes made:' includes the emphasized skills when tailored_content has them."""
+    from sqlmodel import Session
+    from database.models import JobDescription, JobSkill, Skill
+    import graph.pipeline as _pipeline
+    from conftest import _seed_user_and_skill
+
+    user = _seed_user_and_skill(isolated_engine)
+
+    with Session(isolated_engine) as session:
+        job = JobDescription(title="Eng", company="Inc", description="")
+        session.add(job)
+        session.flush()
+        skill = Skill(name="Go")
+        session.add(skill)
+        session.flush()
+        session.add(JobSkill(job_id=job.job_id, skill_id=skill.skill_id, required=True, weight=1.0))
+        session.commit()
+        job_id = str(job.job_id)
+
+    def fake_match(state):
+        state["matched_skills"] = {"Go": {"match_type": "direct"}}
+        state["missing_skills"] = []
+        state["ats_score"] = 90.0
+        return state
+
+    def fake_tailor(state):
+        state["tailored_content"] = {
+            "experiences": [],
+            "projects": [],
+            "skills_emphasized": ["Go", "Docker", "Kubernetes"],
+        }
+        state["result_id"] = ""
+        return state
+
+    def fake_format(state):
+        state["formatted_resume"] = ""
+        return state
+
+    monkeypatch.setattr(_pipeline, "match_skills_node", fake_match)
+    monkeypatch.setattr(_pipeline, "tailor_resume_node", fake_tailor)
+    monkeypatch.setattr(_pipeline, "format_resume_node", fake_format)
+
+    agent = chat_module.ChatAgent()
+    agent.set_active_job(job_id)
+    response = agent._tailor_active_job("")
+
+    assert "Changes made:" in response
+    assert "Emphasized:" in response or "Emphasized" in response
+
+
+# ── Add missing skill fast-path (Part B) ─────────────────────────────────────
+
+def test_add_missing_skill_fast_path_bypasses_llm(isolated_engine, monkeypatch):
+    """'add missing skill X' is handled without calling the LLM."""
+    class ShouldNotBeCalled:
+        def invoke(self, *_a, **_kw):
+            raise AssertionError("LLM must not be called for add-skill command")
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda *a, **kw: ShouldNotBeCalled())
+    _seed_user_and_skill(isolated_engine)
+
+    agent = chat_module.ChatAgent()
+    response = agent.chat("add missing skill Docker")
+
+    assert "docker" in response.lower() or "added" in response.lower(), (
+        f"Unexpected response: {response!r}"
+    )
+
+
+def test_add_skill_to_profile_fast_path_bypasses_llm(isolated_engine, monkeypatch):
+    """'add X to my profile' is handled without calling the LLM."""
+    class ShouldNotBeCalled:
+        def invoke(self, *_a, **_kw):
+            raise AssertionError("LLM must not be called for add-skill command")
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda *a, **kw: ShouldNotBeCalled())
+    _seed_user_and_skill(isolated_engine)
+
+    agent = chat_module.ChatAgent()
+    response = agent.chat("add FastAPI to my profile")
+
+    assert "fastapi" in response.lower() or "added" in response.lower(), (
+        f"Unexpected response: {response!r}"
+    )
+
+
+def test_add_skill_fast_path_trace_label(isolated_engine):
+    """_infer_fast_path labels add-skill commands correctly."""
+    agent = chat_module.ChatAgent()
+    assert agent._infer_fast_path("add missing skill Docker", set()) == "add_missing_skill"
+    assert agent._infer_fast_path("add skill Rust", set()) == "add_missing_skill"
+    assert agent._infer_fast_path("add FastAPI to my profile", set()) == "add_to_profile"
+    assert agent._infer_fast_path("add Go to my skills", set()) == "add_to_profile"

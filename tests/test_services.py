@@ -298,3 +298,61 @@ def test_load_chat_history_limit(isolated_engine):
     # Should be the 2 most recent (msg 2 and msg 3), in oldest-first order.
     assert history[0]["content"] == "msg 2"
     assert history[1]["content"] == "msg 3"
+
+
+# ── add_skill_to_profile ───────────────────────────────────────────────────────
+
+def test_add_skill_to_profile_creates_skill_and_link(isolated_engine):
+    """add_skill_to_profile creates the Skill row and UserSkill link."""
+    from sqlmodel import select as _sel
+    user = _seed_user_and_skill(isolated_engine)
+
+    result = services_module.add_skill_to_profile(user.user_id, "Docker")
+    assert "added" in result.lower(), f"Unexpected response: {result!r}"
+
+    with Session(isolated_engine) as session:
+        skill = session.exec(_sel(Skill).where(Skill.name == "Docker")).first()
+        assert skill is not None
+        link = session.exec(
+            _sel(UserSkill).where(
+                UserSkill.user_id == user.user_id,
+                UserSkill.skill_id == skill.skill_id,
+            )
+        ).first()
+        assert link is not None
+        assert link.evidence_source == "manual"
+
+
+def test_add_skill_to_profile_duplicate_returns_message(isolated_engine):
+    """Adding the same skill twice returns 'already in your profile'."""
+    user = _seed_user_and_skill(isolated_engine)
+
+    services_module.add_skill_to_profile(user.user_id, "Kubernetes")
+    result = services_module.add_skill_to_profile(user.user_id, "Kubernetes")
+    assert "already" in result.lower(), f"Expected 'already' message, got: {result!r}"
+
+
+def test_add_skill_to_profile_case_insensitive_match(isolated_engine):
+    """A skill with the same name (different case) reuses the existing Skill row."""
+    from sqlmodel import select as _sel
+    user = _seed_user_and_skill(isolated_engine)
+
+    # Pre-create skill with lowercase name
+    with Session(isolated_engine) as session:
+        skill = Skill(name="fastapi")
+        session.add(skill)
+        session.commit()
+
+    result = services_module.add_skill_to_profile(user.user_id, "FastAPI")
+    assert "added" in result.lower()
+
+    with Session(isolated_engine) as session:
+        skills = session.exec(_sel(Skill).where(Skill.name == "fastapi")).all()
+        assert len(skills) == 1, "Should reuse existing Skill row"
+
+
+def test_add_skill_to_profile_empty_name_returns_error(isolated_engine):
+    """An empty skill name returns a helpful error without raising."""
+    user = _seed_user_and_skill(isolated_engine)
+    result = services_module.add_skill_to_profile(user.user_id, "")
+    assert "provide" in result.lower() or "name" in result.lower()
