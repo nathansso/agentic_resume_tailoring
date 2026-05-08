@@ -631,3 +631,54 @@ def test_add_skill_fast_path_trace_label(isolated_engine):
     assert agent._infer_fast_path("add skill Rust", set()) == "add_missing_skill"
     assert agent._infer_fast_path("add FastAPI to my profile", set()) == "add_to_profile"
     assert agent._infer_fast_path("add Go to my skills", set()) == "add_to_profile"
+
+
+# ── Fix 4: Job analysis must not create UserSkill rows ────────────────────────
+
+def test_analyze_job_does_not_create_user_skill_rows(isolated_engine, monkeypatch):
+    """_analyze_active_job writes JobSkill rows but never UserSkill rows."""
+    from sqlmodel import Session, select
+    from database.models import JobDescription, JobSkill, UserSkill
+    import agents.job_analyzer as ja_module
+
+    user = _seed_user_and_skill(isolated_engine)
+
+    with Session(isolated_engine) as session:
+        job = JobDescription(title="Data Eng", company="BigCo",
+                             description="Uses Kubernetes, Spark, and Flink")
+        session.add(job)
+        session.commit()
+        job_id = str(job.job_id)
+
+    # Count UserSkill rows before analysis
+    with Session(isolated_engine) as session:
+        before = len(session.exec(
+            select(UserSkill).where(UserSkill.user_id == user.user_id)
+        ).all())
+
+    class _FakeAnalyzer:
+        def _extract_skills(self, text):
+            return [
+                {"name": "Kubernetes", "category": "Tool", "required": True, "weight": 0.9},
+                {"name": "Apache Spark", "category": "Data", "required": True, "weight": 0.8},
+                {"name": "Flink", "category": "Data", "required": False, "weight": 0.5},
+            ]
+
+    monkeypatch.setattr(ja_module, "JobAnalyzerAgent", _FakeAnalyzer)
+
+    agent = chat_module.ChatAgent()
+    agent.set_active_job(job_id)
+    agent._analyze_active_job("")
+
+    with Session(isolated_engine) as session:
+        after = len(session.exec(
+            select(UserSkill).where(UserSkill.user_id == user.user_id)
+        ).all())
+        job_skills = session.exec(
+            select(JobSkill).where(JobSkill.job_id == job.job_id)
+        ).all()
+
+    assert after == before, (
+        f"Job analysis must not create UserSkill rows. Before: {before}, After: {after}"
+    )
+    assert len(job_skills) == 3, f"Expected 3 JobSkill rows, got {len(job_skills)}"

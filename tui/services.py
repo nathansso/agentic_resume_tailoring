@@ -245,6 +245,17 @@ def ingest_github_for_profile(user_id: Optional[UUID], username: str) -> str:
     return ingest_github(username)
 
 
+def _format_skill_source(evidence_source: str) -> str:
+    """Convert a raw evidence_source value to a human-readable display label."""
+    src = (evidence_source or "").strip()
+    if src.startswith("github:"):
+        ref = src[len("github:"):]   # "username" or "owner/repo"
+        return f"GitHub: {ref.split('/')[-1]}"
+    if src.startswith("manual"):
+        return "manual"
+    return "resume"  # any file path, "resume" literal, or unknown → resume
+
+
 def get_skills(user_id: Optional[UUID]) -> list[dict]:
     if user_id is None:
         return []
@@ -252,18 +263,43 @@ def get_skills(user_id: Optional[UUID]) -> list[dict]:
         user_skills = session.exec(
             select(UserSkill).where(UserSkill.user_id == user_id)
         ).all()
-        rows = []
+
+        # Deduplicate by normalized skill name; merge sources and keep highest confidence.
+        merged: dict[str, dict] = {}
         for us in user_skills:
             skill = session.get(Skill, us.skill_id)
-            if skill:
-                source = (us.evidence_source or "unknown").split(":")[0]
-                rows.append({
+            if not skill:
+                continue
+            key = skill.name.lower().strip()
+            source = _format_skill_source(us.evidence_source or "")
+            confidence = us.confidence_score or 0.0
+
+            if key not in merged:
+                merged[key] = {
                     "name": skill.name,
                     "category": skill.category or "Uncategorized",
-                    "source": source,
-                    "proficiency": str(us.proficiency or "N/A"),
-                    "confidence": f"{us.confidence_score:.1f}",
-                })
+                    "proficiency": us.proficiency,
+                    "confidence": confidence,
+                    "sources": {source} if source else set(),
+                }
+            else:
+                if confidence > merged[key]["confidence"]:
+                    merged[key]["confidence"] = confidence
+                    if us.proficiency is not None:
+                        merged[key]["proficiency"] = us.proficiency
+                if source:
+                    merged[key]["sources"].add(source)
+
+        rows = []
+        for entry in merged.values():
+            prof = entry["proficiency"]
+            rows.append({
+                "name": entry["name"],
+                "category": entry["category"],
+                "source": ", ".join(sorted(entry["sources"])) if entry["sources"] else "",
+                "proficiency": str(prof) if prof is not None else "N/A",
+                "confidence": f"{entry['confidence']:.1f}",
+            })
         return rows
 
 
@@ -515,13 +551,14 @@ def ingest_resume_file(file_path: str) -> str:
         with _suppress_output():
             if file_path.endswith(".md"):
                 ingestion_data = {
-                    "source_file": file_path,
+                    "source_file": "resume",  # normalized: prevents multi-resume duplicate rows
                     "full_text": path.read_text(encoding="utf-8"),
                     "parsed_sections": {},
                 }
             else:
                 from ingestion.resume import ResumeIngestor
                 ingestion_data = ResumeIngestor().ingest(file_path)
+                ingestion_data["source_file"] = "resume"  # normalize regardless of ingestor value
             from agents.parser import ResumeParserAgent
             ResumeParserAgent().parse_and_save(ingestion_data)
         if user:
