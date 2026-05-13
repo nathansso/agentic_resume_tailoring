@@ -39,6 +39,9 @@ def _migrate_db() -> None:
         "ALTER TABLE userjobresult ADD COLUMN export_path TEXT",
         # PRD 07
         "ALTER TABLE user ADD COLUMN resume_path TEXT",
+        # contact info fields
+        "ALTER TABLE user ADD COLUMN phone TEXT",
+        "ALTER TABLE user ADD COLUMN location TEXT",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
