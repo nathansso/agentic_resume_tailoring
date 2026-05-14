@@ -32,7 +32,7 @@ playwright install chromium
 ## 3. Initialize the database
 
 ```bash
-python init_project_db.py
+python scripts/init_project_db.py
 ```
 
 ---
