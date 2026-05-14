@@ -470,6 +470,44 @@ def test_delete_button_removes_job_immediately(isolated_engine):
     asyncio.run(_run())
 
 
+def test_delete_button_click_triggers_delete(isolated_engine):
+    """Button.Pressed from the × button routes through on_button_pressed and deletes the job."""
+    async def _run():
+        # Seed a user so the OnboardingScreen is not pushed over the main UI.
+        _seed_user_and_skill(isolated_engine)
+
+        app = tui_module.ArtApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            with Session(isolated_engine) as session:
+                job = JobDescription(title="ClickDelete", company="Corp", description="")
+                session.add(job)
+                session.commit()
+                job_id = str(job.job_id)
+
+            app._load_jobs_sidebar()
+            await pilot.pause()
+
+            # Find the delete button ID for this job.
+            del_btn_id = None
+            for item_id, jid in app._job_item_to_uuid.items():
+                if jid == job_id:
+                    del_btn_id = f"del-{item_id}"
+                    break
+            assert del_btn_id is not None, "Delete button not found in sidebar"
+
+            await pilot.click(f"#{del_btn_id}")
+            await pilot.pause()
+
+            with Session(isolated_engine) as session:
+                gone = session.get(JobDescription, UUID(job_id))
+            assert gone is None, "Job should be deleted after clicking × button"
+            assert not any(v == job_id for v in app._job_item_to_uuid.values()), \
+                "Job should be removed from sidebar map after button click"
+
+    asyncio.run(_run())
+
+
 def test_chat_input_is_textarea(isolated_engine):
     """#chat-input is a _ChatInput (TextArea subclass), not a single-line Input."""
     from textual.widgets import TextArea

@@ -647,7 +647,12 @@ class ArtApp(App):
 
     def _delete_job(self, job_uuid: str) -> None:
         """Delete the job immediately and reload the sidebar."""
-        services.delete_job(job_uuid)
+        result = services.delete_job(job_uuid)
+        if result.startswith("Failed"):
+            scroll = self.query_one("#chat-scroll", VerticalScroll)
+            scroll.mount(Static(result, classes="system-msg"))
+            scroll.scroll_end()
+            return
         self._job_chat_cache.pop(job_uuid, None)
         for k in [k for k, v in self._job_item_to_uuid.items() if v == job_uuid]:
             del self._job_item_to_uuid[k]

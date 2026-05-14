@@ -17,7 +17,7 @@ from sqlmodel import Session, delete, select
 
 from database.db import engine
 from database.models import (
-    ChatMessage, Experience, JobDescription, Project,
+    ChatMessage, Experience, JobDescription, JobSkill, Project,
     Skill, User, UserJobResult, UserSkill,
 )
 
@@ -482,16 +482,15 @@ def delete_resume(user_id: UUID) -> None:
 
 
 def delete_job(job_uuid: str) -> str:
-    """Delete a JobDescription and all its UserJobResult rows.
+    """Delete a JobDescription and all dependent rows (UserJobResult, JobSkill, ChatMessage).
     Returns plain-English result. Never raises."""
     try:
         from uuid import UUID as _UUID
         jid = _UUID(job_uuid)
         with Session(engine) as session:
-            for row in session.exec(
-                select(UserJobResult).where(UserJobResult.job_id == jid)
-            ).all():
-                session.delete(row)
+            session.exec(delete(UserJobResult).where(UserJobResult.job_id == jid))
+            session.exec(delete(JobSkill).where(JobSkill.job_id == jid))
+            session.exec(delete(ChatMessage).where(ChatMessage.job_id == jid))
             session.commit()
             job = session.get(JobDescription, jid)
             if job:
