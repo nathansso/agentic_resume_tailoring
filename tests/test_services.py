@@ -218,6 +218,40 @@ def test_delete_job_removes_job_and_results(isolated_engine):
         assert len(leftovers) == 0
 
 
+def test_delete_job_cleans_up_related_rows(isolated_engine):
+    """delete_job removes JobSkill and ChatMessage rows so the parent delete never fails."""
+    from sqlmodel import Session as S, select as sel
+    from database.models import (
+        ChatMessage, JobDescription, JobSkill, Skill, UserJobResult,
+    )
+    from conftest import _seed_user_and_skill
+
+    user = _seed_user_and_skill(isolated_engine)
+
+    with S(isolated_engine) as session:
+        skill = Skill(name="Go", category="language")
+        session.add(skill)
+        job = JobDescription(title="Go Role", company="Acme", description="")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        session.refresh(skill)
+        jid = job.job_id
+        session.add(JobSkill(job_id=jid, skill_id=skill.skill_id))
+        session.add(ChatMessage(job_id=jid, role="user", content="hello"))
+        session.add(UserJobResult(user_id=user.user_id, job_id=jid, ats_score=70.0))
+        session.commit()
+
+    msg = services_module.delete_job(str(jid))
+    assert "deleted" in msg.lower(), f"Expected deleted, got: {msg}"
+
+    with S(isolated_engine) as session:
+        assert session.get(JobDescription, jid) is None
+        assert session.exec(sel(JobSkill).where(JobSkill.job_id == jid)).first() is None
+        assert session.exec(sel(ChatMessage).where(ChatMessage.job_id == jid)).first() is None
+        assert session.exec(sel(UserJobResult).where(UserJobResult.job_id == jid)).first() is None
+
+
 def test_github_token_round_trip(tmp_path, monkeypatch):
     """get_github_token / save_github_token round-trip via a temp .env file."""
     env_file = tmp_path / ".env"
