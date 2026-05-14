@@ -52,6 +52,7 @@ Keep these roles separate:
 - Do not retroactively edit PRD task checklists. Update only the `## Progress` section while work is in flight.
 - When a PRD is complete, add a new top entry to `CHANGELOG.md` immediately.
 - Keep one logical unit of work per commit.
+- For issue resolution, follow the workflow in `ISSUE_WORKFLOW.md`.
 
 **Commit format:** `type(scope): short description`
 
