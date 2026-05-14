@@ -17,7 +17,26 @@
       "Bash(git commit *)",
       "Bash(git push *)",
       "Bash(.venv/Scripts/python.exe cli.py chat-eval --help)",
-      "Bash(EVAL_MODEL=claude-opus-4-7 .venv/Scripts/python.exe cli.py chat-eval --stubbed --judge)"
+      "Bash(EVAL_MODEL=claude-opus-4-7 .venv/Scripts/python.exe cli.py chat-eval --stubbed --judge)",
+      "Bash(.venv\\\\Scripts\\\\python.exe *)",
+      "PowerShell(& \".venv\\\\Scripts\\\\python.exe\" -c \"import textual; print\\(textual.__version__\\)\")",
+      "PowerShell(& \".venv\\\\Scripts\\\\python.exe\" -c \"import textual.widgets._text_area as ta; import inspect; print\\([m for m in dir\\(ta.TextArea\\) if 'key' in m.lower\\(\\)]\\)\")",
+      "PowerShell(& \".venv\\\\Scripts\\\\python.exe\" -c \"import textual.widgets._text_area as ta; print\\([m for m in dir\\(ta.TextArea\\) if not m.startswith\\('__'\\)][:40]\\)\")",
+      "PowerShell(& \".venv\\\\Scripts\\\\python.exe\" -c \"import textual.widgets._text_area as ta; print\\([m for m in dir\\(ta.TextArea\\) if 'clear' in m.lower\\(\\) or 'load' in m.lower\\(\\) or 'text' in m.lower\\(\\)]\\)\")",
+      "PowerShell(& \".venv\\\\Scripts\\\\python.exe\" -c \"import weasyprint; print\\('weasyprint ok'\\)\" 2>&1; & \".venv\\\\Scripts\\\\python.exe\" -c \"import markdown; print\\('markdown ok'\\)\" 2>&1; & \".venv\\\\Scripts\\\\python.exe\" -c \"import xhtml2pdf; print\\('xhtml2pdf ok'\\)\" 2>&1)",
+      "PowerShell(& \".venv\\\\Scripts\\\\pip.exe\" install weasyprint markdown 2>&1 | Select-Object -Last 15)",
+      "PowerShell(& \".venv\\\\Scripts\\\\python.exe\" -c \"import weasyprint, markdown; print\\('both ok'\\)\")",
+      "PowerShell(& \".venv\\\\Scripts\\\\python.exe\" -c \"import reportlab; print\\('reportlab', reportlab.__version__\\)\" 2>&1; & \".venv\\\\Scripts\\\\python.exe\" -c \"import xhtml2pdf; print\\('xhtml2pdf ok'\\)\" 2>&1; & \".venv\\\\Scripts\\\\python.exe\" -c \"from fpdf import FPDF; print\\('fpdf2 ok'\\)\" 2>&1)",
+      "PowerShell(& \".venv\\\\Scripts\\\\pip.exe\" install xhtml2pdf 2>&1 | Select-Object -Last 10)",
+      "PowerShell(& \".venv\\\\Scripts\\\\python.exe\" -c \"import xhtml2pdf; print\\('xhtml2pdf ok'\\); import markdown; print\\('markdown ok'\\)\")",
+      "Bash(gh issue *)",
+      "Bash(gh project *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\noliv\\\\Desktop\\\\coding_projects\\\\agentic_resume_tailoring\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\noliv\\\\Desktop\\\\coding_projects\\\\agentic_resume_tailoring\" -Force)",
+      "Bash(Select-Object Name)",
+      "PowerShell(.venv\\\\Scripts\\\\Activate.ps1; python run_tests.py 2>&1)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\noliv\\\\Desktop\\\\coding_projects\\\\agentic_resume_tailoring\" -Force | Select-Object -Property Name, @{Name=\"Type\";Expression={if \\($_.PSIsContainer\\) {\"Folder\"} else {\"File\"}}} | Format-Table -AutoSize)"
     ]
   }
 }
