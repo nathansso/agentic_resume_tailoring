@@ -1,0 +1,1 @@
+Run `gh project list` to show all GitHub projects, then run `gh project item-list` on the first project found (or the one matching "to-do" or "todo" if visible in the list) and display the items in a readable format grouped by status.
