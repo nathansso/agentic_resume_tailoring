@@ -542,6 +542,26 @@ def test_chat_agent_exception_shows_system_msg(isolated_engine):
     asyncio.run(_run())
 
 
+def test_on_mount_restores_landing_history(isolated_engine):
+    """on_mount loads DB landing-context messages into the scroll and cache."""
+    import tui.services as services_module
+    services_module.save_chat_message(None, "user", "Hello before restart")
+    services_module.save_chat_message(None, "assistant", "Hi! Welcome back.")
+
+    async def _run():
+        app = tui_module.ArtApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            scroll = app.query_one("#chat-scroll", VerticalScroll)
+            texts = [str(w._Static__content) for w in scroll.query(Static)]
+            assert any("Hello before restart" in t for t in texts), "User message not restored"
+            assert any("Hi! Welcome back." in t for t in texts), "Bot message not restored"
+            # Cache should have: welcome msg + 2 DB messages = 3 entries
+            assert len(app._job_chat_cache["landing"]) == 3
+
+    asyncio.run(_run())
+
+
 def test_post_system_msg_renders_with_system_msg_class(isolated_engine):
     """_post_system_msg mounts a Static with class 'system-msg' in the chat scroll."""
     async def _run():

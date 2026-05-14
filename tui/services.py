@@ -13,7 +13,7 @@ from uuid import UUID
 
 _ENV_PATH = Path(__file__).parent.parent / ".env"
 
-from sqlmodel import Session, select
+from sqlmodel import Session, delete, select
 
 from database.db import engine
 from database.models import (
@@ -504,6 +504,9 @@ def delete_job(job_uuid: str) -> str:
 
 # ── Chat history (persisted per job) ────────────────────────
 
+_MAX_CHAT_MESSAGES_PER_JOB = 100
+
+
 def save_chat_message(job_id: Optional[str], role: str, content: str) -> None:
     """Persist one message to the ChatMessage table. Never raises."""
     try:
@@ -511,8 +514,26 @@ def save_chat_message(job_id: Optional[str], role: str, content: str) -> None:
         with Session(engine) as session:
             session.add(ChatMessage(job_id=jid, role=role, content=content))
             session.commit()
+        _prune_chat_messages(jid)
     except Exception as e:
         logger.warning("save_chat_message failed: %s", e)
+
+
+def _prune_chat_messages(jid: Optional[UUID], keep: int = _MAX_CHAT_MESSAGES_PER_JOB) -> None:
+    """Delete oldest messages beyond `keep` for the given job_id. Never raises."""
+    try:
+        with Session(engine) as session:
+            ids = session.exec(
+                select(ChatMessage.message_id)
+                .where(ChatMessage.job_id == jid)
+                .order_by(ChatMessage.created_at.desc())
+            ).all()
+            if len(ids) > keep:
+                to_delete = list(ids[keep:])
+                session.exec(delete(ChatMessage).where(ChatMessage.message_id.in_(to_delete)))
+                session.commit()
+    except Exception:
+        pass
 
 
 def load_chat_history(job_id: Optional[str], limit: int = 20) -> list[dict]:

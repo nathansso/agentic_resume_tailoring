@@ -22,6 +22,9 @@ from database.models import (
 
 logger = logging.getLogger(__name__)
 
+_COMPRESS_AT = 30    # trigger summarization when history reaches this length
+_COMPRESS_KEEP = 8   # messages to retain after compression
+
 
 class ChatTurnTrace(TypedDict):
     """Structured record for one agent turn — used by the eval harness and opt-in logging."""
@@ -526,6 +529,7 @@ class ChatAgent:
         self.last_trace: Optional[ChatTurnTrace] = None
         self.active_job_id: Optional[str] = None
         self._job_histories: dict[str | None, list] = {}
+        self._job_summaries: dict[str | None, Optional[str]] = {}
         self._active_job_id: str | None = None
         self._tool_map: Dict = {
             **TOOL_MAP,
@@ -595,6 +599,29 @@ class ChatAgent:
         if len(raw) > 100 and self.active_job_id: return "job_description_paste"
         if n in SHORTCUTS: return f"shortcut:{n}"
         return "token_combo_or_evidence"
+
+    # ── History compression ─────────────────────────────────────────────────
+
+    def _maybe_compress_history(self) -> None:
+        """Summarize the oldest messages when history exceeds _COMPRESS_AT, then trim."""
+        if len(self.history) < _COMPRESS_AT:
+            return
+        to_summarize = self.history[:-_COMPRESS_KEEP]
+        try:
+            formatted = "\n".join(
+                f"{m['role'].capitalize()}: {m['content'][:300]}"
+                for m in to_summarize
+            )
+            prompt = [{"role": "user", "content":
+                f"Summarize this conversation in 3-5 sentences. Focus on skills discussed, "
+                f"jobs analyzed, decisions made, and any user preferences:\n\n{formatted}"}]
+            resp = get_llm(role="chat", temperature=0.0).invoke(prompt)
+            summary = resp.content if hasattr(resp, "content") else str(resp)
+            self._job_summaries[self._active_job_id] = summary
+            self.history = self.history[-_COMPRESS_KEEP:]
+            logger.debug("[chat] history compressed to %d msgs", _COMPRESS_KEEP)
+        except Exception as e:
+            logger.warning("History compression failed: %s", e)
 
     # ── Active job lifecycle ────────────────────────────────────────────────
 
@@ -1162,6 +1189,7 @@ class ChatAgent:
                 duration_ms=ms,
             )
             self._turn_index += 1
+            self._maybe_compress_history()
             return routed
 
         self.history.append({"role": "user", "content": user_message})
@@ -1194,6 +1222,10 @@ class ChatAgent:
             active_job_ats=_active_job_ats,
         )
         messages = [{"role": "system", "content": system_prompt}]
+        _summary = self._job_summaries.get(self._active_job_id)
+        if _summary:
+            messages.append({"role": "user", "content": f"[Earlier conversation summary: {_summary}]"})
+            messages.append({"role": "assistant", "content": "Understood, I have context from our earlier exchange."})
         # Keep a smaller window for lower latency while preserving context.
         messages.extend(self.history[-12:])
 
@@ -1242,6 +1274,7 @@ class ChatAgent:
                 duration_ms=ms,
             )
             self._turn_index += 1
+            self._maybe_compress_history()
             return rendered
         else:
             # CLARIFY, RESPONSE, or RAW (malformed) — strip envelope prefix and return.
@@ -1261,6 +1294,7 @@ class ChatAgent:
                 duration_ms=ms,
             )
             self._turn_index += 1
+            self._maybe_compress_history()
             return clean_content
 
     def _resolve_tool_calls(self, text: str) -> tuple:

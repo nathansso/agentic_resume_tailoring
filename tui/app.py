@@ -299,6 +299,15 @@ class ArtApp(App):
         ensure_app_dirs()
         init_db()
         self._job_chat_cache["landing"] = [("bot-msg", _WELCOME_MSG)]
+        db_landing = services.load_chat_history(None)
+        if db_landing:
+            scroll = self.query_one("#chat-scroll", VerticalScroll)
+            for msg in db_landing:
+                css = "user-msg" if msg["role"] == "user" else "bot-msg"
+                text = f"You: {msg['content']}" if msg["role"] == "user" else msg["content"]
+                scroll.mount(Static(text, classes=css))
+                self._job_chat_cache["landing"].append((css, text))
+            scroll.scroll_end()
 
         from config_validator import validate_config
         config_errors = validate_config()
