@@ -483,6 +483,48 @@ def test_chat_db_write_failure_does_not_affect_response(isolated_engine, monkeyp
     assert response == "Still working fine."
 
 
+def test_compression_triggers_and_trims_history(isolated_engine, monkeypatch):
+    """_maybe_compress_history summarizes and trims when history reaches _COMPRESS_AT."""
+    class FakeLLM:
+        def invoke(self, *_a, **_kw):
+            class R:
+                content = "Summary: user asked about Python and React skills."
+            return R()
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda *a, **kw: FakeLLM())
+
+    agent = chat_module.ChatAgent()
+    agent.history = [{"role": "user", "content": f"msg {i}"} for i in range(chat_module._COMPRESS_AT)]
+
+    agent._maybe_compress_history()
+
+    assert len(agent.history) == chat_module._COMPRESS_KEEP
+    assert agent._job_summaries[None] == "Summary: user asked about Python and React skills."
+
+
+def test_summary_injected_into_llm_messages(isolated_engine, monkeypatch):
+    """When a summary exists, it is prepended to the LLM message list."""
+    captured = []
+
+    class CaptureLLM:
+        def invoke(self, messages, *_a, **_kw):
+            captured.extend(messages)
+            class R:
+                content = "RESPONSE: Got it."
+            return R()
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda *a, **kw: CaptureLLM())
+
+    agent = chat_module.ChatAgent()
+    agent._job_summaries[None] = "Earlier: user discussed Go and Kubernetes."
+
+    agent.chat("what skills do I have?")
+
+    contents = [m["content"] for m in captured]
+    assert any("Earlier: user discussed Go and Kubernetes." in c for c in contents), \
+        "Summary not found in LLM messages"
+
+
 # ── Change summary (Part A) ───────────────────────────────────────────────────
 
 def test_tailoring_response_includes_changes_section(isolated_engine, monkeypatch):

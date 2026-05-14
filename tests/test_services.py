@@ -334,6 +334,29 @@ def test_load_chat_history_limit(isolated_engine):
     assert history[1]["content"] == "msg 3"
 
 
+def test_prune_chat_messages_caps_at_limit(isolated_engine):
+    """Saving more than _MAX_CHAT_MESSAGES_PER_JOB messages prunes oldest entries."""
+    from sqlmodel import Session as S
+    from database.models import JobDescription
+
+    with S(isolated_engine) as session:
+        job = JobDescription(title="Prune Test", company="Co", description="")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = str(job.job_id)
+
+    limit = services_module._MAX_CHAT_MESSAGES_PER_JOB
+    for i in range(limit + 5):
+        services_module.save_chat_message(job_id, "user", f"msg {i}")
+
+    history = services_module.load_chat_history(job_id, limit=limit + 10)
+    assert len(history) == limit, f"Expected {limit} messages, got {len(history)}"
+    # Oldest 5 are pruned (one per save once over the limit), newest 100 retained.
+    assert history[-1]["content"] == f"msg {limit + 4}"
+    assert history[0]["content"] == "msg 5"
+
+
 # ── add_skill_to_profile ───────────────────────────────────────────────────────
 
 def test_add_skill_to_profile_creates_skill_and_link(isolated_engine):
