@@ -4,6 +4,24 @@ All completed PRD deliveries are recorded here. PRDs remain as pure forward-look
 
 ---
 
+## PRD 10 — Persistent Per-Job Chat Memory
+**Status:** complete | **Tests:** 108 pass (6 new)
+
+Every chat message is now written to SQLite on each turn. On app restart, selecting a job replays prior messages in the scroll and restores `ChatAgent.history` so the AI retains full context.
+
+### What shipped
+- `database/models.py` — `ChatMessage` table (`message_id`, `job_id`, `role`, `content`, `created_at`); auto-created by `SQLModel.metadata.create_all` on next startup; no manual migration needed
+- `tui/services.py` — `save_chat_message(job_id, role, content)` and `load_chat_history(job_id, limit=20)`; both non-raising with try/except; `job_id=None` represents landing context
+- `agents/chat.py` — `chat()` lazily imports `tui.services` and calls `save_chat_message` after every append to `self.history` (fast-path, tool-call, and clarify/response paths); `set_active_job()` loads DB history on cold start and sets `self.history` if non-empty
+- `tui/app.py` — `_show_job_details()` calls `services.load_chat_history()` on first visit and reconstructs the scroll before the job detail card; populates `_job_chat_cache` from DB result
+- `tests/test_services.py` — 3 new tests: round-trip for job, landing context (`job_id=None`), limit behavior
+- `tests/test_chat.py` — 3 new tests: persistence of user + assistant rows, history restore via `set_active_job`, DB write failure does not affect response
+
+### Deviations from spec
+- None
+
+---
+
 ## PRD 05 — Desktop Productization, Cloud Models, And Data Security
 **Status:** complete | **Tests:** 64 pass
 

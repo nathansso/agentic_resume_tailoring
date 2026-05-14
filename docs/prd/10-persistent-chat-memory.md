@@ -185,20 +185,24 @@ messages before the job detail card.
 
 ## Satisfaction criteria
 
-- [ ] Sending a message to a job writes a `ChatMessage` row to SQLite.
-- [ ] Both user and assistant turns are persisted.
-- [ ] After app restart, selecting a job with prior history shows those messages
+- [x] Sending a message to a job writes a `ChatMessage` row to SQLite.
+- [x] Both user and assistant turns are persisted.
+- [x] After app restart, selecting a job with prior history shows those messages
       in the scroll in the correct order.
-- [ ] `ChatAgent.history` is populated from DB when a job is selected after a
+- [x] `ChatAgent.history` is populated from DB when a job is selected after a
       restart — the AI does not lose context.
-- [ ] `job_id = None` (landing context) messages are stored and retrievable.
-- [ ] A DB write failure in `save_chat_message` does not affect the chat
+- [x] `job_id = None` (landing context) messages are stored and retrievable.
+- [x] A DB write failure in `save_chat_message` does not affect the chat
       response or raise any exception visible to the user.
-- [ ] Existing local databases (no `chatmessage` table) auto-migrate on the
+- [x] Existing local databases (no `chatmessage` table) auto-migrate on the
       next `init_db()` call without error.
-- [ ] `python run_tests.py` passes in full.
-- [ ] At least three new tests using `isolated_engine`:
+- [x] `python run_tests.py` passes in full.
+- [x] At least three new tests using `isolated_engine`:
       - `save_chat_message` + `load_chat_history` round-trip for a job.
       - `load_chat_history` with `job_id=None` returns landing messages.
       - `load_chat_history` with `limit=2` returns only the 2 most recent
         messages, oldest-first.
+
+## Progress
+
+Complete. All tasks shipped and all satisfaction criteria verified. 108 tests pass.
