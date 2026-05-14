@@ -36,7 +36,11 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\noliv\\\\Desktop\\\\coding_projects\\\\agentic_resume_tailoring\" -Force)",
       "Bash(Select-Object Name)",
       "PowerShell(.venv\\\\Scripts\\\\Activate.ps1; python run_tests.py 2>&1)",
-      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\noliv\\\\Desktop\\\\coding_projects\\\\agentic_resume_tailoring\" -Force | Select-Object -Property Name, @{Name=\"Type\";Expression={if \\($_.PSIsContainer\\) {\"Folder\"} else {\"File\"}}} | Format-Table -AutoSize)"
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\noliv\\\\Desktop\\\\coding_projects\\\\agentic_resume_tailoring\" -Force | Select-Object -Property Name, @{Name=\"Type\";Expression={if \\($_.PSIsContainer\\) {\"Folder\"} else {\"File\"}}} | Format-Table -AutoSize)",
+      "Bash(New-Item -ItemType Directory -Force .claude\\\\commands)",
+      "Bash(Out-Null)",
+      "Bash(Write-Host \"done\")",
+      "Bash(gh api *)"
     ]
   }
 }
