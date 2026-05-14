@@ -66,13 +66,25 @@ Present the plan in full to the user. Do not proceed to implementation until the
 
 ## Phase 6 — Post Update to Issue
 
-After committing, post a comment on the GitHub issue using `gh issue comment <number> --body "..."` that includes:
+After committing, update the issue body using `gh issue edit <number> --body "..."` to reflect the current state of the work. The body must include:
 
-- What was implemented and which files changed.
+- **Completed** section — what was implemented and which files changed.
+- **Future Improvements** section — known limitations, follow-up items, or out-of-scope findings surfaced during implementation.
+
+Then post a comment using `gh issue comment <number> --body "..."` that includes:
+
 - Which tests were added and confirmation that the suite passes.
-- Any known limitations, follow-up items, or out-of-scope findings.
+- A pointer to the commit(s) that implemented the work.
 
 **Do not close or resolve the issue.** Leave that action for the user after they review the implementation.
+
+---
+
+## On Completing a Task (Done → project board update)
+
+When work on an issue is finished and the project board item is moved to Done, update the issue body (as above) before changing the status. This ensures the issue is a living record — not just a spec — and future readers can see what was done and what remains without digging through commits.
+
+If an issue is moved *back* from Done to Ready/Todo (e.g., because follow-up work was identified), update the body to clearly separate **Completed** (what shipped) from **Future Improvements** (what still needs doing), so the scope of the remaining work is explicit.
 
 ---
 
