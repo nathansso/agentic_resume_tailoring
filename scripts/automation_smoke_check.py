@@ -12,7 +12,8 @@ from database.db import engine
 from database.models import JobDescription
 from tui.app import ArtApp
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 PYTHON = sys.executable
 
 

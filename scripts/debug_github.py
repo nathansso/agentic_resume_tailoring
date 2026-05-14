@@ -1,4 +1,8 @@
 """Quick debug script to check what the GitHub ingestor fetches."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from ingestion.github import GitHubIngestor
 
 ingestor = GitHubIngestor("nathansso")
