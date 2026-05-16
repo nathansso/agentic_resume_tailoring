@@ -504,6 +504,34 @@ def test_set_active_job_does_not_overwrite_in_session_summary(isolated_engine):
     assert agent._job_summaries[job_id] == "Fresher in-session summary."
 
 
+def test_build_context_window_respects_budget():
+    """_build_context_window never exceeds budget_tokens and returns oldest-first."""
+    agent = chat_module.ChatAgent()
+    # Each message content is 400 chars → ~100 tokens
+    agent.history = [{"role": "user", "content": "x" * 400, "idx": i} for i in range(20)]
+    # Budget of 350 tokens fits at most 3 messages (3 * 100 = 300 ≤ 350 < 4 * 100 = 400)
+    window = agent._build_context_window(budget_tokens=350)
+    total_tokens = sum(len(m["content"]) // 4 for m in window)
+    assert total_tokens <= 350
+    assert len(window) == 3
+    # Oldest-first: last 3 messages in history order
+    assert window == agent.history[-3:]
+
+
+def test_build_context_window_returns_all_when_under_budget():
+    """_build_context_window returns the full history when it fits within the budget."""
+    agent = chat_module.ChatAgent()
+    agent.history = [{"role": "user", "content": "short"} for _ in range(5)]
+    window = agent._build_context_window(budget_tokens=6000)
+    assert window == agent.history
+
+
+def test_build_context_window_empty_history():
+    """_build_context_window returns [] for an empty history."""
+    agent = chat_module.ChatAgent()
+    assert agent._build_context_window() == []
+
+
 def test_chat_db_write_failure_does_not_affect_response(isolated_engine, monkeypatch):
     """A DB failure in save_chat_message never surfaces as a chat error or exception."""
     monkeypatch.setattr(services_module, "save_chat_message", lambda *_a, **_kw: (_ for _ in ()).throw(RuntimeError("DB is down")))
