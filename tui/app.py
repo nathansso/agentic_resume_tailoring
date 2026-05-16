@@ -172,6 +172,13 @@ class ArtApp(App):
         padding: 0 1;
         margin: 0 0 1 0;
     }
+    .day-separator {
+        color: $text-muted;
+        text-style: italic;
+        content-align: center middle;
+        padding: 0 1;
+        margin: 1 0;
+    }
 
     /* Graph Tree */
     #graph-tree {
@@ -302,7 +309,12 @@ class ArtApp(App):
         db_landing = services.load_chat_history(None)
         if db_landing:
             scroll = self.query_one("#chat-scroll", VerticalScroll)
+            last_day: str | None = None
             for msg in db_landing:
+                day = msg.get("created_at", "")[:10]
+                if day and day != last_day:
+                    scroll.mount(Static(f"── {day} ──", classes="day-separator"))
+                    last_day = day
                 css = "user-msg" if msg["role"] == "user" else "bot-msg"
                 text = f"You: {msg['content']}" if msg["role"] == "user" else msg["content"]
                 scroll.mount(Static(text, classes=css))
@@ -713,7 +725,12 @@ class ArtApp(App):
             db_history = services.load_chat_history(job_uuid)
             if db_history:
                 cached = []
+                last_day: str | None = None
                 for msg in db_history:
+                    day = msg.get("created_at", "")[:10]
+                    if day and day != last_day:
+                        scroll.mount(Static(f"── {day} ──", classes="day-separator"))
+                        last_day = day
                     if msg["role"] == "user":
                         css, text = "user-msg", f"You: {msg['content']}"
                     else:

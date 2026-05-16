@@ -554,7 +554,7 @@ def load_chat_history(job_id: Optional[str], limit: int = 20) -> list[dict]:
                 .order_by(ChatMessage.created_at.desc())
                 .limit(limit)
             ).all()
-        return [{"role": m.role, "content": m.content} for m in reversed(msgs)]
+        return [{"role": m.role, "content": m.content, "created_at": m.created_at.isoformat()} for m in reversed(msgs)]
     except Exception as e:
         logger.warning("load_chat_history failed: %s", e)
         return []

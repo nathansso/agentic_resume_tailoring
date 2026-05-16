@@ -617,3 +617,67 @@ def test_post_system_msg_renders_with_system_msg_class(isolated_engine):
             assert matches, "system-msg widget not found in chat scroll"
 
     asyncio.run(_run())
+
+
+def test_on_mount_inserts_day_separator_for_multi_day_history(isolated_engine):
+    """on_mount inserts a day-separator widget between messages from different days."""
+    import tui.services as services_module
+    from datetime import datetime, timezone
+    from sqlmodel import Session as S
+    from database.models import ChatMessage
+
+    # Insert two messages with different calendar days directly so we can control timestamps.
+    with S(isolated_engine) as session:
+        session.add(ChatMessage(
+            job_id=None, role="user", content="day one msg",
+            created_at=datetime(2024, 1, 1, 10, 0, 0),
+        ))
+        session.add(ChatMessage(
+            job_id=None, role="assistant", content="day two reply",
+            created_at=datetime(2024, 1, 2, 9, 0, 0),
+        ))
+        session.commit()
+
+    async def _run():
+        app = tui_module.ArtApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            scroll = app.query_one("#chat-scroll", VerticalScroll)
+            separators = [
+                w for w in scroll.query(Static)
+                if "day-separator" in w.classes
+            ]
+            assert len(separators) >= 2, (
+                f"Expected at least 2 day separators (one per day), got {len(separators)}: "
+                f"{[str(w._Static__content) for w in separators]}"
+            )
+            texts = [str(w._Static__content) for w in separators]
+            assert any("2024-01-01" in t for t in texts), "Missing separator for 2024-01-01"
+            assert any("2024-01-02" in t for t in texts), "Missing separator for 2024-01-02"
+
+    asyncio.run(_run())
+
+
+def test_on_mount_no_day_separator_for_single_day_history(isolated_engine):
+    """on_mount inserts no day separator when all messages share the same calendar day."""
+    from datetime import datetime
+    from sqlmodel import Session as S
+    from database.models import ChatMessage
+
+    same_day = datetime(2024, 3, 15, 12, 0, 0)
+    with S(isolated_engine) as session:
+        session.add(ChatMessage(job_id=None, role="user", content="first", created_at=same_day))
+        session.add(ChatMessage(job_id=None, role="assistant", content="second", created_at=same_day))
+        session.commit()
+
+    async def _run():
+        app = tui_module.ArtApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            scroll = app.query_one("#chat-scroll", VerticalScroll)
+            separators = [w for w in scroll.query(Static) if "day-separator" in w.classes]
+            assert len(separators) == 1, (
+                f"Expected exactly 1 separator for a single day, got {len(separators)}"
+            )
+
+    asyncio.run(_run())
