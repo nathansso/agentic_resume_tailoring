@@ -104,6 +104,7 @@ class JobDescription(SQLModel, table=True):
     description: str = Field(default="")  # Raw text
     source_url: Optional[str] = None
     status: str = Field(default="created")  # created, analyzed, tailored, exported
+    chat_summary: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

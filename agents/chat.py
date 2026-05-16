@@ -620,6 +620,11 @@ class ChatAgent:
             self._job_summaries[self._active_job_id] = summary
             self.history = self.history[-_COMPRESS_KEEP:]
             logger.debug("[chat] history compressed to %d msgs", _COMPRESS_KEEP)
+            try:
+                from tui import services as _svc
+                _svc.save_chat_summary(self._active_job_id, summary)
+            except Exception:
+                pass
         except Exception as e:
             logger.warning("History compression failed: %s", e)
 
@@ -638,6 +643,13 @@ class ChatAgent:
             db_history = []
         if db_history:
             self.history = db_history
+        try:
+            from tui import services as _svc
+            persisted_summary = _svc.load_chat_summary(job_id)
+            if persisted_summary and job_id not in self._job_summaries:
+                self._job_summaries[job_id] = persisted_summary
+        except Exception:
+            pass
 
     def _get_active_job(self) -> Optional[JobDescription]:
         if not self.active_job_id:

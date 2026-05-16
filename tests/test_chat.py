@@ -466,6 +466,44 @@ def test_set_active_job_restores_history_from_db(isolated_engine):
     assert agent.history[1]["role"] == "assistant" and agent.history[1]["content"] == "You match SWE roles."
 
 
+def test_set_active_job_loads_persisted_summary(isolated_engine):
+    """set_active_job() populates _job_summaries from a DB-persisted summary."""
+    with Session(isolated_engine) as session:
+        job = JobDescription(title="Summary Test", company="Co", description="")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = str(job.job_id)
+
+    services_module.save_chat_summary(job_id, "User is experienced in ML and wants remote roles.")
+
+    agent = chat_module.ChatAgent()
+    assert agent._job_summaries.get(job_id) is None
+
+    agent.set_active_job(job_id)
+
+    assert agent._job_summaries.get(job_id) == "User is experienced in ML and wants remote roles."
+
+
+def test_set_active_job_does_not_overwrite_in_session_summary(isolated_engine):
+    """set_active_job() does not overwrite a summary already held in memory."""
+    with Session(isolated_engine) as session:
+        job = JobDescription(title="No Overwrite", company="Co", description="")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = str(job.job_id)
+
+    services_module.save_chat_summary(job_id, "Old DB summary.")
+
+    agent = chat_module.ChatAgent()
+    agent._job_summaries[job_id] = "Fresher in-session summary."
+
+    agent.set_active_job(job_id)
+
+    assert agent._job_summaries[job_id] == "Fresher in-session summary."
+
+
 def test_chat_db_write_failure_does_not_affect_response(isolated_engine, monkeypatch):
     """A DB failure in save_chat_message never surfaces as a chat error or exception."""
     monkeypatch.setattr(services_module, "save_chat_message", lambda *_a, **_kw: (_ for _ in ()).throw(RuntimeError("DB is down")))

@@ -45,6 +45,8 @@ def _migrate_db() -> None:
         # resume style capture
         "ALTER TABLE user ADD COLUMN resume_markdown TEXT",
         "ALTER TABLE user ADD COLUMN resume_style TEXT",
+        # issue 24: persisted chat summaries
+        "ALTER TABLE jobdescription ADD COLUMN chat_summary TEXT",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
