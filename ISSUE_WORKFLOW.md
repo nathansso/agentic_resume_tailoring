@@ -88,6 +88,19 @@ If an issue is moved *back* from Done to Ready/Todo (e.g., because follow-up wor
 
 ---
 
+## Phase 7 — Offer to Move to Done
+
+After completing Phase 6, use the `AskUserQuestion` tool to ask:
+
+> "Move issue #N to Done on the project board?"
+
+- **Yes** — run the `gh project item-edit` GraphQL mutation to set the item's status to Done (project #2, owner `nathansso`).
+- **No** — do nothing. The item stays where it is.
+
+This is not the same as closing the issue. Per hard rule 1, issues are never closed automatically.
+
+---
+
 ## Hard Rules
 
 These apply in every session, without exception:
