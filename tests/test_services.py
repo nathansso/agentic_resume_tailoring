@@ -554,3 +554,82 @@ def test_ingest_resume_normalizes_source_to_resume(isolated_engine, tmp_path, mo
     assert captured == ["resume", "resume"], (
         f"Both ingestions should use source_file='resume', got: {captured}"
     )
+
+
+# ── Resume style capture ──────────────────────────────────────
+
+
+def test_extract_style_profile_section_order():
+    """extract_style_profile detects section order, labels, separator, and contact fields."""
+    from ingestion.resume import extract_style_profile
+
+    md = (
+        "Jane Smith\n"
+        "jane@example.com | linkedin.com/in/jane | (858) 555-1234\n\n"
+        "Education\n"
+        "UCSD, B.S. CS 2024\n\n"
+        "Work Experience\n"
+        "Engineer @ Acme 2022-2024\n"
+        "- Built distributed systems\n"
+        "- Reduced latency by 40%\n\n"
+        "Projects\n"
+        "Cool App\n"
+        "- Did stuff\n\n"
+        "Technical Skills\n"
+        "- Python, SQL\n"
+    )
+
+    profile = extract_style_profile(md)
+
+    assert profile["section_order"] == ["education", "experience", "projects", "skills"]
+    assert profile["section_labels"]["experience"] == "Work Experience"
+    assert profile["section_labels"]["skills"] == "Technical Skills"
+    assert profile["header"]["contact_separator"] == " | "
+    assert "email" in profile["header"]["contact_fields"]
+    assert "linkedin" in profile["header"]["contact_fields"]
+    assert "phone" in profile["header"]["contact_fields"]
+    assert profile["bullet_prefix"] == "- "
+
+
+def test_ingest_resume_md_saves_style_profile(isolated_engine, tmp_path, monkeypatch):
+    """ingest_resume_file persists resume_style to the User row after ingesting a .md file."""
+    import agents.parser as parser_module
+    from sqlmodel import Session as S
+    from database.models import User
+
+    _seed_user_and_skill(isolated_engine)
+
+    class _FakeParser:
+        def parse_and_save(self, data):
+            pass
+
+    monkeypatch.setattr(parser_module, "ResumeParserAgent", lambda: _FakeParser())
+
+    resume = tmp_path / "styled_resume.md"
+    resume.write_text(
+        "Jane Smith\n"
+        "jane@example.com | linkedin.com/in/jane\n\n"
+        "Education\nUCSD 2024\n\n"
+        "Work Experience\nEngineer @ Corp\n- Built things\n\n"
+        "Projects\nCool App\n- Did stuff\n\n"
+        "Technical Skills\n- Python\n",
+        encoding="utf-8",
+    )
+
+    services_module.ingest_resume_file(str(resume))
+
+    from database.user_utils import get_active_profile
+    user = get_active_profile()
+    assert user is not None
+    style = services_module.get_resume_style(user.user_id)
+    assert style is not None
+    assert style["section_order"] == ["education", "experience", "projects", "skills"]
+    assert style["section_labels"].get("experience") == "Work Experience"
+    assert style["section_labels"].get("skills") == "Technical Skills"
+
+
+def test_get_resume_style_returns_none_without_ingestion(isolated_engine):
+    """get_resume_style returns None for a user who has not ingested a resume."""
+    user = _seed_user_and_skill(isolated_engine)
+    style = services_module.get_resume_style(user.user_id)
+    assert style is None

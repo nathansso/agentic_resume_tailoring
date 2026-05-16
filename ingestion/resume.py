@@ -1,7 +1,8 @@
 import logging
 import json
+import re
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from docling.document_converter import DocumentConverter
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,69 @@ SECTION_KEYWORDS = {
     "technical skills": "skills",
     "certifications": "certifications"
 }
+
+def extract_style_profile(markdown_text: str) -> dict:
+    """Heuristically extract resume style metadata from Docling markdown output."""
+    lines = markdown_text.split("\n")
+    section_order: List[str] = []
+    section_labels: Dict[str, str] = {}
+    header_lines: List[str] = []
+    in_header = True
+    bullet_counts: Dict[str, int] = {"-": 0, "*": 0, "•": 0}
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        heading_text = re.sub(r"^#{1,3}\s+", "", stripped)
+        key = SECTION_KEYWORDS.get(heading_text.lower())
+        if key:
+            in_header = False
+            if key not in section_order:
+                section_order.append(key)
+                section_labels[key] = heading_text
+            continue
+        if in_header:
+            header_lines.append(stripped)
+        for prefix, ch in [("- ", "-"), ("* ", "*"), ("• ", "•")]:
+            if stripped.startswith(prefix):
+                bullet_counts[ch] += 1
+
+    contact_sep = " | "
+    contact_fields: List[str] = []
+    for line in header_lines[1:]:
+        if " | " in line:
+            contact_sep = " | "
+        elif " · " in line:
+            contact_sep = " · "
+        elif " • " in line:
+            contact_sep = " • "
+        for part in re.split(r"\s*[|·•]\s*", line):
+            p = part.strip()
+            if "@" in p and "email" not in contact_fields:
+                contact_fields.append("email")
+            elif "linkedin" in p.lower() and "linkedin" not in contact_fields:
+                contact_fields.append("linkedin")
+            elif "github" in p.lower() and "github" not in contact_fields:
+                contact_fields.append("github")
+            elif re.search(r"\d{3}[-.\s]\d{3}", p) and "phone" not in contact_fields:
+                contact_fields.append("phone")
+            elif re.match(r"[A-Za-z].*,\s+[A-Z]{2}", p) and "location" not in contact_fields:
+                contact_fields.append("location")
+
+    top = max(bullet_counts, key=bullet_counts.get)
+    bullet_prefix = f"{top} " if bullet_counts[top] > 0 else "- "
+
+    return {
+        "section_order": section_order,
+        "section_labels": section_labels,
+        "header": {
+            "contact_separator": contact_sep,
+            "contact_fields": contact_fields or ["email", "linkedin"],
+        },
+        "bullet_prefix": bullet_prefix,
+    }
+
 
 class ResumeIngestor:
     def __init__(self):
@@ -42,7 +106,9 @@ class ResumeIngestor:
         return {
             "source_file": str(file_path),
             "parsed_sections": sections,
-            "full_text": full_text
+            "full_text": full_text,
+            "resume_markdown": full_text,
+            "resume_style": extract_style_profile(full_text),
         }
 
     def _heuristic_segmentation(self, doc) -> Dict[str, List[Dict]]:
