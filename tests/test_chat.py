@@ -462,8 +462,8 @@ def test_set_active_job_restores_history_from_db(isolated_engine):
     agent.set_active_job(job_id)
 
     assert len(agent.history) == 2
-    assert agent.history[0] == {"role": "user", "content": "What roles match me?"}
-    assert agent.history[1] == {"role": "assistant", "content": "You match SWE roles."}
+    assert agent.history[0]["role"] == "user" and agent.history[0]["content"] == "What roles match me?"
+    assert agent.history[1]["role"] == "assistant" and agent.history[1]["content"] == "You match SWE roles."
 
 
 def test_chat_db_write_failure_does_not_affect_response(isolated_engine, monkeypatch):

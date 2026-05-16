@@ -331,8 +331,10 @@ def test_save_and_load_chat_history_for_job(isolated_engine):
 
     history = services_module.load_chat_history(job_id)
     assert len(history) == 2
-    assert history[0] == {"role": "user", "content": "Hello agent"}
-    assert history[1] == {"role": "assistant", "content": "Hello user"}
+    assert history[0]["role"] == "user" and history[0]["content"] == "Hello agent"
+    assert history[1]["role"] == "assistant" and history[1]["content"] == "Hello user"
+    assert "created_at" in history[0]
+    assert "created_at" in history[1]
 
 
 def test_load_chat_history_landing_context(isolated_engine):
@@ -342,8 +344,8 @@ def test_load_chat_history_landing_context(isolated_engine):
 
     history = services_module.load_chat_history(None)
     assert len(history) == 2
-    assert history[0] == {"role": "user", "content": "landing message"}
-    assert history[1] == {"role": "assistant", "content": "landing reply"}
+    assert history[0]["role"] == "user" and history[0]["content"] == "landing message"
+    assert history[1]["role"] == "assistant" and history[1]["content"] == "landing reply"
 
 
 def test_load_chat_history_limit(isolated_engine):
@@ -389,6 +391,27 @@ def test_prune_chat_messages_caps_at_limit(isolated_engine):
     # Oldest 5 are pruned (one per save once over the limit), newest 100 retained.
     assert history[-1]["content"] == f"msg {limit + 4}"
     assert history[0]["content"] == "msg 5"
+
+
+def test_load_chat_history_includes_created_at(isolated_engine):
+    """load_chat_history returns created_at ISO string in each message dict."""
+    from sqlmodel import Session as S
+    from database.models import JobDescription
+
+    with S(isolated_engine) as session:
+        job = JobDescription(title="TS Job", company="Co", description="")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = str(job.job_id)
+
+    services_module.save_chat_message(job_id, "user", "hi")
+    history = services_module.load_chat_history(job_id)
+    assert len(history) == 1
+    assert "created_at" in history[0]
+    # Should be a valid ISO datetime string
+    from datetime import datetime
+    datetime.fromisoformat(history[0]["created_at"])
 
 
 # ── add_skill_to_profile ───────────────────────────────────────────────────────
