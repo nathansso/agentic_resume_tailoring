@@ -67,6 +67,19 @@ Examples:
 
 The **ART Development Plan** project (number 2, owner `nathansso`) must stay in sync with the codebase at all times. Both of the following behaviors are required — do not skip them.
 
+### Slash commands
+
+Use these slash commands to manage the board without manual API calls:
+
+| Command | Usage | Purpose |
+|---|---|---|
+| `/projects` | `/projects` | Full board view grouped by status |
+| `/ready` | `/ready` | Issues ready to work on next |
+| `/issue` | `/issue 14` | Full details + board status for one issue |
+| `/start` | `/start 14` | Move issue to In Progress |
+| `/done` | `/done 14` | Move to Done, auto-unblock dependents |
+| `/new-issue` | `/new-issue Fix PDF export` | Create issue, add to board, assess deps |
+
 ### When a new issue is created
 
 1. Add it to the project immediately:
