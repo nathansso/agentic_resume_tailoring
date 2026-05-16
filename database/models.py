@@ -20,6 +20,8 @@ class User(SQLModel, table=True):
     onboarding_complete: bool = Field(default=False)
     onboarding_steps: Dict = Field(default={}, sa_column=Column(JSON))
     resume_path: Optional[str] = None
+    resume_markdown: Optional[str] = None
+    resume_style: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

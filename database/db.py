@@ -42,6 +42,9 @@ def _migrate_db() -> None:
         # contact info fields
         "ALTER TABLE user ADD COLUMN phone TEXT",
         "ALTER TABLE user ADD COLUMN location TEXT",
+        # resume style capture
+        "ALTER TABLE user ADD COLUMN resume_markdown TEXT",
+        "ALTER TABLE user ADD COLUMN resume_style TEXT",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

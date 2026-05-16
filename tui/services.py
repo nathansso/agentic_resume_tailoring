@@ -421,6 +421,13 @@ def get_resume_path(user_id: UUID) -> Optional[str]:
         return user.resume_path if user else None
 
 
+def get_resume_style(user_id: UUID) -> Optional[dict]:
+    """Return the parsed style profile for the user's ingested resume, or None."""
+    with Session(engine) as session:
+        user = session.get(User, user_id)
+        return user.resume_style if user else None
+
+
 def update_resume_path(user_id: UUID, path: str) -> None:
     """Set resume_path on the User row."""
     with Session(engine) as session:
@@ -582,6 +589,16 @@ def ingest_resume_file(file_path: str) -> str:
             from agents.parser import ResumeParserAgent
             ResumeParserAgent().parse_and_save(ingestion_data)
         if user:
+            from ingestion.resume import extract_style_profile
+            full_text = ingestion_data.get("full_text", "")
+            style = ingestion_data.get("resume_style") or extract_style_profile(full_text)
+            with Session(engine) as session:
+                db_user = session.get(User, user.user_id)
+                if db_user:
+                    db_user.resume_markdown = full_text
+                    db_user.resume_style = style
+                    session.add(db_user)
+                    session.commit()
             return _format_ingestion_diff(user.user_id, pre[0], pre[1], pre[2], path.name)
         return f"Resume ingested: {path.name}."
     except Exception as e:
