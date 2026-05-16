@@ -45,7 +45,21 @@
       "PowerShell(.venv\\\\Scripts\\\\python.exe run_tests.py 2>&1)",
       "PowerShell(.venv\\\\Scripts\\\\python.exe run_tests.py -k \"delete\" 2>&1 | Select-Object -Last 20)",
       "PowerShell(.venv\\\\Scripts\\\\python.exe run_tests.py 2>&1 | Select-Object -Last 10)",
-      "Bash(Remove-Item *)"
+      "Bash(Remove-Item *)",
+      "Bash(python -c ' *)",
+      "Skill(update-config)",
+      "Bash(python3 -c ' *)",
+      "Bash(git mv *)",
+      "Bash(python run_tests.py)",
+      "Bash(grep -i \"xhtml2pdf\\\\|weasyprint\\\\|pdfkit\\\\|markdown\" requirements.txt)",
+      "Bash(grep -i \"xhtml2pdf\\\\|weasyprint\\\\|pdfkit\\\\|markdown\" pyproject.toml)",
+      "Bash(git -C \"C:\\\\Users\\\\noliv\\\\Desktop\\\\coding_projects\\\\agentic_resume_tailoring\" log --oneline --all)",
+      "Skill(issue)",
+      "Skill(start)",
+      "Bash(python *)",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe run_tests.py -k \"chat_history or day_separator\" 2>&1)",
+      "Skill(done)",
+      "Bash(xargs '-I{}' sh -c 'body=$\\(gh issue view {} --json body --jq .body\\); if echo \"$body\" | grep -qi \"blocked by #24\"; then echo \"BLOCKED: {}\"; fi')"
     ]
   }
 }
