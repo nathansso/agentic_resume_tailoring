@@ -560,6 +560,36 @@ def load_chat_history(job_id: Optional[str], limit: int = 20) -> list[dict]:
         return []
 
 
+def save_chat_summary(job_id: Optional[str], summary: str) -> None:
+    """Persist a conversation summary to JobDescription.chat_summary. Never raises."""
+    if not job_id:
+        return
+    try:
+        jid = UUID(job_id)
+        with Session(engine) as session:
+            job = session.get(JobDescription, jid)
+            if job:
+                job.chat_summary = summary
+                session.add(job)
+                session.commit()
+    except Exception as e:
+        logger.warning("save_chat_summary failed: %s", e)
+
+
+def load_chat_summary(job_id: Optional[str]) -> Optional[str]:
+    """Return the persisted chat summary for this job, or None if absent or on error."""
+    if not job_id:
+        return None
+    try:
+        jid = UUID(job_id)
+        with Session(engine) as session:
+            job = session.get(JobDescription, jid)
+            return job.chat_summary if job else None
+    except Exception as e:
+        logger.warning("load_chat_summary failed: %s", e)
+        return None
+
+
 # ── Ingestion service functions ─────────────────────────────
 # Each returns a plain-English result string and never raises.
 

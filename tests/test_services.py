@@ -414,6 +414,39 @@ def test_load_chat_history_includes_created_at(isolated_engine):
     datetime.fromisoformat(history[0]["created_at"])
 
 
+def test_save_and_load_chat_summary_round_trip(isolated_engine):
+    """save_chat_summary persists and load_chat_summary retrieves it for a job."""
+    from sqlmodel import Session as S
+    from database.models import JobDescription
+
+    with S(isolated_engine) as session:
+        job = JobDescription(title="Summary Job", company="Co", description="")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = str(job.job_id)
+
+    assert services_module.load_chat_summary(job_id) is None
+
+    services_module.save_chat_summary(job_id, "User prefers Python roles.")
+    assert services_module.load_chat_summary(job_id) == "User prefers Python roles."
+
+    services_module.save_chat_summary(job_id, "Updated: also interested in Go.")
+    assert services_module.load_chat_summary(job_id) == "Updated: also interested in Go."
+
+
+def test_load_chat_summary_returns_none_for_unknown_job(isolated_engine):
+    """load_chat_summary returns None for a job_id that doesn't exist."""
+    from uuid import uuid4
+    assert services_module.load_chat_summary(str(uuid4())) is None
+
+
+def test_save_chat_summary_no_ops_on_null_job_id(isolated_engine):
+    """save_chat_summary with job_id=None is a safe no-op."""
+    services_module.save_chat_summary(None, "some summary")
+    assert services_module.load_chat_summary(None) is None
+
+
 # ── add_skill_to_profile ───────────────────────────────────────────────────────
 
 def test_add_skill_to_profile_creates_skill_and_link(isolated_engine):
