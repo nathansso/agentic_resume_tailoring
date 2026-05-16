@@ -600,6 +600,24 @@ class ChatAgent:
         if n in SHORTCUTS: return f"shortcut:{n}"
         return "token_combo_or_evidence"
 
+    # ── Context window ──────────────────────────────────────────────────────
+
+    def _build_context_window(self, budget_tokens: int = 6000) -> list:
+        """Return the most-recent messages that fit within budget_tokens (oldest-first).
+
+        Approximates token count as len(content) // 4. Iterates newest-to-oldest,
+        accumulates until the budget is exceeded, then returns the slice oldest-first.
+        """
+        selected = []
+        used = 0
+        for msg in reversed(self.history):
+            cost = len(msg.get("content", "")) // 4
+            if used + cost > budget_tokens:
+                break
+            selected.append(msg)
+            used += cost
+        return list(reversed(selected))
+
     # ── History compression ─────────────────────────────────────────────────
 
     def _maybe_compress_history(self) -> None:
@@ -638,7 +656,7 @@ class ChatAgent:
         self.history = list(self._job_histories.get(job_id, []))
         try:
             from tui import services as _svc
-            db_history = _svc.load_chat_history(job_id, limit=20)
+            db_history = _svc.load_chat_history(job_id, limit=50)
         except Exception:
             db_history = []
         if db_history:
@@ -1238,8 +1256,7 @@ class ChatAgent:
         if _summary:
             messages.append({"role": "user", "content": f"[Earlier conversation summary: {_summary}]"})
             messages.append({"role": "assistant", "content": "Understood, I have context from our earlier exchange."})
-        # Keep a smaller window for lower latency while preserving context.
-        messages.extend(self.history[-12:])
+        messages.extend(self._build_context_window())
 
         try:
             response = self.llm.invoke(messages)
