@@ -3,6 +3,7 @@ Chat Agent — TUI assistant with tool-calling for ART operations.
 Uses a role-based LLM with a simple TOOL_CALL protocol to ingest data,
 query the knowledge graph, and run tailoring pipelines conversationally.
 """
+import os
 import re
 import time
 import uuid
@@ -22,8 +23,9 @@ from database.models import (
 
 logger = logging.getLogger(__name__)
 
-_COMPRESS_AT = 30    # trigger summarization when history reaches this length
-_COMPRESS_KEEP = 8   # messages to retain after compression
+_COMPRESS_AT = int(os.environ.get("ART_COMPRESS_AT", 30))
+_COMPRESS_KEEP = int(os.environ.get("ART_COMPRESS_KEEP", 8))
+_CONTEXT_BUDGET = int(os.environ.get("ART_CONTEXT_BUDGET", 6000))
 
 
 class ChatTurnTrace(TypedDict):
@@ -602,17 +604,18 @@ class ChatAgent:
 
     # ── Context window ──────────────────────────────────────────────────────
 
-    def _build_context_window(self, budget_tokens: int = 6000) -> list:
-        """Return the most-recent messages that fit within budget_tokens (oldest-first).
+    def _build_context_window(self, budget_tokens: int = _CONTEXT_BUDGET, reserved_tokens: int = 0) -> list:
+        """Return the most-recent messages that fit within the token budget (oldest-first).
 
-        Approximates token count as len(content) // 4. Iterates newest-to-oldest,
-        accumulates until the budget is exceeded, then returns the slice oldest-first.
+        Approximates token count as len(content) // 4. reserved_tokens is subtracted first
+        to account for system prompt and injected summary overhead.
         """
+        effective_budget = max(0, budget_tokens - reserved_tokens)
         selected = []
         used = 0
         for msg in reversed(self.history):
             cost = len(msg.get("content", "")) // 4
-            if used + cost > budget_tokens:
+            if used + cost > effective_budget:
                 break
             selected.append(msg)
             used += cost
@@ -626,10 +629,24 @@ class ChatAgent:
             return
         to_summarize = self.history[:-_COMPRESS_KEEP]
         try:
-            formatted = "\n".join(
-                f"{m['role'].capitalize()}: {m['content'][:300]}"
-                for m in to_summarize
-            )
+            # Proportional per-message token budget so long messages aren't hard-truncated
+            summarize_budget = 4000  # tokens allocated to the messages being summarized
+            total_chars = sum(len(m.get("content", "")) for m in to_summarize)
+            lines = []
+            for m in to_summarize:
+                content = m.get("content", "")
+                if total_chars > 0:
+                    alloc_chars = int(summarize_budget * 4 * len(content) / total_chars)
+                    content = content[:alloc_chars]
+                lines.append(f"{m['role'].capitalize()}: {content}")
+
+            # Fix 1: roll prior summary forward so earlier context survives repeated compression
+            prior_summary = self._job_summaries.get(self._active_job_id)
+            prefix = ""
+            if prior_summary:
+                prefix = f"Prior summary:\n{prior_summary}\n\nNew messages:\n"
+
+            formatted = prefix + "\n".join(lines)
             prompt = [{"role": "user", "content":
                 f"Summarize this conversation in 3-5 sentences. Focus on skills discussed, "
                 f"jobs analyzed, decisions made, and any user preferences:\n\n{formatted}"}]
@@ -1256,7 +1273,8 @@ class ChatAgent:
         if _summary:
             messages.append({"role": "user", "content": f"[Earlier conversation summary: {_summary}]"})
             messages.append({"role": "assistant", "content": "Understood, I have context from our earlier exchange."})
-        messages.extend(self._build_context_window())
+        _reserved = len(system_prompt) // 4 + (len(_summary) // 4 if _summary else 0)
+        messages.extend(self._build_context_window(reserved_tokens=_reserved))
 
         try:
             response = self.llm.invoke(messages)
