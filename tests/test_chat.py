@@ -568,6 +568,84 @@ def test_compression_triggers_and_trims_history(isolated_engine, monkeypatch):
     assert agent._job_summaries[None] == "Summary: user asked about Python and React skills."
 
 
+def test_env_var_overrides_compress_constants(monkeypatch):
+    """ART_COMPRESS_AT, ART_COMPRESS_KEEP, ART_CONTEXT_BUDGET are read from env vars."""
+    monkeypatch.setenv("ART_COMPRESS_AT", "15")
+    monkeypatch.setenv("ART_COMPRESS_KEEP", "4")
+    monkeypatch.setenv("ART_CONTEXT_BUDGET", "3000")
+    import importlib
+    reloaded = importlib.reload(chat_module)
+    try:
+        assert reloaded._COMPRESS_AT == 15
+        assert reloaded._COMPRESS_KEEP == 4
+        assert reloaded._CONTEXT_BUDGET == 3000
+    finally:
+        importlib.reload(chat_module)
+
+
+def test_cumulative_summary_rolls_forward(isolated_engine, monkeypatch):
+    """Second compression includes the prior summary so earlier context is not lost."""
+    received_prompts = []
+
+    class CaptureLLM:
+        def invoke(self, msgs, *_a, **_kw):
+            received_prompts.append(msgs[0]["content"])
+            class R:
+                content = "New combined summary."
+            return R()
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda *a, **kw: CaptureLLM())
+
+    agent = chat_module.ChatAgent()
+    agent._job_summaries[None] = "Prior summary: user knows Python."
+    agent.history = [{"role": "user", "content": f"msg {i}"} for i in range(chat_module._COMPRESS_AT)]
+
+    agent._maybe_compress_history()
+
+    assert "Prior summary: user knows Python." in received_prompts[0]
+    assert agent._job_summaries[None] == "New combined summary."
+
+
+def test_compression_prompt_uses_proportional_truncation(isolated_engine, monkeypatch):
+    """Long messages are truncated proportionally, not capped at 300 chars."""
+    received_prompts = []
+
+    class CaptureLLM:
+        def invoke(self, msgs, *_a, **_kw):
+            received_prompts.append(msgs[0]["content"])
+            class R:
+                content = "summary"
+            return R()
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda *a, **kw: CaptureLLM())
+
+    agent = chat_module.ChatAgent()
+    long_content = "x" * 2000
+    agent.history = [{"role": "user", "content": long_content}] * chat_module._COMPRESS_AT
+
+    agent._maybe_compress_history()
+
+    # With proportional budget, each message gets more than 300 chars
+    prompt_text = received_prompts[0]
+    # The prompt should contain significantly more than 300 'x' chars from a single message
+    assert prompt_text.count("x") > 300
+
+
+def test_build_context_window_reserved_tokens_reduces_budget():
+    """reserved_tokens shrinks the effective budget so fewer messages are included."""
+    agent = chat_module.ChatAgent()
+    # Each message ~100 tokens (400 chars // 4)
+    agent.history = [{"role": "user", "content": "x" * 400} for _ in range(10)]
+
+    # Without reservation: budget 600 → fits 6 messages
+    without = agent._build_context_window(budget_tokens=600, reserved_tokens=0)
+    # With 200 reserved: effective budget 400 → fits 4 messages
+    with_reserved = agent._build_context_window(budget_tokens=600, reserved_tokens=200)
+
+    assert len(without) == 6
+    assert len(with_reserved) == 4
+
+
 def test_summary_injected_into_llm_messages(isolated_engine, monkeypatch):
     """When a summary exists, it is prepended to the LLM message list."""
     captured = []
