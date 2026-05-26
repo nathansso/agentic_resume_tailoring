@@ -13,24 +13,34 @@ _VALID_PROVIDERS = {"openai", "anthropic"}
 
 
 def validate_config() -> list[str]:
-    """Check runtime configuration and return a list of error strings (empty = OK)."""
+    """Check runtime configuration and return a list of error strings (empty = OK).
+
+    Reads LLM_PROVIDER and API keys from os.environ first so that keys set via
+    services.save_llm_config() are reflected immediately without restart.
+    """
+    import os
     import config as _cfg
 
     errors: list[str] = []
 
     # 1. Provider must be a known value.
-    provider = _cfg.LLM_PROVIDER
+    # Check os.environ first — save_llm_config() sets it there for immediate effect.
+    provider = os.environ.get("LLM_PROVIDER") or _cfg.LLM_PROVIDER
     if provider not in _VALID_PROVIDERS:
         errors.append(
             f"LLM_PROVIDER must be one of {sorted(_VALID_PROVIDERS)}, got: {provider!r}"
         )
 
     # 2. API key must be present for the chosen cloud provider.
-    if provider == "openai" and not _cfg.OPENAI_API_KEY:
-        errors.append("OPENAI_API_KEY is not set (required when LLM_PROVIDER=openai)")
+    if provider == "openai":
+        api_key = os.environ.get("OPENAI_API_KEY") or _cfg.OPENAI_API_KEY
+        if not api_key:
+            errors.append("OPENAI_API_KEY is not set (required when LLM_PROVIDER=openai)")
 
-    if provider == "anthropic" and not _cfg.ANTHROPIC_API_KEY:
-        errors.append("ANTHROPIC_API_KEY is not set (required when LLM_PROVIDER=anthropic)")
+    if provider == "anthropic":
+        api_key = os.environ.get("ANTHROPIC_API_KEY") or _cfg.ANTHROPIC_API_KEY
+        if not api_key:
+            errors.append("ANTHROPIC_API_KEY is not set (required when LLM_PROVIDER=anthropic)")
 
     # 3. APP_DATA_DIR must be writable.
     try:
