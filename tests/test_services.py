@@ -761,7 +761,9 @@ def test_create_skill_artifact_from_chat(isolated_engine):
     user = _seed_user_and_skill(isolated_engine)
 
     result = services_module.create_artifact_from_chat(
-        user.user_id, "skill", {"name": "Redis", "category": "Database"}
+        user.user_id, "skill",
+        {"name": "Redis", "category": "Database",
+         "evidence": "I built a distributed cache at my last job using Redis"},
     )
     assert "added" in result.lower(), f"Unexpected response: {result!r}"
     assert "redis" in result.lower()
@@ -779,6 +781,9 @@ def test_create_skill_artifact_from_chat(isolated_engine):
         assert link.evidence_source == "chat", (
             f"evidence_source should be 'chat', got: {link.evidence_source!r}"
         )
+        assert "Redis" in (link.evidence_detail or ""), (
+            f"evidence_detail should contain the quote, got: {link.evidence_detail!r}"
+        )
 
 
 def test_create_project_artifact_from_chat(isolated_engine):
@@ -791,7 +796,8 @@ def test_create_project_artifact_from_chat(isolated_engine):
     result = services_module.create_artifact_from_chat(
         user.user_id,
         "project",
-        {"name": "Distributed Cache", "description": "Redis-backed caching layer"},
+        {"name": "Distributed Cache", "description": "Redis-backed caching layer",
+         "evidence": "I built a distributed cache at my last job using Redis"},
     )
     assert "added" in result.lower(), f"Unexpected response: {result!r}"
 
@@ -807,7 +813,9 @@ def test_create_project_artifact_from_chat(isolated_engine):
 
     # Second call with same name should report already exists
     result2 = services_module.create_artifact_from_chat(
-        user.user_id, "project", {"name": "Distributed Cache"}
+        user.user_id, "project",
+        {"name": "Distributed Cache",
+         "evidence": "I built a distributed cache at my last job using Redis"},
     )
     assert "already" in result2.lower()
 
@@ -829,13 +837,17 @@ def test_artifact_survives_job_deletion(isolated_engine):
 
     # Create artifacts linked conceptually to that chat context
     skill_result = services_module.create_artifact_from_chat(
-        user.user_id, "skill", {"name": "ElasticSearch", "category": "Search"},
+        user.user_id, "skill",
+        {"name": "ElasticSearch", "category": "Search",
+         "evidence": "We used ElasticSearch for full-text search across the platform"},
         source_context=f"chat:{jid}",
     )
     assert "added" in skill_result.lower()
 
     proj_result = services_module.create_artifact_from_chat(
-        user.user_id, "project", {"name": "Search Infra"},
+        user.user_id, "project",
+        {"name": "Search Infra",
+         "evidence": "I built the search infrastructure for our internal tools"},
         source_context=f"chat:{jid}",
     )
     assert "added" in proj_result.lower()
@@ -863,6 +875,24 @@ def test_artifact_survives_job_deletion(isolated_engine):
             )
         ).first()
         assert proj is not None, "Project row must survive job deletion"
+
+
+def test_create_artifact_from_chat_requires_evidence(isolated_engine):
+    """create_artifact_from_chat rejects all artifact types when evidence is missing or empty."""
+    user = _seed_user_and_skill(isolated_engine)
+
+    cases = [
+        ("skill",      {"name": "Redis", "category": "Database"}),
+        ("skill",      {"name": "Redis", "category": "Database", "evidence": ""}),
+        ("skill",      {"name": "Redis", "category": "Database", "evidence": "   "}),
+        ("project",    {"name": "My Project", "description": "A project"}),
+        ("experience", {"title": "Engineer", "company": "Acme"}),
+    ]
+    for atype, data in cases:
+        result = services_module.create_artifact_from_chat(user.user_id, atype, data)
+        assert "evidence" in result.lower(), (
+            f"Expected evidence-required message for {atype!r} data={data!r}, got: {result!r}"
+        )
 
 
 # ── Empty-state and error-path tests ─────────────────────────────────────────
