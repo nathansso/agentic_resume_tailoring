@@ -31,6 +31,19 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+**3a. Reproducible install from lockfile** *(optional — recommended for CI or Docker)*
+
+`requirements-lock.txt` pins every transitive dependency at an exact version:
+```bash
+pip install -r requirements-lock.txt
+playwright install chromium
+```
+
+To regenerate the lockfile after modifying `requirements.txt`:
+```bash
+python scripts/generate_lockfile.py
+```
+
 **4. Configure your API key**
 ```bash
 cp .env.example .env
@@ -69,3 +82,7 @@ Your data is stored under `~/.art/` (created automatically on first launch).
 
 **GitHub ingestion returns 403**
 → Set `GITHUB_TOKEN` in `.env` with `repo` and `read:user` scopes.
+
+**`pywin32` install error on Linux**
+→ Use `requirements-lock.txt` — it annotates `pywin32` with `; sys_platform == "win32"`
+  so pip skips it on Linux automatically. Requires pip ≥ 20.
