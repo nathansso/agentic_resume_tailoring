@@ -689,3 +689,117 @@ def test_get_resume_style_returns_none_without_ingestion(isolated_engine):
     user = _seed_user_and_skill(isolated_engine)
     style = services_module.get_resume_style(user.user_id)
     assert style is None
+
+
+# ── create_artifact_from_chat ─────────────────────────────────────────────────
+
+def test_create_skill_artifact_from_chat(isolated_engine):
+    """create_artifact_from_chat creates Skill + UserSkill rows with evidence_source='chat'."""
+    from sqlmodel import Session as S, select as sel
+    from database.models import Project
+
+    user = _seed_user_and_skill(isolated_engine)
+
+    result = services_module.create_artifact_from_chat(
+        user.user_id, "skill", {"name": "Redis", "category": "Database"}
+    )
+    assert "added" in result.lower(), f"Unexpected response: {result!r}"
+    assert "redis" in result.lower()
+
+    with S(isolated_engine) as session:
+        skill = session.exec(sel(Skill).where(Skill.name == "Redis")).first()
+        assert skill is not None, "Skill row should be created"
+        link = session.exec(
+            sel(UserSkill).where(
+                UserSkill.user_id == user.user_id,
+                UserSkill.skill_id == skill.skill_id,
+            )
+        ).first()
+        assert link is not None, "UserSkill link should be created"
+        assert link.evidence_source == "chat", (
+            f"evidence_source should be 'chat', got: {link.evidence_source!r}"
+        )
+
+
+def test_create_project_artifact_from_chat(isolated_engine):
+    """create_artifact_from_chat creates a Project row for artifact_type='project'."""
+    from sqlmodel import Session as S, select as sel
+    from database.models import Project
+
+    user = _seed_user_and_skill(isolated_engine)
+
+    result = services_module.create_artifact_from_chat(
+        user.user_id,
+        "project",
+        {"name": "Distributed Cache", "description": "Redis-backed caching layer"},
+    )
+    assert "added" in result.lower(), f"Unexpected response: {result!r}"
+
+    with S(isolated_engine) as session:
+        proj = session.exec(
+            sel(Project).where(
+                Project.user_id == user.user_id,
+                Project.name == "Distributed Cache",
+            )
+        ).first()
+        assert proj is not None, "Project row should be created"
+        assert proj.description == "Redis-backed caching layer"
+
+    # Second call with same name should report already exists
+    result2 = services_module.create_artifact_from_chat(
+        user.user_id, "project", {"name": "Distributed Cache"}
+    )
+    assert "already" in result2.lower()
+
+
+def test_artifact_survives_job_deletion(isolated_engine):
+    """Artifacts created via create_artifact_from_chat persist after the job is deleted."""
+    from sqlmodel import Session as S, select as sel
+    from database.models import JobDescription, Project
+
+    user = _seed_user_and_skill(isolated_engine)
+
+    # Create a job whose deletion we'll test
+    with S(isolated_engine) as session:
+        job = JobDescription(title="Temp Job", company="Acme", description="")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        jid = str(job.job_id)
+
+    # Create artifacts linked conceptually to that chat context
+    skill_result = services_module.create_artifact_from_chat(
+        user.user_id, "skill", {"name": "ElasticSearch", "category": "Search"},
+        source_context=f"chat:{jid}",
+    )
+    assert "added" in skill_result.lower()
+
+    proj_result = services_module.create_artifact_from_chat(
+        user.user_id, "project", {"name": "Search Infra"},
+        source_context=f"chat:{jid}",
+    )
+    assert "added" in proj_result.lower()
+
+    # Delete the job
+    delete_msg = services_module.delete_job(jid)
+    assert "deleted" in delete_msg.lower()
+
+    # Artifacts must still exist — they belong to the user profile, not the job
+    with S(isolated_engine) as session:
+        skill = session.exec(sel(Skill).where(Skill.name == "ElasticSearch")).first()
+        assert skill is not None, "Skill row must survive job deletion"
+        link = session.exec(
+            sel(UserSkill).where(
+                UserSkill.user_id == user.user_id,
+                UserSkill.skill_id == skill.skill_id,
+            )
+        ).first()
+        assert link is not None, "UserSkill link must survive job deletion"
+
+        proj = session.exec(
+            sel(Project).where(
+                Project.user_id == user.user_id,
+                Project.name == "Search Infra",
+            )
+        ).first()
+        assert proj is not None, "Project row must survive job deletion"

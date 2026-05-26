@@ -868,3 +868,77 @@ def test_analyze_job_does_not_create_user_skill_rows(isolated_engine, monkeypatc
         f"Job analysis must not create UserSkill rows. Before: {before}, After: {after}"
     )
     assert len(job_skills) == 3, f"Expected 3 JobSkill rows, got {len(job_skills)}"
+
+
+# ── _extract_chat_artifacts ───────────────────────────────────────────────────
+
+def test_extract_chat_artifacts_with_fixture_llm(isolated_engine, monkeypatch):
+    """_extract_chat_artifacts parses a canned JSON response from the LLM correctly."""
+    import json
+
+    _seed_user_and_skill(isolated_engine)
+
+    canned_response = json.dumps([
+        {"type": "skill", "name": "Redis", "category": "Database", "description": ""},
+        {"type": "project", "name": "Distributed Cache", "description": "Redis-backed layer"},
+    ])
+
+    class FixtureLLM:
+        def invoke(self, *_args, **_kwargs):
+            class Resp:
+                content = canned_response
+            return Resp()
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: FixtureLLM())
+
+    agent = chat_module.ChatAgent()
+    messages = [
+        {"role": "user", "content": "I built a distributed cache at my last job using Redis."},
+        {"role": "assistant", "content": "That's great experience!"},
+    ]
+    candidates = agent._extract_chat_artifacts(messages)
+
+    assert len(candidates) == 2, f"Expected 2 candidates, got {len(candidates)}: {candidates}"
+    types = {c["type"] for c in candidates}
+    assert "skill" in types
+    assert "project" in types
+    names = {c["name"] for c in candidates}
+    assert "Redis" in names
+    assert "Distributed Cache" in names
+
+
+def test_extract_chat_artifacts_returns_empty_on_nothing_new(isolated_engine, monkeypatch):
+    """_extract_chat_artifacts returns [] when the LLM finds no new items."""
+    _seed_user_and_skill(isolated_engine)
+
+    class FixtureLLM:
+        def invoke(self, *_args, **_kwargs):
+            class Resp:
+                content = "[]"
+            return Resp()
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: FixtureLLM())
+
+    agent = chat_module.ChatAgent()
+    candidates = agent._extract_chat_artifacts([{"role": "user", "content": "Hello!"}])
+    assert candidates == []
+
+
+def test_save_command_fast_path_no_llm_call_on_empty(isolated_engine, monkeypatch):
+    """/save with an LLM returning [] reports 'no new items' without touching DB."""
+    _seed_user_and_skill(isolated_engine)
+
+    class EmptyExtractLLM:
+        def invoke(self, *_args, **_kwargs):
+            class Resp:
+                content = "[]"
+            return Resp()
+
+    # Both initial LLM (router) and extraction LLM use the same monkeypatch here.
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: EmptyExtractLLM())
+    monkeypatch.setattr(chat_module, "get_llm", lambda **kw: EmptyExtractLLM())
+
+    agent = chat_module.ChatAgent()
+    response = agent.chat("/save")
+
+    assert "no new" in response.lower() or "not detected" in response.lower() or "detected" in response.lower()

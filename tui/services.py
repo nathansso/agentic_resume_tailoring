@@ -478,6 +478,108 @@ def add_skill_to_profile(user_id: UUID, skill_name: str, target: Optional[str] =
         return f"Failed to add skill: {e}"
 
 
+def create_artifact_from_chat(
+    user_id: UUID,
+    artifact_type: str,
+    data: dict,
+    source_context: str = "chat",
+) -> str:
+    """Create a skill, project, or experience row from structured chat-extracted data.
+
+    artifact_type: 'skill' | 'project' | 'experience'
+    data: type-specific fields (name/category for skill; name/description/repo_url for project;
+          title/company/description for experience).
+    source_context: free-form back-reference (e.g. 'chat:job_<id>') stored on the artifact.
+    Returns a plain-English result string. Never raises.
+    """
+    try:
+        artifact_type = artifact_type.lower().strip()
+        if artifact_type == "skill":
+            name = (data.get("name") or "").strip()
+            if not name:
+                return "Skill name is required."
+            category = (data.get("category") or "").strip() or None
+            with Session(engine) as session:
+                skill = session.exec(select(Skill).where(Skill.name == name)).first()
+                if not skill:
+                    all_skills = session.exec(select(Skill)).all()
+                    skill = next((s for s in all_skills if s.name.lower() == name.lower()), None)
+                if not skill:
+                    skill = Skill(name=name, category=category)
+                    session.add(skill)
+                    session.flush()
+                existing = session.exec(
+                    select(UserSkill).where(
+                        UserSkill.user_id == user_id,
+                        UserSkill.skill_id == skill.skill_id,
+                    )
+                ).first()
+                if existing:
+                    return f"'{name}' is already in your profile."
+                session.add(UserSkill(
+                    user_id=user_id,
+                    skill_id=skill.skill_id,
+                    proficiency=3,
+                    evidence_source="chat",
+                    confidence_score=0.7,
+                    evidence_detail=source_context,
+                ))
+                session.commit()
+            return f"Added skill '{name}' to your profile (source: chat)."
+        elif artifact_type == "project":
+            name = (data.get("name") or "").strip()
+            if not name:
+                return "Project name is required."
+            description = (data.get("description") or "").strip() or None
+            repo_url = (data.get("repo_url") or "").strip() or None
+            with Session(engine) as session:
+                existing = session.exec(
+                    select(Project).where(
+                        Project.user_id == user_id,
+                        Project.name == name,
+                    )
+                ).first()
+                if existing:
+                    return f"Project '{name}' is already in your profile."
+                session.add(Project(
+                    user_id=user_id,
+                    name=name,
+                    description=description,
+                    repo_url=repo_url,
+                ))
+                session.commit()
+            return f"Added project '{name}' to your profile."
+        elif artifact_type == "experience":
+            title = (data.get("title") or "").strip()
+            company = (data.get("company") or "").strip()
+            if not title or not company:
+                return "Experience title and company are required."
+            description = (data.get("description") or "").strip() or None
+            with Session(engine) as session:
+                existing = session.exec(
+                    select(Experience).where(
+                        Experience.user_id == user_id,
+                        Experience.title == title,
+                        Experience.company == company,
+                    )
+                ).first()
+                if existing:
+                    return f"Experience '{title} @ {company}' is already in your profile."
+                session.add(Experience(
+                    user_id=user_id,
+                    title=title,
+                    company=company,
+                    description=description,
+                ))
+                session.commit()
+            return f"Added experience '{title} @ {company}' to your profile."
+        else:
+            return f"Unknown artifact type: '{artifact_type}'. Use 'skill', 'project', or 'experience'."
+    except Exception as e:
+        logger.error("create_artifact_from_chat failed: %s", e)
+        return f"Failed to create artifact: {e}"
+
+
 def delete_resume(user_id: UUID) -> None:
     """Clear resume_path on the User row. Does not delete the file or any ingested data."""
     with Session(engine) as session:
