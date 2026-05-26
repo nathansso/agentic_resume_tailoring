@@ -111,13 +111,22 @@ class EvalRunner:
         }
 
     def write_artifacts(self, results: List[dict], run_id: Optional[str] = None) -> Path:
-        """Write transcript.jsonl, summary.json, and claude_handoff.md to the output directory."""
+        """Write transcript.jsonl, summary.json, claude_handoff.md, and report.md."""
         from datetime import datetime
-        from verification.chat_eval.artifacts import append_turn, write_summary, write_handoff
+        from verification.chat_eval.artifacts import (
+            append_turn,
+            write_summary,
+            write_handoff,
+            load_latest_prior_summary,
+        )
+        from verification.chat_eval.report import write_report
 
         ts = run_id or datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         run_dir = self.output_dir / ts
         run_dir.mkdir(parents=True, exist_ok=True)
+
+        # Capture prior run before writing this run's summary.
+        prior_summary = load_latest_prior_summary(self.output_dir)
 
         for result in results:
             for trace in result.get("traces", []):
@@ -125,5 +134,6 @@ class EvalRunner:
 
         write_summary(run_dir, results)
         write_handoff(run_dir, results)
+        write_report(run_dir, results, prior_summary)
 
         return run_dir

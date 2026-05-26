@@ -405,20 +405,9 @@ def cmd_chat_eval(args):
         run_dir = runner.write_artifacts(all_results)
 
     passed = sum(1 for r in all_results if r["score"]["passed"])
-    print(f"\n{passed}/{len(all_results)} passed — artifacts: {run_dir}")
-
-    if getattr(args, "judge", False):
-        from verification.chat_eval.judge import score_transcript
-        from verification.chat_eval.artifacts import write_judge_scores
-        print("\nRunning LLM-as-judge pass...")
-        judge_results = score_transcript(run_dir / "transcript.jsonl")
-        write_judge_scores(run_dir, judge_results)
-        judged = [r for r in judge_results if r.get("judge_scores", {}).get("helpfulness", -1) != -1]
-        print(f"  Turns judged: {len(judged)}/{len(judge_results)}")
-        for dim in ["helpfulness", "correctness", "conciseness"]:
-            vals = [r["judge_scores"][dim] for r in judged if dim in r.get("judge_scores", {})]
-            mean = sum(vals) / len(vals) if vals else 0.0
-            print(f"  {dim}: {mean:.2f}")
+    print(f"\n{passed}/{len(all_results)} passed")
+    print(f"artifacts: {run_dir}")
+    print(f"report:    {run_dir / 'report.md'}")
 
     # Cleanup temp DB.
     try:
@@ -478,8 +467,6 @@ def main():
                         help="Run with real services (no stubs)")
     p_eval.add_argument("--output-dir", dest="output_dir", default=None,
                         help="Override artifact output directory")
-    p_eval.add_argument("--judge", action="store_true", default=False,
-                        help="Run LLM-as-judge scoring on the transcript after the eval run")
 
     args = parser.parse_args()
 

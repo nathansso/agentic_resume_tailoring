@@ -4,11 +4,13 @@ allowed-tools: Bash(gh issue *), Bash(gh project *), Bash(gh api *)
 
 Show full details for a GitHub issue. `$ARGUMENTS` is the issue number.
 
-**Step 1 — Fetch issue details**
+If `$ARGUMENTS` is empty, output "Usage: /issue <number>" and stop.
+
+**Step 1 — Fetch issue details and comments**
 
 Run:
 ```
-gh issue view $ARGUMENTS --json number,title,body,labels,assignees,state,url
+gh issue view $ARGUMENTS --json number,title,body,comments,labels,assignees,state,url
 ```
 
 **Step 2 — Fetch project board status**
@@ -22,14 +24,23 @@ Find the item whose `content.number` matches `$ARGUMENTS`. Extract its `status`.
 
 **Step 3 — Display**
 
-Show:
+Show the header first:
 ```
 #<number> — <title>
 Status: <project board status>   State: <open/closed>
 URL: <url>
-Labels: <comma-separated>
+Labels: <comma-separated or none>
+```
+
+Then check `comments` for one whose body starts with `## Implementation Plan`. If found, show it prominently **before** the issue body:
+
+```
+─────────────────────────────────────
+Implementation Plan:
+<plan comment body>
+─────────────────────────────────────
 ```
 
 Then show the full issue body as-is (preserve markdown formatting).
 
-If `$ARGUMENTS` is empty, prompt: "Usage: /issue <number>"
+If there is no implementation plan comment, show the issue body directly with no separator.

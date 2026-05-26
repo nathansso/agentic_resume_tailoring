@@ -137,37 +137,25 @@ def build_handoff_markdown(results: List[dict]) -> str:
     return "\n".join(buf)
 
 
-def write_judge_scores(run_dir: Path, judge_results: list[dict]) -> None:
-    """Write per-turn judge scores and aggregate stats to run_dir/judge_scores.json."""
-    dims = ["helpfulness", "correctness", "conciseness"]
-    judged = [r for r in judge_results if r.get("judge_scores", {}).get("helpfulness", -1) != -1]
-    total = len(judge_results)
-    n_judged = len(judged)
+def load_latest_prior_summary(output_dir: Path) -> "dict | None":
+    """Return the second-most-recent run's summary.json, or None if no prior run exists.
 
-    means = {}
-    for dim in dims:
-        vals = [r["judge_scores"][dim] for r in judged if dim in r.get("judge_scores", {})]
-        means[f"mean_{dim}"] = round(sum(vals) / len(vals), 3) if vals else None
-
-    high_quality = sum(
-        1 for r in judged
-        if all(r.get("judge_scores", {}).get(d, 0) >= 2 for d in dims)
+    Run directories are named %Y%m%dT%H%M%SZ so lexicographic sort == chronological.
+    The most-recent directory is the *current* run being written; we want the one before it.
+    """
+    candidates = sorted(
+        [d for d in output_dir.iterdir() if d.is_dir() and (d / "summary.json").exists()],
+        key=lambda d: d.name,
     )
-    output = {
-        "turns": judge_results,
-        "aggregate": {
-            **means,
-            "pct_judged": round(n_judged / total * 100, 1) if total else 0.0,
-            "pct_high_quality_all_dims": round(high_quality / n_judged * 100, 1) if n_judged else 0.0,
-            "n_total": total,
-            "n_judged": n_judged,
-        },
-    }
+    # Need at least two dirs: [prior, current]
+    if len(candidates) < 2:
+        return None
+    prior_dir = candidates[-2]
     try:
-        with open(run_dir / "judge_scores.json", "w", encoding="utf-8") as fh:
-            json.dump(output, fh, indent=2)
+        with open(prior_dir / "summary.json", encoding="utf-8") as fh:
+            return json.load(fh)
     except Exception:
-        pass
+        return None
 
 
 def make_live_session_sink(output_dir: Path | None = None) -> Callable[[dict], None]:
