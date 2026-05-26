@@ -39,7 +39,15 @@ class LinkedInIngestor:
         Returns:
             Dict with source_type, source_file, full_text (structured profile text)
         """
-        from playwright.sync_api import sync_playwright
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError as exc:
+            raise ImportError(
+                "playwright is required for LinkedIn web scraping but is not installed.\n"
+                "Install the full dependencies:\n"
+                "    pip install -r requirements-full.txt\n"
+                "    playwright install chromium"
+            ) from exc
 
         # Normalize URL
         profile_url = profile_url.rstrip("/")

@@ -64,6 +64,7 @@ class SkillMatcherAgent:
             # Pre-compute user skill embeddings for semantic matching
             user_skill_names_list = list(user_skill_map.values())
             user_embeddings = None
+            model = None
             try:
                 model = get_embedding_model()
                 if user_skill_names_list:
