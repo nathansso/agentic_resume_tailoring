@@ -1,0 +1,27 @@
+# Core dependencies — no heavyweight optional extras.
+# Use this for Docker base images or lightweight environments.
+# For full functionality (LinkedIn web scraping + semantic skill matching):
+#   pip install -r requirements-full.txt
+docling
+openai
+python-dotenv
+sqlmodel
+langchain
+langchain-openai
+langgraph
+requests
+python-docx
+pydantic
+# For resume-matcher logic
+nltk
+scikit-learn
+# Optional but good for graph
+networkx
+# LinkedIn scraping (PDF/HTML path only — browser not required)
+beautifulsoup4
+# TUI
+textual
+plotext
+# PDF export
+markdown
+xhtml2pdf

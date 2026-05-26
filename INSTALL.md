@@ -27,9 +27,28 @@ source .venv/bin/activate
 ```
 
 **3. Install dependencies**
+
+**Core install** *(no browser, no ML model — fastest; suits Docker base images)*:
+```bash
+pip install -r requirements-core.txt
+```
+
+**Full install** *(adds LinkedIn web scraping + semantic skill matching)*:
+```bash
+pip install -r requirements-full.txt
+playwright install chromium
+```
+
+**Legacy / all-in-one** *(backwards-compatible, same as before)*:
 ```bash
 pip install -r requirements.txt
+playwright install chromium
 ```
+
+> **What each tier includes:**
+> - **core** — all TUI + chat features; LinkedIn PDF import works; no browser or ML model needed
+> - **full** — core + `playwright` (LinkedIn web scraping) + `sentence-transformers` (semantic skill matching; downloads ~90 MB model on first use)
+> - **requirements.txt** — identical to full; kept for backwards compatibility
 
 **3a. Reproducible install from lockfile** *(optional — recommended for CI or Docker)*
 
@@ -86,3 +105,13 @@ Your data is stored under `~/.art/` (created automatically on first launch).
 **`pywin32` install error on Linux**
 → Use `requirements-lock.txt` — it annotates `pywin32` with `; sys_platform == "win32"`
   so pip skips it on Linux automatically. Requires pip ≥ 20.
+
+**`ImportError: playwright is required for LinkedIn web scraping`**
+→ You installed the core dependencies only. Run:
+  `pip install playwright && playwright install chromium`
+  or reinstall with: `pip install -r requirements-full.txt && playwright install chromium`
+
+**`Semantic embedding failed, falling back to exact match` in logs**
+→ This is a warning, not an error — skill matching continues using exact-name matching.
+  To enable semantic matching, run: `pip install sentence-transformers`
+  or reinstall with: `pip install -r requirements-full.txt`
