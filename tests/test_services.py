@@ -266,6 +266,66 @@ def test_github_token_round_trip(tmp_path, monkeypatch):
     assert services_module.get_github_token() == ""
 
 
+def test_save_llm_config_anthropic(tmp_path, monkeypatch):
+    """save_llm_config writes provider + key to .env and os.environ (anthropic)."""
+    env_file = tmp_path / ".env"
+    monkeypatch.setattr(services_module, "_ENV_PATH", env_file)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+
+    services_module.save_llm_config("anthropic", "sk-ant-test")
+
+    import os
+    assert os.environ.get("LLM_PROVIDER") == "anthropic"
+    assert os.environ.get("ANTHROPIC_API_KEY") == "sk-ant-test"
+
+    provider, has_key = services_module.get_llm_config()
+    assert provider == "anthropic"
+    assert has_key is True
+
+
+def test_save_llm_config_openai(tmp_path, monkeypatch):
+    """save_llm_config writes provider + key to .env and os.environ (openai)."""
+    env_file = tmp_path / ".env"
+    monkeypatch.setattr(services_module, "_ENV_PATH", env_file)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+
+    services_module.save_llm_config("openai", "sk-openai-test")
+
+    import os
+    assert os.environ.get("LLM_PROVIDER") == "openai"
+    assert os.environ.get("OPENAI_API_KEY") == "sk-openai-test"
+
+    provider, has_key = services_module.get_llm_config()
+    assert provider == "openai"
+    assert has_key is True
+
+
+def test_save_llm_provider_only(tmp_path, monkeypatch):
+    """save_llm_provider_only updates provider without touching existing keys."""
+    env_file = tmp_path / ".env"
+    monkeypatch.setattr(services_module, "_ENV_PATH", env_file)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+
+    services_module.save_llm_provider_only("openai")
+
+    import os
+    assert os.environ.get("LLM_PROVIDER") == "openai"
+
+
+def test_get_llm_config_no_key(tmp_path, monkeypatch):
+    """get_llm_config reports has_key=False when no key is present."""
+    env_file = tmp_path / ".env"
+    monkeypatch.setattr(services_module, "_ENV_PATH", env_file)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+
+    _, has_key = services_module.get_llm_config()
+    assert has_key is False
+
+
 def test_update_resume_path_and_delete_resume(isolated_engine):
     """update_resume_path sets the path; delete_resume clears it without touching skills."""
     _seed_user_and_skill(isolated_engine)

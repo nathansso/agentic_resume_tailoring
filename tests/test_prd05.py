@@ -9,6 +9,9 @@ def test_validate_config_catches_missing_api_key(monkeypatch):
 
     monkeypatch.setattr(cfg, "LLM_PROVIDER", "openai")
     monkeypatch.setattr(cfg, "OPENAI_API_KEY", "")
+    # Clear os.environ so the validator doesn't pick up a real key from the shell.
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     errors = config_validator.validate_config()
     assert any("OPENAI_API_KEY" in e for e in errors), (
@@ -23,6 +26,9 @@ def test_validate_config_catches_missing_anthropic_key(monkeypatch):
 
     monkeypatch.setattr(cfg, "LLM_PROVIDER", "anthropic")
     monkeypatch.setattr(cfg, "ANTHROPIC_API_KEY", "")
+    # Clear os.environ so the validator doesn't pick up a real key from the shell.
+    monkeypatch.setenv("LLM_PROVIDER", "anthropic")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
     errors = config_validator.validate_config()
     assert any("ANTHROPIC_API_KEY" in e for e in errors), (
@@ -36,6 +42,8 @@ def test_validate_config_rejects_unknown_provider(monkeypatch):
     import config_validator
 
     monkeypatch.setattr(cfg, "LLM_PROVIDER", "gpt-banana")
+    # Override os.environ so the validator sees the bad provider, not the real one.
+    monkeypatch.setenv("LLM_PROVIDER", "gpt-banana")
 
     errors = config_validator.validate_config()
     assert any("LLM_PROVIDER" in e for e in errors)

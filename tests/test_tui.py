@@ -143,10 +143,13 @@ def test_onboarding_screen_mounts(isolated_engine):
     asyncio.run(_run())
 
 
-def test_onboarding_name_required_blocks_advance(isolated_engine):
-    """Leaving name blank keeps the screen on step 1."""
+def test_onboarding_name_required_blocks_advance(isolated_engine, monkeypatch):
+    """Leaving name blank keeps the screen on the name step."""
     from textual.app import App
     from tui.screens.onboarding import OnboardingScreen
+
+    # Pre-configure a key so the provider step is auto-skipped; name step is index 1.
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
 
     class _App(App):
         def on_mount(self):
@@ -156,20 +159,22 @@ def test_onboarding_name_required_blocks_advance(isolated_engine):
         async with _App().run_test() as pilot:
             await pilot.pause()
             screen = pilot.app.screen
-            assert screen._step_index == 0
+            assert screen._step_index == 1  # name step (provider skipped)
             screen._advance(skip=False)
             await pilot.pause()
-            assert screen._step_index == 0
+            assert screen._step_index == 1  # stayed on name step
             status = str(screen.query_one("#onboarding-status")._Static__content)
             assert "required" in status.lower() or "name" in status.lower()
 
     asyncio.run(_run())
 
 
-def test_onboarding_advance_past_name(isolated_engine):
-    """A valid name advances to step 2 (resume)."""
+def test_onboarding_advance_past_name(isolated_engine, monkeypatch):
+    """A valid name advances to the resume step."""
     from textual.app import App
     from tui.screens.onboarding import OnboardingScreen
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
 
     class _App(App):
         def on_mount(self):
@@ -182,17 +187,18 @@ def test_onboarding_advance_past_name(isolated_engine):
             screen.query_one("#step-input").value = "Alice Smith"
             screen._advance(skip=False)
             await pilot.pause()
-            assert screen._step_index == 1
+            assert screen._step_index == 2  # resume step
             assert screen._answers["name"] == "Alice Smith"
 
     asyncio.run(_run())
 
 
-def test_onboarding_skip_optional_steps(isolated_engine, tmp_path):
+def test_onboarding_skip_optional_steps(isolated_engine, tmp_path, monkeypatch):
     """GitHub and LinkedIn steps can be skipped; skipped values are empty strings."""
     from textual.app import App
     from tui.screens.onboarding import OnboardingScreen
 
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     resume_file = tmp_path / "resume.md"
     resume_file.write_text("# Resume")
 
@@ -210,14 +216,61 @@ def test_onboarding_skip_optional_steps(isolated_engine, tmp_path):
             screen.query_one("#step-input").value = str(resume_file)
             screen._advance(skip=False)
             await pilot.pause()
-            assert screen._step_index == 2
+            assert screen._step_index == 3  # github step
             screen._advance(skip=True)
             await pilot.pause()
             assert screen._answers.get("github", "") == ""
-            assert screen._step_index == 3
+            assert screen._step_index == 4  # linkedin step
             screen._advance(skip=True)
             await pilot.pause()
             assert screen._answers.get("linkedin", "") == ""
+
+    asyncio.run(_run())
+
+
+def test_onboarding_shows_provider_step_when_no_key(isolated_engine, monkeypatch):
+    """Provider step is shown at index 0 when no API key is configured."""
+    from textual.app import App
+    from tui.screens.onboarding import OnboardingScreen
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    class _App(App):
+        def on_mount(self):
+            self.push_screen(OnboardingScreen())
+
+    async def _run():
+        async with _App().run_test() as pilot:
+            await pilot.pause()
+            screen = pilot.app.screen
+            assert screen._step_index == 0  # provider step
+            assert not screen._provider_step_skipped
+            indicator = str(screen.query_one("#step-indicator")._Static__content)
+            assert "1" in indicator  # "Step 1 of 5"
+
+    asyncio.run(_run())
+
+
+def test_onboarding_skips_provider_step_when_key_present(isolated_engine, monkeypatch):
+    """Provider step is skipped when an API key is already in the environment."""
+    from textual.app import App
+    from tui.screens.onboarding import OnboardingScreen
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-existing")
+
+    class _App(App):
+        def on_mount(self):
+            self.push_screen(OnboardingScreen())
+
+    async def _run():
+        async with _App().run_test() as pilot:
+            await pilot.pause()
+            screen = pilot.app.screen
+            assert screen._provider_step_skipped
+            assert screen._step_index == 1  # name step — provider was auto-skipped
+            indicator = str(screen.query_one("#step-indicator")._Static__content)
+            assert "1" in indicator  # "Step 1 of 4"
 
     asyncio.run(_run())
 

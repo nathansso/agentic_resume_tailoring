@@ -38,26 +38,34 @@ def get_llm(role: str = ModelRole.CHAT, temperature: float = 0.0) -> BaseChatMod
     """
     Return a LangChain ChatModel for the given role.
 
+    Reads LLM_PROVIDER and API keys from os.environ at call time so that keys
+    saved via services.save_llm_config() take effect immediately without restart.
+    Falls back to module-level config values when env vars are absent.
+
     Args:
         role: One of ModelRole.CHAT / EXTRACT / TAILOR (defaults to CHAT).
         temperature: Sampling temperature passed to the model.
     """
+    import os
+    provider = os.environ.get("LLM_PROVIDER") or LLM_PROVIDER
     model_name = _ROLE_MODELS.get(role, CHAT_MODEL)
 
-    if LLM_PROVIDER == "anthropic":
+    if provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
+        api_key = os.environ.get("ANTHROPIC_API_KEY") or ANTHROPIC_API_KEY
         logger.info(f"Using Anthropic model: {model_name} (role={role})")
-        kwargs: dict = {"model": model_name, "api_key": ANTHROPIC_API_KEY}
+        kwargs: dict = {"model": model_name, "api_key": api_key}
         if model_name not in _ANTHROPIC_NO_TEMPERATURE:
             kwargs["temperature"] = temperature
         return ChatAnthropic(**kwargs)
-    elif LLM_PROVIDER == "openai":
+    elif provider == "openai":
         from langchain_openai import ChatOpenAI
+        api_key = os.environ.get("OPENAI_API_KEY") or OPENAI_API_KEY
         logger.info(f"Using OpenAI model: {model_name} (role={role})")
         return ChatOpenAI(
             model=model_name,
             temperature=temperature,
-            api_key=OPENAI_API_KEY,
+            api_key=api_key,
         )
     else:
-        raise ValueError(f"Unknown LLM_PROVIDER: {LLM_PROVIDER!r}. Use 'anthropic' or 'openai'.")
+        raise ValueError(f"Unknown LLM_PROVIDER: {provider!r}. Use 'anthropic' or 'openai'.")

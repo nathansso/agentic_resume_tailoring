@@ -1,4 +1,5 @@
 """OnboardingScreen — step-by-step first-run profile setup."""
+import os
 import time
 from pathlib import Path
 
@@ -10,7 +11,7 @@ from textual.widgets import Header, Footer, Static, Input, Button, Label
 from textual import work
 
 
-_STEPS = ["name", "resume", "github", "linkedin"]
+_STEPS = ["provider", "name", "resume", "github", "linkedin"]
 
 
 class OnboardingScreen(Screen):
@@ -52,6 +53,16 @@ class OnboardingScreen(Screen):
         padding-bottom: 1;
     }
 
+    #provider-row {
+        height: auto;
+        margin-bottom: 1;
+    }
+
+    #provider-row Button {
+        margin-right: 1;
+        min-width: 14;
+    }
+
     #step-input {
         width: 1fr;
     }
@@ -86,6 +97,12 @@ class OnboardingScreen(Screen):
 
     # Step metadata: (question, hint, placeholder, skippable)
     _STEP_META = {
+        "provider": (
+            "Which AI provider do you use?",
+            "Select a provider, then enter your API key below.",
+            "Paste your API key here",
+            False,
+        ),
         "name": (
             "What's your name?",
             "This will appear on your profile.",
@@ -116,10 +133,17 @@ class OnboardingScreen(Screen):
         super().__init__()
         self._step_index = 0
         self._answers: dict[str, str] = {}
+        self._selected_provider: str = "anthropic"
+        # Skip the provider step if a key is already configured.
+        self._provider_step_skipped: bool = self._key_already_configured()
 
-    @property
-    def _current_step(self) -> str:
-        return _STEPS[self._step_index]
+    @staticmethod
+    def _key_already_configured() -> bool:
+        """Return True if a usable API key is already present in the environment."""
+        return bool(
+            os.environ.get("ANTHROPIC_API_KEY")
+            or os.environ.get("OPENAI_API_KEY")
+        )
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -128,6 +152,9 @@ class OnboardingScreen(Screen):
             yield Static("", id="step-indicator")
             yield Static("", id="step-question")
             yield Static("", id="step-hint")
+            with Horizontal(id="provider-row", classes="hidden"):
+                yield Button("Anthropic", id="provider-anthropic-btn", variant="primary")
+                yield Button("OpenAI", id="provider-openai-btn")
             with Horizontal(id="input-row"):
                 yield Input(placeholder="", id="step-input")
                 yield Button("Upload", id="upload-btn", classes="hidden")
@@ -138,13 +165,18 @@ class OnboardingScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
+        if self._provider_step_skipped:
+            self._step_index = 1  # jump straight to "name"
         self._render_step()
 
     def _render_step(self) -> None:
         step = self._current_step
         question, hint, placeholder, skippable = self._STEP_META[step]
-        total = len(_STEPS)
-        current = self._step_index + 1
+
+        # Compute visible step number accounting for skipped provider step.
+        skipped = 1 if self._provider_step_skipped else 0
+        total = len(_STEPS) - skipped
+        current = self._step_index + 1 - skipped
 
         self.query_one("#step-indicator", Static).update(f"Step {current} of {total}")
         self.query_one("#step-question", Static).update(question)
@@ -157,6 +189,17 @@ class OnboardingScreen(Screen):
 
         upload_btn = self.query_one("#upload-btn", Button)
         skip_btn = self.query_one("#skip-btn", Button)
+        provider_row = self.query_one("#provider-row")
+
+        # Provider step: show provider selector, hide upload; use key input
+        if step == "provider":
+            provider_row.remove_class("hidden")
+            inp.password = True
+            inp.placeholder = "Paste your API key here"
+            upload_btn.add_class("hidden")
+        else:
+            provider_row.add_class("hidden")
+            inp.password = False
 
         if step == "resume":
             upload_btn.remove_class("hidden")
@@ -169,6 +212,10 @@ class OnboardingScreen(Screen):
             skip_btn.add_class("hidden")
 
         inp.focus()
+
+    @property
+    def _current_step(self) -> str:
+        return _STEPS[self._step_index]
 
     def _set_status(self, msg: str) -> None:
         self.query_one("#onboarding-status", Static).update(msg)
@@ -184,6 +231,22 @@ class OnboardingScreen(Screen):
             self._advance(skip=True)
         elif event.button.id == "upload-btn":
             self._open_file_dialog()
+        elif event.button.id == "provider-anthropic-btn":
+            self._select_provider("anthropic")
+        elif event.button.id == "provider-openai-btn":
+            self._select_provider("openai")
+
+    def _select_provider(self, provider: str) -> None:
+        self._selected_provider = provider
+        # Highlight selected button as primary, reset the other.
+        anthropic_btn = self.query_one("#provider-anthropic-btn", Button)
+        openai_btn = self.query_one("#provider-openai-btn", Button)
+        if provider == "anthropic":
+            anthropic_btn.variant = "primary"
+            openai_btn.variant = "default"
+        else:
+            anthropic_btn.variant = "default"
+            openai_btn.variant = "primary"
 
     def _open_file_dialog(self) -> None:
         """Open a native file-picker and put the chosen path in the input."""
@@ -212,6 +275,18 @@ class OnboardingScreen(Screen):
 
         # Validate required steps
         if not skip:
+            if step == "provider":
+                if not value:
+                    self._set_status("API key is required.")
+                    return
+                # Save immediately so resume ingestion (a later step) can use the key.
+                from tui import services
+                services.save_llm_config(self._selected_provider, value)
+                self._answers["provider"] = self._selected_provider
+                self._answers["provider_key"] = value
+                self._step_index += 1
+                self._render_step()
+                return
             if step == "name" and not value:
                 self._set_status("Name is required.")
                 return

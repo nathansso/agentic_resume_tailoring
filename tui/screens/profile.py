@@ -1,4 +1,5 @@
 """ProfileScreen — view and edit the active profile."""
+import os
 from pathlib import Path
 
 from textual.app import ComposeResult
@@ -125,6 +126,22 @@ class ProfileScreen(Screen):
         min-width: 10;
     }
 
+    #llm-section {
+        padding: 0 4 1 4;
+        height: auto;
+    }
+
+    #llm-provider-row {
+        height: auto;
+        padding-top: 1;
+        padding-bottom: 1;
+    }
+
+    #llm-provider-row Button {
+        margin-right: 1;
+        min-width: 14;
+    }
+
     #profile-btn-row {
         padding: 1 4 2 4;
         height: auto;
@@ -144,6 +161,10 @@ class ProfileScreen(Screen):
         Binding("escape", "close", "Close"),
         Binding("ctrl+q", "app.quit", "Quit"),
     ]
+
+    def __init__(self):
+        super().__init__()
+        self._llm_provider: str = "anthropic"  # tracks which provider button is active
 
     def compose(self) -> ComposeResult:
         with Vertical(id="profile-panel"):
@@ -169,6 +190,13 @@ class ProfileScreen(Screen):
                 yield Input(placeholder="City, ST (optional)", id="profile-location-input", classes="field-input")
             yield Static("", id="profile-divider")
             yield Static("", id="profile-stats")
+            with Vertical(id="llm-section"):
+                yield Label("AI Provider", classes="field-label")
+                with Horizontal(id="llm-provider-row"):
+                    yield Button("Anthropic", id="llm-anthropic-btn", variant="primary")
+                    yield Button("OpenAI", id="llm-openai-btn")
+                yield Label("API Key", classes="field-label")
+                yield Input(password=True, placeholder="Paste your API key", id="llm-key-input")
             with Vertical(id="resume-section"):
                 yield Label("Base Resume: none", id="resume-label")
                 with Horizontal(id="resume-btn-row"):
@@ -214,6 +242,13 @@ class ProfileScreen(Screen):
         if token:
             self.query_one("#profile-token-input", Input).value = _TOKEN_MASK
 
+        # LLM provider + API key
+        provider, has_key = services.get_llm_config()
+        self._llm_provider = provider
+        self._update_provider_buttons(provider)
+        if has_key:
+            self.query_one("#llm-key-input", Input).value = _TOKEN_MASK
+
         sources = ", ".join(data["sources"]) if data["sources"] else "none"
         self.query_one("#profile-stats", Static).update(
             f"Skills: {data['skills']}  ·  Experiences: {data['experiences']}  ·  "
@@ -226,9 +261,28 @@ class ProfileScreen(Screen):
             self.query_one("#resume-label", Label).update(f"Base Resume: {Path(resume_path).name}")
             self.query_one("#delete-resume-btn", Button).disabled = False
 
+    def _update_provider_buttons(self, provider: str) -> None:
+        """Highlight the active provider button."""
+        anthropic_btn = self.query_one("#llm-anthropic-btn", Button)
+        openai_btn = self.query_one("#llm-openai-btn", Button)
+        if provider == "anthropic":
+            anthropic_btn.variant = "primary"
+            openai_btn.variant = "default"
+        else:
+            anthropic_btn.variant = "default"
+            openai_btn.variant = "primary"
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         btn = event.button.id
-        if btn == "update-profile-btn":
+        if btn == "llm-anthropic-btn":
+            self._llm_provider = "anthropic"
+            self._update_provider_buttons("anthropic")
+            return
+        elif btn == "llm-openai-btn":
+            self._llm_provider = "openai"
+            self._update_provider_buttons("openai")
+            return
+        elif btn == "update-profile-btn":
             self._save()
         elif btn == "close-profile-btn":
             self.action_close()
@@ -254,11 +308,22 @@ class ProfileScreen(Screen):
     def _save(self) -> None:
         self.query_one("#update-profile-btn", Button).disabled = True
 
-        # Handle token — only write if the user changed it
+        from tui import services
+
+        # GitHub token — only write if the user changed it from the mask
         token_value = self.query_one("#profile-token-input", Input).value
         if token_value != _TOKEN_MASK:
-            from tui import services
             services.save_github_token(token_value)
+
+        # LLM config — save provider+key when a real key is entered; provider-only otherwise
+        llm_key_value = self.query_one("#llm-key-input", Input).value
+        if llm_key_value and llm_key_value != _TOKEN_MASK:
+            # New key entered — persist both provider and key
+            services.save_llm_config(self._llm_provider, llm_key_value)
+            self.query_one("#llm-key-input", Input).value = _TOKEN_MASK
+        else:
+            # Provider button may have changed without a new key — persist just the provider
+            services.save_llm_provider_only(self._llm_provider)
 
         self._run_save(
             name=self.query_one("#profile-name-input", Input).value.strip(),
