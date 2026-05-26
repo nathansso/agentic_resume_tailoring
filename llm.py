@@ -1,13 +1,12 @@
 """
 LLM Factory — role-aware provider layer.
 Each role (chat, extract, tailor) maps to its own model name from config.
-Supports Anthropic (default), OpenAI, and Ollama (local) via LLM_PROVIDER env var.
+Supports Anthropic (default) and OpenAI via LLM_PROVIDER env var.
 """
 import logging
 from langchain_core.language_models.chat_models import BaseChatModel
 from config import (
     LLM_PROVIDER,
-    OLLAMA_MODEL, OLLAMA_BASE_URL,
     CHAT_MODEL, EXTRACT_MODEL, TAILOR_MODEL, EVAL_MODEL, REVIEW_MODEL,
     OPENAI_API_KEY, ANTHROPIC_API_KEY,
 )
@@ -60,13 +59,5 @@ def get_llm(role: str = ModelRole.CHAT, temperature: float = 0.0) -> BaseChatMod
             temperature=temperature,
             api_key=OPENAI_API_KEY,
         )
-    elif LLM_PROVIDER == "ollama":
-        from langchain_ollama import ChatOllama
-        logger.info(f"Using Ollama model: {OLLAMA_MODEL} at {OLLAMA_BASE_URL} (role={role})")
-        return ChatOllama(
-            model=OLLAMA_MODEL,
-            base_url=OLLAMA_BASE_URL,
-            temperature=temperature,
-        )
     else:
-        raise ValueError(f"Unknown LLM_PROVIDER: {LLM_PROVIDER!r}. Use 'anthropic', 'openai', or 'ollama'.")
+        raise ValueError(f"Unknown LLM_PROVIDER: {LLM_PROVIDER!r}. Use 'anthropic' or 'openai'.")
