@@ -9,7 +9,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-_VALID_PROVIDERS = {"openai", "anthropic", "ollama"}
+_VALID_PROVIDERS = {"openai", "anthropic"}
 
 
 def validate_config() -> list[str]:
@@ -32,15 +32,7 @@ def validate_config() -> list[str]:
     if provider == "anthropic" and not _cfg.ANTHROPIC_API_KEY:
         errors.append("ANTHROPIC_API_KEY is not set (required when LLM_PROVIDER=anthropic)")
 
-    # 3. Ollama base URL must be reachable.
-    if provider == "ollama":
-        try:
-            import requests
-            requests.get(_cfg.OLLAMA_BASE_URL, timeout=2)
-        except Exception:
-            errors.append(f"Ollama is not reachable at {_cfg.OLLAMA_BASE_URL!r}")
-
-    # 4. APP_DATA_DIR must be writable.
+    # 3. APP_DATA_DIR must be writable.
     try:
         _cfg.APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
         _probe = _cfg.APP_DATA_DIR / ".art_write_probe"
