@@ -1,0 +1,23 @@
+{
+  "scenario_id": "query_skills_no_jobs",
+  "description": "User asks about job skill matches when no jobs are saved — must NOT call ingestion tools",
+  "tags": ["query", "no_jobs", "negative"],
+  "profile_fixture": {
+    "name": "Query User",
+    "email": "querynojobs@test.local"
+  },
+  "canonical_turns": [
+    {"user": "what jobs match my skills?"}
+  ],
+  "max_turns": 2,
+  "must_call_tools": [],
+  "forbidden_tools": ["run_ingest_resume", "run_ingest_github", "run_ingest_linkedin_pdf", "run_ingest_github_repo"],
+  "required_response_substrings": [],
+  "success_conditions": {
+    "route_must_be_any": ["tool_call", "llm", "fast_path"],
+    "forbidden_tools_not_called": true
+  },
+  "failure_labels": {
+    "ingestion_triggered": "wrong_tool"
+  }
+}

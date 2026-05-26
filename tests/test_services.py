@@ -803,3 +803,79 @@ def test_artifact_survives_job_deletion(isolated_engine):
             )
         ).first()
         assert proj is not None, "Project row must survive job deletion"
+
+
+# ── Empty-state and error-path tests ─────────────────────────────────────────
+
+
+def test_get_jobs_returns_empty_list(isolated_engine):
+    """get_jobs returns an empty list when no jobs exist in the database."""
+    result = services_module.get_jobs()
+    assert result == [], f"Expected [], got {result!r}"
+
+
+def test_get_job_details_nonexistent_uuid(isolated_engine):
+    """get_job_details returns None for a well-formed UUID that has no matching row."""
+    import uuid
+    result = services_module.get_job_details(str(uuid.uuid4()))
+    assert result is None
+
+
+def test_get_job_details_invalid_uuid_format(isolated_engine):
+    """get_job_details returns None for a non-UUID string instead of raising ValueError."""
+    result = services_module.get_job_details("not-a-uuid")
+    assert result is None
+
+
+def test_get_experiences_empty_profile(isolated_engine):
+    """get_experiences returns [] for a user with zero experience rows."""
+    user = _seed_user_and_skill(isolated_engine)
+    result = services_module.get_experiences(user.user_id)
+    assert result == [], f"Expected [], got {result!r}"
+
+
+def test_get_projects_empty_profile(isolated_engine):
+    """get_projects returns [] for a user with zero project rows."""
+    user = _seed_user_and_skill(isolated_engine)
+    result = services_module.get_projects(user.user_id)
+    assert result == [], f"Expected [], got {result!r}"
+
+
+def test_get_skills_none_user_id(isolated_engine):
+    """get_skills returns [] when user_id is None."""
+    result = services_module.get_skills(None)
+    assert result == [], f"Expected [], got {result!r}"
+
+
+def test_add_skill_whitespace_only_name(isolated_engine):
+    """add_skill_to_profile returns an error message for a whitespace-only skill name."""
+    user = _seed_user_and_skill(isolated_engine)
+    result = services_module.add_skill_to_profile(user.user_id, "   ")
+    assert isinstance(result, str)
+    assert "provide" in result.lower() or "name" in result.lower()
+
+
+def test_update_profile_nonexistent_user(isolated_engine):
+    """update_profile returns 'Profile not found.' for a user_id not in the database."""
+    import uuid
+    result = services_module.update_profile(
+        uuid.uuid4(), "Ghost", "", "", phone="", email="", location=""
+    )
+    assert "not found" in result.lower(), f"Expected 'not found', got: {result!r}"
+
+
+def test_delete_resume_no_resume_set(isolated_engine):
+    """delete_resume is a safe no-op when the user has no resume_path set."""
+    user = _seed_user_and_skill(isolated_engine)
+    # Should not raise
+    services_module.delete_resume(user.user_id)
+    # resume_path remains None
+    result = services_module.get_resume_path(user.user_id)
+    assert result is None
+
+
+def test_ingest_resume_file_empty_string_path(isolated_engine):
+    """ingest_resume_file returns an error string for an empty path, does not raise."""
+    result = services_module.ingest_resume_file("")
+    assert isinstance(result, str)
+    assert result  # non-empty message

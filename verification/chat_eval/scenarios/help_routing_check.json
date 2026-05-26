@@ -1,0 +1,24 @@
+{
+  "scenario_id": "help_routing_check",
+  "description": "User types 'help' with an active profile — must fast-path and include key command names",
+  "tags": ["help", "fast_path"],
+  "profile_fixture": {
+    "name": "Help User",
+    "email": "helpuser@test.local",
+    "github_username": "helpcoder"
+  },
+  "canonical_turns": [
+    {"user": "help"}
+  ],
+  "max_turns": 1,
+  "must_call_tools": [],
+  "forbidden_tools": [],
+  "required_response_substrings": ["ingest", "skills", "tailor"],
+  "success_conditions": {
+    "route_must_be_any": ["fast_path"],
+    "response_must_contain_any": ["ingest", "skills", "tailor"]
+  },
+  "failure_labels": {
+    "llm_called_for_help": "routing_failure"
+  }
+}

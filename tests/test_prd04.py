@@ -261,3 +261,33 @@ def test_set_active_job_restores_prior_history(isolated_engine):
         {"role": "user", "content": "analyze"},
         {"role": "assistant", "content": "done"},
     ]
+
+
+# ── Edge cases: job with no results ──────────────────────────────────────────
+
+
+def test_get_job_details_no_results_yet(isolated_engine):
+    """get_job_details returns a dict without 'ats_score' when no results exist for the job."""
+    import tui.services as services_module
+    job = _make_job(isolated_engine, title="Fresh Job", company="Startup")
+
+    detail = services_module.get_job_details(str(job.job_id))
+
+    assert detail is not None, "Should return a dict for an existing job"
+    assert detail["title"] == "Fresh Job"
+    assert detail["company"] == "Startup"
+    # No results yet — ats_score should NOT be in the dict (no KeyError in the service)
+    assert "ats_score" not in detail
+
+
+def test_get_jobs_score_display_no_results(isolated_engine):
+    """get_jobs returns an empty score string for a job with no UserJobResult rows."""
+    import tui.services as services_module
+    _make_job(isolated_engine, title="Unseen Job", company="Nobody Inc")
+
+    jobs = services_module.get_jobs()
+    assert len(jobs) == 1
+    assert jobs[0]["title"] == "Unseen Job"
+    assert jobs[0]["score"] == "", (
+        f"Expected empty score for job with no results, got: {jobs[0]['score']!r}"
+    )

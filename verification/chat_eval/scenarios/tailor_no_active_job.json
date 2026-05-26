@@ -1,0 +1,23 @@
+{
+  "scenario_id": "tailor_no_active_job",
+  "description": "User types 'tailor' with no active job selected — should explain or ask which job",
+  "tags": ["tailor", "no_job", "fast_path"],
+  "profile_fixture": {
+    "name": "Tailor User",
+    "email": "tailoruser@test.local"
+  },
+  "canonical_turns": [
+    {"user": "tailor"}
+  ],
+  "max_turns": 2,
+  "must_call_tools": [],
+  "forbidden_tools": ["run_ingest_resume", "run_ingest_github", "run_ingest_linkedin_pdf", "run_ingest_github_repo"],
+  "required_response_substrings": [],
+  "success_conditions": {
+    "route_must_be_any": ["fast_path", "llm"],
+    "response_must_contain_any": ["job", "select", "sidebar", "No active", "active job", "first"]
+  },
+  "failure_labels": {
+    "no_guidance_given": "response_clarity_failure"
+  }
+}

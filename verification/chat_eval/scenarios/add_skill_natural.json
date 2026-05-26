@@ -1,0 +1,23 @@
+{
+  "scenario_id": "add_skill_natural",
+  "description": "User adds a skill naturally — must route as fast_path without calling ingestion tools",
+  "tags": ["add_skill", "fast_path"],
+  "profile_fixture": {
+    "name": "Skill User",
+    "email": "skill@test.local"
+  },
+  "canonical_turns": [
+    {"user": "add Docker to my profile"}
+  ],
+  "max_turns": 2,
+  "must_call_tools": [],
+  "forbidden_tools": ["run_ingest_resume", "run_ingest_github", "run_ingest_linkedin_pdf", "run_ingest_github_repo"],
+  "required_response_substrings": ["Docker"],
+  "success_conditions": {
+    "route_must_be_any": ["fast_path"],
+    "response_must_contain_any": ["Docker", "skill", "profile", "added"]
+  },
+  "failure_labels": {
+    "wrong_route": "routing_failure"
+  }
+}
