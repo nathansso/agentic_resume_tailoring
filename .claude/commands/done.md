@@ -2,7 +2,7 @@
 allowed-tools: Bash(gh project *), Bash(gh api *), Bash(gh issue *)
 ---
 
-Mark an issue as **Done** on the ART Development Plan project board and unblock any issues that were waiting on it. `$ARGUMENTS` is the issue number.
+Mark an issue as **Done** on the ART Development Plan project board, close the GitHub issue, and unblock any issues that were waiting on it. `$ARGUMENTS` is the issue number.
 
 If `$ARGUMENTS` is empty, output "Usage: /done <issue-number>" and stop.
 
@@ -31,7 +31,14 @@ gh api graphql -f query='mutation {
 }'
 ```
 
-**Step 3 — Find newly unblocked issues**
+**Step 3 — Close the GitHub issue**
+
+Run:
+```
+gh issue close $ARGUMENTS
+```
+
+**Step 4 — Find newly unblocked issues**
 
 For each Backlog item (status = "Backlog"), run:
 ```
@@ -42,11 +49,11 @@ Parse the `## Dependencies` section of the body. If it lists `Blocked by #<N>` a
 
 For each potentially unblocked issue, also check whether any of its *other* blockers are still open (status not Done). Only move it to Ready if all its blockers are Done.
 
-**Step 4 — Move newly unblocked issues to Ready**
+**Step 5 — Move newly unblocked issues to Ready**
 
 For each confirmed-unblocked issue, run the GraphQL mutation with option `e18bf179` (Ready).
 
-**Step 5 — Display summary**
+**Step 6 — Display summary**
 
 ```
 Done: #<number> — <title>

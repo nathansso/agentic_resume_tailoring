@@ -23,10 +23,14 @@ Compose a `## Dependencies` section:
 
 **Step 3 — Create the issue**
 
-Build a full issue body:
+Build a full issue body using this template:
 ```
 ## Summary
 <1–2 sentence description derived from the title>
+
+## Goals
+- <goal 1>
+- <goal 2>
 
 ## Acceptance criteria
 - [ ] <criterion 1>

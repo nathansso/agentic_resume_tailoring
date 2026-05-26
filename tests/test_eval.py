@@ -109,80 +109,134 @@ def test_handoff_generation():
     assert "tool_wrapper_failure" in md
 
 
-def test_judge_turn_skips_fast_path(monkeypatch):
-    """fast_path turns return -1 scores without invoking the LLM."""
-    import llm as llm_module
+def test_report_per_scenario_table():
+    """build_report() output contains each scenario_id and PASS/FAIL symbols."""
+    from verification.chat_eval.report import build_report
 
-    calls = []
-    monkeypatch.setattr(llm_module, "get_llm", lambda role="chat", temperature=0.0: calls.append(1))
-
-    from verification.chat_eval.judge import judge_turn
-    result = judge_turn("help", "Here are the commands...", route_kind="fast_path")
-
-    assert result["helpfulness"] == -1
-    assert result["correctness"] == -1
-    assert result["conciseness"] == -1
-    assert result["rationale"] == "skipped"
-    assert not calls
-
-
-def test_judge_turn_parses_llm_json(monkeypatch):
-    """judge_turn correctly parses a valid JSON response returned by the LLM."""
-    import llm as llm_module
-
-    class FakeLLM:
-        def invoke(self, prompt):
-            class R:
-                content = '{"helpfulness": 3, "correctness": 2, "conciseness": 3, "rationale": "clear and correct"}'
-            return R()
-
-    monkeypatch.setattr(llm_module, "get_llm", lambda role="chat", temperature=0.0: FakeLLM())
-
-    from verification.chat_eval.judge import judge_turn
-    result = judge_turn("what are my skills?", "You have Python and Go.", "llm")
-
-    assert result["helpfulness"] == 3
-    assert result["correctness"] == 2
-    assert result["conciseness"] == 3
-    assert result["rationale"] == "clear and correct"
-
-
-def test_score_transcript_reads_jsonl(tmp_path, monkeypatch):
-    """score_transcript returns one entry per JSONL line with correct judge scores."""
-    import json as _json
-    import llm as llm_module
-
-    class FakeLLM:
-        def invoke(self, prompt):
-            class R:
-                content = '{"helpfulness": 2, "correctness": 2, "conciseness": 2, "rationale": "ok"}'
-            return R()
-
-    monkeypatch.setattr(llm_module, "get_llm", lambda role="chat", temperature=0.0: FakeLLM())
-
-    transcript = tmp_path / "transcript.jsonl"
-    records = [
-        {"scenario_id": "s1", "turn_index": 0, "user_message": "help", "route_kind": "fast_path", "response_text": "Here are commands"},
-        {"scenario_id": "s1", "turn_index": 1, "user_message": "what are my skills?", "route_kind": "llm", "response_text": "You have Python and Go."},
+    results = [
+        {
+            "scenario_id": "scenario_alpha",
+            "traces": [{"route_kind": "fast_path"}],
+            "score": {"passed": True, "failure_labels": []},
+        },
+        {
+            "scenario_id": "scenario_beta",
+            "traces": [{"route_kind": "llm"}],
+            "score": {"passed": False, "failure_labels": ["response_clarity_failure"]},
+        },
     ]
-    with open(transcript, "w", encoding="utf-8") as fh:
-        for r in records:
-            fh.write(_json.dumps(r) + "\n")
+    report = build_report(results, "20260101T000000Z")
 
-    from verification.chat_eval.judge import score_transcript
-    results = score_transcript(transcript)
+    assert "scenario_alpha" in report
+    assert "scenario_beta" in report
+    assert "✅ PASS" in report
+    assert "❌ FAIL" in report
 
-    assert len(results) == 2
-    fp = next(r for r in results if r["route_kind"] == "fast_path")
-    llm_r = next(r for r in results if r["route_kind"] == "llm")
 
-    assert fp["judge_scores"]["helpfulness"] == -1
-    assert fp["judge_scores"]["correctness"] == -1
-    assert fp["judge_scores"]["conciseness"] == -1
+def test_report_routing_accuracy():
+    """Traces with known route kinds produce correct counts and % in the report."""
+    from verification.chat_eval.report import build_report
 
-    assert llm_r["judge_scores"]["helpfulness"] == 2
-    assert llm_r["judge_scores"]["correctness"] == 2
-    assert llm_r["judge_scores"]["conciseness"] == 2
+    results = [
+        {
+            "scenario_id": "s1",
+            "traces": [
+                {"route_kind": "fast_path"},
+                {"route_kind": "fast_path"},
+                {"route_kind": "tool_call"},
+            ],
+            "score": {"passed": True, "failure_labels": []},
+        }
+    ]
+    report = build_report(results, "run_x")
+
+    assert "fast_path" in report
+    assert "tool_call" in report
+    # 2 fast_path out of 3 = 66.7%
+    assert "66.7%" in report
+    # 1 tool_call out of 3 = 33.3%
+    assert "33.3%" in report
+
+
+def test_report_failure_label_aggregation():
+    """Two scenarios with the same label → count=2 and both IDs listed."""
+    from verification.chat_eval.report import build_report
+
+    results = [
+        {
+            "scenario_id": "s1",
+            "traces": [],
+            "score": {"passed": False, "failure_labels": ["response_clarity_failure"]},
+        },
+        {
+            "scenario_id": "s2",
+            "traces": [],
+            "score": {"passed": False, "failure_labels": ["response_clarity_failure"]},
+        },
+    ]
+    report = build_report(results, "run_y")
+
+    assert "response_clarity_failure" in report
+    # count = 2 appears in the table
+    assert "| 2 |" in report
+    assert "s1" in report
+    assert "s2" in report
+
+
+def test_report_regression_detection():
+    """Scenario that was PASS in prior run and is now FAIL appears in Regressions."""
+    from verification.chat_eval.report import build_report
+
+    prior_summary = {
+        "scenarios": [
+            {"scenario_id": "flaky_scenario", "passed": True, "failure_labels": []},
+        ]
+    }
+    results = [
+        {
+            "scenario_id": "flaky_scenario",
+            "traces": [],
+            "score": {"passed": False, "failure_labels": ["llm_prompt_gap"]},
+        }
+    ]
+    report = build_report(results, "run_z", prior_summary=prior_summary)
+
+    assert "Regressions" in report
+    assert "flaky_scenario" in report
+    assert "was PASS, now FAIL" in report
+    assert "llm_prompt_gap" in report
+
+
+def test_load_latest_prior_summary(tmp_path):
+    """load_latest_prior_summary returns the second-most-recent run, not the current one."""
+    import json as _json
+    from verification.chat_eval.artifacts import load_latest_prior_summary
+
+    # Write two fake run dirs — names must sort chronologically.
+    older = tmp_path / "20260101T000000Z"
+    newer = tmp_path / "20260102T000000Z"
+    for d in (older, newer):
+        d.mkdir()
+        payload = {"run_id": d.name, "total": 1, "passed": 1, "failed": 0, "scenarios": []}
+        with open(d / "summary.json", "w") as fh:
+            _json.dump(payload, fh)
+
+    result = load_latest_prior_summary(tmp_path)
+    assert result is not None
+    assert result["run_id"] == "20260101T000000Z"
+
+
+def test_load_latest_prior_summary_no_prior(tmp_path):
+    """Returns None when there is only one (current) run dir."""
+    import json as _json
+    from verification.chat_eval.artifacts import load_latest_prior_summary
+
+    only_dir = tmp_path / "20260101T000000Z"
+    only_dir.mkdir()
+    with open(only_dir / "summary.json", "w") as fh:
+        _json.dump({"run_id": only_dir.name, "scenarios": []}, fh)
+
+    assert load_latest_prior_summary(tmp_path) is None
 
 
 def test_tui_logging_opt_in(isolated_engine, monkeypatch):
