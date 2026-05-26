@@ -879,8 +879,10 @@ def test_extract_chat_artifacts_with_fixture_llm(isolated_engine, monkeypatch):
     _seed_user_and_skill(isolated_engine)
 
     canned_response = json.dumps([
-        {"type": "skill", "name": "Redis", "category": "Database", "description": ""},
-        {"type": "project", "name": "Distributed Cache", "description": "Redis-backed layer"},
+        {"type": "skill", "name": "Redis", "category": "Database", "description": "",
+         "evidence": "I built a distributed cache at my last job using Redis"},
+        {"type": "project", "name": "Distributed Cache", "description": "Redis-backed layer",
+         "evidence": "I built a distributed cache at my last job using Redis"},
     ])
 
     class FixtureLLM:
@@ -922,6 +924,38 @@ def test_extract_chat_artifacts_returns_empty_on_nothing_new(isolated_engine, mo
     agent = chat_module.ChatAgent()
     candidates = agent._extract_chat_artifacts([{"role": "user", "content": "Hello!"}])
     assert candidates == []
+
+
+def test_extract_chat_artifacts_filters_no_evidence(isolated_engine, monkeypatch):
+    """_extract_chat_artifacts drops candidates that have empty or missing evidence."""
+    import json
+
+    _seed_user_and_skill(isolated_engine)
+
+    # Item 1 has evidence (should be kept); item 2 has empty evidence (should be dropped);
+    # item 3 is missing the key entirely (should be dropped).
+    canned = json.dumps([
+        {"type": "skill", "name": "Redis", "category": "Database",
+         "evidence": "I use Redis daily for caching in my current role"},
+        {"type": "project", "name": "No Evidence Project", "description": "...", "evidence": ""},
+        {"type": "skill", "name": "Kafka", "category": "Messaging"},
+    ])
+
+    class FixtureLLM:
+        def invoke(self, *_a, **_kw):
+            class Resp:
+                content = canned
+            return Resp()
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: FixtureLLM())
+
+    agent = chat_module.ChatAgent()
+    candidates = agent._extract_chat_artifacts([
+        {"role": "user", "content": "I use Redis daily for caching in my current role."},
+    ])
+
+    assert len(candidates) == 1, f"Expected 1 candidate (evidence-backed), got: {candidates}"
+    assert candidates[0]["name"] == "Redis"
 
 
 def test_save_command_fast_path_no_llm_call_on_empty(isolated_engine, monkeypatch):

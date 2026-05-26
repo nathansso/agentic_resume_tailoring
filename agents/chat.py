@@ -965,9 +965,12 @@ class ChatAgent:
                 f"Return ONLY a JSON array (no markdown, no explanation). Each item:\n"
                 f'  {{"type": "skill"|"project"|"experience", "name": "...", '
                 f'"category": "..." (for skills only), "company": "..." (for experience only), '
-                f'"description": "..."}}\n\n'
+                f'"description": "...", '
+                f'"evidence": "<verbatim quote or close paraphrase from the conversation that shows the user mentioned this>"}}\n\n'
                 f"For experience items set \"name\" equal to the job title and include \"company\".\n"
-                f"Return [] if nothing new was mentioned.\n\n"
+                f"Only include an item when a clear supporting quote is present in the conversation. "
+                f"Do NOT invent items not grounded in the transcript.\n"
+                f"Return [] if nothing new was mentioned with clear supporting evidence.\n\n"
                 f"Conversation:\n{transcript}"
             )}]
 
@@ -992,6 +995,14 @@ class ChatAgent:
                 name = (item.get("name") or item.get("title") or "").strip()
                 if not name:
                     continue
+                # Require evidence — items without a supporting quote from the conversation
+                # are not safe to surface for persistence (guards against hallucination).
+                if not (item.get("evidence") or "").strip():
+                    logger.debug(
+                        "_extract_chat_artifacts: dropped '%s' (%s) — no evidence quote",
+                        name, atype,
+                    )
+                    continue
                 result.append(item)
             return result
         except Exception as exc:
@@ -1015,9 +1026,12 @@ class ChatAgent:
             atype = (item.get("type") or "").lower()
             name = (item.get("name") or item.get("title") or "").strip()
             extra = item.get("category") or item.get("company") or item.get("description") or ""
+            evidence_snippet = (item.get("evidence") or "")[:100]
             display = f"  {i}. {atype.capitalize()}: {name}"
             if extra:
                 display += f" ({extra[:60]})"
+            if evidence_snippet:
+                display += f'\n     Evidence: "{evidence_snippet}"'
             lines.append(display)
             option_data[str(i)] = {
                 "user_id": user.user_id,

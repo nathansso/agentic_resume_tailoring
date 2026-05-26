@@ -535,11 +535,22 @@ def create_artifact_from_chat(
 
     artifact_type: 'skill' | 'project' | 'experience'
     data: type-specific fields (name/category for skill; name/description/repo_url for project;
-          title/company/description for experience).
+          title/company/description for experience).  Must include a non-empty 'evidence' key:
+          a verbatim quote or paraphrase from the conversation that supports saving this artifact.
     source_context: free-form back-reference (e.g. 'chat:job_<id>') stored on the artifact.
     Returns a plain-English result string. Never raises.
     """
     try:
+        # Evidence is required — callers must supply a quote/paraphrase from the conversation
+        # that supports this artifact.  This prevents the LLM from hallucinating artifacts that
+        # were never actually discussed.
+        evidence = (data.get("evidence") or "").strip()
+        if not evidence:
+            return (
+                "Evidence is required to save this artifact from chat. "
+                "Describe what was said in the conversation that supports this."
+            )
+
         artifact_type = artifact_type.lower().strip()
         if artifact_type == "skill":
             name = (data.get("name") or "").strip()
@@ -569,7 +580,7 @@ def create_artifact_from_chat(
                     proficiency=3,
                     evidence_source="chat",
                     confidence_score=0.7,
-                    evidence_detail=source_context,
+                    evidence_detail=evidence,  # verbatim quote from the conversation
                 ))
                 session.commit()
             return f"Added skill '{name}' to your profile (source: chat)."
@@ -577,7 +588,8 @@ def create_artifact_from_chat(
             name = (data.get("name") or "").strip()
             if not name:
                 return "Project name is required."
-            description = (data.get("description") or "").strip() or None
+            # Fall back to the evidence quote when no separate description is provided.
+            description = (data.get("description") or evidence).strip() or None
             repo_url = (data.get("repo_url") or "").strip() or None
             with Session(engine) as session:
                 existing = session.exec(
@@ -601,7 +613,8 @@ def create_artifact_from_chat(
             company = (data.get("company") or "").strip()
             if not title or not company:
                 return "Experience title and company are required."
-            description = (data.get("description") or "").strip() or None
+            # Fall back to the evidence quote when no separate description is provided.
+            description = (data.get("description") or evidence).strip() or None
             with Session(engine) as session:
                 existing = session.exec(
                     select(Experience).where(
