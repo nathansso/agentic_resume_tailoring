@@ -361,8 +361,12 @@ def get_jobs() -> list[dict]:
 
 
 def get_job_details(job_uuid: str) -> Optional[dict]:
+    try:
+        parsed_uuid = UUID(job_uuid)
+    except (ValueError, AttributeError):
+        return None
     with Session(engine) as session:
-        job = session.get(JobDescription, UUID(job_uuid))
+        job = session.get(JobDescription, parsed_uuid)
         if not job:
             return None
         results = session.exec(

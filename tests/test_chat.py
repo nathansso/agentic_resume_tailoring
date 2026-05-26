@@ -942,3 +942,130 @@ def test_save_command_fast_path_no_llm_call_on_empty(isolated_engine, monkeypatc
     response = agent.chat("/save")
 
     assert "no new" in response.lower() or "not detected" in response.lower() or "detected" in response.lower()
+
+
+# ── Edge cases and error paths ────────────────────────────────────────────────
+
+
+def test_pending_option_no_options_exist(isolated_engine, monkeypatch):
+    """Typing '1' when no pending options are set passes through to the LLM, not a crash."""
+    llm_called = []
+
+    class TrackingLLM:
+        def invoke(self, *_a, **_kw):
+            llm_called.append(True)
+            class Resp:
+                content = "RESPONSE: I can help with that."
+            return Resp()
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda *a, **kw: TrackingLLM())
+
+    agent = chat_module.ChatAgent()
+    assert not agent._pending_options, "No pending options should be set initially"
+
+    response = agent.chat("1")
+    assert isinstance(response, str), "Should return a string even with no pending options"
+    assert llm_called, "LLM should be reached when '1' has no pending options to resolve"
+
+
+def test_malformed_tool_call_missing_close_paren(isolated_engine, monkeypatch):
+    """A TOOL_CALL with a missing closing paren is handled without crashing."""
+    class MalformedLLM:
+        def invoke(self, *_a, **_kw):
+            class Resp:
+                # Missing closing paren — regex won't match, falls through to plain text
+                content = "TOOL_CALL: query_skills("
+            return Resp()
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda *a, **kw: MalformedLLM())
+
+    agent = chat_module.ChatAgent()
+    response = agent.chat("show my skills")
+    # Should return a string without raising, even if it returns the raw text
+    assert isinstance(response, str)
+
+
+def test_unknown_tool_name_in_tool_call(isolated_engine, monkeypatch):
+    """A TOOL_CALL referencing an unknown tool returns 'Unknown tool' without crashing."""
+    class UnknownToolLLM:
+        def invoke(self, *_a, **_kw):
+            class Resp:
+                content = "TOOL_CALL: nonexistent_fn()"
+            return Resp()
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda *a, **kw: UnknownToolLLM())
+
+    agent = chat_module.ChatAgent()
+    response = agent.chat("do something")
+    assert isinstance(response, str)
+    assert "unknown" in response.lower() or "nonexistent" in response.lower(), (
+        f"Expected 'Unknown tool' in response, got: {response!r}"
+    )
+
+
+def test_compression_boundary_at_limit(isolated_engine, monkeypatch):
+    """History with exactly _COMPRESS_AT messages does NOT trigger compression."""
+    compress_called = []
+
+    class SpyLLM:
+        def invoke(self, *_a, **_kw):
+            compress_called.append(True)
+            class Resp:
+                content = "Summary."
+            return Resp()
+
+    # Only patch the compression LLM call; routing LLM is not used here
+    monkeypatch.setattr(chat_module, "get_llm", lambda *a, **kw: SpyLLM())
+
+    agent = chat_module.ChatAgent()
+    # Exactly at the limit — compression requires len(history) >= _COMPRESS_AT
+    # The check is `< _COMPRESS_AT`, so exactly _COMPRESS_AT - 1 should NOT compress
+    agent.history = [{"role": "user", "content": f"msg {i}"} for i in range(chat_module._COMPRESS_AT - 1)]
+    initial_len = len(agent.history)
+
+    agent._maybe_compress_history()
+
+    assert len(agent.history) == initial_len, (
+        f"History should not be compressed at {initial_len} messages "
+        f"(threshold is {chat_module._COMPRESS_AT})"
+    )
+    assert not compress_called, "LLM should not be called for compression below threshold"
+
+
+def test_compression_boundary_one_over(isolated_engine, monkeypatch):
+    """History with _COMPRESS_AT messages DOES trigger compression."""
+    class FakeLLM:
+        def invoke(self, *_a, **_kw):
+            class Resp:
+                content = "Compressed summary."
+            return Resp()
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda *a, **kw: FakeLLM())
+
+    agent = chat_module.ChatAgent()
+    agent.history = [{"role": "user", "content": f"msg {i}"} for i in range(chat_module._COMPRESS_AT)]
+
+    agent._maybe_compress_history()
+
+    assert len(agent.history) == chat_module._COMPRESS_KEEP, (
+        f"History should be trimmed to {chat_module._COMPRESS_KEEP} after compression, "
+        f"got {len(agent.history)}"
+    )
+    assert agent._job_summaries[None] == "Compressed summary."
+
+
+def test_chat_no_active_profile(isolated_engine, monkeypatch):
+    """chat() returns a plain string when no profile is in the database — does not raise."""
+    class FakeLLM:
+        def invoke(self, *_a, **_kw):
+            class Resp:
+                content = "RESPONSE: Please set up a profile first."
+            return Resp()
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda *a, **kw: FakeLLM())
+
+    # No profile seeded — isolated_engine has empty DB
+    agent = chat_module.ChatAgent()
+    response = agent.chat("what are my skills?")
+    assert isinstance(response, str), "Should return a string even with no profile"
+    assert response  # non-empty

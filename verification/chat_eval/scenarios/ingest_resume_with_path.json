@@ -1,0 +1,23 @@
+{
+  "scenario_id": "ingest_resume_with_path",
+  "description": "User provides a resume file path directly — should fast-path to the resume ingestor",
+  "tags": ["resume", "ingestion", "fast_path"],
+  "profile_fixture": {
+    "name": "Resume User",
+    "email": "resumeuser@test.local"
+  },
+  "canonical_turns": [
+    {"user": "ingest resume /tmp/myresume.md"}
+  ],
+  "max_turns": 2,
+  "must_call_tools": [],
+  "forbidden_tools": ["run_ingest_github", "run_ingest_linkedin_pdf", "run_ingest_github_repo"],
+  "required_response_substrings": [],
+  "success_conditions": {
+    "route_must_be_any": ["fast_path"],
+    "response_must_contain_any": ["resume", "ingest", "File not found", "not found", "myresume"]
+  },
+  "failure_labels": {
+    "wrong_tool_called": "routing_failure"
+  }
+}
