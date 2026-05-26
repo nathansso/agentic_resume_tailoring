@@ -209,7 +209,8 @@ def get_help_text() -> str:
         "  tailor <job description or file> — tailor your resume to a job\n\n"
         "Profile commands:\n"
         "  add missing skill <name>        — add a skill directly to your profile\n"
-        "  add <skill> to my profile       — same as above\n\n"
+        "  add <skill> to my profile       — same as above\n"
+        "  /save                           — detect and save new skills/projects/experience from recent chat\n\n"
         "TUI shortcuts (type in chat):\n"
         "  /ingest  /data  /tailor  /viz  /profile  /copy\n\n"
         "Note: use ctrl+q to quit. ctrl+c is disabled to allow copy/paste."
@@ -926,6 +927,134 @@ class ChatAgent:
             return "No active profile. Complete onboarding first."
         return services.add_skill_to_profile(user.user_id, skill_name, target)
 
+    def _extract_chat_artifacts(self, messages: list[dict]) -> list[dict]:
+        """Extract new skill/project/experience candidates from recent messages using the LLM.
+
+        Returns a list of candidate dicts, each with keys: type, name/title, category/company,
+        description. Returns [] on LLM failure or parse error. Isolated and unit-testable with
+        a fixture LLM response.
+        """
+        import json
+        from database.user_utils import get_active_profile
+        try:
+            user = get_active_profile()
+            existing_skills: list[str] = []
+            if user:
+                with Session(engine) as session:
+                    user_skills = session.exec(
+                        select(UserSkill).where(UserSkill.user_id == user.user_id)
+                    ).all()
+                    for us in user_skills:
+                        skill = session.get(Skill, us.skill_id)
+                        if skill:
+                            existing_skills.append(skill.name)
+
+            # Build a compact transcript from the supplied messages
+            transcript_lines = []
+            for msg in messages[-10:]:
+                role = msg.get("role", "user")
+                content = (msg.get("content") or "")[:500]
+                if role in ("user", "assistant"):
+                    transcript_lines.append(f"{role.capitalize()}: {content}")
+            transcript = "\n".join(transcript_lines)
+
+            skills_str = ", ".join(existing_skills[:30]) if existing_skills else "none"
+            extraction_prompt = [{"role": "user", "content": (
+                f"Given this conversation excerpt, extract any skills, projects, or experiences "
+                f"the user mentioned that are NEW (not in their current skill list: {skills_str}).\n\n"
+                f"Return ONLY a JSON array (no markdown, no explanation). Each item:\n"
+                f'  {{"type": "skill"|"project"|"experience", "name": "...", '
+                f'"category": "..." (for skills only), "company": "..." (for experience only), '
+                f'"description": "..."}}\n\n'
+                f"For experience items set \"name\" equal to the job title and include \"company\".\n"
+                f"Return [] if nothing new was mentioned.\n\n"
+                f"Conversation:\n{transcript}"
+            )}]
+
+            resp = get_llm(role="chat", temperature=0.0).invoke(extraction_prompt)
+            raw = (resp.content if hasattr(resp, "content") else str(resp)).strip()
+            # Strip markdown code fences if the model wraps output
+            if raw.startswith("```"):
+                raw = re.sub(r"^```(?:json)?\n?", "", raw)
+                raw = re.sub(r"\n?```$", "", raw).strip()
+
+            candidates = json.loads(raw)
+            if not isinstance(candidates, list):
+                return []
+
+            result = []
+            for item in candidates:
+                if not isinstance(item, dict):
+                    continue
+                atype = (item.get("type") or "").lower()
+                if atype not in ("skill", "project", "experience"):
+                    continue
+                name = (item.get("name") or item.get("title") or "").strip()
+                if not name:
+                    continue
+                result.append(item)
+            return result
+        except Exception as exc:
+            logger.debug("_extract_chat_artifacts failed: %s", exc)
+            return []
+
+    def _handle_save_command(self) -> str:
+        """Handle /save: extract knowledge artifacts from recent chat and offer to persist them."""
+        from database.user_utils import get_active_profile
+        user = get_active_profile()
+        if not user:
+            return "No active profile. Complete onboarding first."
+
+        candidates = self._extract_chat_artifacts(self.history[-10:])
+        if not candidates:
+            return "No new skills, projects, or experiences detected in recent messages."
+
+        lines = ["I found these new items in our conversation:\n"]
+        option_data: dict[str, dict] = {}
+        for i, item in enumerate(candidates, start=1):
+            atype = (item.get("type") or "").lower()
+            name = (item.get("name") or item.get("title") or "").strip()
+            extra = item.get("category") or item.get("company") or item.get("description") or ""
+            display = f"  {i}. {atype.capitalize()}: {name}"
+            if extra:
+                display += f" ({extra[:60]})"
+            lines.append(display)
+            option_data[str(i)] = {
+                "user_id": user.user_id,
+                "type": atype,
+                "data": item,
+                "name": name,
+            }
+
+        lines.append("\nType a number to save that item, 'all' to save all, or 'skip' to dismiss.")
+
+        uid = user.user_id
+        active = self._active_job_id
+
+        for key, info in option_data.items():
+            t, d, a = info["type"], info["data"], active
+            def _make_single(u=uid, typ=t, dat=d, ajid=a):
+                def _save(_=None):
+                    return services.create_artifact_from_chat(
+                        u, typ, dat, source_context=f"chat:{ajid or 'landing'}"
+                    )
+                return _save
+            self._pending_options[key] = _make_single()
+
+        def _save_all(_=None):
+            results = []
+            for info in option_data.values():
+                results.append(services.create_artifact_from_chat(
+                    info["user_id"], info["type"], info["data"],
+                    source_context=f"chat:{active or 'landing'}",
+                ))
+            return "\n".join(results)
+
+        self._pending_options["all"] = _save_all
+        self._pending_options["skip"] = lambda: "Dismissed — no items saved."
+
+        return "\n".join(lines)
+
     @staticmethod
     def _normalize(text: str) -> str:
         return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9\s]", " ", text.lower())).strip()
@@ -1174,6 +1303,10 @@ class ChatAgent:
                     "  `ingest linkedin pdf <path>`\n\n"
                     "Example: `ingest linkedin pdf /path/to/linkedin.pdf`"
                 )
+
+        # /save command: extract and persist knowledge artifacts from the conversation.
+        if raw.lower() in ("/save", "/save artifacts", "save artifacts"):
+            return self._handle_save_command()
 
         # 2) Dedicated skill evidence parser.
         evidence_match = re.search(
