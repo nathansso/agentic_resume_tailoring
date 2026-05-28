@@ -20,10 +20,14 @@ def _migrate_db_location() -> None:
             logging.getLogger("ART").warning("DB migration skipped: %s", exc)
 
 
-_migrate_db_location()
+_sqlite = DATABASE_URL.startswith("sqlite")
 
-# connect_args needed for SQLite to allow usage across threads
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+if _sqlite:
+    _migrate_db_location()
+
+# check_same_thread is SQLite-only; PostgreSQL handles threading natively
+_connect_args = {"check_same_thread": False} if _sqlite else {}
+engine = create_engine(DATABASE_URL, connect_args=_connect_args)
 
 def _migrate_db() -> None:
     """Apply incremental column additions for existing DBs (SQLite, no Alembic)."""
@@ -59,7 +63,8 @@ def _migrate_db() -> None:
 
 def init_db():
     SQLModel.metadata.create_all(engine)
-    _migrate_db()
+    if _sqlite:
+        _migrate_db()  # column-addition migrations are SQLite-only; PostgreSQL starts fresh
 
 def get_session():
     with Session(engine) as session:

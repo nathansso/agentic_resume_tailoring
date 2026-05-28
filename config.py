@@ -14,8 +14,8 @@ EXPORTS_DIR = APP_DATA_DIR / "exports"
 UPLOADS_DIR = APP_DATA_DIR / "uploads"
 LOGS_DIR    = APP_DATA_DIR / "logs"
 
-# Database Config — SQLite at ~/.art/art.db
-DATABASE_URL = f"sqlite:///{APP_DATA_DIR / 'art.db'}"
+# Database — defaults to local SQLite; set DATABASE_URL to use PostgreSQL (e.g. Supabase)
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{APP_DATA_DIR / 'art.db'}")
 
 
 def ensure_app_dirs(base_dir: Path | None = None) -> None:
