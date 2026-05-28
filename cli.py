@@ -323,6 +323,15 @@ def cmd_status(args):
         print()
 
 
+def cmd_serve(args):
+    """Serve the TUI in a browser via textual-web."""
+    import subprocess
+    cmd = ["textual-web", "serve", "--config", "textual-web.toml"]
+    if getattr(args, "port", None):
+        cmd += ["--port", str(args.port)]
+    subprocess.run(cmd)
+
+
 def cmd_supabase_setup(args):
     """Apply the Phase 2 schema migration and RLS policies to the Supabase database."""
     import os
@@ -499,6 +508,10 @@ def main():
     # tui
     subparsers.add_parser("tui", help="Launch interactive TUI")
 
+    # serve
+    p_serve = subparsers.add_parser("serve", help="Serve the TUI in a browser via textual-web")
+    p_serve.add_argument("--port", type=int, default=None, help="Port to listen on (default: textual-web default)")
+
     # supabase-setup
     subparsers.add_parser(
         "supabase-setup",
@@ -535,6 +548,8 @@ def main():
     elif args.command == "tui":
         from tui.app import main as tui_main
         tui_main()
+    elif args.command == "serve":
+        cmd_serve(args)
     elif args.command == "supabase-setup":
         cmd_supabase_setup(args)
     elif args.command == "chat-eval":
