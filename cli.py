@@ -341,22 +341,26 @@ def cmd_supabase_setup(args):
         ("RLS policies", base / "rls_policies.sql"),
     ]
 
-    for label, path in files:
+    for path in [p for _, p in files]:
         if not path.exists():
             print(f"Error: {path} not found.")
             sys.exit(1)
-        sql = path.read_text()
-        print(f"Applying {label} ({path.name})...")
-        try:
-            with engine.raw_connection() as raw_conn:
-                raw_conn.autocommit = True
-                cursor = raw_conn.cursor()
-                cursor.execute(sql)
-                cursor.close()
-            print(f"  OK")
-        except Exception as exc:
-            print(f"  Error: {exc}")
-            sys.exit(1)
+
+    # Use a single connection so DDL from the migration is visible when RLS
+    # policies are compiled (PostgreSQL validates sql-language function bodies
+    # against the live catalog at CREATE time).
+    try:
+        with engine.raw_connection() as raw_conn:
+            raw_conn.autocommit = True
+            cursor = raw_conn.cursor()
+            for label, path in files:
+                print(f"Applying {label} ({path.name})...")
+                cursor.execute(path.read_text())
+                print("  OK")
+            cursor.close()
+    except Exception as exc:
+        print(f"  Error: {exc}")
+        sys.exit(1)
 
     print("\nSupabase Phase 2 setup complete.")
     print("Schema columns added, RLS policies enabled.")
