@@ -51,6 +51,11 @@ def _migrate_db() -> None:
         "ALTER TABLE user ADD COLUMN resume_style TEXT",
         # issue 24: persisted chat summaries
         "ALTER TABLE jobdescription ADD COLUMN chat_summary TEXT",
+        # issue 35: auth columns
+        "ALTER TABLE user ADD COLUMN username TEXT",
+        "ALTER TABLE user ADD COLUMN password_hash TEXT",
+        "ALTER TABLE user ADD COLUMN supabase_uid TEXT",
+        "ALTER TABLE jobdescription ADD COLUMN user_id TEXT",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

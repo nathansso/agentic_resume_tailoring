@@ -30,6 +30,7 @@ from textual.widgets import (
 from textual import work, events
 
 from database.db import init_db, engine
+from tui.screens.login import LoginScreen
 from tui.screens.onboarding import OnboardingScreen
 from tui.screens.profile import ProfileScreen, _initials
 from database.models import JobDescription, Skill, User, UserJobResult, UserSkill
@@ -336,9 +337,31 @@ class ArtApp(App):
         self._refresh_app_state()
         self._load_jobs_sidebar()
         self._load_data_tables()
-        from database.user_utils import get_active_profile
-        if get_active_profile() is None:
+        self._show_auth_screen()
+
+    def _show_auth_screen(self) -> None:
+        """Show login if users exist, otherwise show onboarding."""
+        with Session(engine) as session:
+            has_users = session.exec(select(User).limit(1)).first() is not None
+        if has_users:
+            self.push_screen(LoginScreen(), callback=self._on_login_done)
+        else:
             self.push_screen(OnboardingScreen(), callback=self._on_onboarding_done)
+
+    def _on_login_done(self, result: dict | None) -> None:
+        if result and result.get("action") == "new_account":
+            self.push_screen(OnboardingScreen(), callback=self._on_onboarding_done)
+            return
+        self._refresh_app_state()
+        self._load_jobs_sidebar()
+        self._load_data_tables()
+        if result and result.get("name"):
+            scroll = self.query_one("#chat-scroll", VerticalScroll)
+            scroll.mount(Static(
+                f"Welcome back, {result['name']}!",
+                classes="bot-msg",
+            ))
+            scroll.scroll_end()
 
     def _on_onboarding_done(self, result: dict | None) -> None:
         self._refresh_app_state()
