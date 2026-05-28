@@ -12,9 +12,10 @@ from textual.widgets import Header, Footer, Static, Input, Button, Label
 from textual import work
 
 
-_STEPS = ["provider", "username", "password", "confirm_password", "name", "resume", "github", "linkedin"]
+_STEPS = ["provider", "username", "email", "password", "confirm_password", "name", "resume", "github", "linkedin"]
 
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9_-]{3,32}$")
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class OnboardingScreen(Screen):
@@ -110,6 +111,12 @@ class OnboardingScreen(Screen):
             "Choose a username.",
             "3–32 characters: letters, numbers, underscores, hyphens. Used to log in.",
             "your-username",
+            False,
+        ),
+        "email": (
+            "What's your email address?",
+            "Used for account verification and password recovery.",
+            "you@example.com",
             False,
         ),
         "password": (
@@ -315,6 +322,11 @@ class OnboardingScreen(Screen):
                     self._set_status("That username is already taken.")
                     return
 
+            if step == "email":
+                if not _EMAIL_RE.match(value):
+                    self._set_status("Please enter a valid email address.")
+                    return
+
             if step == "password":
                 if len(value) < 8:
                     self._set_status("Password must be at least 8 characters.")
@@ -348,8 +360,8 @@ class OnboardingScreen(Screen):
 
     def _submit(self) -> None:
         username = self._answers.get("username", "")
+        email = self._answers.get("email", "")
         name = self._answers.get("name", "")
-        email = f"{username}@art.local" if username else f"user.{__import__('uuid').uuid4().hex[:8]}@local"
         self.query_one("#next-btn", Button).disabled = True
         self._run_onboarding(
             name=name,
@@ -383,8 +395,8 @@ class OnboardingScreen(Screen):
 
             # Attempt Supabase sign-up if configured; fall through gracefully if not.
             supabase_uid = None
-            if username and password:
-                supabase_result = supabase_sign_up(username, password)
+            if email and password:
+                supabase_result = supabase_sign_up(email, password)
                 if supabase_result:
                     supabase_uid = supabase_result.get("supabase_uid")
                     if "access_token" in supabase_result:

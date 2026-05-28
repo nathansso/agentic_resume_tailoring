@@ -52,32 +52,31 @@ def _session_dict(response) -> Optional[dict]:
     return result
 
 
-def supabase_sign_up(username: str, password: str) -> Optional[dict]:
-    """Sign up via Supabase Auth.
+def supabase_sign_up(email: str, password: str) -> Optional[dict]:
+    """Sign up via Supabase Auth using the user's real email address.
 
     Returns ``{supabase_uid, access_token, refresh_token, expires_at}`` on
-    success. If Supabase requires email confirmation the session keys will be
-    absent (supabase_uid is still returned).  Returns None on any error.
+    success. If email confirmation is enabled the session keys will be absent
+    until the user clicks the verification link (supabase_uid is still
+    returned). Returns None on any error.
     """
     client = _supabase_client()
     if not client:
         return None
-    email = f"{username}@art.local"
     try:
         return _session_dict(client.auth.sign_up({"email": email, "password": password}))
     except Exception:
         return None
 
 
-def supabase_sign_in(username: str, password: str) -> Optional[dict]:
-    """Sign in via Supabase Auth.
+def supabase_sign_in(email: str, password: str) -> Optional[dict]:
+    """Sign in via Supabase Auth using the user's email address.
 
     Returns ``{supabase_uid, access_token, refresh_token, expires_at}`` or None.
     """
     client = _supabase_client()
     if not client:
         return None
-    email = f"{username}@art.local"
     try:
         return _session_dict(
             client.auth.sign_in_with_password({"email": email, "password": password})

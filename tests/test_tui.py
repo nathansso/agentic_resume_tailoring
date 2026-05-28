@@ -185,12 +185,12 @@ def test_onboarding_advance_past_name(isolated_engine, monkeypatch):
             await pilot.pause()
             screen = pilot.app.screen
             # Jump past provider/username/password/confirm_password to the name step (index 4).
-            screen._step_index = 4
+            screen._step_index = 5
             screen._render_step()
             screen.query_one("#step-input").value = "Alice Smith"
             screen._advance(skip=False)
             await pilot.pause()
-            assert screen._step_index == 5  # resume step
+            assert screen._step_index == 6  # resume step
             assert screen._answers["name"] == "Alice Smith"
 
     asyncio.run(_run())
@@ -214,7 +214,7 @@ def test_onboarding_skip_optional_steps(isolated_engine, tmp_path, monkeypatch):
             await pilot.pause()
             screen = pilot.app.screen
             # Jump to the name step (index 4) — skips provider/username/password/confirm.
-            screen._step_index = 4
+            screen._step_index = 5
             screen._render_step()
             screen.query_one("#step-input").value = "Alice Smith"
             screen._advance(skip=False)
@@ -222,11 +222,11 @@ def test_onboarding_skip_optional_steps(isolated_engine, tmp_path, monkeypatch):
             screen.query_one("#step-input").value = str(resume_file)
             screen._advance(skip=False)
             await pilot.pause()
-            assert screen._step_index == 6  # github step
+            assert screen._step_index == 7  # github step
             screen._advance(skip=True)
             await pilot.pause()
             assert screen._answers.get("github", "") == ""
-            assert screen._step_index == 7  # linkedin step
+            assert screen._step_index == 8  # linkedin step
             screen._advance(skip=True)
             await pilot.pause()
             assert screen._answers.get("linkedin", "") == ""
