@@ -119,7 +119,11 @@ class LoginScreen(Screen):
             if os.getenv("SUPABASE_URL"):
                 from database.auth import supabase_sign_in
                 from database.session_store import save_session
-                result = supabase_sign_in(username, password)
+                user = get_user_by_username(username)
+                if not user or not user.email:
+                    self.app.call_from_thread(self._set_status, "Invalid username or password.")
+                    return
+                result = supabase_sign_in(user.email, password)
                 if result:
                     if "access_token" in result:
                         save_session(
@@ -128,15 +132,13 @@ class LoginScreen(Screen):
                             result["expires_at"],
                             result["supabase_uid"],
                         )
-                    user = get_user_by_username(username)
-                    if user:
-                        ART_DIR.mkdir(parents=True, exist_ok=True)
-                        ACTIVE_PROFILE_FILE.write_text(str(user.user_id))
-                        self.app.call_from_thread(
-                            self.dismiss,
-                            {"user_id": str(user.user_id), "name": user.name},
-                        )
-                        return
+                    ART_DIR.mkdir(parents=True, exist_ok=True)
+                    ACTIVE_PROFILE_FILE.write_text(str(user.user_id))
+                    self.app.call_from_thread(
+                        self.dismiss,
+                        {"user_id": str(user.user_id), "name": user.name},
+                    )
+                    return
                 self.app.call_from_thread(self._set_status, "Invalid username or password.")
             else:
                 user = authenticate_local(username, password)
