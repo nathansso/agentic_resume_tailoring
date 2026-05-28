@@ -13,6 +13,9 @@ class User(SQLModel, table=True):
     user_id: UUID = Field(default_factory=uuid4, primary_key=True)
     name: str
     email: str = Field(unique=True)
+    username: Optional[str] = Field(default=None, unique=True, index=True)
+    password_hash: Optional[str] = Field(default=None)
+    supabase_uid: Optional[str] = Field(default=None, unique=True)
     linkedin_url: Optional[str] = None
     github_username: Optional[str] = None
     phone: Optional[str] = None
@@ -99,6 +102,7 @@ class ProjectBlurb(SQLModel, table=True):
 
 class JobDescription(SQLModel, table=True):
     job_id: UUID = Field(default_factory=uuid4, primary_key=True)
+    user_id: Optional[UUID] = Field(default=None, foreign_key="user.user_id", index=True)
     title: str
     company: str
     description: str = Field(default="")  # Raw text
