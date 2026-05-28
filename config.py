@@ -8,8 +8,8 @@ load_dotenv()
 # Base Paths
 BASE_DIR = Path(__file__).resolve().parent
 
-# App data directory — all user data lives under ~/.art/
-APP_DATA_DIR = Path.home() / ".art"
+# App data directory — all user data lives under ~/.art/ (override via ART_DATA_DIR for Docker)
+APP_DATA_DIR = Path(os.getenv("ART_DATA_DIR", str(Path.home() / ".art")))
 EXPORTS_DIR = APP_DATA_DIR / "exports"
 UPLOADS_DIR = APP_DATA_DIR / "uploads"
 LOGS_DIR    = APP_DATA_DIR / "logs"
