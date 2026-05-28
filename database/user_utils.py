@@ -29,6 +29,12 @@ def get_user_by_username(username: str) -> Optional[User]:
         return session.exec(select(User).where(User.username == username)).first()
 
 
+def get_user_by_supabase_uid(supabase_uid: str) -> Optional[User]:
+    """Return the User mapped to the given Supabase Auth UID, or None."""
+    with Session(engine) as session:
+        return session.exec(select(User).where(User.supabase_uid == supabase_uid)).first()
+
+
 def authenticate_local(username: str, password: str) -> Optional[User]:
     """Verify username + password against the local DB. Returns the User or None."""
     from database.auth import verify_password

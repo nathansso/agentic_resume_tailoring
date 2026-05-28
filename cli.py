@@ -323,6 +323,46 @@ def cmd_status(args):
         print()
 
 
+def cmd_supabase_setup(args):
+    """Apply the Phase 2 schema migration and RLS policies to the Supabase database."""
+    import os
+    from pathlib import Path
+    from database.db import engine
+
+    db_url = os.getenv("DATABASE_URL", "")
+    if not db_url.startswith("postgresql"):
+        print("Error: DATABASE_URL must point to a PostgreSQL (Supabase) database.")
+        print("Set DATABASE_URL=postgresql://... in your .env and try again.")
+        sys.exit(1)
+
+    base = Path(__file__).parent / "supabase"
+    files = [
+        ("Phase 2 schema migration", base / "migrations" / "phase2_auth.sql"),
+        ("RLS policies", base / "rls_policies.sql"),
+    ]
+
+    for label, path in files:
+        if not path.exists():
+            print(f"Error: {path} not found.")
+            sys.exit(1)
+        sql = path.read_text()
+        print(f"Applying {label} ({path.name})...")
+        try:
+            with engine.raw_connection() as raw_conn:
+                raw_conn.autocommit = True
+                cursor = raw_conn.cursor()
+                cursor.execute(sql)
+                cursor.close()
+            print(f"  OK")
+        except Exception as exc:
+            print(f"  Error: {exc}")
+            sys.exit(1)
+
+    print("\nSupabase Phase 2 setup complete.")
+    print("Schema columns added, RLS policies enabled.")
+    print("Users can now sign up and log in with username + password.")
+
+
 def cmd_chat_eval(args):
     """Run the synthetic chat evaluation harness against one or all scenarios."""
     import tempfile
@@ -455,6 +495,12 @@ def main():
     # tui
     subparsers.add_parser("tui", help="Launch interactive TUI")
 
+    # supabase-setup
+    subparsers.add_parser(
+        "supabase-setup",
+        help="Apply Phase 2 schema migration + RLS policies to Supabase (requires DATABASE_URL)",
+    )
+
     # chat-eval
     p_eval = subparsers.add_parser("chat-eval", help="Run synthetic chat evaluation harness")
     p_eval.add_argument("--scenario", default=None, help="Run a single scenario by ID")
@@ -485,6 +531,8 @@ def main():
     elif args.command == "tui":
         from tui.app import main as tui_main
         tui_main()
+    elif args.command == "supabase-setup":
+        cmd_supabase_setup(args)
     elif args.command == "chat-eval":
         cmd_chat_eval(args)
     else:

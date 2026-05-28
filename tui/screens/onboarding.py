@@ -384,7 +384,17 @@ class OnboardingScreen(Screen):
             # Attempt Supabase sign-up if configured; fall through gracefully if not.
             supabase_uid = None
             if username and password:
-                supabase_uid = supabase_sign_up(username, password)
+                supabase_result = supabase_sign_up(username, password)
+                if supabase_result:
+                    supabase_uid = supabase_result.get("supabase_uid")
+                    if "access_token" in supabase_result:
+                        from database.session_store import save_session
+                        save_session(
+                            supabase_result["access_token"],
+                            supabase_result["refresh_token"],
+                            supabase_result["expires_at"],
+                            supabase_uid or "",
+                        )
 
             user = create_profile(
                 name=name,
