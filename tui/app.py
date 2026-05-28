@@ -340,13 +340,36 @@ class ArtApp(App):
         self._show_auth_screen()
 
     def _show_auth_screen(self) -> None:
-        """Show login if users exist, otherwise show onboarding."""
+        """Show login if users exist, otherwise show onboarding.
+
+        When SUPABASE_URL is set, first attempts a silent session restore so
+        returning users are not prompted to log in unless their token has expired
+        and cannot be refreshed.
+        """
+        import os
         with Session(engine) as session:
             has_users = session.exec(select(User).limit(1)).first() is not None
-        if has_users:
-            self.push_screen(LoginScreen(), callback=self._on_login_done)
-        else:
+
+        if not has_users:
             self.push_screen(OnboardingScreen(), callback=self._on_onboarding_done)
+            return
+
+        if os.getenv("SUPABASE_URL"):
+            from database.auth import supabase_restore_session
+            from database.user_utils import get_user_by_supabase_uid, ART_DIR, ACTIVE_PROFILE_FILE
+            uid = supabase_restore_session()
+            if uid:
+                user = get_user_by_supabase_uid(uid)
+                if user:
+                    ART_DIR.mkdir(parents=True, exist_ok=True)
+                    ACTIVE_PROFILE_FILE.write_text(str(user.user_id))
+                    self._refresh_app_state()
+                    scroll = self.query_one("#chat-scroll", VerticalScroll)
+                    scroll.mount(Static(f"Welcome back, {user.name}!", classes="bot-msg"))
+                    scroll.scroll_end()
+                    return
+
+        self.push_screen(LoginScreen(), callback=self._on_login_done)
 
     def _on_login_done(self, result: dict | None) -> None:
         if result and result.get("action") == "new_account":

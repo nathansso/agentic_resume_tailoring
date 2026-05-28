@@ -118,8 +118,16 @@ class LoginScreen(Screen):
         try:
             if os.getenv("SUPABASE_URL"):
                 from database.auth import supabase_sign_in
-                uid = supabase_sign_in(username, password)
-                if uid:
+                from database.session_store import save_session
+                result = supabase_sign_in(username, password)
+                if result:
+                    if "access_token" in result:
+                        save_session(
+                            result["access_token"],
+                            result["refresh_token"],
+                            result["expires_at"],
+                            result["supabase_uid"],
+                        )
                     user = get_user_by_username(username)
                     if user:
                         ART_DIR.mkdir(parents=True, exist_ok=True)

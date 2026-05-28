@@ -125,3 +125,61 @@ def test_username_uniqueness(isolated_engine):
     user_utils_module.create_profile("Alice", "alice@art.local", username="alice", password_hash=pw)
     with pytest.raises(Exception):
         user_utils_module.create_profile("Alice2", "alice2@art.local", username="alice", password_hash=pw)
+
+
+def test_get_user_by_supabase_uid(isolated_engine):
+    """get_user_by_supabase_uid returns the matching user."""
+    from database.auth import hash_password
+    pw = hash_password("pass1234")
+    user = user_utils_module.create_profile(
+        "Carol", "carol@art.local",
+        username="carol", password_hash=pw, supabase_uid="supabase-uid-123",
+    )
+    found = user_utils_module.get_user_by_supabase_uid("supabase-uid-123")
+    assert found is not None
+    assert found.user_id == user.user_id
+    assert user_utils_module.get_user_by_supabase_uid("nonexistent") is None
+
+
+# ── Session store tests ───────────────────────────────────────────────────────
+
+def test_session_save_and_load(isolated_engine, monkeypatch, tmp_path):
+    """save_session persists to disk; load_session reads it back."""
+    import database.user_utils as _uu
+    monkeypatch.setattr(_uu, "ART_DIR", tmp_path)
+
+    from database.session_store import save_session, load_session
+    save_session("tok_access", "tok_refresh", 9999999999, "uid-abc")
+    data = load_session()
+    assert data["access_token"] == "tok_access"
+    assert data["refresh_token"] == "tok_refresh"
+    assert data["supabase_uid"] == "uid-abc"
+
+
+def test_session_clear(isolated_engine, monkeypatch, tmp_path):
+    """clear_session removes the session file."""
+    import database.user_utils as _uu
+    monkeypatch.setattr(_uu, "ART_DIR", tmp_path)
+
+    from database.session_store import save_session, clear_session, load_session
+    save_session("tok", "ref", 9999999999, "uid")
+    clear_session()
+    assert load_session() is None
+
+
+def test_session_is_expired(monkeypatch, tmp_path):
+    """is_expired returns True for past timestamps and False for future ones."""
+    import time
+    from database.session_store import is_expired
+    past = {"expires_at": int(time.time()) - 120}
+    future = {"expires_at": int(time.time()) + 3600}
+    assert is_expired(past)
+    assert not is_expired(future)
+
+
+def test_load_session_missing_returns_none(monkeypatch, tmp_path):
+    """load_session returns None when no session file exists."""
+    import database.user_utils as _uu
+    monkeypatch.setattr(_uu, "ART_DIR", tmp_path)
+    from database.session_store import load_session
+    assert load_session() is None

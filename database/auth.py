@@ -36,29 +36,86 @@ def _supabase_client():
         return None
 
 
-def supabase_sign_up(username: str, password: str) -> Optional[str]:
-    """Create a Supabase Auth user; returns the supabase_uid on success, None otherwise."""
+def _session_dict(response) -> Optional[dict]:
+    """Extract a session dict from a supabase-py AuthResponse."""
+    user = response.user
+    session = response.session
+    if not user:
+        return None
+    result: dict = {"supabase_uid": str(user.id)}
+    if session:
+        result.update({
+            "access_token": session.access_token,
+            "refresh_token": session.refresh_token,
+            "expires_at": int(session.expires_at),
+        })
+    return result
+
+
+def supabase_sign_up(username: str, password: str) -> Optional[dict]:
+    """Sign up via Supabase Auth.
+
+    Returns ``{supabase_uid, access_token, refresh_token, expires_at}`` on
+    success. If Supabase requires email confirmation the session keys will be
+    absent (supabase_uid is still returned).  Returns None on any error.
+    """
     client = _supabase_client()
     if not client:
         return None
     email = f"{username}@art.local"
     try:
-        response = client.auth.sign_up({"email": email, "password": password})
-        user = response.user
-        return str(user.id) if user else None
+        return _session_dict(client.auth.sign_up({"email": email, "password": password}))
     except Exception:
         return None
 
 
-def supabase_sign_in(username: str, password: str) -> Optional[str]:
-    """Sign in via Supabase Auth; returns the supabase_uid on success, None otherwise."""
+def supabase_sign_in(username: str, password: str) -> Optional[dict]:
+    """Sign in via Supabase Auth.
+
+    Returns ``{supabase_uid, access_token, refresh_token, expires_at}`` or None.
+    """
     client = _supabase_client()
     if not client:
         return None
     email = f"{username}@art.local"
     try:
-        response = client.auth.sign_in_with_password({"email": email, "password": password})
-        user = response.user
-        return str(user.id) if user else None
+        return _session_dict(
+            client.auth.sign_in_with_password({"email": email, "password": password})
+        )
     except Exception:
         return None
+
+
+def supabase_refresh_session(refresh_token: str) -> Optional[dict]:
+    """Exchange a refresh token for a new session; returns updated dict or None."""
+    client = _supabase_client()
+    if not client:
+        return None
+    try:
+        return _session_dict(client.auth.refresh_session(refresh_token))
+    except Exception:
+        return None
+
+
+def supabase_restore_session() -> Optional[str]:
+    """Load the persisted session; refresh if expired.
+
+    Returns the ``supabase_uid`` of the restored user, or None if the session
+    is missing, expired, or cannot be refreshed.
+    """
+    from database.session_store import load_session, save_session, is_expired
+    session = load_session()
+    if not session:
+        return None
+    if not is_expired(session):
+        return session.get("supabase_uid") or None
+    refreshed = supabase_refresh_session(session.get("refresh_token", ""))
+    if not refreshed:
+        return None
+    save_session(
+        access_token=refreshed["access_token"],
+        refresh_token=refreshed["refresh_token"],
+        expires_at=refreshed["expires_at"],
+        supabase_uid=refreshed["supabase_uid"],
+    )
+    return refreshed["supabase_uid"]
