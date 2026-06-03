@@ -30,31 +30,32 @@ _connect_args = {"check_same_thread": False} if _sqlite else {}
 engine = create_engine(DATABASE_URL, connect_args=_connect_args)
 
 def _migrate_db() -> None:
-    """Apply incremental column additions for existing DBs (SQLite, no Alembic)."""
+    """Apply incremental column additions for existing DBs (SQLite and PostgreSQL)."""
     from sqlalchemy import text
+    # "user" is a reserved word in PostgreSQL — quote it; SQLite accepts quoted identifiers too
     migrations = [
         # PRD 03
-        "ALTER TABLE user ADD COLUMN onboarding_complete INTEGER DEFAULT 0",
-        "ALTER TABLE user ADD COLUMN onboarding_steps TEXT DEFAULT '{}'",
+        'ALTER TABLE "user" ADD COLUMN onboarding_complete INTEGER DEFAULT 0',
+        "ALTER TABLE \"user\" ADD COLUMN onboarding_steps TEXT DEFAULT '{}'",
         # PRD 04
         "ALTER TABLE jobdescription ADD COLUMN status TEXT DEFAULT 'created'",
         "ALTER TABLE jobdescription ADD COLUMN description TEXT DEFAULT ''",
         "ALTER TABLE userjobresult ADD COLUMN revision_notes TEXT",
         "ALTER TABLE userjobresult ADD COLUMN export_path TEXT",
         # PRD 07
-        "ALTER TABLE user ADD COLUMN resume_path TEXT",
+        'ALTER TABLE "user" ADD COLUMN resume_path TEXT',
         # contact info fields
-        "ALTER TABLE user ADD COLUMN phone TEXT",
-        "ALTER TABLE user ADD COLUMN location TEXT",
+        'ALTER TABLE "user" ADD COLUMN phone TEXT',
+        'ALTER TABLE "user" ADD COLUMN location TEXT',
         # resume style capture
-        "ALTER TABLE user ADD COLUMN resume_markdown TEXT",
-        "ALTER TABLE user ADD COLUMN resume_style TEXT",
+        'ALTER TABLE "user" ADD COLUMN resume_markdown TEXT',
+        'ALTER TABLE "user" ADD COLUMN resume_style TEXT',
         # issue 24: persisted chat summaries
         "ALTER TABLE jobdescription ADD COLUMN chat_summary TEXT",
         # issue 35: auth columns
-        "ALTER TABLE user ADD COLUMN username TEXT",
-        "ALTER TABLE user ADD COLUMN password_hash TEXT",
-        "ALTER TABLE user ADD COLUMN supabase_uid TEXT",
+        'ALTER TABLE "user" ADD COLUMN username TEXT',
+        'ALTER TABLE "user" ADD COLUMN password_hash TEXT',
+        'ALTER TABLE "user" ADD COLUMN supabase_uid TEXT',
         "ALTER TABLE jobdescription ADD COLUMN user_id TEXT",
     ]
     with engine.connect() as conn:
@@ -68,8 +69,7 @@ def _migrate_db() -> None:
 
 def init_db():
     SQLModel.metadata.create_all(engine)
-    if _sqlite:
-        _migrate_db()  # column-addition migrations are SQLite-only; PostgreSQL starts fresh
+    _migrate_db()
 
 def get_session():
     with Session(engine) as session:
