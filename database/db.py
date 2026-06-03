@@ -64,7 +64,7 @@ def _migrate_db() -> None:
                 conn.execute(text(stmt))
                 conn.commit()
             except Exception:
-                pass  # Column already exists — safe to ignore
+                conn.rollback()  # PostgreSQL aborts the txn on error; rollback resets it
 
 
 def init_db():
