@@ -5,15 +5,76 @@ export interface User {
   username: string | null;
 }
 
-export interface Job {
-  id: string;
+export interface JobListItem {
+  job_id: string;
   title: string;
   company: string;
   status: "created" | "analyzed" | "tailored" | "exported";
-  ats_score?: number;
+  ats_score: number | null;
+}
+
+export interface JobDetail extends JobListItem {
+  description: string;
+  matched_skills: string[];
+  missing_skills: string[];
+}
+
+export interface TailorResult {
+  ats_score: number;
+  matched_skills: string[];
+  missing_skills: string[];
+  status: string;
+}
+
+export interface ChatMsg {
+  role: "user" | "assistant";
+  content: string;
   created_at: string;
 }
 
+export interface SkillRow {
+  name: string;
+  category: string;
+  source: string;
+  proficiency: string;
+  confidence: string;
+}
+
+export interface ExpRow {
+  title: string;
+  company: string;
+  start: string;
+  end: string;
+}
+
+export interface ProjectRow {
+  name: string;
+  url: string;
+  desc: string;
+}
+
+export interface GraphData {
+  top_skills: { name: string; connections: number }[];
+  by_category: Record<string, number>;
+  evidence: Record<string, string[]>;
+}
+
+export interface ProfileData {
+  user_id: string;
+  name: string;
+  email: string;
+  phone: string;
+  location: string;
+  github_username: string;
+  linkedin_url: string;
+  skills: number;
+  experiences: number;
+  projects: number;
+  sources: string[];
+}
+
+// Legacy aliases kept for backward compat
+export type Job = JobListItem;
 export interface Skill {
   name: string;
   category: string | null;
@@ -21,7 +82,6 @@ export interface Skill {
   evidence_source: string | null;
   confidence_score: number;
 }
-
 export interface Experience {
   id: string;
   title: string;
@@ -30,14 +90,12 @@ export interface Experience {
   end_date: string | null;
   bullets: string[];
 }
-
 export interface Project {
   id: string;
   name: string;
   description: string | null;
   repo_url: string | null;
 }
-
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
