@@ -10,6 +10,7 @@ export function WelcomePanel({ onViewChange }: Props) {
     { label: "Ingest Resume", view: "ingest", desc: "Upload a PDF, DOCX, or Markdown resume" },
     { label: "Connect GitHub", view: "ingest", desc: "Pull in repos and extract skills" },
     { label: "Browse Data", view: "data", desc: "View your skills, experiences, and projects" },
+    { label: "Open Chat", view: "chat", desc: "Start chatting without a job selected" },
   ];
 
   return (

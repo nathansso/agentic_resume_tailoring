@@ -10,11 +10,12 @@ export function ProfilePanel() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     getProfile()
       .then(p => { setProfile(p); setForm(p); })
-      .catch(() => {})
+      .catch(e => setLoadError(e instanceof Error ? e.message : "Failed to load profile"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -41,7 +42,6 @@ export function ProfilePanel() {
   }
 
   if (loading) return <div style={s.page}><p style={s.muted}>Loading…</p></div>;
-  if (!profile) return <div style={s.page}><p style={s.muted}>No profile found.</p></div>;
 
   const fields: { key: keyof ProfileData; label: string }[] = [
     { key: "name", label: "Name" },
@@ -63,13 +63,14 @@ export function ProfilePanel() {
             <button style={s.saveBtn} onClick={handleSave} disabled={saving}>
               {saving ? "Saving…" : "Save"}
             </button>
-            <button style={s.cancelBtn} onClick={() => { setEditing(false); setForm(profile); setMessage(null); }}>
+            <button style={s.cancelBtn} onClick={() => { setEditing(false); setForm(profile ?? {}); setMessage(null); }}>
               Cancel
             </button>
           </div>
         )}
       </div>
 
+      {loadError && <p style={{ ...s.muted, color: colors.error }}>{loadError}</p>}
       {message && <p style={{ ...s.muted, color: message.includes("fail") || message.includes("Error") ? colors.error : colors.accent }}>{message}</p>}
 
       <div style={s.grid}>
@@ -83,27 +84,29 @@ export function ProfilePanel() {
                 onChange={onChange(key)}
               />
             ) : (
-              <span style={s.value}>{(profile[key] as string) || <span style={{ color: colors.textMuted }}>—</span>}</span>
+              <span style={s.value}>{(form[key] as string) || <span style={{ color: colors.textMuted }}>—</span>}</span>
             )}
           </div>
         ))}
       </div>
 
-      <div style={s.stats}>
-        <span style={s.statChip}>{profile.skills} skills</span>
-        <span style={s.statDot}>·</span>
-        <span style={s.statChip}>{profile.experiences} experiences</span>
-        <span style={s.statDot}>·</span>
-        <span style={s.statChip}>{profile.projects} projects</span>
-        {profile.sources.length > 0 && (
-          <>
-            <span style={s.statDot}>·</span>
-            <span style={{ ...s.statChip, color: colors.textMuted }}>
-              Sources: {profile.sources.join(", ")}
-            </span>
-          </>
-        )}
-      </div>
+      {profile && (
+        <div style={s.stats}>
+          <span style={s.statChip}>{profile.skills} skills</span>
+          <span style={s.statDot}>·</span>
+          <span style={s.statChip}>{profile.experiences} experiences</span>
+          <span style={s.statDot}>·</span>
+          <span style={s.statChip}>{profile.projects} projects</span>
+          {profile.sources.length > 0 && (
+            <>
+              <span style={s.statDot}>·</span>
+              <span style={{ ...s.statChip, color: colors.textMuted }}>
+                Sources: {profile.sources.join(", ")}
+              </span>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

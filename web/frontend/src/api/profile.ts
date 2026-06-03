@@ -9,11 +9,11 @@ async function json<T>(res: Response): Promise<T> {
 }
 
 export async function getProfile(): Promise<ProfileData> {
-  return json(await fetch("/api/profile", { credentials: "include" }));
+  return json(await fetch("/api/profile/", { credentials: "include" }));
 }
 
 export async function updateProfile(data: Partial<ProfileData>): Promise<{ result: string }> {
-  return json(await fetch("/api/profile", {
+  return json(await fetch("/api/profile/", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),

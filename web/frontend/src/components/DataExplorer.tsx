@@ -3,7 +3,7 @@ import type { SkillRow, ExpRow, ProjectRow, GraphData } from "../types";
 import { colors, font } from "../theme";
 import { getSkills, getExperiences, getProjects, getGraph } from "../api/profile";
 
-type Tab = "skills" | "experiences" | "projects" | "graph";
+type Tab = "skills" | "experiences" | "projects" | "graph" | "charts";
 
 export function DataExplorer() {
   const [tab, setTab] = useState<Tab>("skills");
@@ -27,6 +27,7 @@ export function DataExplorer() {
     { key: "experiences", label: `Experiences (${exps.length})` },
     { key: "projects", label: `Projects (${projects.length})` },
     { key: "graph", label: "Graph" },
+    { key: "charts", label: "Charts" },
   ];
 
   return (
@@ -49,7 +50,8 @@ export function DataExplorer() {
         {!loading && !error && tab === "skills" && <SkillsTab skills={skills} />}
         {!loading && !error && tab === "experiences" && <ExpsTab exps={exps} />}
         {!loading && !error && tab === "projects" && <ProjectsTab projects={projects} />}
-        {!loading && !error && tab === "graph" && graph && <GraphTab graph={graph} />}
+        {!loading && !error && tab === "graph" && <GraphTab graph={graph ?? { top_skills: [], by_category: {}, evidence: {} }} />}
+        {!loading && !error && tab === "charts" && <ChartsTab skills={skills} graph={graph} />}
       </div>
     </div>
   );
@@ -124,6 +126,10 @@ function ProjectsTab({ projects }: { projects: ProjectRow[] }) {
 }
 
 function GraphTab({ graph }: { graph: GraphData }) {
+  if (graph.top_skills.length === 0 && Object.keys(graph.by_category).length === 0) {
+    return <p style={sInner.empty}>No graph data yet — ingest your resume to build the knowledge graph.</p>;
+  }
+
   return (
     <div style={sInner.graphRoot}>
       <section style={sInner.graphSection}>
@@ -170,6 +176,95 @@ function GraphTab({ graph }: { graph: GraphData }) {
     </div>
   );
 }
+
+function ChartsTab({ skills, graph }: { skills: SkillRow[]; graph: GraphData | null }) {
+  if (skills.length === 0) return <p style={sInner.empty}>No data yet — ingest your resume to see charts.</p>;
+
+  // Skills by category count
+  const byCategory: Record<string, number> = {};
+  for (const sk of skills) {
+    const cat = sk.category || "Uncategorized";
+    byCategory[cat] = (byCategory[cat] ?? 0) + 1;
+  }
+  const catEntries = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);
+  const maxCat = Math.max(...catEntries.map(([, v]) => v), 1);
+
+  // Top skills by confidence
+  const topByConf = [...skills]
+    .sort((a, b) => parseFloat(b.confidence) - parseFloat(a.confidence))
+    .slice(0, 12);
+  const maxConf = Math.max(...topByConf.map(s => parseFloat(s.confidence)), 1);
+
+  // Top skills by connections (from graph)
+  const topByConn = graph?.top_skills.slice(0, 10) ?? [];
+  const maxConn = Math.max(...topByConn.map(s => s.connections), 1);
+
+  return (
+    <div style={sChart.root}>
+      {/* Chart 1: Skills by category */}
+      <section style={sChart.section}>
+        <h3 style={sChart.heading}>Skills by Category</h3>
+        <div style={sChart.bars}>
+          {catEntries.map(([cat, count]) => (
+            <div key={cat} style={sChart.barRow}>
+              <span style={sChart.barLabel}>{cat}</span>
+              <div style={sChart.barTrack}>
+                <div style={{ ...sChart.barFill, width: `${(count / maxCat) * 100}%` }} />
+              </div>
+              <span style={sChart.barValue}>{count}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Chart 2: Top skills by confidence */}
+      <section style={sChart.section}>
+        <h3 style={sChart.heading}>Top Skills by Confidence</h3>
+        <div style={sChart.bars}>
+          {topByConf.map(sk => (
+            <div key={sk.name} style={sChart.barRow}>
+              <span style={sChart.barLabel}>{sk.name}</span>
+              <div style={sChart.barTrack}>
+                <div style={{ ...sChart.barFill, width: `${(parseFloat(sk.confidence) / maxConf) * 100}%`, background: colors.accent }} />
+              </div>
+              <span style={sChart.barValue}>{sk.confidence}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Chart 3: Top skills by knowledge graph connections */}
+      {topByConn.length > 0 && (
+        <section style={sChart.section}>
+          <h3 style={sChart.heading}>Top Skills by Graph Connections</h3>
+          <div style={sChart.bars}>
+            {topByConn.map(sk => (
+              <div key={sk.name} style={sChart.barRow}>
+                <span style={sChart.barLabel}>{sk.name}</span>
+                <div style={sChart.barTrack}>
+                  <div style={{ ...sChart.barFill, width: `${(sk.connections / maxConn) * 100}%`, background: "#d29922" }} />
+                </div>
+                <span style={sChart.barValue}>{sk.connections}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+const sChart: Record<string, CSSProperties> = {
+  root: { display: "flex", flexDirection: "column", gap: "2rem" },
+  section: {},
+  heading: { margin: "0 0 0.75rem", color: colors.accent, fontSize: font.size.base, fontWeight: 700 },
+  bars: { display: "flex", flexDirection: "column", gap: "0.4rem" },
+  barRow: { display: "grid", gridTemplateColumns: "18ch 1fr 4ch", alignItems: "center", gap: "0.625rem" },
+  barLabel: { color: colors.text, fontSize: font.size.sm, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  barTrack: { height: "0.875rem", background: colors.primary, position: "relative" },
+  barFill: { position: "absolute", top: 0, left: 0, height: "100%", background: colors.textMuted, transition: "width 0.3s ease" },
+  barValue: { color: colors.textMuted, fontSize: font.size.sm, textAlign: "right" as const },
+};
 
 const s: Record<string, CSSProperties> = {
   panel: { display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" },
