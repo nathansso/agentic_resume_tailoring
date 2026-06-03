@@ -19,6 +19,7 @@ export function MainPage() {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [selectedJob, setSelectedJob] = useState<JobDetail | null>(null);
   const [activeView, setActiveView] = useState<ActiveView>("chat");
+  const [welcomeDismissed, setWelcomeDismissed] = useState(false);
   const [jobsLoading, setJobsLoading] = useState(true);
 
   // Load jobs on mount
@@ -83,8 +84,8 @@ export function MainPage() {
           ? <JobDetailPanel job={selectedJob} onJobUpdate={handleJobUpdate} onViewChange={v => setActiveView(v as ActiveView)} />
           : <ChatPanel jobId={selectedJobId} onViewChange={v => setActiveView(v as ActiveView)} />;
       default:
-        if (!selectedJobId && jobs.length === 0 && !jobsLoading) {
-          return <WelcomePanel onViewChange={v => setActiveView(v as ActiveView)} />;
+        if (!welcomeDismissed && !selectedJobId && jobs.length === 0 && !jobsLoading) {
+          return <WelcomePanel onViewChange={v => { setWelcomeDismissed(true); setActiveView(v as ActiveView); }} />;
         }
         return <ChatPanel jobId={selectedJobId} onViewChange={v => setActiveView(v as ActiveView)} />;
     }
