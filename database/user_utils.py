@@ -29,6 +29,12 @@ def get_user_by_username(username: str) -> Optional[User]:
         return session.exec(select(User).where(User.username == username)).first()
 
 
+def get_user_by_email(email: str) -> Optional[User]:
+    """Return the User with the given email, or None if not found."""
+    with Session(engine) as session:
+        return session.exec(select(User).where(User.email == email)).first()
+
+
 def get_user_by_supabase_uid(supabase_uid: str) -> Optional[User]:
     """Return the User mapped to the given Supabase Auth UID, or None."""
     with Session(engine) as session:
