@@ -1,0 +1,143 @@
+import { useState, useEffect, type CSSProperties, type ChangeEvent } from "react";
+import type { ProfileData } from "../types";
+import { colors, font } from "../theme";
+import { getProfile, updateProfile } from "../api/profile";
+
+export function ProfilePanel() {
+  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState<Partial<ProfileData>>({});
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getProfile()
+      .then(p => { setProfile(p); setForm(p); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  function onChange(field: keyof ProfileData) {
+    return (e: ChangeEvent<HTMLInputElement>) =>
+      setForm(prev => ({ ...prev, [field]: e.target.value }));
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setMessage(null);
+    try {
+      await updateProfile(form);
+      const updated = await getProfile();
+      setProfile(updated);
+      setForm(updated);
+      setEditing(false);
+      setMessage("Profile updated.");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) return <div style={s.page}><p style={s.muted}>Loading…</p></div>;
+  if (!profile) return <div style={s.page}><p style={s.muted}>No profile found.</p></div>;
+
+  const fields: { key: keyof ProfileData; label: string }[] = [
+    { key: "name", label: "Name" },
+    { key: "email", label: "Email" },
+    { key: "phone", label: "Phone" },
+    { key: "location", label: "Location" },
+    { key: "github_username", label: "GitHub username" },
+    { key: "linkedin_url", label: "LinkedIn URL" },
+  ];
+
+  return (
+    <div style={s.page}>
+      <div style={s.header}>
+        <h2 style={s.title}>Profile</h2>
+        {!editing ? (
+          <button style={s.editBtn} onClick={() => { setEditing(true); setMessage(null); }}>Edit</button>
+        ) : (
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button style={s.saveBtn} onClick={handleSave} disabled={saving}>
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <button style={s.cancelBtn} onClick={() => { setEditing(false); setForm(profile); setMessage(null); }}>
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
+
+      {message && <p style={{ ...s.muted, color: message.includes("fail") || message.includes("Error") ? colors.error : colors.accent }}>{message}</p>}
+
+      <div style={s.grid}>
+        {fields.map(({ key, label }) => (
+          <div key={key} style={s.field}>
+            <span style={s.label}>{label}</span>
+            {editing ? (
+              <input
+                style={s.input}
+                value={(form[key] as string) ?? ""}
+                onChange={onChange(key)}
+              />
+            ) : (
+              <span style={s.value}>{(profile[key] as string) || <span style={{ color: colors.textMuted }}>—</span>}</span>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div style={s.stats}>
+        <span style={s.statChip}>{profile.skills} skills</span>
+        <span style={s.statDot}>·</span>
+        <span style={s.statChip}>{profile.experiences} experiences</span>
+        <span style={s.statDot}>·</span>
+        <span style={s.statChip}>{profile.projects} projects</span>
+        {profile.sources.length > 0 && (
+          <>
+            <span style={s.statDot}>·</span>
+            <span style={{ ...s.statChip, color: colors.textMuted }}>
+              Sources: {profile.sources.join(", ")}
+            </span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const s: Record<string, CSSProperties> = {
+  page: { padding: "1.5rem", maxWidth: "60ch" },
+  header: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem" },
+  title: { margin: 0, color: colors.accent, fontSize: font.size.xl, fontWeight: 700 },
+  editBtn: {
+    background: "transparent", border: `1px solid ${colors.primary}`,
+    color: colors.text, fontSize: font.size.sm, padding: "0.25rem 0.75rem",
+    cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
+  },
+  saveBtn: {
+    background: colors.accent, border: "none", color: colors.background,
+    fontWeight: 700, fontSize: font.size.sm, padding: "0.25rem 0.75rem",
+    cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
+  },
+  cancelBtn: {
+    background: "transparent", border: `1px solid ${colors.primary}`,
+    color: colors.text, fontSize: font.size.sm, padding: "0.25rem 0.75rem",
+    cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
+  },
+  grid: { display: "flex", flexDirection: "column", gap: "0.625rem", marginBottom: "1.5rem" },
+  field: { display: "grid", gridTemplateColumns: "14ch 1fr", alignItems: "center", gap: "0.75rem" },
+  label: { color: colors.textMuted, fontSize: font.size.sm },
+  value: { color: colors.text, fontSize: font.size.base },
+  input: {
+    background: colors.background, border: `1px solid ${colors.primary}`,
+    color: colors.text, fontSize: font.size.base, padding: "0.25rem 0.5rem",
+    fontFamily: "inherit", outline: "none", borderRadius: 0,
+  },
+  stats: { display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" },
+  statChip: { color: colors.text, fontSize: font.size.sm },
+  statDot: { color: colors.textMuted },
+  muted: { color: colors.textMuted, fontSize: font.size.sm },
+};
