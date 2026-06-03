@@ -1,0 +1,18 @@
+scenario: "user formatting preference recall across compression"
+key_fact: "concise bullet points"
+
+turns:
+  - role: user
+    content: "I prefer concise bullet points over long paragraphs in my resume."
+  - role: assistant
+    content: "Understood, I will keep entries as concise bullet points."
+
+filler:
+  pairs: 17
+  user_content: "Let us go over my work experience section next."
+  assistant_content: "Sure, please share your experience details and I will help format them."
+
+probe:
+  content: "What formatting style did I say I prefer for my resume?"
+  expected_contains: "bullet"
+  metric: factual_recall

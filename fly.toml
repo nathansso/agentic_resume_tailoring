@@ -1,0 +1,32 @@
+# Fly.io deploy config for ART.
+# Replace "art-resume" with your app name from `fly launch`.
+app = "artie-resume-tailoring"
+primary_region = "iad"
+
+[build]
+
+[env]
+  ART_DATA_DIR = "/data"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "15s"
+    interval = "30s"
+    timeout = "5s"
+    method = "GET"
+    path = "/api/health"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+[[mounts]]
+  source = "art_data"
+  destination = "/data"

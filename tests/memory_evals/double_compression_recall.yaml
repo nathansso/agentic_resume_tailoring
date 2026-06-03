@@ -1,0 +1,18 @@
+scenario: "salary target recall after two compressions"
+key_fact: "target salary 150k"
+
+turns:
+  - role: user
+    content: "My target salary is 150k for my next role."
+  - role: assistant
+    content: "Noted, your target salary is 150k."
+
+filler:
+  pairs: 27
+  user_content: "Can you review the skills section of my resume?"
+  assistant_content: "Of course, let me review your skills section carefully."
+
+probe:
+  content: "What salary target did I mention earlier in our conversation?"
+  expected_contains: "150"
+  metric: factual_recall

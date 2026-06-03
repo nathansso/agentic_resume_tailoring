@@ -1,0 +1,21 @@
+scenario: "budget boundary: fact outside token budget is not recalled"
+key_fact: "ZEPHYR_CODE_9987"
+
+turns:
+  - role: user
+    content: "My secret keyword is ZEPHYR_CODE_9987."
+  - role: assistant
+    content: "Understood."
+
+filler:
+  pairs: 3
+  filler_chars: 1200
+  user_content: "Please review this section of my resume carefully."
+  assistant_content: "Reviewing now."
+
+probe:
+  content: "What was the secret keyword I mentioned?"
+  expected_contains: "ZEPHYR"
+  metric: negative_recall
+
+budget_tokens: 800

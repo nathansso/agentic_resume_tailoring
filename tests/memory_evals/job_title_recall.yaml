@@ -1,0 +1,18 @@
+scenario: "job title recall after context window fills"
+key_fact: "Senior Software Engineer"
+
+turns:
+  - role: user
+    content: "I am currently a Senior Software Engineer at a fintech startup."
+  - role: assistant
+    content: "Noted, you are a Senior Software Engineer at a fintech startup."
+
+filler:
+  pairs: 17
+  user_content: "What sections should I prioritize on my resume?"
+  assistant_content: "I recommend leading with your experience and key achievements."
+
+probe:
+  content: "What position am I currently in?"
+  expected_contains: "Senior Software Engineer"
+  metric: factual_recall
