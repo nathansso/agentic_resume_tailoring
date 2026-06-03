@@ -2,6 +2,7 @@ import { useState, type FormEvent, type CSSProperties } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { login } from "../api/auth";
 import { useAuth } from "../context/AuthContext";
+import { colors, font } from "../theme";
 
 export function LoginPage() {
   const [username, setUsername] = useState("");
@@ -63,14 +64,53 @@ export function LoginPage() {
 }
 
 const s: Record<string, CSSProperties> = {
-  page: { display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: "#0f172a" },
-  card: { background: "#1e293b", padding: "2.5rem", borderRadius: "12px", width: "100%", maxWidth: "360px", color: "#f1f5f9" },
-  title: { margin: 0, fontSize: "2rem", fontWeight: 700, letterSpacing: "-0.5px" },
-  subtitle: { margin: "0.25rem 0 1.75rem", color: "#94a3b8", fontSize: "0.875rem" },
-  form: { display: "flex", flexDirection: "column", gap: "0.75rem" },
-  input: { padding: "0.625rem 0.875rem", borderRadius: "6px", border: "1px solid #334155", background: "#0f172a", color: "#f1f5f9", fontSize: "0.875rem", outline: "none" },
-  error: { margin: 0, color: "#f87171", fontSize: "0.8rem" },
-  button: { padding: "0.625rem", borderRadius: "6px", background: "#6366f1", color: "#fff", fontWeight: 600, border: "none", cursor: "pointer", fontSize: "0.875rem" },
-  hint: { marginTop: "1.25rem", textAlign: "center", color: "#94a3b8", fontSize: "0.8rem" },
-  link: { color: "#818cf8" },
+  page: {
+    display: "flex", alignItems: "center", justifyContent: "center",
+    minHeight: "100vh", background: colors.background,
+  },
+  card: {
+    background: colors.surface,
+    padding: "2.5rem",
+    borderRadius: 0,
+    border: `1px solid ${colors.primary}`,
+    width: "100%", maxWidth: "360px",
+    color: colors.text,
+  },
+  title: {
+    margin: 0, fontSize: font.size.xxl, fontWeight: 700,
+    letterSpacing: "0.05em", color: colors.accent,
+  },
+  subtitle: {
+    margin: "0.25rem 0 1.75rem",
+    color: colors.textMuted, fontSize: font.size.sm,
+  },
+  form: { display: "flex", flexDirection: "column", gap: "0.625rem" },
+  input: {
+    padding: "0.5rem 0.75rem",
+    borderRadius: 0,
+    border: `1px solid ${colors.primary}`,
+    background: colors.background,
+    color: colors.text,
+    fontSize: font.size.base,
+    outline: "none",
+    fontFamily: "inherit",
+  },
+  error: { margin: 0, color: colors.error, fontSize: font.size.sm },
+  button: {
+    padding: "0.5rem",
+    borderRadius: 0,
+    background: colors.accent,
+    color: colors.background,
+    fontWeight: 700,
+    border: "none",
+    cursor: "pointer",
+    fontSize: font.size.base,
+    fontFamily: "inherit",
+    letterSpacing: "0.03em",
+  },
+  hint: {
+    marginTop: "1.25rem", textAlign: "center",
+    color: colors.textMuted, fontSize: font.size.sm,
+  },
+  link: { color: colors.accent },
 };
