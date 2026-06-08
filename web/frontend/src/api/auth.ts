@@ -44,3 +44,11 @@ export async function getMe(): Promise<User | null> {
   if (!res.ok) return null;
   return res.json() as Promise<User>;
 }
+
+export async function getGithubStatus(): Promise<{ connected: boolean; oauth_configured: boolean }> {
+  return json(await fetch("/api/auth/github/status", { credentials: "include" }));
+}
+
+export async function disconnectGithub(): Promise<void> {
+  await json(await fetch("/api/auth/github", { method: "DELETE", credentials: "include" }));
+}
