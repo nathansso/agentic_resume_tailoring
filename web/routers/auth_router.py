@@ -1,10 +1,18 @@
+from urllib.parse import urlencode
+from uuid import UUID
+
+import requests as _requests
 from fastapi import APIRouter, HTTPException, Response, Depends
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session
 
+from config import GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
 from database.auth import hash_password, supabase_sign_in, supabase_sign_up
+from database.db import engine
 from database.user_utils import authenticate_local, create_profile, get_user_by_email, get_user_by_username
-from web.auth import get_current_user, make_session_token
+from web.auth import get_current_user, make_session_token, _SESSION_SECRET
 from database.models import User
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -91,3 +99,73 @@ def register(body: RegisterRequest, response: Response):
 @router.get("/me")
 def me(user: User = Depends(get_current_user)):
     return _user_dict(user)
+
+
+# ── GitHub OAuth ──────────────────────────────────────────────
+
+@router.get("/github")
+def github_oauth_start(user: User = Depends(get_current_user)):
+    """Redirect the browser to GitHub's OAuth authorization page."""
+    if not GITHUB_CLIENT_ID:
+        raise HTTPException(status_code=503, detail="GitHub OAuth not configured (GITHUB_CLIENT_ID missing)")
+    from itsdangerous import URLSafeSerializer
+    state = URLSafeSerializer(_SESSION_SECRET).dumps(str(user.user_id))
+    qs = urlencode({"client_id": GITHUB_CLIENT_ID, "scope": "repo read:user", "state": state})
+    return RedirectResponse(f"https://github.com/login/oauth/authorize?{qs}")
+
+
+@router.get("/github/callback")
+def github_oauth_callback(code: str, state: str):
+    """Receive GitHub's OAuth callback, exchange code for token, store it."""
+    if not GITHUB_CLIENT_ID or not GITHUB_CLIENT_SECRET:
+        raise HTTPException(status_code=503, detail="GitHub OAuth not configured")
+
+    from itsdangerous import URLSafeSerializer, BadSignature
+    try:
+        user_id_str = URLSafeSerializer(_SESSION_SECRET).loads(state)
+        user_id = UUID(user_id_str)
+    except (BadSignature, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid OAuth state parameter")
+
+    resp = _requests.post(
+        "https://github.com/login/oauth/access_token",
+        headers={"Accept": "application/json"},
+        json={"client_id": GITHUB_CLIENT_ID, "client_secret": GITHUB_CLIENT_SECRET, "code": code},
+        timeout=10,
+    )
+    token_data = resp.json()
+    access_token = token_data.get("access_token")
+    if not access_token:
+        err = token_data.get("error_description", "Unknown error")
+        raise HTTPException(status_code=400, detail=f"GitHub OAuth failed: {err}")
+
+    with Session(engine) as db:
+        u = db.get(User, user_id)
+        if not u:
+            raise HTTPException(status_code=404, detail="User not found")
+        u.github_access_token = access_token
+        db.add(u)
+        db.commit()
+
+    return RedirectResponse("/?github_connected=1")
+
+
+@router.get("/github/status")
+def github_status(user: User = Depends(get_current_user)):
+    """Return whether the current user has a connected GitHub OAuth token."""
+    return {
+        "connected": bool(user.github_access_token),
+        "oauth_configured": bool(GITHUB_CLIENT_ID),
+    }
+
+
+@router.delete("/github")
+def github_disconnect(user: User = Depends(get_current_user)):
+    """Remove the stored GitHub OAuth token for the current user."""
+    with Session(engine) as db:
+        u = db.get(User, user.user_id)
+        if u:
+            u.github_access_token = None
+            db.add(u)
+            db.commit()
+    return {"ok": True}

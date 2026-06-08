@@ -18,6 +18,7 @@ class User(SQLModel, table=True):
     supabase_uid: Optional[str] = Field(default=None, unique=True)
     linkedin_url: Optional[str] = None
     github_username: Optional[str] = None
+    github_access_token: Optional[str] = None
     phone: Optional[str] = None
     location: Optional[str] = None
     onboarding_complete: bool = Field(default=False)
