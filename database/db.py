@@ -57,6 +57,8 @@ def _migrate_db() -> None:
         'ALTER TABLE "user" ADD COLUMN password_hash TEXT',
         'ALTER TABLE "user" ADD COLUMN supabase_uid TEXT',
         "ALTER TABLE jobdescription ADD COLUMN user_id TEXT",
+        # issue 4: GitHub OAuth token per user
+        'ALTER TABLE "user" ADD COLUMN github_access_token TEXT',
     ]
     with engine.connect() as conn:
         for stmt in migrations:

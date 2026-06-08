@@ -29,6 +29,8 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")  # stub for PRD 05
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_USERNAME = os.getenv("GITHUB_USERNAME")
+GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
+GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
 
 # LLM Provider Config
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")  # "anthropic" or "openai"

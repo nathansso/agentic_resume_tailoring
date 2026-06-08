@@ -51,7 +51,8 @@ async def ingest_github(
     user: User = Depends(get_current_user),
 ):
     _write_active_profile(user.user_id)
-    result = await asyncio.to_thread(services.ingest_github, body.username.strip())
+    token = user.github_access_token or None
+    result = await asyncio.to_thread(services.ingest_github, body.username.strip(), token=token)
     return {"result": result}
 
 
@@ -61,5 +62,6 @@ async def ingest_github_repo(
     user: User = Depends(get_current_user),
 ):
     _write_active_profile(user.user_id)
-    result = await asyncio.to_thread(services.ingest_github_repo, body.repo_ref.strip())
+    token = user.github_access_token or None
+    result = await asyncio.to_thread(services.ingest_github_repo, body.repo_ref.strip(), token=token)
     return {"result": result}
