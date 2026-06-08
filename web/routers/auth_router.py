@@ -139,11 +139,25 @@ def github_oauth_callback(code: str, state: str):
         err = token_data.get("error_description", "Unknown error")
         raise HTTPException(status_code=400, detail=f"GitHub OAuth failed: {err}")
 
+    github_username = None
+    try:
+        user_resp = _requests.get(
+            "https://api.github.com/user",
+            headers={"Authorization": f"token {access_token}", "Accept": "application/vnd.github+json"},
+            timeout=10,
+        )
+        if user_resp.ok:
+            github_username = user_resp.json().get("login")
+    except Exception:
+        pass
+
     with Session(engine) as db:
         u = db.get(User, user_id)
         if not u:
             raise HTTPException(status_code=404, detail="User not found")
         u.github_access_token = access_token
+        if github_username:
+            u.github_username = github_username
         db.add(u)
         db.commit()
 
@@ -156,6 +170,7 @@ def github_status(user: User = Depends(get_current_user)):
     return {
         "connected": bool(user.github_access_token),
         "oauth_configured": bool(GITHUB_CLIENT_ID),
+        "github_username": user.github_username,
     }
 
 
@@ -166,6 +181,7 @@ def github_disconnect(user: User = Depends(get_current_user)):
         u = db.get(User, user.user_id)
         if u:
             u.github_access_token = None
+            u.github_username = None
             db.add(u)
             db.commit()
     return {"ok": True}

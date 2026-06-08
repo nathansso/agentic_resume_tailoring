@@ -53,6 +53,7 @@ def test_github_status_not_connected(client, monkeypatch):
     data = resp.json()
     assert data["connected"] is False
     assert data["oauth_configured"] is False
+    assert data["github_username"] is None
 
 
 def test_github_status_connected(client, monkeypatch):
@@ -77,6 +78,7 @@ def test_github_status_connected(client, monkeypatch):
     data = resp.json()
     assert data["connected"] is True
     assert data["oauth_configured"] is True
+    assert "github_username" in data
 
 
 # ── DELETE /api/auth/github ───────────────────────────────────
@@ -115,6 +117,26 @@ def test_github_oauth_start_redirects_to_github(client, monkeypatch):
     assert resp.status_code in (302, 307)
     assert "github.com/login/oauth/authorize" in resp.headers["location"]
     assert "my-client-id" in resp.headers["location"]
+
+
+# ── disconnect clears username ────────────────────────────────
+
+def test_github_disconnect_clears_username(client):
+    tc, user, engine = client
+    with Session(engine) as session:
+        u = session.get(User, user.user_id)
+        u.github_access_token = "gho_existing"
+        u.github_username = "octocat"
+        session.add(u)
+        session.commit()
+
+    resp = tc.delete("/api/auth/github")
+    assert resp.status_code == 200
+
+    with Session(engine) as session:
+        u = session.get(User, user.user_id)
+        assert u.github_access_token is None
+        assert u.github_username is None
 
 
 # ── ingest_github token pass-through ─────────────────────────
