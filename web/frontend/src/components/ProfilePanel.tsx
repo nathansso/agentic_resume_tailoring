@@ -2,6 +2,7 @@ import { useState, useEffect, type CSSProperties, type ChangeEvent } from "react
 import type { ProfileData } from "../types";
 import { colors, font } from "../theme";
 import { getProfile, updateProfile } from "../api/profile";
+import { getGithubStatus, disconnectGithub } from "../api/auth";
 
 export function ProfilePanel() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -11,12 +12,18 @@ export function ProfilePanel() {
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [githubConnected, setGithubConnected] = useState(false);
+  const [oauthConfigured, setOauthConfigured] = useState(false);
+  const [githubWorking, setGithubWorking] = useState(false);
 
   useEffect(() => {
     getProfile()
       .then(p => { setProfile(p); setForm(p); })
       .catch(e => setLoadError(e instanceof Error ? e.message : "Failed to load profile"))
       .finally(() => setLoading(false));
+    getGithubStatus()
+      .then(s => { setGithubConnected(s.connected); setOauthConfigured(s.oauth_configured); })
+      .catch(() => {});
   }, []);
 
   function onChange(field: keyof ProfileData) {
@@ -38,6 +45,19 @@ export function ProfilePanel() {
       setMessage(e instanceof Error ? e.message : "Save failed");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleGithubDisconnect() {
+    setGithubWorking(true);
+    try {
+      await disconnectGithub();
+      setGithubConnected(false);
+      setMessage("GitHub disconnected.");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Disconnect failed");
+    } finally {
+      setGithubWorking(false);
     }
   }
 
@@ -107,6 +127,31 @@ export function ProfilePanel() {
           )}
         </div>
       )}
+
+      {oauthConfigured && (
+        <div style={s.githubSection}>
+          <p style={s.githubLabel}>GitHub</p>
+          {githubConnected ? (
+            <div style={s.githubRow}>
+              <span style={{ ...s.muted, color: colors.accent }}>Connected</span>
+              <button
+                style={{ ...s.cancelBtn, marginLeft: "1rem" }}
+                onClick={handleGithubDisconnect}
+                disabled={githubWorking}
+              >
+                {githubWorking ? "Disconnecting…" : "Disconnect"}
+              </button>
+            </div>
+          ) : (
+            <div style={s.githubRow}>
+              <span style={s.muted}>Not connected</span>
+              <a href="/api/auth/github" style={s.connectBtn}>
+                Connect GitHub
+              </a>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -143,4 +188,13 @@ const s: Record<string, CSSProperties> = {
   statChip: { color: colors.text, fontSize: font.size.sm },
   statDot: { color: colors.textMuted },
   muted: { color: colors.textMuted, fontSize: font.size.sm },
+  githubSection: { marginTop: "1.25rem", borderTop: `1px solid ${colors.primary}`, paddingTop: "1rem" },
+  githubLabel: { margin: "0 0 0.5rem", color: colors.textMuted, fontSize: font.size.sm, fontWeight: 600 },
+  githubRow: { display: "flex", alignItems: "center", gap: "0.75rem" },
+  connectBtn: {
+    background: colors.accent, border: "none", color: colors.background,
+    fontWeight: 700, fontSize: font.size.sm, padding: "0.25rem 0.75rem",
+    cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
+    textDecoration: "none", display: "inline-block",
+  },
 };
