@@ -1,12 +1,12 @@
 # ART — Repository Guidelines
 
 ## Project overview
-ART is a resume-tailoring platform that ingests resume, GitHub, and LinkedIn data into a knowledge graph, then tailors resumes to job descriptions through chat and workflow tools. It ships as both a **web app** (primary) and a **local TUI** (retained for power users).
+ART is a resume-tailoring platform that ingests resume, GitHub, and LinkedIn data into a knowledge graph, then tailors resumes to job descriptions through chat and workflow tools. The **web app** is the primary and only actively maintained implementation.
 
 **Web app (primary):** https://artie-resume-tailoring.fly.dev/  
 Deployed on Fly.io. React + TypeScript frontend served as static files by a FastAPI backend. Supabase Postgres in production (via `DATABASE_URL` Fly.io secret); falls back to SQLite locally. Supabase Auth used for JWT session tokens when env vars are present; falls back to local signed cookies.
 
-**TUI (secondary):** Textual-based terminal UI, same Python backend, local SQLite.
+**TUI (deprecated):** Textual-based terminal UI — retained for reference, not actively maintained. All new work targets the web layer.
 
 **Stack:**
 - Frontend: React 18, TypeScript, Vite — lives in `web/frontend/`
@@ -30,7 +30,7 @@ source .venv/Scripts/activate   # bash
 .venv\Scripts\Activate.ps1      # PowerShell
 ```
 
-Do not break the TUI or CLI when making web changes, and vice versa.
+Do not break the CLI when making web changes. TUI is deprecated — no new TUI features needed.
 
 ---
 
@@ -126,9 +126,8 @@ For any missing issue, add it and set status (closed → Done; open unblocked hi
 
 ### After implementing an issue
 
-1. **Always ask the user:** "Issue #N is implemented — should I mark it as Done on the project board?"
-2. If yes, move the item to Done (option `98236657`) via the GraphQL API.
-3. Check whether any Backlog issues that depended on the just-completed issue are now unblocked, and move them to `Ready` (option `e18bf179`).
+1. Move the item to Done (option `98236657`) via the GraphQL API — no confirmation needed.
+2. Check whether any Backlog issues that depended on the just-completed issue are now unblocked, and move them to `Ready` (option `e18bf179`).
 
 ### Project board API reference
 
@@ -137,15 +136,10 @@ For any missing issue, add it and set status (closed → Done; open unblocked hi
 gh project item-list 2 --owner nathansso --format json \
   | python -c "import json,sys; items=json.load(sys.stdin)['items']; [print(f\"{i['content']['number']}: {i['id']}\") for i in items if i.get('content')]"
 
-# Update a status field
-gh api graphql -f query='mutation {
-  updateProjectV2ItemFieldValue(input: {
-    projectId: "PVT_kwHOCpdM7s4BXnLT"
-    itemId: "<ITEM_ID>"
-    fieldId: "PVTSSF_lAHOCpdM7s4BXnLTzhSy32k"
-    value: { singleSelectOptionId: "<OPTION_ID>" }
-  }) { projectV2Item { id } }
-}'
+# Update a status field (use GraphQL variables — literal IDs in the query body cause "Expected type 'ID!'" errors)
+gh api graphql -f query='mutation($proj:ID!,$item:ID!,$field:ID!,$opt:String!){
+  updateProjectV2ItemFieldValue(input:{projectId:$proj,itemId:$item,fieldId:$field,value:{singleSelectOptionId:$opt}}){projectV2Item{id}}
+}' -f proj="PVT_kwHOCpdM7s4BXnLT" -f item="<ITEM_ID>" -f field="PVTSSF_lAHOCpdM7s4BXnLTzhSy32k" -f opt="<OPTION_ID>"
 ```
 
 **Status option IDs:**
@@ -171,7 +165,6 @@ gh api graphql -f query='mutation {
 ## Architecture invariants
 
 - Use `database/user_utils.py::get_active_profile()` for active user lookups. `get_or_create_default_user()` exists only as backward-compat support.
-- All TUI database access goes through `tui/services.py`. Widgets and screens should not query the database directly.
 - Keep schema changes backward-compatible with defaults so existing local DBs still load.
 - Keep chat/router changes aligned with actual product capabilities. Do not teach prompts a capability that code does not expose.
 - Prefer adding focused local guidance instead of expanding this file with volatile implementation details.
@@ -179,7 +172,7 @@ gh api graphql -f query='mutation {
 For folder-specific rules:
 - See `web/CLAUDE.md` for FastAPI routers, React components, auth flow, and deploy.
 - See `agents/CLAUDE.md` for chat routing, prompt, and tool-calling work.
-- See `tui/CLAUDE.md` for Textual UI, screen, and service-boundary work.
+- See `tui/CLAUDE.md` for TUI reference (deprecated — no new features).
 
 When adding more guidance, prefer updating one of those local files over expanding this file with transient implementation detail.
 
@@ -224,4 +217,4 @@ Definition of done:
 1. The feature works.
 2. At least one test covers the new behavior.
 3. `python run_tests.py` passes in full.
-4. Ask the user to confirm completion, then move the issue to Done on the project board and unblock any newly-unblocked issues.
+4. Move the issue to Done on the project board and unblock any newly-unblocked issues.
