@@ -5,10 +5,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlmodel import Session
 
+from database.db import engine
 from database.models import User
 from database.user_utils import ACTIVE_PROFILE_FILE, ART_DIR
 from web.auth import get_current_user
+from web.routers.dependencies import check_ai_quota, increment_ai_usage
 from tui import services
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -44,6 +47,7 @@ async def send_message(
     body: ChatBody,
     request: Request,
     user: User = Depends(get_current_user),
+    _quota: None = Depends(check_ai_quota),
 ):
     _write_active_profile(user.user_id)
     agent = _get_or_create_agent(request, user)
@@ -53,6 +57,8 @@ async def send_message(
     async def event_stream():
         try:
             result: str = await asyncio.to_thread(agent.chat, body.message)
+            with Session(engine) as s:
+                increment_ai_usage(user.user_id, s)
         except Exception as exc:
             result = f"Error: {exc}"
         yield f"data: {_json.dumps({'content': result, 'done': True})}\n\n"
