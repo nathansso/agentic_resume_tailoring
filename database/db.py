@@ -59,6 +59,8 @@ def _migrate_db() -> None:
         "ALTER TABLE jobdescription ADD COLUMN user_id TEXT",
         # issue 4: GitHub OAuth token per user
         'ALTER TABLE "user" ADD COLUMN github_access_token TEXT',
+        # issue 2: ATS scoring breakdown
+        "ALTER TABLE userjobresult ADD COLUMN score_breakdown TEXT DEFAULT '{}'",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

@@ -138,6 +138,7 @@ class UserJobResult(SQLModel, table=True):
     matched_skills: Dict = Field(default={}, sa_column=Column(JSON))
     missing_skills: List[str] = Field(default=[], sa_column=Column(JSON))
     tailored_resume_content: Dict = Field(default={}, sa_column=Column(JSON)) # The JSON structure of the new resume
+    score_breakdown: Dict = Field(default={}, sa_column=Column(JSON))
     revision_notes: Optional[str] = None
     export_path: Optional[str] = None
 
