@@ -7,6 +7,7 @@ Markdown output is retained for debugging but is not the intended pipeline.
 """
 import logging
 import re
+import shutil
 import warnings
 from typing import Dict, List, Optional
 from uuid import UUID
@@ -42,8 +43,10 @@ _JAKE_PREAMBLE = r"""%-------------------------
 \usepackage{fancyhdr}
 \usepackage[english]{babel}
 \usepackage{tabularx}
-\usepackage[utf8]{inputenc}
-\input{glyphtounicode}
+\ifdefined\pdftexversion
+  \usepackage[utf8]{inputenc}
+  \input{glyphtounicode}
+\fi
 
 \pagestyle{fancy}
 \fancyhf{}
@@ -67,7 +70,7 @@ _JAKE_PREAMBLE = r"""%-------------------------
   \vspace{-4pt}\scshape\raggedright\large
 }{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
 
-\pdfgentounicode=1
+\ifdefined\pdftexversion\pdfgentounicode=1\fi
 
 %-------------------------
 % Custom commands
@@ -148,10 +151,22 @@ def _convert_inline(text: str) -> str:
 # ── PDF compilation ───────────────────────────────────────────────────────────
 
 def _compile_tex_to_pdf(tex_str: str) -> bytes:
-    """Write tex_str to a temp file, compile with pdflatex, return PDF bytes."""
+    """Compile tex_str to PDF bytes. Prefers tectonic, falls back to pdflatex."""
     import os
     import subprocess
     import tempfile
+
+    # Resolve engine: check PATH first, then check alongside this Python executable
+    import sys as _sys
+    _py_bin = os.path.dirname(_sys.executable)
+    tectonic = (
+        shutil.which("tectonic")
+        or (os.path.join(_py_bin, "tectonic.exe") if os.path.exists(os.path.join(_py_bin, "tectonic.exe")) else None)
+        or (os.path.join(_py_bin, "tectonic") if os.path.exists(os.path.join(_py_bin, "tectonic")) else None)
+    )
+    pdflatex = shutil.which("pdflatex")
+    if not tectonic and not pdflatex:
+        raise RuntimeError("No LaTeX engine found. Install tectonic or pdflatex.")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tex_path = os.path.join(tmpdir, "resume.tex")
@@ -159,17 +174,23 @@ def _compile_tex_to_pdf(tex_str: str) -> bytes:
         with open(tex_path, "w", encoding="utf-8") as f:
             f.write(tex_str)
 
-        result = subprocess.run(
-            ["pdflatex", "-interaction=nonstopmode", "-output-directory", tmpdir, tex_path],
-            capture_output=True,
-            timeout=60,
-        )
+        if tectonic:
+            result = subprocess.run(
+                [tectonic, "--outdir", tmpdir, tex_path],
+                capture_output=True,
+                timeout=120,
+            )
+        else:
+            result = subprocess.run(
+                [pdflatex, "-interaction=nonstopmode", "-output-directory", tmpdir, tex_path],
+                capture_output=True,
+                timeout=60,
+            )
 
         if not os.path.exists(pdf_path):
-            stdout = result.stdout.decode("utf-8", errors="replace")
-            raise RuntimeError(
-                f"pdflatex failed (exit {result.returncode}):\n{stdout[-3000:]}"
-            )
+            out = (result.stdout + result.stderr).decode("utf-8", errors="replace")
+            engine = "tectonic" if tectonic else "pdflatex"
+            raise RuntimeError(f"{engine} failed (exit {result.returncode}):\n{out[-3000:]}")
 
         with open(pdf_path, "rb") as f:
             return f.read()
