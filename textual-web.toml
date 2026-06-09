@@ -1,0 +1,4 @@
+[[apps]]
+name = "ART — Agentic Resume Tailoring"
+slug = "art"
+command = "python tui/app.py"

@@ -1,0 +1,15 @@
+services:
+  art:
+    build: .
+    image: art-tui
+    stdin_open: true
+    tty: true
+    env_file:
+      - .env
+    volumes:
+      - art_data:/data
+      - ./.linkedin_session:/app/.linkedin_session
+      - ./.github_cache.json:/app/.github_cache.json
+
+volumes:
+  art_data:

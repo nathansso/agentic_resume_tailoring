@@ -416,6 +416,57 @@ def save_github_token(token: str) -> None:
         unset_key(str(_ENV_PATH), "GITHUB_TOKEN")
 
 
+# ── GitHub OAuth device flow (TUI) ───────────────────────────
+
+def start_github_device_flow() -> dict:
+    """Initiate GitHub device flow. Returns { user_code, verification_uri, device_code, interval } or raises."""
+    import requests as _req
+    from config import GITHUB_CLIENT_ID
+    if not GITHUB_CLIENT_ID:
+        raise RuntimeError("GITHUB_CLIENT_ID is not set — cannot start device flow")
+    resp = _req.post(
+        "https://github.com/login/device/code",
+        headers={"Accept": "application/json"},
+        json={"client_id": GITHUB_CLIENT_ID, "scope": "repo read:user"},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return {
+        "device_code": data["device_code"],
+        "user_code": data["user_code"],
+        "verification_uri": data["verification_uri"],
+        "interval": data.get("interval", 5),
+        "expires_in": data.get("expires_in", 900),
+    }
+
+
+def poll_github_device_flow(device_code: str, interval: int = 5) -> str | None:
+    """Poll once for a device-flow access token. Returns token string, None if still pending, or raises on error."""
+    import time
+    import requests as _req
+    from config import GITHUB_CLIENT_ID
+    time.sleep(interval)
+    resp = _req.post(
+        "https://github.com/login/oauth/access_token",
+        headers={"Accept": "application/json"},
+        json={
+            "client_id": GITHUB_CLIENT_ID,
+            "device_code": device_code,
+            "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+        },
+        timeout=10,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if data.get("access_token"):
+        return data["access_token"]
+    error = data.get("error", "")
+    if error in ("authorization_pending", "slow_down"):
+        return None
+    raise RuntimeError(f"Device flow error: {error} — {data.get('error_description', '')}")
+
+
 # ── LLM provider + API key (stored in .env, never in SQLite) ─
 
 def get_llm_config() -> tuple[str, bool]:
@@ -797,12 +848,16 @@ def ingest_resume_file(file_path: str) -> str:
         return f"Ingestion failed: {e}"
 
 
-def ingest_github(username: str = "") -> str:
-    """Fetch GitHub repos for a user and save skills/projects to DB."""
-    from config import GITHUB_USERNAME
+def ingest_github(username: str = "", token: str | None = None) -> str:
+    """Fetch GitHub repos for a user and save skills/projects to DB.
+
+    token: OAuth or PAT to use. Falls back to GITHUB_TOKEN env var if not provided.
+    """
+    from config import GITHUB_USERNAME, GITHUB_TOKEN
     target = username.strip() or GITHUB_USERNAME
     if not target:
         return "No GitHub username provided and GITHUB_USERNAME is not set in .env."
+    auth_token = token or GITHUB_TOKEN
     try:
         from database.db import init_db
         from database.user_utils import get_active_profile
@@ -812,7 +867,7 @@ def ingest_github(username: str = "") -> str:
         user = get_active_profile()
         pre = _snapshot_user_data(user.user_id) if user else (set(), set(), set())
         with _suppress_output():
-            repos = GitHubIngestor(username=target).ingest()
+            repos = GitHubIngestor(username=target, token=auth_token).ingest()
             if not repos:
                 return f"No new or updated repos found for {target}."
             lines = []
@@ -853,8 +908,11 @@ def parse_github_repo_ref(repo_ref: str) -> "tuple[str, str] | None":
     return None
 
 
-def ingest_github_repo(repo_ref: str) -> str:
-    """Fetch a single GitHub repo and save to DB. Returns a plain-English summary string and never raises."""
+def ingest_github_repo(repo_ref: str, token: str | None = None) -> str:
+    """Fetch a single GitHub repo and save to DB. Returns a plain-English summary string and never raises.
+
+    token: OAuth or PAT to use. Falls back to GITHUB_TOKEN env var if not provided.
+    """
     parsed = parse_github_repo_ref(repo_ref)
     if not parsed:
         return (
@@ -863,15 +921,17 @@ def ingest_github_repo(repo_ref: str) -> str:
         )
     owner, repo_name = parsed
     try:
+        from config import GITHUB_TOKEN
         from database.db import init_db
         from database.user_utils import get_active_profile
         from ingestion.github import GitHubIngestor
         from agents.parser import ResumeParserAgent
         init_db()
+        auth_token = token or GITHUB_TOKEN
         user = get_active_profile()
         pre = _snapshot_user_data(user.user_id) if user else (set(), set(), set())
         with _suppress_output():
-            repo = GitHubIngestor.fetch_repo(owner, repo_name)
+            repo = GitHubIngestor.fetch_repo(owner, repo_name, token=auth_token)
             if not repo:
                 return f"Could not fetch {owner}/{repo_name}. Check the owner/repo name and your network connection."
             langs = ", ".join(repo.get("languages", [])) or "unknown"

@@ -19,9 +19,17 @@ scikit-learn
 networkx
 # LinkedIn scraping (PDF/HTML path only — browser not required)
 beautifulsoup4
-# TUI
+# TUI (local use only)
 textual
 plotext
-# PDF export
-markdown
-xhtml2pdf
+# Web API
+fastapi
+uvicorn[standard]
+python-multipart
+python-jose[cryptography]
+itsdangerous
+# PDF export — LaTeX/pdflatex (installed via apt in Dockerfile; no Python deps needed)
+# PostgreSQL driver (used when DATABASE_URL points to Supabase or other hosted Postgres)
+psycopg2-binary
+# Supabase client — Auth + Realtime (Phase 2 cloud features)
+supabase

@@ -1,0 +1,18 @@
+scenario: "skill recall across compression"
+key_fact: "4 years of Kubernetes"
+
+turns:
+  - role: user
+    content: "I have 4 years of experience with Kubernetes."
+  - role: assistant
+    content: "Got it, I will note your four years of Kubernetes experience."
+
+filler:
+  pairs: 17
+  user_content: "Can you help me tailor my resume for a backend role?"
+  assistant_content: "Of course, I am happy to assist with your resume tailoring."
+
+probe:
+  content: "What Kubernetes experience level did I mention earlier?"
+  expected_contains: "4"
+  metric: factual_recall

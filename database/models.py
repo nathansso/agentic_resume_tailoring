@@ -18,6 +18,7 @@ class User(SQLModel, table=True):
     supabase_uid: Optional[str] = Field(default=None, unique=True)
     linkedin_url: Optional[str] = None
     github_username: Optional[str] = None
+    github_access_token: Optional[str] = None
     phone: Optional[str] = None
     location: Optional[str] = None
     onboarding_complete: bool = Field(default=False)
@@ -154,3 +155,10 @@ class ChatMessage(SQLModel, table=True):
     role: str        # "user" | "assistant"
     content: str
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class AIUsage(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: UUID = Field(foreign_key="user.user_id", index=True)
+    date: str  # YYYY-MM-DD UTC
+    call_count: int = Field(default=0)
