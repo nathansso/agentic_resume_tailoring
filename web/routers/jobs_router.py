@@ -229,9 +229,9 @@ async def tailor_job(job_id: str, user: User = Depends(get_current_user), _quota
 # ── Export job ───────────────────────────────────────────────
 
 @router.get("/{job_id}/export")
-async def export_job(job_id: str, format: str = "md", user: User = Depends(get_current_user)):
-    if format not in ("md", "pdf"):
-        raise HTTPException(status_code=422, detail="format must be 'md' or 'pdf'")
+async def export_job(job_id: str, format: str = "pdf", user: User = Depends(get_current_user)):
+    if format not in ("pdf", "tex", "docx"):
+        raise HTTPException(status_code=422, detail="format must be 'pdf', 'tex', or 'docx'")
     job, session = _get_owned_job(job_id, user)
     with session:
         latest = _latest_result(session, job.job_id)
@@ -245,7 +245,9 @@ async def export_job(job_id: str, format: str = "md", user: User = Depends(get_c
         agent = ResumeFormatterAgent(user.user_id)
         if format == "pdf":
             return agent.format_pdf(tailored_content, job_title=job.title)
-        return agent.format_markdown(tailored_content, job_title=job.title)
+        if format == "tex":
+            return agent.format_tex(tailored_content, job_title=job.title)
+        return agent.format_docx(tailored_content, job_title=job.title)
 
     content = await asyncio.to_thread(_render)
 
@@ -255,8 +257,14 @@ async def export_job(job_id: str, format: str = "md", user: User = Depends(get_c
             media_type="application/pdf",
             headers={"Content-Disposition": f'attachment; filename="tailored_{job_title}.pdf"'},
         )
+    if format == "tex":
+        return Response(
+            content=content if isinstance(content, bytes) else content.encode("utf-8"),
+            media_type="text/plain",
+            headers={"Content-Disposition": f'attachment; filename="tailored_{job_title}.tex"'},
+        )
     return Response(
-        content=content if isinstance(content, bytes) else content.encode(),
-        media_type="text/markdown",
-        headers={"Content-Disposition": f'attachment; filename="tailored_{job_title}.md"'},
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="tailored_{job_title}.docx"'},
     )
