@@ -12,7 +12,8 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libxml2 libxslt1.1 libffi-dev \
-    gcc python3-dev pkg-config libcairo2-dev \
+    gcc python3-dev pkg-config \
+    texlive-latex-base texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements-core.txt .

@@ -20,6 +20,4 @@ beautifulsoup4
 # TUI
 textual
 plotext
-# PDF export
-markdown
-xhtml2pdf
+# PDF export — LaTeX/pdflatex (installed via apt in Dockerfile; no Python deps needed)

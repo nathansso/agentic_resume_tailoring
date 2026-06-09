@@ -28,9 +28,7 @@ uvicorn[standard]
 python-multipart
 python-jose[cryptography]
 itsdangerous
-# PDF export
-markdown
-xhtml2pdf
+# PDF export — LaTeX/pdflatex (installed via apt in Dockerfile; no Python deps needed)
 # PostgreSQL driver (used when DATABASE_URL points to Supabase or other hosted Postgres)
 psycopg2-binary
 # Supabase client — Auth + Realtime (Phase 2 cloud features)

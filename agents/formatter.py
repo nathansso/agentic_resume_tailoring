@@ -1,15 +1,12 @@
 """
-Resume Formatter Agent — Converts tailored JSON output into a formatted markdown resume.
+Resume Formatter Agent — Converts tailored JSON output into a formatted resume.
 
-Produces markdown matching the user's resume style (captured during ingestion):
-- Header with name, contact fields in the order they appeared on the original resume
-- Sections rendered in the order captured from the original resume
-- Section labels preserved as-is (e.g. "Work Experience" not just "Experience")
-- Bullet prefix style matched to the original
-- Falls back to sensible defaults when no style has been captured
+Primary output path: LaTeX → PDF via pdflatex (Jake's Resume layout).
+Markdown output is retained for debugging but is not the intended pipeline.
 """
 import logging
 import re
+import warnings
 from typing import Dict, Any, List, Optional
 from uuid import UUID
 from sqlmodel import Session, select
@@ -22,120 +19,176 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_SECTION_ORDER = ["education", "experience", "projects", "skills"]
 
-_RESUME_CSS = """\
-@page {
-    size: letter;
-    margin: 1in;
+# ── Jake's Resume LaTeX preamble ─────────────────────────────────────────────
+# Adapted from https://github.com/jakegut/resume (MIT License)
+
+_JAKE_PREAMBLE = r"""\documentclass[letterpaper,11pt]{article}
+
+\usepackage{latexsym}
+\usepackage[empty]{fullpage}
+\usepackage{titlesec}
+\usepackage[usenames,dvipsnames]{color}
+\usepackage{verbatim}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\input{glyphtounicode}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\addtolength{\oddsidemargin}{-0.5in}
+\addtolength{\evensidemargin}{-0.5in}
+\addtolength{\textwidth}{1in}
+\addtolength{\topmargin}{-.5in}
+\addtolength{\textheight}{1.0in}
+
+\urlstyle{same}
+\raggedbottom
+\raggedright
+\setlength{\tabcolsep}{0in}
+
+\titleformat{\section}{
+  \vspace{-4pt}\scshape\raggedright\large
+}{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
+
+\pdfgentounicode=1
+
+%-------------------------
+% Custom commands (Jake's Resume)
+\newcommand{\resumeItem}[1]{
+  \item\small{
+    {#1 \vspace{-2pt}}
+  }
 }
-body {
-    font-family: Helvetica, Arial, sans-serif;
-    font-size: 11pt;
-    color: #111111;
-    line-height: 1.4;
+
+\newcommand{\resumeSubheading}[4]{
+  \vspace{-2pt}\item
+    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & #2 \\
+      \textit{\small#3} & \textit{\small #4} \\
+    \end{tabular*}\vspace{-7pt}
 }
-h1 {
-    font-size: 18pt;
-    font-weight: bold;
-    border-bottom: 2pt solid #111111;
-    padding-bottom: 4pt;
-    margin-bottom: 6pt;
+
+\newcommand{\resumeSubSubheading}[2]{
+    \item
+    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+      \textit{\small#1} & \textit{\small #2} \\
+    \end{tabular*}\vspace{-7pt}
 }
-h2 {
-    font-size: 12pt;
-    font-weight: bold;
-    border-bottom: 0.5pt solid #666666;
-    padding-bottom: 2pt;
-    margin-top: 12pt;
-    margin-bottom: 4pt;
+
+\newcommand{\resumeProjectHeading}[2]{
+    \item
+    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+      \small#1 & #2 \\
+    \end{tabular*}\vspace{-7pt}
 }
-p {
-    margin-top: 2pt;
-    margin-bottom: 5pt;
-}
-ul {
-    margin-top: 2pt;
-    margin-bottom: 8pt;
-    padding-left: 16pt;
-}
-li {
-    margin-bottom: 3pt;
-}
-strong {
-    font-weight: bold;
-}
-em {
-    font-style: italic;
-}
+
+\newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}
+
+\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
+
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+\newcommand{\resumeItemListStart}{\begin{itemize}}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
 """
 
-_SECTION_NAMES = frozenset({"Education", "Projects", "Experience", "Skills"})
+
+# ── TeX utilities ─────────────────────────────────────────────────────────────
+
+_TEX_SPECIAL = {
+    "\\": r"\textbackslash{}",
+    "&":  r"\&",
+    "%":  r"\%",
+    "$":  r"\$",
+    "#":  r"\#",
+    "_":  r"\_",
+    "{":  r"\{",
+    "}":  r"\}",
+    "~":  r"\textasciitilde{}",
+    "^":  r"\textasciicircum{}",
+}
+_TEX_ESCAPE_RE = re.compile(r"[\\&%$#_{}~^]")
 
 
-def _promote_section_headings(md_text: str, known_labels: Optional[frozenset] = None) -> str:
-    """Promote the name line and section-header lines to Markdown heading levels.
+def _escape_tex(text: str) -> str:
+    """Escape special LaTeX characters in user-supplied text (single-pass)."""
+    return _TEX_ESCAPE_RE.sub(lambda m: _TEX_SPECIAL[m.group()], text)
 
-    format_markdown() outputs flat text (no # markers). This gives the PDF
-    renderer proper <h1>/<h2> anchors without changing the .md output contract.
-    """
-    effective_labels = known_labels if known_labels is not None else _SECTION_NAMES
-    lines = []
-    first_content_seen = False
-    for line in md_text.split("\n"):
-        stripped = line.strip()
-        if stripped in effective_labels:
-            lines.append(f"## {stripped}")
-        elif not first_content_seen and stripped:
-            lines.append(f"# {stripped}")
-            first_content_seen = True
+
+def _convert_inline(text: str) -> str:
+    """Convert **bold** and *italic* markdown markers to LaTeX equivalents,
+    escaping all other text for TeX."""
+    parts = re.split(r"(\*\*[^*]+\*\*|\*[^*]+\*)", text)
+    result = []
+    for part in parts:
+        if part.startswith("**") and part.endswith("**"):
+            result.append(r"\textbf{" + _escape_tex(part[2:-2]) + "}")
+        elif part.startswith("*") and part.endswith("*"):
+            result.append(r"\textit{" + _escape_tex(part[1:-1]) + "}")
         else:
-            lines.append(line)
-    return "\n".join(lines)
+            result.append(_escape_tex(part))
+    return "".join(result)
 
 
-def _md_to_pdf_bytes(md_text: str, known_labels: Optional[frozenset] = None) -> bytes:
-    """Convert a Markdown string to PDF bytes via HTML + xhtml2pdf."""
-    import io
-    import logging as _logging
-    import markdown as _markdown
-    from xhtml2pdf import pisa
+def _compile_tex_to_pdf(tex_str: str) -> bytes:
+    """Write tex_str to a temp file, compile with pdflatex, return PDF bytes."""
+    import subprocess
+    import tempfile
+    import os
 
-    _logging.getLogger("xhtml2pdf").setLevel(_logging.ERROR)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tex_path = os.path.join(tmpdir, "resume.tex")
+        pdf_path = os.path.join(tmpdir, "resume.pdf")
+        with open(tex_path, "w", encoding="utf-8") as f:
+            f.write(tex_str)
 
-    enhanced_md = _promote_section_headings(md_text, known_labels)
-    html_body = _markdown.markdown(enhanced_md, extensions=["tables"])
-    html = (
-        "<!DOCTYPE html><html><head>"
-        "<meta charset='utf-8'/>"
-        f"<style>{_RESUME_CSS}</style>"
-        f"</head><body>{html_body}</body></html>"
-    )
-    pdf_buf = io.BytesIO()
-    status = pisa.CreatePDF(html, dest=pdf_buf)
-    if status.err:
-        raise RuntimeError(f"PDF generation failed (err={status.err})")
-    return pdf_buf.getvalue()
+        result = subprocess.run(
+            ["pdflatex", "-interaction=nonstopmode", "-output-directory", tmpdir, tex_path],
+            capture_output=True,
+            timeout=60,
+        )
+
+        if not os.path.exists(pdf_path):
+            stdout = result.stdout.decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"pdflatex failed (exit {result.returncode}):\n{stdout[-3000:]}"
+            )
+
+        with open(pdf_path, "rb") as f:
+            return f.read()
 
 
 def sanitize_text(text: str) -> str:
     """Replace problematic Unicode characters with ASCII-safe equivalents."""
     replacements = {
-        "–": "-",   # en dash
-        "—": "-",   # em dash
-        "‘": "'",   # left single quote
-        "’": "'",   # right single quote (apostrophe)
-        "“": '"',   # left double quote
-        "”": '"',   # right double quote
-        "…": "...", # ellipsis
-        " ": " ",   # non-breaking space
-        "​": "",    # zero-width space
+        "–": "-",
+        "—": "-",
+        "‘": "'",
+        "’": "'",
+        "“": '"',
+        "”": '"',
+        "…": "...",
+        " ": " ",
+        "​": "",
     }
     for char, replacement in replacements.items():
         text = text.replace(char, replacement)
     return text
 
 
+# ── Formatter agent ───────────────────────────────────────────────────────────
+
 class ResumeFormatterAgent:
-    """Formats tailored resume content into styled markdown, driven by the user's captured style."""
+    """Formats tailored resume content into a styled PDF using Jake's Resume layout."""
 
     def __init__(self, user_id: UUID):
         self.user_id = user_id
@@ -149,15 +202,256 @@ class ResumeFormatterAgent:
             return None
 
     def _resolve_label(self, key: str) -> str:
-        """Return the display label for a section from captured style, or a sensible default."""
         return (self._style or {}).get("section_labels", {}).get(key, key.capitalize())
 
     def _build_known_labels(self) -> frozenset:
-        """Build the full set of section label strings for _promote_section_headings."""
-        labels = set(_SECTION_NAMES)
+        labels: set = set()
         for v in (self._style or {}).get("section_labels", {}).values():
             labels.add(v)
         return frozenset(labels)
+
+    # ── Primary path: LaTeX → PDF ─────────────────────────────────────────────
+
+    def format_pdf(
+        self,
+        tailored_content: Dict,
+        job_title: str = "",
+        section_order: Optional[List[str]] = None,
+    ) -> bytes:
+        """Convert tailored_content to a PDF using Jake's Resume LaTeX layout."""
+        tex = self._build_tex(tailored_content, section_order=section_order)
+        return _compile_tex_to_pdf(tex)
+
+    def _build_tex(
+        self,
+        tailored_content: Dict,
+        section_order: Optional[List[str]] = None,
+    ) -> str:
+        """Assemble the full LaTeX document string."""
+        style = self._style or {}
+        order = section_order or style.get("section_order") or _DEFAULT_SECTION_ORDER
+
+        builders = {
+            "education": self._build_tex_education,
+            "experience": lambda: self._build_tex_experiences(
+                tailored_content.get("experiences", [])
+            ),
+            "projects": lambda: self._build_tex_projects(
+                tailored_content.get("projects", [])
+            ),
+            "skills": lambda: self._build_tex_skills(
+                tailored_content.get("skills_emphasized", [])
+            ),
+        }
+
+        body_parts = [self._build_tex_header()]
+        seen: set = set()
+        for key in order:
+            if key in seen or key not in builders:
+                continue
+            seen.add(key)
+            block = builders[key]()
+            if block:
+                body_parts.append(block)
+        for key, fn in builders.items():
+            if key not in seen:
+                block = fn()
+                if block:
+                    body_parts.append(block)
+
+        body = "\n\n".join(body_parts)
+        return (
+            _JAKE_PREAMBLE
+            + "\n\\begin{document}\n\n"
+            + body
+            + "\n\n\\end{document}\n"
+        )
+
+    def _build_tex_header(self) -> str:
+        """Jake's centered header block."""
+        with Session(engine) as session:
+            user = session.exec(select(User).where(User.user_id == self.user_id)).first()
+            if not user:
+                return ""
+
+        name = _escape_tex(user.name)
+
+        contact_parts = []
+        if user.phone:
+            contact_parts.append(_escape_tex(user.phone))
+        if user.email and user.email != "user@example.com":
+            email_esc = _escape_tex(user.email)
+            contact_parts.append(
+                rf"\href{{mailto:{email_esc}}}{{\underline{{{email_esc}}}}}"
+            )
+        if user.linkedin_url:
+            url_esc = _escape_tex(user.linkedin_url)
+            display = url_esc.replace("https://", "").replace("http://", "")
+            contact_parts.append(rf"\href{{{url_esc}}}{{\underline{{{display}}}}}")
+        if user.github_username:
+            gh_url = _escape_tex(f"https://github.com/{user.github_username}")
+            gh_display = f"github.com/{_escape_tex(user.github_username)}"
+            contact_parts.append(rf"\href{{{gh_url}}}{{\underline{{{gh_display}}}}}")
+        if user.location:
+            contact_parts.append(_escape_tex(user.location))
+
+        contact_line = " $|$ ".join(contact_parts)
+
+        return (
+            r"\begin{center}"
+            + "\n"
+            + rf"    \textbf{{\Huge \scshape {name}}} \\ \vspace{{1pt}}"
+            + "\n"
+            + rf"    \small {contact_line}"
+            + "\n"
+            + r"\end{center}"
+        )
+
+    def _build_tex_education(self) -> str:
+        """Jake's \\resumeSubheading blocks for education."""
+        label = _escape_tex(self._resolve_label("education"))
+        return "\n".join([
+            rf"\section{{{label}}}",
+            r"  \resumeSubHeadingListStart",
+            r"    \resumeSubheading",
+            r"      {University of California, San Diego}{La Jolla, CA}",
+            r"      {M.S. Data Science, GPA: 4.0/4.0}{Expected June 2027}",
+            r"    \resumeSubheading",
+            r"      {University of California, San Diego}{La Jolla, CA}",
+            r"      {B.S. Mathematics \& Economics, Minor in Data Science}{June 2025}",
+            r"    \resumeSubItem{Notable Coursework: OOP, DSA, Micro/Macroeconomics, Econometrics, ML \& Probabilistic Modeling}",
+            r"  \resumeSubHeadingListEnd",
+        ])
+
+    def _build_tex_experiences(self, experiences: List[Dict]) -> str:
+        """Jake's \\resumeSubheading + item lists for each role."""
+        if not experiences:
+            return ""
+
+        label = _escape_tex(self._resolve_label("experience"))
+        lines = [
+            rf"\section{{{label}}}",
+            r"  \resumeSubHeadingListStart",
+        ]
+
+        for exp in experiences:
+            title      = _escape_tex(exp.get("title", ""))
+            company    = _escape_tex(exp.get("company", ""))
+            start      = _escape_tex(exp.get("start_date", ""))
+            end        = _escape_tex(exp.get("end_date", ""))
+            date_range = f"{start} -- {end}" if start else end
+            location   = _escape_tex(exp.get("location", ""))
+
+            lines += [
+                r"    \resumeSubheading",
+                f"      {{{title}}}{{{date_range}}}",
+                f"      {{{company}}}{{{location}}}",
+            ]
+
+            bullets = exp.get("bullets", [])
+            if bullets:
+                lines.append(r"      \resumeItemListStart")
+                for bullet in bullets:
+                    lines.append(
+                        r"        \resumeItem{" + _convert_inline(bullet.strip()) + "}"
+                    )
+                lines.append(r"      \resumeItemListEnd")
+
+        lines.append(r"  \resumeSubHeadingListEnd")
+        return "\n".join(lines)
+
+    def _build_tex_projects(self, projects: List[Dict]) -> str:
+        """Jake's \\resumeProjectHeading blocks."""
+        if not projects:
+            return ""
+
+        label = _escape_tex(self._resolve_label("projects"))
+        lines = [
+            rf"\section{{{label}}}",
+            r"    \resumeSubHeadingListStart",
+        ]
+
+        for proj in projects:
+            name  = _escape_tex(proj.get("name", "Untitled"))
+            techs = _escape_tex(proj.get("tech_stack", proj.get("technologies", "")))
+            dates = _escape_tex(proj.get("date_range", proj.get("dates", "")))
+
+            heading = (
+                rf"\textbf{{{name}}} $|$ \emph{{{techs}}}" if techs
+                else rf"\textbf{{{name}}}"
+            )
+
+            lines += [
+                r"      \resumeProjectHeading",
+                f"          {{{heading}}}{{{dates}}}",
+            ]
+
+            bullets = proj.get("bullets", [])
+            if bullets:
+                lines.append(r"          \resumeItemListStart")
+                for bullet in bullets:
+                    lines.append(
+                        r"            \resumeItem{" + _convert_inline(bullet.strip()) + "}"
+                    )
+                lines.append(r"          \resumeItemListEnd")
+
+        lines.append(r"    \resumeSubHeadingListEnd")
+        return "\n".join(lines)
+
+    def _build_tex_skills(self, emphasized_skills: List[str]) -> str:
+        """Jake's skills itemize block grouped by category."""
+        with Session(engine) as session:
+            user_skills = session.exec(
+                select(UserSkill).where(UserSkill.user_id == self.user_id)
+            ).all()
+
+            categories: Dict[str, List[str]] = {}
+            for us in user_skills:
+                skill = session.exec(
+                    select(Skill).where(Skill.skill_id == us.skill_id)
+                ).first()
+                if not skill:
+                    continue
+                if should_reject_skill(skill.name):
+                    continue
+                canonical = normalize_skill_name(skill.name)
+                cat = self._normalize_category(skill.category or "Other")
+                categories.setdefault(cat, [])
+                if canonical not in categories[cat]:
+                    categories[cat].append(canonical)
+
+        if not categories:
+            return ""
+
+        label = _escape_tex(self._resolve_label("skills"))
+        cat_order = [
+            "Languages & Libraries", "AI & Machine Learning", "Data Engineering",
+            "Tools", "Cloud", "Other",
+        ]
+
+        skill_lines = []
+        for cat in cat_order:
+            if cat in categories:
+                skills_str = _escape_tex(", ".join(sorted(categories.pop(cat))))
+                skill_lines.append(
+                    rf"     \textbf{{{_escape_tex(cat)}}}{{: {skills_str}}} \\"
+                )
+        for cat, skills in categories.items():
+            skills_str = _escape_tex(", ".join(sorted(skills)))
+            skill_lines.append(
+                rf"     \textbf{{{_escape_tex(cat)}}}{{: {skills_str}}} \\"
+            )
+
+        return "\n".join([
+            rf"\section{{{label}}}",
+            r" \begin{itemize}[leftmargin=0.15in, label={}]",
+            r"    \small{\item{",
+            *skill_lines,
+            r"    }}",
+            r" \end{itemize}",
+        ])
+
+    # ── Deprecated: Markdown path ─────────────────────────────────────────────
 
     def format_markdown(
         self,
@@ -165,16 +459,16 @@ class ResumeFormatterAgent:
         job_title: str = "",
         section_order: Optional[List[str]] = None,
     ) -> str:
-        """Convert tailored_content JSON into a formatted markdown resume.
+        """[DEPRECATED] Produce a plain Markdown resume string.
 
-        Args:
-            tailored_content: JSON from the tailor agent (experiences, projects, skills_emphasized)
-            job_title: Optional job title for context
-            section_order: Optional override for section ordering (canonical keys like
-                "experience", "projects", "skills", "education"). When provided, used
-                instead of the captured style order. Intended for the tailoring pipeline
-                to supply a job-relevance-ranked order.
+        The primary export pipeline is format_pdf() → LaTeX → pdflatex.
+        This method is retained for debugging and plain-text inspection only.
         """
+        warnings.warn(
+            "format_markdown() is deprecated — use format_pdf() for the primary export path.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         style = self._style or {}
         order = section_order or style.get("section_order") or _DEFAULT_SECTION_ORDER
         bullet = style.get("bullet_prefix", "- ")
@@ -206,7 +500,6 @@ class ResumeFormatterAgent:
             block = builders[key]()
             if block:
                 sections.append(block)
-        # Append any builder not covered by the stored order
         for key, fn in builders.items():
             if key not in seen:
                 block = fn()
@@ -215,27 +508,16 @@ class ResumeFormatterAgent:
 
         return sanitize_text("\n".join(sections))
 
-    def format_pdf(
-        self,
-        tailored_content: Dict,
-        job_title: str = "",
-        section_order: Optional[List[str]] = None,
-    ) -> bytes:
-        """Convert tailored_content to a styled PDF and return raw bytes."""
-        md_text = self.format_markdown(tailored_content, job_title, section_order)
-        return _md_to_pdf_bytes(md_text, self._build_known_labels())
+    # ── Markdown section builders (used only by deprecated format_markdown()) ─
 
     def _build_header(self) -> str:
-        """Build the resume header, using contact field order from captured style."""
         with Session(engine) as session:
             user = session.exec(select(User).where(User.user_id == self.user_id)).first()
             if not user:
                 return ""
-
             style_header = (self._style or {}).get("header", {})
             sep = style_header.get("contact_separator", " | ")
             field_order = style_header.get("contact_fields", ["email", "linkedin"])
-
             field_values = {
                 "email": user.email if user.email and user.email != "user@example.com" else None,
                 "linkedin": user.linkedin_url,
@@ -243,13 +525,10 @@ class ResumeFormatterAgent:
                 "location": user.location,
                 "github": f"github.com/{user.github_username}" if user.github_username else None,
             }
-
             contact = [field_values[f] for f in field_order if field_values.get(f)]
             if not contact:
                 contact = [v for v in field_values.values() if v]
-
-            parts = [user.name, "  ", sep.join(contact)]
-            return "\n".join(parts)
+            return "\n".join([user.name, "  ", sep.join(contact)])
 
     def _build_education(self) -> str:
         label = self._resolve_label("education")
@@ -267,20 +546,14 @@ class ResumeFormatterAgent:
         label: str = "Projects",
         bullet_prefix: str = "- ",
     ) -> str:
-        """Build the projects section from tailored project data."""
         if not projects:
             return ""
-
         lines = [label]
         for proj in projects:
-            name = proj.get("name", "Untitled Project")
-            lines.append(f"**{name}**\n")
-
+            lines.append(f"**{proj.get('name', 'Untitled Project')}**\n")
             for bullet in proj.get("bullets", []):
-                formatted = self._format_bullet(bullet)
-                lines.append(f"{bullet_prefix}{formatted}")
+                lines.append(f"{bullet_prefix}{self._format_bullet(bullet)}")
             lines.append("")
-
         return "\n".join(lines)
 
     def _build_experiences(
@@ -289,29 +562,22 @@ class ResumeFormatterAgent:
         label: str = "Experience",
         bullet_prefix: str = "- ",
     ) -> str:
-        """Build the experience section from tailored experience data."""
         if not experiences:
             return ""
-
         lines = [label]
         for exp in experiences:
-            title = exp.get("title", "Unknown Role")
+            title   = exp.get("title", "Unknown Role")
             company = exp.get("company", "Unknown Company")
-            start = exp.get("start_date", "")
-            end = exp.get("end_date", "")
+            start   = exp.get("start_date", "")
+            end     = exp.get("end_date", "")
             date_range = f"{start} - {end}" if start else ""
-
             lines.append(f"**{title},** {company}\t{date_range}")
-
             desc = exp.get("description", "")
             if desc:
                 lines.append(f"*{desc}*\n")
-
             for bullet in exp.get("bullets", []):
-                formatted = self._format_bullet(bullet)
-                lines.append(f"{bullet_prefix}{formatted}")
+                lines.append(f"{bullet_prefix}{self._format_bullet(bullet)}")
             lines.append("")
-
         return "\n".join(lines)
 
     def _build_skills(
@@ -319,12 +585,10 @@ class ResumeFormatterAgent:
         emphasized_skills: List[str],
         label: str = "Skills",
     ) -> str:
-        """Build the skills section, grouping by category."""
         with Session(engine) as session:
             user_skills = session.exec(
                 select(UserSkill).where(UserSkill.user_id == self.user_id)
             ).all()
-
             categories: Dict[str, List[str]] = {}
             for us in user_skills:
                 skill = session.exec(
@@ -334,41 +598,30 @@ class ResumeFormatterAgent:
                     continue
                 if should_reject_skill(skill.name):
                     continue
-                canonical_name = normalize_skill_name(skill.name)
+                canonical = normalize_skill_name(skill.name)
                 cat = self._normalize_category(skill.category or "Other")
-                if cat not in categories:
-                    categories[cat] = []
-                if canonical_name not in categories[cat]:
-                    categories[cat].append(canonical_name)
+                categories.setdefault(cat, [])
+                if canonical not in categories[cat]:
+                    categories[cat].append(canonical)
 
         if not categories:
             return ""
 
         order = [
-            "Languages & Libraries",
-            "AI & Machine Learning",
-            "Data Engineering",
-            "Tools",
-            "Cloud",
-            "Other",
+            "Languages & Libraries", "AI & Machine Learning", "Data Engineering",
+            "Tools", "Cloud", "Other",
         ]
-
         lines = [label]
         for cat in order:
             if cat in categories:
-                skills_list = ", ".join(sorted(categories[cat]))
-                lines.append(f"**{cat}:** {skills_list}")
+                lines.append(f"**{cat}:** {', '.join(sorted(categories[cat]))}")
                 del categories[cat]
-
         for cat, skills in categories.items():
-            skills_list = ", ".join(sorted(skills))
-            lines.append(f"**{cat}:** {skills_list}")
-
+            lines.append(f"**{cat}:** {', '.join(sorted(skills))}")
         return "\n".join(lines)
 
     @staticmethod
     def _format_bullet(bullet: str) -> str:
-        """Ensure bullet has a bold lead-in phrase for consistent formatting."""
         bullet = bullet.strip()
         if bullet.startswith("**"):
             return bullet
@@ -378,7 +631,7 @@ class ResumeFormatterAgent:
         for i, word in enumerate(words):
             if i >= 4 and (word.endswith(",") or word.endswith(":")):
                 lead = " ".join(words[: i + 1]).rstrip(",:")
-                rest = " ".join(words[i + 1 :]).lstrip(",: ")
+                rest = " ".join(words[i + 1:]).lstrip(",: ")
                 return f"**{lead}** {rest}" if rest else f"**{lead}**"
         lead = " ".join(words[:4])
         rest = " ".join(words[4:])
@@ -386,20 +639,15 @@ class ResumeFormatterAgent:
 
     @staticmethod
     def _normalize_category(cat: str) -> str:
-        """Normalize varied category names into consistent groups."""
         cat_lower = cat.lower().strip()
-        if any(kw in cat_lower for kw in ["language", "library", "libraries"]):
+        if any(kw in cat_lower for kw in ["language", "library", "libraries", "framework"]):
             return "Languages & Libraries"
-        if any(kw in cat_lower for kw in ["ml", "machine learning", "ai", "deep learning"]):
+        if any(kw in cat_lower for kw in ["ml", "machine learning", "ai", "deep learning", "technique"]):
             return "AI & Machine Learning"
         if any(kw in cat_lower for kw in ["data engineer", "etl", "pipeline", "database"]):
             return "Data Engineering"
-        if any(kw in cat_lower for kw in ["framework"]):
-            return "Languages & Libraries"
         if any(kw in cat_lower for kw in ["tool", "devops", "infrastructure"]):
             return "Tools"
         if any(kw in cat_lower for kw in ["cloud", "aws", "gcp", "azure"]):
             return "Cloud"
-        if any(kw in cat_lower for kw in ["technique"]):
-            return "AI & Machine Learning"
         return cat
