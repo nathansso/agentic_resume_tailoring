@@ -184,8 +184,11 @@ export function JobDetailPanel({ job, onJobUpdate, onViewChange }: Props) {
               <a href={exportUrl(job.job_id, "pdf")} style={s.downloadBtn} download>
                 Download PDF
               </a>
-              <a href={exportUrl(job.job_id, "md")} style={{ ...s.downloadBtn, background: "transparent", color: colors.accent, border: `1px solid ${colors.accent}` }} download>
-                Download Markdown
+              <a href={exportUrl(job.job_id, "tex")} style={{ ...s.downloadBtn, background: "transparent", color: colors.accent, border: `1px solid ${colors.accent}` }} download>
+                Download LaTeX
+              </a>
+              <a href={exportUrl(job.job_id, "docx")} style={{ ...s.downloadBtn, background: "transparent", color: colors.accent, border: `1px solid ${colors.accent}` }} download>
+                Download DOCX
               </a>
               <button style={s.actionBtn} onClick={handleTailor}>Re-tailor</button>
             </div>

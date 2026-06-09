@@ -52,6 +52,6 @@ export async function tailorJob(jobId: string): Promise<TailorResult> {
   }));
 }
 
-export function exportUrl(jobId: string, format: "md" | "pdf"): string {
+export function exportUrl(jobId: string, format: "pdf" | "tex" | "docx"): string {
   return `/api/jobs/${jobId}/export?format=${format}`;
 }

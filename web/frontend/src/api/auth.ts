@@ -45,7 +45,7 @@ export async function getMe(): Promise<User | null> {
   return res.json() as Promise<User>;
 }
 
-export async function getGithubStatus(): Promise<{ connected: boolean; oauth_configured: boolean }> {
+export async function getGithubStatus(): Promise<{ connected: boolean; oauth_configured: boolean; github_username: string | null }> {
   return json(await fetch("/api/auth/github/status", { credentials: "include" }));
 }
 
