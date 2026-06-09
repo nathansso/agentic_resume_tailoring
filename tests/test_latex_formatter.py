@@ -1,15 +1,20 @@
-"""Tests for the LaTeX resume formatter (issue: LaTeX export pipeline).
+"""Tests for the LaTeX/docx resume formatter.
 
 Fast tests (no pdflatex): verify .tex source structure and escaping.
 Integration test (requires pdflatex): marked @pytest.mark.integration.
+
+Test data mirrors Jake's resume sample content so the generated .tex can be
+dropped directly into Overleaf against his template for visual verification.
 """
+import io
+import os
 import shutil
 import warnings
-from uuid import uuid4
 
 import pytest
 from sqlmodel import Session
 
+import agents.formatter as fmt_module
 from agents.formatter import (
     ResumeFormatterAgent,
     _compile_tex_to_pdf,
@@ -19,276 +24,336 @@ from agents.formatter import (
 from database.models import Skill, User, UserSkill
 
 
-# ── fixtures ──────────────────────────────────────────────────────────────────
+# ── Jake-style sample data ────────────────────────────────────────────────────
 
-_SAMPLE_CONTENT = {
+_JAKE_CONTENT = {
     "experiences": [
         {
-            "title": "Software Engineer",
-            "company": "Acme Corp",
-            "start_date": "Jan 2023",
+            "title": "Undergraduate Research Assistant",
+            "company": "Texas A&M University",
+            "start_date": "June 2020",
             "end_date": "Present",
-            "location": "San Diego, CA",
+            "location": "College Station, TX",
             "bullets": [
-                "**Built** a distributed cache reducing API latency by 40%",
-                "Led team of 5 engineers across 3 time zones",
+                "Developed a REST API using FastAPI and PostgreSQL to store data from learning management systems",
+                "Developed a full-stack web application using Flask, React, PostgreSQL and Docker to analyze GitHub data",
+                "Explored ways to visualize GitHub collaboration in a classroom setting",
             ],
-        }
+        },
+        {
+            "title": "Information Technology Support Specialist",
+            "company": "Southwestern University",
+            "start_date": "Sep. 2018",
+            "end_date": "Present",
+            "location": "Georgetown, TX",
+            "bullets": [
+                "Communicate with managers to set up campus computers used on campus",
+                "Assess and troubleshoot computer problems brought by students, faculty and staff",
+                "Maintain upkeep of computers, classroom equipment, and 200 printers across campus",
+            ],
+        },
     ],
     "projects": [
         {
-            "name": "ART Resume Tailoring",
-            "tech_stack": "Python, FastAPI, React",
-            "dates": "2024",
+            "name": "Gitlytics",
+            "tech_stack": "Python, Flask, React, PostgreSQL, Docker",
+            "dates": "June 2020 -- Present",
             "bullets": [
-                "**Designed** an agentic pipeline for resume tailoring",
+                "Developed a full-stack web application using Flask serving a REST API with React as the frontend",
+                "Implemented GitHub OAuth to get data from user's repositories",
+                "Visualized GitHub data to show collaboration",
+                "Used Celery and Redis for asynchronous tasks",
             ],
-        }
+        },
+        {
+            "name": "Simple Paintball",
+            "tech_stack": "Spigot API, Java, Maven, TravisCI, Git",
+            "dates": "May 2018 -- May 2020",
+            "bullets": [
+                "Developed a Minecraft server plugin to entertain kids during free time for a previous job",
+                "Published plugin to websites gaining 2K+ downloads and an average 4.5/5-star review",
+                "Implemented continuous delivery using TravisCI to build the plugin upon new a release",
+            ],
+        },
     ],
-    "skills_emphasized": ["Python", "FastAPI"],
+    "skills_emphasized": ["Python", "Java", "React"],
 }
 
 
-def _seed_user(engine, email="latex@example.com") -> User:
+def _seed_jake_user(engine) -> User:
     with Session(engine) as s:
-        user = User(name="Nathaniel Oliver", email=email)
-        user.phone = "619-555-0100"
-        user.location = "San Diego, CA"
-        user.github_username = "nathansso"
-        user.linkedin_url = "https://linkedin.com/in/nathanoliver"
+        user = User(
+            name="Jake Ryan",
+            email="jake@su.edu",
+            phone="123-456-7890",
+            location="Georgetown, TX",
+            github_username="jake",
+            linkedin_url="https://linkedin.com/in/jake",
+        )
         s.add(user)
+        s.commit()
+        s.refresh(user)
+
+        for name, cat in [
+            ("Java", "language"),
+            ("Python", "language"),
+            ("C/C++", "language"),
+            ("SQL", "language"),
+            ("JavaScript", "language"),
+            ("React", "framework"),
+            ("Node.js", "framework"),
+            ("Flask", "framework"),
+            ("FastAPI", "framework"),
+            ("Git", "tool"),
+            ("Docker", "tool"),
+            ("TravisCI", "tool"),
+        ]:
+            sk = Skill(name=name, category=cat)
+            s.add(sk)
+            s.commit()
+            s.refresh(sk)
+            s.add(UserSkill(user_id=user.user_id, skill_id=sk.skill_id, confidence_score=0.9))
         s.commit()
         s.refresh(user)
         return user
 
 
-def _seed_skill(engine, user_id, name, category="language"):
-    with Session(engine) as s:
-        skill = Skill(name=name, category=category)
-        s.add(skill)
-        s.commit()
-        s.refresh(skill)
-        us = UserSkill(
-            user_id=user_id,
-            skill_id=skill.skill_id,
-            confidence_score=0.9,
-        )
-        s.add(us)
-        s.commit()
-
-
 # ── _escape_tex ───────────────────────────────────────────────────────────────
 
 def test_escape_ampersand():
-    assert _escape_tex("Data & Science") == r"Data \& Science"
+    assert _escape_tex("Texas A&M University") == r"Texas A\&M University"
 
 def test_escape_percent():
-    assert _escape_tex("50% faster") == r"50\% faster"
+    assert _escape_tex("95% coverage") == r"95\% coverage"
 
 def test_escape_dollar():
-    assert _escape_tex("$100k salary") == r"\$100k salary"
+    assert _escape_tex("$1M budget") == r"\$1M budget"
 
 def test_escape_hash():
     assert _escape_tex("issue #42") == r"issue \#42"
 
 def test_escape_underscore():
-    assert _escape_tex("snake_case") == r"snake\_case"
+    assert _escape_tex("snake_case_var") == r"snake\_case\_var"
 
-def test_escape_backslash_first():
-    # backslash must not be double-escaped
+def test_escape_backslash_single_pass():
     result = _escape_tex("a\\b")
     assert result == r"a\textbackslash{}b"
     assert result.count(r"\textbackslash{}") == 1
 
+def test_escape_braces():
+    assert _escape_tex("{hello}") == r"\{hello\}"
+
+def test_escape_tilde():
+    assert _escape_tex("~") == r"\textasciitilde{}"
+
 
 # ── _convert_inline ───────────────────────────────────────────────────────────
 
-def test_convert_bold():
-    result = _convert_inline("**Built** a feature")
-    assert r"\textbf{Built}" in result
+def test_convert_bold_to_textbf():
+    result = _convert_inline("**Developed** a REST API")
+    assert r"\textbf{Developed}" in result
     assert "**" not in result
 
-def test_convert_italic():
-    result = _convert_inline("*Python* developer")
-    assert r"\textit{Python}" in result
+def test_convert_italic_to_textit():
+    result = _convert_inline("based on *The Legend of Zelda*")
+    assert r"\textit{The Legend of Zelda}" in result
 
-def test_convert_mixed():
-    result = _convert_inline("**Led** a *cross-functional* team")
-    assert r"\textbf{Led}" in result
-    assert r"\textit{cross" in result
-
-def test_convert_escapes_outside_markers():
-    result = _convert_inline("Increased revenue by 50% with **Python & Go**")
+def test_convert_escapes_special_chars_outside_markers():
+    result = _convert_inline("Contributed 50% via Git & GitHub")
     assert r"50\%" in result
+    assert r"Git \& GitHub" in result
+
+def test_convert_bold_content_with_special_chars():
+    result = _convert_inline("**Python & Go**")
     assert r"\textbf{Python \& Go}" in result
 
-def test_convert_no_markers():
-    result = _convert_inline("plain text with 100% coverage")
-    assert r"100\%" in result
+def test_convert_no_markers_still_escapes():
+    result = _convert_inline("2K+ downloads at 4.5/5 stars")
     assert "**" not in result
+    assert result == r"2K+ downloads at 4.5/5 stars"
 
 
-# ── .tex source structure ─────────────────────────────────────────────────────
+# ── .tex document structure ───────────────────────────────────────────────────
 
-def test_tex_contains_jake_commands(isolated_engine, monkeypatch):
-    import agents.formatter as fmt_module
+def test_tex_documentclass(isolated_engine, monkeypatch):
     monkeypatch.setattr(fmt_module, "engine", isolated_engine)
-
-    user = _seed_user(isolated_engine)
-    agent = ResumeFormatterAgent(user.user_id)
-    tex = agent._build_tex(_SAMPLE_CONTENT)
-
-    # Jake's custom commands must be present
-    assert r"\resumeSubHeadingListStart" in tex
-    assert r"\resumeSubHeadingListEnd" in tex
-    assert r"\resumeSubheading" in tex
-    assert r"\resumeProjectHeading" in tex
-    assert r"\resumeItemListStart" in tex
-    assert r"\resumeItemListEnd" in tex
-    assert r"\resumeItem{" in tex
-
-
-def test_tex_document_structure(isolated_engine, monkeypatch):
-    import agents.formatter as fmt_module
-    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
-
-    user = _seed_user(isolated_engine)
-    agent = ResumeFormatterAgent(user.user_id)
-    tex = agent._build_tex(_SAMPLE_CONTENT)
-
+    user = _seed_jake_user(isolated_engine)
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(_JAKE_CONTENT)
     assert r"\documentclass[letterpaper,11pt]{article}" in tex
+
+def test_tex_jake_preamble_packages(isolated_engine, monkeypatch):
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(_JAKE_CONTENT)
+    for pkg in [r"\usepackage{marvosym}", r"\usepackage{latexsym}",
+                r"\usepackage{enumitem}", r"\usepackage[hidelinks]{hyperref}",
+                r"\usepackage{fancyhdr}", r"\usepackage{tabularx}",
+                r"\usepackage{titlesec}", r"\pdfgentounicode=1"]:
+        assert pkg in tex, f"Missing package: {pkg}"
+
+def test_tex_jake_custom_commands(isolated_engine, monkeypatch):
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(_JAKE_CONTENT)
+    for cmd in [r"\resumeItem", r"\resumeSubheading", r"\resumeSubSubheading",
+                r"\resumeProjectHeading", r"\resumeSubItem",
+                r"\resumeSubHeadingListStart", r"\resumeSubHeadingListEnd",
+                r"\resumeItemListStart", r"\resumeItemListEnd"]:
+        assert cmd in tex, f"Missing command definition: {cmd}"
+
+def test_tex_document_begin_end(isolated_engine, monkeypatch):
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(_JAKE_CONTENT)
     assert r"\begin{document}" in tex
     assert r"\end{document}" in tex
-    assert r"\pdfgentounicode=1" in tex
 
-
-def test_tex_header_contains_name_and_contact(isolated_engine, monkeypatch):
-    import agents.formatter as fmt_module
+def test_tex_header_name_and_contact(isolated_engine, monkeypatch):
     monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(_JAKE_CONTENT)
+    assert r"\textbf{\Huge \scshape Jake Ryan}" in tex
+    assert "123-456-7890" in tex
+    assert r"mailto:jake@su.edu" in tex
+    assert "linkedin.com/in/jake" in tex
+    assert "github.com/jake" in tex
 
-    user = _seed_user(isolated_engine)
-    agent = ResumeFormatterAgent(user.user_id)
-    tex = agent._build_tex(_SAMPLE_CONTENT)
-
-    assert "Nathaniel Oliver" in tex
-    assert "619" in tex                     # phone
-    assert "linkedin.com/in" in tex         # linkedin
-    assert "github.com/nathansso" in tex    # github
-
-
-def test_tex_experience_section(isolated_engine, monkeypatch):
-    import agents.formatter as fmt_module
+def test_tex_experience_uses_resumesubheading(isolated_engine, monkeypatch):
     monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(_JAKE_CONTENT)
+    # arg1=title, arg2=dates, arg3=company, arg4=location (Jake's order)
+    assert "{Undergraduate Research Assistant}{June 2020 -- Present}" in tex
+    assert "{Texas A\\&M University}{College Station, TX}" in tex
 
-    user = _seed_user(isolated_engine)
-    agent = ResumeFormatterAgent(user.user_id)
-    tex = agent._build_tex(_SAMPLE_CONTENT)
-
-    assert "Software Engineer" in tex
-    assert "Acme Corp" in tex
-    assert "Jan 2023" in tex
-    # bullet content (bold marker converted to \textbf)
-    assert r"\textbf{Built}" in tex
-
-
-def test_tex_project_section(isolated_engine, monkeypatch):
-    import agents.formatter as fmt_module
+def test_tex_experience_bullets_use_resumeitem(isolated_engine, monkeypatch):
     monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(_JAKE_CONTENT)
+    assert r"\resumeItemListStart" in tex
+    assert r"\resumeItemListEnd" in tex
+    assert r"\resumeItem{Developed a REST API" in tex
 
-    user = _seed_user(isolated_engine)
-    agent = ResumeFormatterAgent(user.user_id)
-    tex = agent._build_tex(_SAMPLE_CONTENT)
-
-    assert "ART Resume Tailoring" in tex
-    assert r"\emph{Python, FastAPI, React}" in tex
-
-
-def test_tex_skills_section(isolated_engine, monkeypatch):
-    import agents.formatter as fmt_module
+def test_tex_projects_use_resumeprojectheading(isolated_engine, monkeypatch):
     monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(_JAKE_CONTENT)
+    assert r"\resumeProjectHeading" in tex
+    assert r"\textbf{Gitlytics} $|$ \emph{Python, Flask, React, PostgreSQL, Docker}" in tex
+    assert "{June 2020 -- Present}" in tex
 
-    user = _seed_user(isolated_engine)
-    _seed_skill(isolated_engine, user.user_id, "Python", "language")
-    _seed_skill(isolated_engine, user.user_id, "React", "framework")
-
-    agent = ResumeFormatterAgent(user.user_id)
-    tex = agent._build_tex(_SAMPLE_CONTENT)
-
-    assert r"\section{Skills}" in tex or r"\section{skills}" in tex.lower()
-    assert "Python" in tex
-    assert r"\textbf{Languages" in tex
-
-
-def test_tex_special_chars_escaped_in_content(isolated_engine, monkeypatch):
-    import agents.formatter as fmt_module
+def test_tex_skills_section_is_technical_skills(isolated_engine, monkeypatch):
     monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(_JAKE_CONTENT)
+    assert r"\section{Technical Skills}" in tex
+    assert r"\textbf{Languages \& Libraries}" in tex
 
+def test_tex_section_order_respected(isolated_engine, monkeypatch):
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(
+        _JAKE_CONTENT, section_order=["projects", "experience", "skills", "education"]
+    )
+    assert tex.index(r"\section{Projects}") < tex.index(r"\section{Experience}")
+
+def test_tex_special_chars_escaped(isolated_engine, monkeypatch):
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
     content = {
-        "experiences": [
-            {
-                "title": "Engineer & Lead",
-                "company": "50% Corp",
-                "bullets": ["Managed $1M budget"],
-            }
-        ],
+        "experiences": [{
+            "title": "Engineer & Lead",
+            "company": "50% Corp",
+            "start_date": "Jan 2023",
+            "end_date": "Present",
+            "location": "",
+            "bullets": ["Managed $1M budget across 3 accounts"],
+        }],
         "projects": [],
         "skills_emphasized": [],
     }
-    user = _seed_user(isolated_engine)
-    agent = ResumeFormatterAgent(user.user_id)
-    tex = agent._build_tex(content)
-
+    user = _seed_jake_user(isolated_engine)
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(content)
     assert r"Engineer \& Lead" in tex
     assert r"50\% Corp" in tex
     assert r"\$1M budget" in tex
 
 
-def test_section_order_respected(isolated_engine, monkeypatch):
-    import agents.formatter as fmt_module
+# ── format_tex() ──────────────────────────────────────────────────────────────
+
+def test_format_tex_returns_string(isolated_engine, monkeypatch):
     monkeypatch.setattr(fmt_module, "engine", isolated_engine)
-
-    user = _seed_user(isolated_engine)
-    agent = ResumeFormatterAgent(user.user_id)
-    tex = agent._build_tex(_SAMPLE_CONTENT, section_order=["projects", "experience", "skills", "education"])
-
-    proj_pos = tex.find(r"\section{Projects}")
-    exp_pos  = tex.find(r"\section{Experience}")
-    assert proj_pos < exp_pos, "Projects section should appear before Experience"
+    user = _seed_jake_user(isolated_engine)
+    tex = ResumeFormatterAgent(user.user_id).format_tex(_JAKE_CONTENT)
+    assert isinstance(tex, str)
+    assert r"\documentclass" in tex
 
 
-# ── deprecated format_markdown() ─────────────────────────────────────────────
+# ── format_docx() ─────────────────────────────────────────────────────────────
+
+def test_format_docx_returns_bytes(isolated_engine, monkeypatch):
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    result = ResumeFormatterAgent(user.user_id).format_docx(_JAKE_CONTENT)
+    assert isinstance(result, bytes)
+    assert len(result) > 500
+
+def test_format_docx_is_valid_docx(isolated_engine, monkeypatch):
+    """Verify the bytes can be opened as a Word document."""
+    from docx import Document
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    docx_bytes = ResumeFormatterAgent(user.user_id).format_docx(_JAKE_CONTENT)
+    doc = Document(io.BytesIO(docx_bytes))
+    full_text = "\n".join(p.text for p in doc.paragraphs)
+    assert "Jake Ryan" in full_text
+    assert "Gitlytics" in full_text
+
+
+# ── format_markdown() deprecation ────────────────────────────────────────────
 
 def test_format_markdown_emits_deprecation_warning(isolated_engine, monkeypatch):
-    import agents.formatter as fmt_module
     monkeypatch.setattr(fmt_module, "engine", isolated_engine)
-
-    user = _seed_user(isolated_engine)
-    agent = ResumeFormatterAgent(user.user_id)
-
+    user = _seed_jake_user(isolated_engine)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        agent.format_markdown(_SAMPLE_CONTENT)
-
+        ResumeFormatterAgent(user.user_id).format_markdown(_JAKE_CONTENT)
     assert any(issubclass(w.category, DeprecationWarning) for w in caught)
+
+
+# ── save .tex to Downloads for manual Overleaf verification ──────────────────
+
+def test_save_tex_to_downloads(isolated_engine, monkeypatch):
+    """Generate a Jake-layout .tex and save to ~/Downloads for Overleaf inspection."""
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    tex = ResumeFormatterAgent(user.user_id).format_tex(_JAKE_CONTENT)
+
+    downloads = os.path.join(os.path.expanduser("~"), "Downloads", "jake_resume_art.tex")
+    with open(downloads, "w", encoding="utf-8") as f:
+        f.write(tex)
+
+    assert os.path.exists(downloads)
+    assert os.path.getsize(downloads) > 1000
 
 
 # ── integration: full pdflatex compile ───────────────────────────────────────
 
 @pytest.mark.integration
 def test_pdflatex_produces_valid_pdf(isolated_engine, monkeypatch):
-    """Requires pdflatex to be installed on the host."""
+    """Requires pdflatex. Verifies the .tex compiles and output is a valid PDF."""
     if not shutil.which("pdflatex"):
         pytest.skip("pdflatex not installed")
 
-    import agents.formatter as fmt_module
     monkeypatch.setattr(fmt_module, "engine", isolated_engine)
-
-    user = _seed_user(isolated_engine)
-    _seed_skill(isolated_engine, user.user_id, "Python", "language")
-
-    agent = ResumeFormatterAgent(user.user_id)
-    pdf_bytes = agent.format_pdf(_SAMPLE_CONTENT)
+    user = _seed_jake_user(isolated_engine)
+    pdf_bytes = ResumeFormatterAgent(user.user_id).format_pdf(_JAKE_CONTENT)
 
     assert isinstance(pdf_bytes, bytes)
     assert len(pdf_bytes) > 1000
-    assert pdf_bytes[:4] == b"%PDF"  # valid PDF magic bytes
+    assert pdf_bytes[:4] == b"%PDF"
+
+    # Also save PDF to Downloads for visual inspection
+    downloads = os.path.join(os.path.expanduser("~"), "Downloads", "jake_resume_art.pdf")
+    with open(downloads, "wb") as f:
+        f.write(pdf_bytes)
+    assert os.path.exists(downloads)
