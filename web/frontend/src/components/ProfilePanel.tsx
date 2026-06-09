@@ -15,6 +15,7 @@ export function ProfilePanel() {
   const [githubConnected, setGithubConnected] = useState(false);
   const [oauthConfigured, setOauthConfigured] = useState(false);
   const [githubWorking, setGithubWorking] = useState(false);
+  const [githubUsername, setGithubUsername] = useState<string | null>(null);
 
   useEffect(() => {
     getProfile()
@@ -22,7 +23,7 @@ export function ProfilePanel() {
       .catch(e => setLoadError(e instanceof Error ? e.message : "Failed to load profile"))
       .finally(() => setLoading(false));
     getGithubStatus()
-      .then(s => { setGithubConnected(s.connected); setOauthConfigured(s.oauth_configured); })
+      .then(s => { setGithubConnected(s.connected); setOauthConfigured(s.oauth_configured); setGithubUsername(s.github_username); })
       .catch(() => {});
   }, []);
 
@@ -53,6 +54,7 @@ export function ProfilePanel() {
     try {
       await disconnectGithub();
       setGithubConnected(false);
+      setGithubUsername(null);
       setMessage("GitHub disconnected.");
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Disconnect failed");
@@ -68,7 +70,6 @@ export function ProfilePanel() {
     { key: "email", label: "Email" },
     { key: "phone", label: "Phone" },
     { key: "location", label: "Location" },
-    { key: "github_username", label: "GitHub username" },
     { key: "linkedin_url", label: "LinkedIn URL" },
   ];
 
@@ -133,7 +134,9 @@ export function ProfilePanel() {
           <p style={s.githubLabel}>GitHub</p>
           {githubConnected ? (
             <div style={s.githubRow}>
-              <span style={{ ...s.muted, color: colors.accent }}>Connected</span>
+              <span style={{ ...s.muted, color: colors.accent }}>
+                {githubUsername ? `@${githubUsername}` : "Connected"}
+              </span>
               <button
                 style={{ ...s.cancelBtn, marginLeft: "1rem" }}
                 onClick={handleGithubDisconnect}

@@ -1,13 +1,28 @@
 # ART — Repository Guidelines
 
 ## Project overview
-ART is a local-first TUI that ingests resume, GitHub, and LinkedIn data into a knowledge graph, then tailors resumes to job descriptions through chat and workflow tools.
+ART is a resume-tailoring platform that ingests resume, GitHub, and LinkedIn data into a knowledge graph, then tailors resumes to job descriptions through chat and workflow tools. It ships as both a **web app** (primary) and a **local TUI** (retained for power users).
 
-**Stack:** Python, Textual, SQLite via SQLModel, LangGraph, LangChain, OpenAI / Anthropic.
+**Web app (primary):** https://artie-resume-tailoring.fly.dev/  
+Deployed on Fly.io. React + TypeScript frontend served as static files by a FastAPI backend. Supabase Postgres in production (via `DATABASE_URL` Fly.io secret); falls back to SQLite locally. Supabase Auth used for JWT session tokens when env vars are present; falls back to local signed cookies.
+
+**TUI (secondary):** Textual-based terminal UI, same Python backend, local SQLite.
+
+**Stack:**
+- Frontend: React 18, TypeScript, Vite — lives in `web/frontend/`
+- Backend API: FastAPI (Python), routers in `web/routers/`
+- Database: SQLModel ORM — Supabase Postgres in production (via `DATABASE_URL` Fly.io secret); falls back to SQLite locally when `DATABASE_URL` is unset
+- Auth: Supabase Auth (JWT) with local `itsdangerous` cookie fallback
+- AI: LangGraph, LangChain, OpenAI / Anthropic
+- TUI: Textual
 
 **Entry points:**
-- `python cli.py tui` or `python tui/app.py` — launch the TUI
+- `uvicorn web.app:app --port 8000` — web server (production uses Fly.io Docker deploy)
+- `npm run dev` (in `web/frontend/`) — Vite dev server on port 5173, proxies `/api` to port 8000
+- `python cli.py tui` or `python tui/app.py` — TUI
 - `python cli.py <command>` — CLI surface
+
+**Deploy:** `fly deploy` from repo root — builds Docker image (Node 20 → Python 3.12), pushes to Fly.io.
 
 **Environment:**
 ```bash
@@ -15,7 +30,7 @@ source .venv/Scripts/activate   # bash
 .venv\Scripts\Activate.ps1      # PowerShell
 ```
 
-Do not break the CLI when making TUI changes.
+Do not break the TUI or CLI when making web changes, and vice versa.
 
 ---
 
@@ -80,6 +95,26 @@ Use these slash commands to manage the board without manual API calls:
 | `/done` | `/done 14` | Move to Done, auto-unblock dependents |
 | `/new-issue` | `/new-issue Fix PDF export` | Create issue, add to board, assess deps |
 
+### Board completeness invariant
+
+**Every issue in the repo must be on the project board.** When starting any session or after creating/discovering issues, verify completeness:
+
+```bash
+# Find issues missing from the board
+gh issue list --repo nathansso/agentic_resume_tailoring --state all --limit 100 --json number,url \
+  | python -c "
+import json, sys, subprocess
+repo_issues = {i['number']: i['url'] for i in json.loads(sys.stdin.read())}
+board = json.loads(subprocess.check_output(['gh','project','item-list','2','--owner','nathansso','--format','json']))
+on_board = {i['content']['number'] for i in board['items'] if i.get('content')}
+for num, url in sorted(repo_issues.items()):
+    if num not in on_board:
+        print(f'Missing #{num}: {url}')
+"
+```
+
+For any missing issue, add it and set status (closed → Done; open unblocked high-priority → Ready; otherwise → Backlog).
+
 ### When a new issue is created
 
 1. Add it to the project immediately:
@@ -142,6 +177,7 @@ gh api graphql -f query='mutation {
 - Prefer adding focused local guidance instead of expanding this file with volatile implementation details.
 
 For folder-specific rules:
+- See `web/CLAUDE.md` for FastAPI routers, React components, auth flow, and deploy.
 - See `agents/CLAUDE.md` for chat routing, prompt, and tool-calling work.
 - See `tui/CLAUDE.md` for Textual UI, screen, and service-boundary work.
 
