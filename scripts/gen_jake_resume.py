@@ -128,15 +128,15 @@ def main():
         f.write(docx_bytes)
     print("Saved .docx : " + docx_path + "  (" + str(os.path.getsize(docx_path)) + " bytes)")
 
-    # .pdf (requires pdflatex)
-    if shutil.which("pdflatex"):
+    # .pdf (uses tectonic or pdflatex — formatter resolves engine automatically)
+    try:
         pdf_bytes = agent.format_pdf(_JAKE_CONTENT)
         pdf_path = os.path.join(downloads, "jake_resume_art.pdf")
         with open(pdf_path, "wb") as f:
             f.write(pdf_bytes)
         print("Saved .pdf  : " + pdf_path + "  (" + str(os.path.getsize(pdf_path)) + " bytes)")
-    else:
-        print("Skipped .pdf -- pdflatex not found. Upload the .tex to Overleaf to render it.")
+    except RuntimeError as e:
+        print("Skipped .pdf -- " + str(e))
 
 
 if __name__ == "__main__":
