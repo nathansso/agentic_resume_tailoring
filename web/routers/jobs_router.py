@@ -10,6 +10,7 @@ from sqlmodel import Session, select
 from database.db import engine
 from database.models import JobDescription, UserJobResult, User
 from web.auth import get_current_user
+from web.routers.dependencies import check_ai_quota, increment_ai_usage
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -182,7 +183,7 @@ async def analyze_job(job_id: str, user: User = Depends(get_current_user)):
 # ── Tailor job ───────────────────────────────────────────────
 
 @router.post("/{job_id}/tailor")
-async def tailor_job(job_id: str, user: User = Depends(get_current_user)):
+async def tailor_job(job_id: str, user: User = Depends(get_current_user), _quota: None = Depends(check_ai_quota)):
     job, session = _get_owned_job(job_id, user)
     with session:
         if job.status not in ("analyzed", "tailored", "exported"):
@@ -212,6 +213,7 @@ async def tailor_job(job_id: str, user: User = Depends(get_current_user)):
 
     await asyncio.to_thread(_run)
     with Session(engine) as s:
+        increment_ai_usage(user.user_id, s)
         refreshed = s.get(JobDescription, UUID(job_id))
         latest2 = _latest_result(s, UUID(job_id))
         matched = list(latest2.matched_skills.keys())[:10] if latest2 and latest2.matched_skills else []

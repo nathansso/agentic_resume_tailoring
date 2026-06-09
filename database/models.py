@@ -155,3 +155,10 @@ class ChatMessage(SQLModel, table=True):
     role: str        # "user" | "assistant"
     content: str
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class AIUsage(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: UUID = Field(foreign_key="user.user_id", index=True)
+    date: str  # YYYY-MM-DD UTC
+    call_count: int = Field(default=0)
