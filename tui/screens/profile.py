@@ -12,6 +12,12 @@ from textual import work
 _TOKEN_MASK = "••••••••"
 
 
+def _oauth_enabled() -> bool:
+    """True when GITHUB_CLIENT_ID is configured (device flow available)."""
+    from config import GITHUB_CLIENT_ID
+    return bool(GITHUB_CLIENT_ID)
+
+
 class ProfileScreen(Screen):
     """Overlay for viewing and editing profile info. Dismissed on Back to Chat."""
 
@@ -126,6 +132,27 @@ class ProfileScreen(Screen):
         min-width: 10;
     }
 
+    #github-oauth-section {
+        padding: 0 4 1 4;
+        height: auto;
+    }
+
+    #github-oauth-btn-row {
+        height: auto;
+        padding-top: 1;
+        padding-bottom: 1;
+    }
+
+    #github-oauth-btn-row Button {
+        margin-right: 1;
+    }
+
+    #github-device-info {
+        color: $accent;
+        padding-top: 1;
+        height: auto;
+    }
+
     #llm-section {
         padding: 0 4 1 4;
         height: auto;
@@ -165,6 +192,8 @@ class ProfileScreen(Screen):
     def __init__(self):
         super().__init__()
         self._llm_provider: str = "anthropic"  # tracks which provider button is active
+        self._device_code: str = ""
+        self._device_interval: int = 5
 
     def compose(self) -> ComposeResult:
         with Vertical(id="profile-panel"):
@@ -188,6 +217,12 @@ class ProfileScreen(Screen):
                 yield Input(placeholder="+1 (555) 000-0000 (optional)", id="profile-phone-input", classes="field-input")
                 yield Label("Location", classes="field-label")
                 yield Input(placeholder="City, ST (optional)", id="profile-location-input", classes="field-input")
+            with Vertical(id="github-oauth-section"):
+                yield Label("GitHub OAuth", classes="field-label")
+                with Horizontal(id="github-oauth-btn-row"):
+                    yield Button("Connect via GitHub", id="github-connect-btn", variant="primary")
+                    yield Button("Disconnect GitHub", id="github-disconnect-btn", variant="error")
+                yield Static("", id="github-device-info")
             yield Static("", id="profile-divider")
             yield Static("", id="profile-stats")
             with Vertical(id="llm-section"):
@@ -242,6 +277,17 @@ class ProfileScreen(Screen):
         if token:
             self.query_one("#profile-token-input", Input).value = _TOKEN_MASK
 
+        # GitHub OAuth section — show only when OAuth is configured
+        oauth = _oauth_enabled()
+        self.query_one("#github-oauth-section").display = oauth
+        if oauth:
+            connected = bool(token)
+            self.query_one("#github-connect-btn", Button).display = not connected
+            self.query_one("#github-disconnect-btn", Button).display = connected
+            self.query_one("#github-device-info", Static).update(
+                "Connected" if connected else ""
+            )
+
         # LLM provider + API key
         provider, has_key = services.get_llm_config()
         self._llm_provider = provider
@@ -274,6 +320,18 @@ class ProfileScreen(Screen):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         btn = event.button.id
+        if btn == "github-connect-btn":
+            self._start_device_flow()
+            return
+        elif btn == "github-disconnect-btn":
+            from tui import services
+            services.save_github_token("")
+            self.query_one("#profile-token-input", Input).value = ""
+            self.query_one("#github-connect-btn", Button).display = True
+            self.query_one("#github-disconnect-btn", Button).display = False
+            self.query_one("#github-device-info", Static).update("")
+            self.app.notify("GitHub disconnected.", severity="information", timeout=3)
+            return
         if btn == "llm-anthropic-btn":
             self._llm_provider = "anthropic"
             self._update_provider_buttons("anthropic")
@@ -387,6 +445,69 @@ class ProfileScreen(Screen):
         self.query_one("#delete-resume-btn", Button).disabled = True
         self.query_one("#delete-confirm-row").display = False
         self.query_one("#profile-status").display = True
+
+    @work(thread=True)
+    def _start_device_flow(self) -> None:
+        from tui import services
+        try:
+            flow = services.start_github_device_flow()
+        except Exception as e:
+            self.app.call_from_thread(
+                self.query_one("#github-device-info", Static).update,
+                f"Error: {e}",
+            )
+            return
+        self._device_code = flow["device_code"]
+        self._device_interval = flow["interval"]
+        msg = (
+            f"Go to: {flow['verification_uri']}\n"
+            f"Enter code: {flow['user_code']}\n"
+            "Waiting for authorization…"
+        )
+        self.app.call_from_thread(
+            self.query_one("#github-device-info", Static).update, msg
+        )
+        self.app.call_from_thread(
+            setattr, self.query_one("#github-connect-btn", Button), "disabled", True
+        )
+        self._poll_device_flow()
+
+    @work(thread=True)
+    def _poll_device_flow(self) -> None:
+        from tui import services
+        expires = 900
+        elapsed = 0
+        while elapsed < expires:
+            try:
+                token = services.poll_github_device_flow(self._device_code, self._device_interval)
+            except Exception as e:
+                self.app.call_from_thread(
+                    self.query_one("#github-device-info", Static).update, f"Error: {e}"
+                )
+                self.app.call_from_thread(
+                    setattr, self.query_one("#github-connect-btn", Button), "disabled", False
+                )
+                return
+            if token:
+                services.save_github_token(token)
+                self.app.call_from_thread(self._after_github_connect)
+                return
+            elapsed += self._device_interval
+
+        self.app.call_from_thread(
+            self.query_one("#github-device-info", Static).update, "Authorization timed out. Try again."
+        )
+        self.app.call_from_thread(
+            setattr, self.query_one("#github-connect-btn", Button), "disabled", False
+        )
+
+    def _after_github_connect(self) -> None:
+        self.query_one("#profile-token-input", Input).value = _TOKEN_MASK
+        self.query_one("#github-connect-btn", Button).display = False
+        self.query_one("#github-connect-btn", Button).disabled = False
+        self.query_one("#github-disconnect-btn", Button).display = True
+        self.query_one("#github-device-info", Static).update("Connected")
+        self.app.notify("GitHub connected.", severity="information", timeout=3)
 
     def action_close(self) -> None:
         self.dismiss(None)

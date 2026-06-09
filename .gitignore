@@ -34,7 +34,14 @@ Thumbs.db
 # GitHub scan cache
 .github_cache.json
 
+# Frontend
+web/frontend/node_modules/
+web/static/
+
 # Output files
 tailored_output.json
 tailored_resume.md
 knowledge_graph.png
+
+# Memory eval results
+tests/memory_evals/results/

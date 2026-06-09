@@ -1,117 +1,120 @@
 # Installing ART
 
-**Requirements:** Python 3.11+, Windows (primary), macOS/Linux (best-effort)
+## Option A — Docker (recommended, no Python setup needed)
 
----
+**Requirements:** Docker Desktop installed and running.
 
-## Steps
-
-**1. Clone the repository**
 ```bash
+# 1. Clone the repo
 git clone https://github.com/nathansso/agentic_resume_tailoring.git
 cd agentic_resume_tailoring
-```
 
-**2. Create and activate a virtual environment**
-```bash
-python -m venv .venv
-
-# Windows (PowerShell)
-.venv\Scripts\Activate.ps1
-
-# Windows (Command Prompt)
-.venv\Scripts\activate.bat
-
-# macOS / Linux
-source .venv/bin/activate
-```
-
-**3. Install dependencies**
-
-**Core install** *(no browser, no ML model — fastest; suits Docker base images)*:
-```bash
-pip install -r requirements-core.txt
-```
-
-**Full install** *(adds LinkedIn web scraping + semantic skill matching)*:
-```bash
-pip install -r requirements-full.txt
-playwright install chromium
-```
-
-**Legacy / all-in-one** *(backwards-compatible, same as before)*:
-```bash
-pip install -r requirements.txt
-playwright install chromium
-```
-
-> **What each tier includes:**
-> - **core** — all TUI + chat features; LinkedIn PDF import works; no browser or ML model needed
-> - **full** — core + `playwright` (LinkedIn web scraping) + `sentence-transformers` (semantic skill matching; downloads ~90 MB model on first use)
-> - **requirements.txt** — identical to full; kept for backwards compatibility
-
-**3a. Reproducible install from lockfile** *(optional — recommended for CI or Docker)*
-
-`requirements-lock.txt` pins every transitive dependency at an exact version:
-```bash
-pip install -r requirements-lock.txt
-playwright install chromium
-```
-
-To regenerate the lockfile after modifying `requirements.txt`:
-```bash
-python scripts/generate_lockfile.py
-```
-
-**4. Configure your API key**
-```bash
+# 2. Configure your API key
 cp .env.example .env
-```
-Open `.env` and set `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY` if you prefer OpenAI).
+# Edit .env and set ANTHROPIC_API_KEY (or OPENAI_API_KEY if using OpenAI)
 
-**5. Launch the TUI**
-
-Windows — double-click `launch.bat`, or from PowerShell:
-```powershell
-.\launch.ps1
+# 3. Launch
+docker compose run --rm art
 ```
 
-macOS / Linux:
-```bash
-python -m tui.app
-```
+Your data (database, exports, uploads) is stored in a Docker named volume (`art_data`) and persists across runs.
 
-Your data is stored under `~/.art/` (created automatically on first launch).
+### Optional: LinkedIn scraping and semantic skill matching
+
+The default Docker image uses `requirements-core.txt` (no Playwright browser, no sentence-transformers). To enable those features, build with the full requirements manually.
 
 ---
 
-## Troubleshooting
+## Option B — Local Python (development)
 
-**`[CONFIG ERROR] ANTHROPIC_API_KEY is not set`**
-→ Open `.env` and add your Anthropic API key. Get one at https://console.anthropic.com/.
+**Requirements:** Python 3.11+
 
-**`ModuleNotFoundError`**
-→ Make sure the virtual environment is activated before running.
+```bash
+# 1. Clone and set up the venv
+git clone https://github.com/nathansso/agentic_resume_tailoring.git
+cd agentic_resume_tailoring
+python -m venv .venv
 
-**`python: command not found` on Windows**
-→ Ensure Python 3.11+ is on your PATH, or use `py -3.11` instead of `python`.
+# 2. Activate
+source .venv/Scripts/activate   # bash / Git Bash on Windows
+.venv\Scripts\Activate.ps1      # PowerShell
 
-**TUI shows blank / garbled text**
-→ Use Windows Terminal or a modern terminal emulator. The legacy `cmd.exe` does not support rich text rendering.
+# 3. Install dependencies
+pip install -r requirements-core.txt   # lightweight
+# or
+pip install -r requirements-full.txt   # includes Playwright + sentence-transformers
 
-**GitHub ingestion returns 403**
-→ Set `GITHUB_TOKEN` in `.env` with `repo` and `read:user` scopes.
+# 4. Configure
+cp .env.example .env
+# Edit .env and set your API key
 
-**`pywin32` install error on Linux**
-→ Use `requirements-lock.txt` — it annotates `pywin32` with `; sys_platform == "win32"`
-  so pip skips it on Linux automatically. Requires pip ≥ 20.
+# 5. Launch
+python -m tui.app
+# or
+python cli.py tui
+```
 
-**`ImportError: playwright is required for LinkedIn web scraping`**
-→ You installed the core dependencies only. Run:
-  `pip install playwright && playwright install chromium`
-  or reinstall with: `pip install -r requirements-full.txt && playwright install chromium`
+### Windows one-click launcher
+Double-click `launch.ps1` (PowerShell) after completing steps 1-4 above.
 
-**`Semantic embedding failed, falling back to exact match` in logs**
-→ This is a warning, not an error — skill matching continues using exact-name matching.
-  To enable semantic matching, run: `pip install sentence-transformers`
-  or reinstall with: `pip install -r requirements-full.txt`
+---
+
+## Option C — Browser (textual-web)
+
+Serve the TUI to any browser over WebSocket — no local install required for end users.
+
+### Local browser access
+
+```bash
+python cli.py serve          # opens on the default textual-web port
+python cli.py serve --port 8080
+```
+
+Open the printed URL in any browser.
+
+### Cloud deploy — Fly.io
+
+> **Pre-requisites:** [flyctl installed](https://fly.io/docs/hands-on/install-flyctl/),
+> a Fly.io account, and a Supabase project with auth enabled.
+
+```bash
+# 1. Clone the repo (fly.toml is already included)
+git clone https://github.com/nathansso/agentic_resume_tailoring.git
+cd agentic_resume_tailoring
+
+# 2. Create the app (keeps the committed fly.toml, skips overwriting it)
+fly launch --no-deploy
+
+# 3. Create the persistent volume
+fly volumes create art_data --size 1 --region iad
+
+# 4. Set required secrets
+fly secrets set \
+  ANTHROPIC_API_KEY=sk-ant-... \
+  DATABASE_URL=postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres \
+  SUPABASE_URL=https://[PROJECT-REF].supabase.co \
+  SUPABASE_ANON_KEY=eyJ... \
+  SUPABASE_SERVICE_ROLE_KEY=eyJ...
+
+# 5. Deploy
+fly deploy
+
+# 6. Apply Supabase schema + RLS policies (first deploy only)
+fly ssh console -C "python cli.py supabase-setup"
+```
+
+After deploy, visit `https://<your-app>.fly.dev` — users see the login screen with no local install needed.
+
+**Notes:**
+- Use the Supabase **pooler** connection string (port 6543) for production, not the direct connection (port 5432).
+- `SUPABASE_SERVICE_ROLE_KEY` is backend-only — never expose it to clients.
+- Each browser session spawns an isolated app process; Supabase RLS enforces per-user data isolation automatically.
+- To verify RLS isolation: log in as two different users and confirm each can only see their own jobs and resume data.
+
+### Cloud deploy — Render
+
+1. Create a new **Web Service** pointing at this repo.
+2. Set **Environment** → **Docker** (Render detects the Dockerfile automatically).
+3. Add environment variable `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY`).
+4. Set the port to `8000` in Render's service settings.
+5. Click **Deploy**.
