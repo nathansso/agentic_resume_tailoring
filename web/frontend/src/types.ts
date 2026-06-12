@@ -13,10 +13,35 @@ export interface JobListItem {
   ats_score: number | null;
 }
 
+export interface ScoreComponent {
+  score: number;
+  weight: number;
+  [key: string]: unknown;
+}
+
+export interface ScoreBreakdown {
+  composite?: number;
+  skill_coverage?: ScoreComponent;
+  keyword_coverage?: ScoreComponent & {
+    matched_keywords?: string[];
+    missing_keywords?: string[];
+    total?: number;
+  };
+  section_presence?: ScoreComponent & {
+    present?: string[];
+    missing?: string[];
+  };
+  role_level?: ScoreComponent & {
+    jd_level?: string;
+    resume_level?: string;
+  };
+}
+
 export interface JobDetail extends JobListItem {
   description: string;
   matched_skills: string[];
   missing_skills: string[];
+  score_breakdown: ScoreBreakdown;
 }
 
 export interface TailorResult {
