@@ -61,6 +61,13 @@ _LEVELS = [
     ("manager",  ["manager", "director", " vp ", "head of"]),
 ]
 
+_WEIGHTS = {
+    "skill_coverage":  0.45,
+    "keyword_coverage": 0.30,
+    "section_presence": 0.15,
+    "role_level":       0.10,
+}
+
 
 class ATSScoringEngine:
     """
@@ -92,12 +99,7 @@ class ATSScoringEngine:
         sp = self._section_presence(user_id, session)
         rl = self._role_level(resume_text, jd_text)
 
-        weights = {
-            "skill_coverage":  0.45,
-            "keyword_coverage": 0.30,
-            "section_presence": 0.15,
-            "role_level":       0.10,
-        }
+        weights = _WEIGHTS
 
         components = {
             "skill_coverage":  {"score": round(skill_coverage_score, 1), **_weight_meta(weights["skill_coverage"])},
@@ -112,6 +114,82 @@ class ATSScoringEngine:
         components["composite"] = round(composite, 1)
 
         return components
+
+    @classmethod
+    def score_tailored(
+        cls,
+        tailored_content: Dict,
+        jd_text: str,
+        matched_skills: Dict,
+        baseline_breakdown: Dict | None = None,
+    ) -> Dict:
+        """
+        Score agentic tailored output with the same algorithmic components as
+        score(), so the tailored resume can be compared against the pre-tailor
+        baseline (issue #12).
+
+        Returns the same breakdown shape as score(), plus `baseline_composite`
+        and `delta` when a baseline breakdown is supplied.
+        """
+        text = cls.flatten_tailored_text(tailored_content)
+        haystack = text.lower()
+
+        skill_names = list(matched_skills or {})
+        covered = [s for s in skill_names if s.lower() in haystack]
+        gaps = [s for s in skill_names if s.lower() not in haystack]
+        skill_score = (len(covered) / len(skill_names) * 100) if skill_names else 100.0
+
+        kd = cls._keyword_coverage(text, jd_text)
+        sp = cls._tailored_section_presence(tailored_content)
+        rl = cls._role_level(text, jd_text)
+
+        components = {
+            "skill_coverage": {
+                "score": round(skill_score, 1),
+                "covered": len(covered),
+                "total": len(skill_names),
+                "gaps": gaps,
+                **_weight_meta(_WEIGHTS["skill_coverage"]),
+            },
+            "keyword_coverage": {**kd, **_weight_meta(_WEIGHTS["keyword_coverage"])},
+            "section_presence": {**sp, **_weight_meta(_WEIGHTS["section_presence"])},
+            "role_level":       {**rl, **_weight_meta(_WEIGHTS["role_level"])},
+        }
+
+        composite = sum(components[k]["score"] * _WEIGHTS[k] for k in _WEIGHTS)
+        components["composite"] = round(composite, 1)
+
+        baseline = (baseline_breakdown or {}).get("composite")
+        if baseline is not None:
+            components["baseline_composite"] = baseline
+            components["delta"] = round(components["composite"] - baseline, 1)
+
+        return components
+
+    @staticmethod
+    def flatten_tailored_text(tailored_content: Dict) -> str:
+        """Collect all string fragments from a tailored_resume_content dict."""
+        parts: List[str] = []
+        for exp in tailored_content.get("experiences") or []:
+            parts.append(f"{exp.get('title', '')} at {exp.get('company', '')}")
+            parts.extend(exp.get("bullets") or [])
+        for proj in tailored_content.get("projects") or []:
+            parts.append(proj.get("name", ""))
+            parts.extend(proj.get("bullets") or [])
+        skills = tailored_content.get("skills_emphasized") or []
+        if skills:
+            parts.append("Skills: " + ", ".join(skills))
+        return "\n".join(p for p in parts if p)
+
+    @staticmethod
+    def _tailored_section_presence(tailored_content: Dict) -> Dict:
+        """Section check for tailored output: both sections must be non-empty."""
+        present: List[str] = []
+        missing: List[str] = []
+        for section in ("experiences", "projects"):
+            (present if tailored_content.get(section) else missing).append(section)
+        score = len(present) / 2 * 100
+        return {"score": round(score, 1), "present": present, "missing": missing}
 
     # ── Sub-scorers ───────────────────────────────────────────────────────────
 

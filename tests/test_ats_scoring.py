@@ -193,6 +193,137 @@ def test_score_and_select_projects_no_jd():
     assert len(selected) == 1
 
 
+# ── Unit tests: score_tailored / flatten_tailored_text (issue 12) ────────────
+
+_TAILORED = {
+    "experiences": [
+        {
+            "title": "Senior Software Engineer",
+            "company": "Tech Corp",
+            "bullets": ["Built python services with fastapi", "Deployed postgresql databases"],
+        },
+    ],
+    "projects": [
+        {
+            "name": "ML Pipeline",
+            "selected_style": "technical",
+            "bullets": ["Trained tensorflow models on large datasets"],
+        },
+    ],
+    "skills_emphasized": ["Python", "FastAPI"],
+}
+
+_JD = "Looking for senior python engineer with fastapi postgresql tensorflow experience."
+
+
+def test_flatten_tailored_text():
+    text = ATSScoringEngine.flatten_tailored_text(_TAILORED)
+    assert "Senior Software Engineer at Tech Corp" in text
+    assert "Built python services with fastapi" in text
+    assert "ML Pipeline" in text
+    assert "Trained tensorflow models on large datasets" in text
+    assert "Skills: Python, FastAPI" in text
+
+
+def test_flatten_tailored_text_empty():
+    assert ATSScoringEngine.flatten_tailored_text({}) == ""
+
+
+def test_score_tailored_structure():
+    bd = ATSScoringEngine.score_tailored(
+        _TAILORED, _JD, matched_skills={"Python": {}, "FastAPI": {}},
+    )
+    for key in ("composite", "skill_coverage", "keyword_coverage", "section_presence", "role_level"):
+        assert key in bd
+    assert 0 <= bd["composite"] <= 100
+    # Both matched skills appear in the tailored text
+    assert bd["skill_coverage"]["score"] == 100.0
+    assert bd["skill_coverage"]["gaps"] == []
+    # No baseline supplied → no delta keys
+    assert "delta" not in bd
+    assert "baseline_composite" not in bd
+
+
+def test_score_tailored_delta_vs_baseline():
+    baseline = {"composite": 50.0}
+    bd = ATSScoringEngine.score_tailored(
+        _TAILORED, _JD, matched_skills={"Python": {}}, baseline_breakdown=baseline,
+    )
+    assert bd["baseline_composite"] == 50.0
+    assert bd["delta"] == pytest.approx(round(bd["composite"] - 50.0, 1))
+
+
+def test_score_tailored_skill_gaps():
+    bd = ATSScoringEngine.score_tailored(
+        _TAILORED, _JD, matched_skills={"Python": {}, "Kubernetes": {}},
+    )
+    assert bd["skill_coverage"]["score"] == pytest.approx(50.0)
+    assert bd["skill_coverage"]["gaps"] == ["Kubernetes"]
+
+
+def test_score_tailored_missing_section():
+    content = {"experiences": _TAILORED["experiences"], "projects": []}
+    bd = ATSScoringEngine.score_tailored(content, _JD, matched_skills={})
+    sp = bd["section_presence"]
+    assert sp["score"] == pytest.approx(50.0)
+    assert "projects" in sp["missing"]
+    assert "experiences" in sp["present"]
+
+
+def test_evaluate_node_attaches_algorithmic_breakdown(monkeypatch):
+    import agents.tailor as tailor_module
+
+    monkeypatch.setattr(tailor_module, "get_llm", lambda *a, **kw: object())
+    agent = tailor_module.ResumeTailorAgent()
+
+    state = {
+        "user_id": "u", "job_id": "j", "result_id": "r",
+        "resume_text": "", "job_text": _JD,
+        "matched_skills": {"Python": {}, "FastAPI": {}},
+        "missing_skills": [],
+        "priority_keywords": ["tensorflow", "postgresql"],
+        "baseline_breakdown": {"composite": 40.0},
+        "experiences": [], "projects": [],
+        "tailored_content": _TAILORED,
+        "evaluation": {}, "attempt": 2, "done": False,
+    }
+    out = agent._evaluate_node(state)
+    ev = out["evaluation"]
+
+    assert "ats_breakdown" in ev
+    assert ev["ats_breakdown"]["baseline_composite"] == 40.0
+    assert "delta" in ev["ats_breakdown"]
+    # Legacy evaluation keys preserved for retry feedback
+    assert ev["coverage_pct"] == 100.0
+    assert ev["kw_coverage"] == 100.0  # both priority keywords present
+    assert out["done"] is True
+
+
+def test_tailored_score_breakdown_roundtrip(isolated_engine):
+    from database.models import JobDescription, UserJobResult
+    from conftest import _seed_user_and_skill
+
+    ctx = _seed_user_and_skill(isolated_engine)
+    with Session(isolated_engine) as session:
+        job = JobDescription(title="Engineer", company="Acme", description="python", user_id=ctx.user_id)
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+
+        result = UserJobResult(
+            user_id=ctx.user_id,
+            job_id=job.job_id,
+            tailored_score_breakdown={"composite": 55.0, "delta": 5.0},
+        )
+        session.add(result)
+        session.commit()
+        result_id = result.result_id
+
+    with Session(isolated_engine) as session:
+        stored = session.get(UserJobResult, result_id)
+        assert stored.tailored_score_breakdown == {"composite": 55.0, "delta": 5.0}
+
+
 # ── Integration test: full ATSScoringEngine.score() ──────────────────────────
 
 def test_ats_scorer_full_integration(isolated_engine, monkeypatch):

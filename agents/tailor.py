@@ -42,6 +42,7 @@ class TailorState(TypedDict):
     matched_skills: Dict      # From SkillMatcherAgent
     missing_skills: List[str]
     priority_keywords: List[str]  # Top missing JD keywords from ATSScoringEngine
+    baseline_breakdown: Dict  # Pre-tailor score_breakdown for delta comparison (issue #12)
     experiences: List[Dict]
     projects: List[Dict]
     tailored_content: Dict    # The generated tailored resume sections
@@ -118,6 +119,7 @@ class ResumeTailorAgent:
             "matched_skills": result.matched_skills if result else {},
             "missing_skills": result.missing_skills if result else [],
             "priority_keywords": priority_keywords,
+            "baseline_breakdown": (result.score_breakdown or {}) if result else {},
             "experiences": exp_dicts,
             "projects": proj_dicts,
             "tailored_content": {},
@@ -135,6 +137,7 @@ class ResumeTailorAgent:
             ).first()
             if result:
                 result.tailored_resume_content = final_state["tailored_content"]
+                result.tailored_score_breakdown = final_state["evaluation"].get("ats_breakdown", {})
                 session.add(result)
                 session.commit()
 
@@ -237,39 +240,44 @@ class ResumeTailorAgent:
             state["done"] = True
             return state
 
-        # Skill coverage: count how many matched skills appear in the tailored output
-        tailored_str = json.dumps(state["tailored_content"]).lower()
-        matched = state["matched_skills"]
-        total = len(matched)
-        covered = 0
-        gaps = []
+        # Algorithmic ATS breakdown of the tailored output (issue #12): same
+        # engine as the pre-tailor baseline, so the two are directly comparable.
+        breakdown = ATSScoringEngine.score_tailored(
+            state["tailored_content"],
+            state["job_text"],
+            matched_skills=state["matched_skills"],
+            baseline_breakdown=state.get("baseline_breakdown") or None,
+        )
 
-        for skill_name in matched:
-            if skill_name.lower() in tailored_str:
-                covered += 1
-            else:
-                gaps.append(skill_name)
+        skill = breakdown["skill_coverage"]
+        skill_coverage_pct = skill["score"]
 
-        skill_coverage_pct = (covered / total * 100) if total > 0 else 100
-
-        # Keyword coverage: check priority keywords appear in tailored output
+        # Retry threshold stays priority-keyword based: full-JD coverage of a
+        # sections-only output is structurally low and would always trigger retries.
+        tailored_str = ATSScoringEngine.flatten_tailored_text(state["tailored_content"]).lower()
         priority_keywords = state.get("priority_keywords", [])
         kw_hits = sum(1 for kw in priority_keywords if kw in tailored_str)
         kw_coverage = kw_hits / len(priority_keywords) if priority_keywords else 1.0
         kw_gaps = [kw for kw in priority_keywords if kw not in tailored_str]
+        if not kw_gaps:
+            kw_gaps = breakdown["keyword_coverage"]["missing_keywords"]
 
         state["evaluation"] = {
             "coverage_pct": round(skill_coverage_pct, 1),
-            "covered": covered,
-            "total": total,
-            "gaps": gaps,
+            "covered": skill["covered"],
+            "total": skill["total"],
+            "gaps": skill["gaps"],
             "kw_coverage": round(kw_coverage * 100, 1),
             "kw_gaps": kw_gaps[:10],
+            "ats_breakdown": breakdown,
         }
 
         logger.info(
-            f"Coverage: skills {skill_coverage_pct:.1f}% ({covered}/{total}), "
-            f"keywords {kw_coverage * 100:.1f}% ({kw_hits}/{len(priority_keywords)})"
+            f"Coverage: skills {skill_coverage_pct:.1f}% ({skill['covered']}/{skill['total']}), "
+            f"priority keywords {kw_coverage * 100:.1f}% ({kw_hits}/{len(priority_keywords)}), "
+            f"algorithmic composite {breakdown['composite']}"
+            + (f" (baseline {breakdown['baseline_composite']}, delta {breakdown['delta']:+})"
+               if "delta" in breakdown else "")
         )
 
         coverage_ok = skill_coverage_pct >= 75 and kw_coverage >= 0.60

@@ -32,7 +32,7 @@ function scoreColor(score: number): string {
 
 type ComponentKey = "skill_coverage" | "keyword_coverage" | "section_presence" | "role_level";
 
-function ScoreBreakdownPanel({ bd }: { bd: ScoreBreakdown }) {
+function ScoreBreakdownPanel({ bd, title = "Score Breakdown" }: { bd: ScoreBreakdown; title?: string }) {
   const [open, setOpen] = useState(false);
   const components: { key: ComponentKey; label: string }[] = [
     { key: "skill_coverage",  label: "Skill Coverage" },
@@ -46,8 +46,13 @@ function ScoreBreakdownPanel({ bd }: { bd: ScoreBreakdown }) {
   return (
     <div style={sb.container}>
       <button style={sb.toggle} onClick={() => setOpen(o => !o)}>
-        Score Breakdown {open ? "▲" : "▼"}
+        {title} {open ? "▲" : "▼"}
       </button>
+      {bd.delta !== undefined && (
+        <span style={{ ...sb.detail, marginLeft: "0.5rem", color: bd.delta >= 0 ? colors.accent : colors.error }}>
+          {bd.delta >= 0 ? "+" : ""}{bd.delta} vs. baseline {bd.baseline_composite}
+        </span>
+      )}
       {open && (
         <div style={sb.rows}>
           {components.map(({ key, label }) => {
@@ -167,6 +172,10 @@ export function JobDetailPanel({ job, onJobUpdate, onViewChange }: Props) {
 
         {job.score_breakdown && Object.keys(job.score_breakdown).length > 0 && (
           <ScoreBreakdownPanel bd={job.score_breakdown} />
+        )}
+
+        {job.tailored_score_breakdown && Object.keys(job.tailored_score_breakdown).length > 0 && (
+          <ScoreBreakdownPanel bd={job.tailored_score_breakdown} title="Tailored Score Breakdown" />
         )}
       </div>
 

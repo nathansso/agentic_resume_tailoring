@@ -21,6 +21,8 @@ export interface ScoreComponent {
 
 export interface ScoreBreakdown {
   composite?: number;
+  baseline_composite?: number;
+  delta?: number;
   skill_coverage?: ScoreComponent;
   keyword_coverage?: ScoreComponent & {
     matched_keywords?: string[];
@@ -42,6 +44,7 @@ export interface JobDetail extends JobListItem {
   matched_skills: string[];
   missing_skills: string[];
   score_breakdown: ScoreBreakdown;
+  tailored_score_breakdown: ScoreBreakdown;
 }
 
 export interface TailorResult {

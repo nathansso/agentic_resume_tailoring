@@ -61,6 +61,8 @@ def _migrate_db() -> None:
         'ALTER TABLE "user" ADD COLUMN github_access_token TEXT',
         # issue 2: ATS scoring breakdown
         "ALTER TABLE userjobresult ADD COLUMN score_breakdown TEXT DEFAULT '{}'",
+        # issue 12: algorithmic score of tailored output
+        "ALTER TABLE userjobresult ADD COLUMN tailored_score_breakdown TEXT DEFAULT '{}'",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

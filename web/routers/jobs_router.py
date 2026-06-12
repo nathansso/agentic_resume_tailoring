@@ -45,6 +45,7 @@ def _job_detail(job: JobDescription, result: UserJobResult | None) -> dict:
     base["matched_skills"] = matched
     base["missing_skills"] = missing
     base["score_breakdown"] = result.score_breakdown if result else {}
+    base["tailored_score_breakdown"] = result.tailored_score_breakdown if result else {}
     return base
 
 
