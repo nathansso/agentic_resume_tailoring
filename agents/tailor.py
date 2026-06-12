@@ -31,6 +31,12 @@ MAX_RETRIES = 2
 
 MAX_PROJECTS = 4  # Max projects to pass to the LLM after keyword scoring
 
+# Section ordering (issue #22). The name/contact header is rendered by the
+# formatter above all sections and is never part of section_order; education
+# stays pinned at the top of the reorderable body.
+PINNED_SECTIONS = ["education"]
+REORDERABLE_SECTIONS = ["experience", "projects", "skills"]
+
 
 class TailorState(TypedDict):
     """State that flows through the LangGraph tailoring pipeline."""
@@ -129,6 +135,14 @@ class ResumeTailorAgent:
         }
 
         final_state = self.graph.invoke(initial_state)
+
+        # Job-specific section order (issue #22), persisted with the content so
+        # the stateless export endpoints can read it later.
+        tailored = final_state["tailored_content"]
+        if tailored and "error" not in tailored:
+            tailored["_section_order"] = self._ranked_section_order(
+                tailored, final_state["matched_skills"], final_state["job_text"]
+            )
 
         # Save to DB
         with Session(engine) as session:
@@ -291,6 +305,45 @@ class ResumeTailorAgent:
         if state["done"]:
             return "done"
         return "retry"
+
+    @staticmethod
+    def _score_section_relevance(
+        section_key: str,
+        tailored_content: Dict,
+        matched_skills: Dict,
+        jd_text: str,
+    ) -> float:
+        """
+        Fraction of a section's content tokens that overlap the matched skill
+        names and JD keywords. Higher = more relevant to this job (issue #22).
+        """
+        text = ATSScoringEngine.flatten_section_text(tailored_content, section_key)
+        tokens = ATSScoringEngine._extract_keywords(text)
+        if not tokens:
+            return 0.0
+        relevant = ATSScoringEngine._extract_keywords(
+            " ".join(matched_skills or {}) + " " + (jd_text or "")
+        )
+        if not relevant:
+            return 0.0
+        return len(tokens & relevant) / len(tokens)
+
+    @classmethod
+    def _ranked_section_order(
+        cls,
+        tailored_content: Dict,
+        matched_skills: Dict,
+        jd_text: str,
+    ) -> List[str]:
+        """Pinned sections first, then reorderable sections by relevance score."""
+        scores = {
+            key: cls._score_section_relevance(key, tailored_content, matched_skills, jd_text)
+            for key in REORDERABLE_SECTIONS
+        }
+        # Stable sort: ties keep the default section order
+        ranked = sorted(REORDERABLE_SECTIONS, key=lambda k: scores[k], reverse=True)
+        logger.debug("Section relevance: %s", scores)
+        return PINNED_SECTIONS + ranked
 
     @staticmethod
     def _score_and_select_projects(

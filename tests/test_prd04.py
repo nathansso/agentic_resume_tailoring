@@ -161,7 +161,7 @@ def test_export_creates_file(isolated_engine, monkeypatch, tmp_path):
     monkeypatch.setattr(
         fmt_module.ResumeFormatterAgent,
         "format_pdf",
-        lambda self, content, job_title="": b"%PDF-1.4 stub",
+        lambda self, content, job_title="", section_order=None: b"%PDF-1.4 stub",
     )
 
     agent = ChatAgent()
@@ -201,7 +201,7 @@ def test_export_produces_pdf_file(isolated_engine, monkeypatch, tmp_path):
     monkeypatch.setattr(
         fmt_module.ResumeFormatterAgent,
         "format_pdf",
-        lambda self, content, job_title="": b"%PDF-1.4 stub",
+        lambda self, content, job_title="", section_order=None: b"%PDF-1.4 stub",
     )
 
     agent = ChatAgent()
@@ -291,3 +291,164 @@ def test_get_jobs_score_display_no_results(isolated_engine):
     assert jobs[0]["score"] == "", (
         f"Expected empty score for job with no results, got: {jobs[0]['score']!r}"
     )
+
+
+# ── Issue 22: dynamic section reordering by job relevance ────
+
+
+_REORDER_CONTENT = {
+    "experiences": [{
+        "title": "Software Engineer",
+        "company": "BigCo",
+        "bullets": ["Led kubernetes deployments", "Managed terraform infrastructure"],
+    }],
+    "projects": [{
+        "name": "Research Pipeline",
+        "bullets": ["Published machine learning research using pytorch"],
+    }],
+    "skills_emphasized": ["Python"],
+}
+
+_RESEARCH_JD = "machine learning research pytorch publications"
+_INFRA_JD = "kubernetes terraform deployments infrastructure"
+
+
+def test_score_section_relevance_differs_by_job():
+    """The same content scores sections differently for different JDs."""
+    from agents.tailor import ResumeTailorAgent
+
+    proj_research = ResumeTailorAgent._score_section_relevance(
+        "projects", _REORDER_CONTENT, {}, _RESEARCH_JD)
+    exp_research = ResumeTailorAgent._score_section_relevance(
+        "experience", _REORDER_CONTENT, {}, _RESEARCH_JD)
+    assert proj_research > exp_research
+
+    proj_infra = ResumeTailorAgent._score_section_relevance(
+        "projects", _REORDER_CONTENT, {}, _INFRA_JD)
+    exp_infra = ResumeTailorAgent._score_section_relevance(
+        "experience", _REORDER_CONTENT, {}, _INFRA_JD)
+    assert exp_infra > proj_infra
+
+
+def test_ranked_section_order_differs_by_job():
+    """Different job skill profiles produce different section orderings."""
+    from agents.tailor import ResumeTailorAgent
+
+    order_research = ResumeTailorAgent._ranked_section_order(_REORDER_CONTENT, {}, _RESEARCH_JD)
+    order_infra = ResumeTailorAgent._ranked_section_order(_REORDER_CONTENT, {}, _INFRA_JD)
+
+    # Education stays pinned first in both
+    assert order_research[0] == "education"
+    assert order_infra[0] == "education"
+
+    assert order_research.index("projects") < order_research.index("experience")
+    assert order_infra.index("experience") < order_infra.index("projects")
+    assert order_research != order_infra
+
+
+def test_tailor_persists_section_order(isolated_engine, monkeypatch):
+    """ResumeTailorAgent.tailor() stores _section_order in tailored_resume_content."""
+    import agents.tailor as tailor_module
+    from conftest import _seed_user_and_skill
+
+    monkeypatch.setattr(tailor_module, "engine", isolated_engine)
+    monkeypatch.setattr(tailor_module, "get_llm", lambda *a, **kw: object())
+
+    user = _seed_user_and_skill(isolated_engine)
+    job = _make_job(isolated_engine, title="MLE", company="Lab",
+                    status="analyzed", description=_RESEARCH_JD)
+    with Session(isolated_engine) as session:
+        result = UserJobResult(user_id=user.user_id, job_id=job.job_id)
+        session.add(result)
+        session.commit()
+        result_id = result.result_id
+
+    agent = tailor_module.ResumeTailorAgent()
+
+    class FakeGraph:
+        def invoke(self, state):
+            return {**state, "tailored_content": dict(_REORDER_CONTENT),
+                    "evaluation": {}, "attempt": 1, "done": True}
+
+    agent.graph = FakeGraph()
+    agent.tailor(user.user_id, job.job_id, result_id)
+
+    with Session(isolated_engine) as session:
+        stored = session.get(UserJobResult, result_id)
+        order = stored.tailored_resume_content.get("_section_order")
+
+    assert order is not None
+    assert order[0] == "education"
+    assert set(order) == {"education", "experience", "projects", "skills"}
+    # Research JD → projects ahead of experience
+    assert order.index("projects") < order.index("experience")
+
+
+def test_export_passes_section_order(isolated_engine, monkeypatch, tmp_path):
+    """_export_active_job forwards the stored _section_order to the formatter."""
+    from conftest import _seed_user_and_skill
+
+    user = _seed_user_and_skill(isolated_engine)
+    job = _make_job(isolated_engine, title="RS", company="Lab", status="tailored")
+
+    stored_order = ["education", "projects", "experience", "skills"]
+    with Session(isolated_engine) as session:
+        result = UserJobResult(
+            user_id=user.user_id,
+            job_id=job.job_id,
+            tailored_resume_content={**_REORDER_CONTENT, "_section_order": stored_order},
+        )
+        session.add(result)
+        session.commit()
+
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+
+    captured = {}
+
+    def fake_format_pdf(self, content, job_title="", section_order=None):
+        captured["section_order"] = section_order
+        return b"%PDF-1.4 stub"
+
+    from agents import formatter as fmt_module
+    monkeypatch.setattr(fmt_module.ResumeFormatterAgent, "format_pdf", fake_format_pdf)
+
+    agent = ChatAgent()
+    agent.set_active_job(str(job.job_id))
+    agent._export_active_job("")
+
+    assert captured["section_order"] == stored_order
+
+
+def test_export_section_order_fallback(isolated_engine, monkeypatch, tmp_path):
+    """Without a stored _section_order the formatter gets None (style/default order)."""
+    from conftest import _seed_user_and_skill
+
+    user = _seed_user_and_skill(isolated_engine)
+    job = _make_job(isolated_engine, title="RS", company="Lab", status="tailored")
+
+    with Session(isolated_engine) as session:
+        result = UserJobResult(
+            user_id=user.user_id,
+            job_id=job.job_id,
+            tailored_resume_content=dict(_REORDER_CONTENT),
+        )
+        session.add(result)
+        session.commit()
+
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+
+    captured = {}
+
+    def fake_format_pdf(self, content, job_title="", section_order=None):
+        captured["section_order"] = section_order
+        return b"%PDF-1.4 stub"
+
+    from agents import formatter as fmt_module
+    monkeypatch.setattr(fmt_module.ResumeFormatterAgent, "format_pdf", fake_format_pdf)
+
+    agent = ChatAgent()
+    agent.set_active_job(str(job.job_id))
+    agent._export_active_job("")
+
+    assert captured["section_order"] is None
+

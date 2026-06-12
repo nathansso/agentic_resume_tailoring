@@ -167,19 +167,31 @@ class ATSScoringEngine:
         return components
 
     @staticmethod
+    def flatten_section_text(tailored_content: Dict, section_key: str) -> str:
+        """String fragments of one resume section ("experience"/"projects"/"skills")."""
+        parts: List[str] = []
+        if section_key == "experience":
+            for exp in tailored_content.get("experiences") or []:
+                parts.append(f"{exp.get('title', '')} at {exp.get('company', '')}")
+                parts.extend(exp.get("bullets") or [])
+        elif section_key == "projects":
+            for proj in tailored_content.get("projects") or []:
+                parts.append(proj.get("name", ""))
+                parts.extend(proj.get("bullets") or [])
+        elif section_key == "skills":
+            skills = tailored_content.get("skills_emphasized") or []
+            if skills:
+                parts.append("Skills: " + ", ".join(skills))
+        return "\n".join(p for p in parts if p)
+
+    @staticmethod
     def flatten_tailored_text(tailored_content: Dict) -> str:
         """Collect all string fragments from a tailored_resume_content dict."""
-        parts: List[str] = []
-        for exp in tailored_content.get("experiences") or []:
-            parts.append(f"{exp.get('title', '')} at {exp.get('company', '')}")
-            parts.extend(exp.get("bullets") or [])
-        for proj in tailored_content.get("projects") or []:
-            parts.append(proj.get("name", ""))
-            parts.extend(proj.get("bullets") or [])
-        skills = tailored_content.get("skills_emphasized") or []
-        if skills:
-            parts.append("Skills: " + ", ".join(skills))
-        return "\n".join(p for p in parts if p)
+        sections = (
+            ATSScoringEngine.flatten_section_text(tailored_content, key)
+            for key in ("experience", "projects", "skills")
+        )
+        return "\n".join(s for s in sections if s)
 
     @staticmethod
     def _tailored_section_presence(tailored_content: Dict) -> Dict:

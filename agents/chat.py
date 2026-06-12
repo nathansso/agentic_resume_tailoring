@@ -891,7 +891,10 @@ class ChatAgent:
         try:
             from agents.formatter import ResumeFormatterAgent
             formatter = ResumeFormatterAgent(user_id=user.user_id)
-            pdf_bytes = formatter.format_pdf(latest.tailored_resume_content)
+            pdf_bytes = formatter.format_pdf(
+                latest.tailored_resume_content,
+                section_order=latest.tailored_resume_content.get("_section_order"),
+            )
         except Exception as e:
             logger.error("PDF export failed: %s", e)
             return f"Export failed: {e}"

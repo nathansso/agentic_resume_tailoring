@@ -257,6 +257,17 @@ def test_tex_section_order_respected(isolated_engine, monkeypatch):
     )
     assert tex.index(r"\section{Projects}") < tex.index(r"\section{Experience}")
 
+def test_tex_header_stays_above_sections_with_custom_order(isolated_engine, monkeypatch):
+    """Name/contact header is pinned at the top regardless of section_order (issue 22)."""
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(
+        _JAKE_CONTENT, section_order=["projects", "skills", "experience", "education"]
+    )
+    first_section = tex.index(r"\section{")
+    assert tex.index("Jake Ryan") < first_section
+    assert tex.index("123-456-7890") < first_section
+
 def test_tex_special_chars_escaped(isolated_engine, monkeypatch):
     monkeypatch.setattr(fmt_module, "engine", isolated_engine)
     content = {
