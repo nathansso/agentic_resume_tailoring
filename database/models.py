@@ -82,6 +82,7 @@ class Project(SQLModel, table=True):
     repo_url: Optional[str] = None
     start_date: Optional[str] = None
     end_date: Optional[str] = None
+    metrics: Dict = Field(default={}, sa_column=Column(JSON)) # GitHub signals: stars, languages, readme_length (issue #46)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

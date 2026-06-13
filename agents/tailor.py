@@ -9,6 +9,7 @@ Flow:
 """
 import logging
 import json
+import re
 from typing import Dict, Any, List, TypedDict, Annotated
 from uuid import UUID
 from sqlmodel import Session, select
@@ -23,13 +24,14 @@ from database.models import (
     JobDescription, JobSkill, UserJobResult,
 )
 from agents.ats_scorer import ATSScoringEngine
+from agents.project_scorer import score_project
 
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 2
 
 
-MAX_PROJECTS = 4  # Max projects to pass to the LLM after keyword scoring
+MAX_PROJECTS = 4  # Max projects to pass to the LLM after selection scoring
 
 # Section ordering (issue #22). The name/contact header is rendered by the
 # formatter above all sections and is never part of section_order; education
@@ -93,6 +95,12 @@ class ResumeTailorAgent:
                 for e in experiences
             ]
 
+            # Skill evidence rows for the knowledge-graph degree signal (issue #46)
+            evidence_rows = session.exec(
+                select(UserSkill.skill_id, UserSkill.evidence_source, UserSkill.evidence_detail)
+                .where(UserSkill.user_id == user_id)
+            ).all()
+
             proj_dicts_all = []
             for p in projects:
                 blurbs = session.exec(
@@ -102,6 +110,8 @@ class ResumeTailorAgent:
                     "name": p.name,
                     "description": p.description,
                     "blurbs": {b.style: b.content for b in blurbs},
+                    "linked_skills": self._count_linked_skills(p.name, p.repo_url, evidence_rows),
+                    "metrics": p.metrics or {},
                 })
 
             # Priority keywords: top missing JD keywords from latest score_breakdown
@@ -217,7 +227,7 @@ class ResumeTailorAgent:
              "MISSING SKILLS:\n{missing_skills}\n\n"
              "PRIORITY JD KEYWORDS — incorporate naturally where truthful (do NOT add if not applicable):\n{priority_keywords}\n\n"
              "CANDIDATE EXPERIENCES:\n{experiences}\n\n"
-             "CANDIDATE PROJECTS (with style variants, pre-scored by relevance):\n{projects}\n\n"
+             "CANDIDATE PROJECTS (with style variants, pre-scored by job relevance + project depth):\n{projects}\n\n"
              "{feedback}\n\n"
              "Return JSON with this structure:\n"
              '{{"experiences": [{{"title": "...", "company": "...", "start_date": "...", '
@@ -346,37 +356,71 @@ class ResumeTailorAgent:
         return PINNED_SECTIONS + ranked
 
     @staticmethod
+    def _count_linked_skills(project_name: str, repo_url: str, evidence_rows: List) -> int:
+        """
+        Knowledge-graph degree: distinct skills whose evidence references this
+        project, matched by repo slug (owner/repo from repo_url) or project
+        name against UserSkill.evidence_source/evidence_detail (issue #46).
+        """
+        needles = set()
+        if repo_url:
+            m = re.search(r"github\.com/([^/\s]+/[^/\s]+?)(?:\.git)?/?$", repo_url)
+            if m:
+                needles.add(m.group(1).lower())
+        if project_name:
+            needles.add(project_name.lower())
+        if not needles:
+            return 0
+
+        skill_ids = set()
+        for skill_id, source, detail in evidence_rows:
+            haystack = f"{source or ''} {detail or ''}".lower()
+            if any(n in haystack for n in needles):
+                skill_ids.add(skill_id)
+        return len(skill_ids)
+
+    # Keys consumed by the selection scorer but not meant for the LLM prompt
+    _SCORING_INPUT_KEYS = ("linked_skills", "metrics")
+
+    @classmethod
     def _score_and_select_projects(
+        cls,
         proj_dicts: List[Dict],
         jd_text: str,
         max_projects: int = MAX_PROJECTS,
     ) -> List[Dict]:
         """
-        Score each project against JD keywords, return top max_projects.
-        Adds a 'keyword_score' hint to each selected project so the LLM
-        knows which are most relevant.
+        Rank projects by composite selection score (ATS relevance + complexity,
+        issue #46) and return the top max_projects. Adds a 'selection_score'
+        and per-component 'selection_breakdown' hint to each selected project
+        so the LLM knows which are most relevant.
         """
         if not proj_dicts:
             return []
 
+        def strip(p: Dict) -> Dict:
+            return {k: v for k, v in p.items() if k not in cls._SCORING_INPUT_KEYS}
+
         jd_keywords = ATSScoringEngine._extract_keywords(jd_text)
         if not jd_keywords:
-            return proj_dicts[:max_projects]
+            return [strip(p) for p in proj_dicts[:max_projects]]
 
         scored = []
         for p in proj_dicts:
-            text_parts = [p.get("name") or "", p.get("description") or ""]
-            for blurb_content in (p.get("blurbs") or {}).values():
-                text_parts.append(blurb_content or "")
-            project_text = " ".join(text_parts).lower()
-            hits = sum(1 for kw in jd_keywords if kw in project_text)
-            score = hits / len(jd_keywords)
-            scored.append({**p, "keyword_score": round(score, 3)})
+            breakdown = score_project(p, jd_text)
+            scored.append({
+                **strip(p),
+                "selection_score": breakdown["composite"],
+                "selection_breakdown": {
+                    "relevance": breakdown["relevance"]["score"],
+                    "complexity": breakdown["complexity"]["score"],
+                },
+            })
 
-        scored.sort(key=lambda x: x["keyword_score"], reverse=True)
+        scored.sort(key=lambda x: x["selection_score"], reverse=True)
         selected = scored[:max_projects]
         logger.debug(
             "Project selection: %s",
-            [(p["name"], p["keyword_score"]) for p in selected],
+            [(p["name"], p["selection_score"], p["selection_breakdown"]) for p in selected],
         )
         return selected

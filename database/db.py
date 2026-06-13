@@ -63,6 +63,8 @@ def _migrate_db() -> None:
         "ALTER TABLE userjobresult ADD COLUMN score_breakdown TEXT DEFAULT '{}'",
         # issue 12: algorithmic score of tailored output
         "ALTER TABLE userjobresult ADD COLUMN tailored_score_breakdown TEXT DEFAULT '{}'",
+        # issue 46: GitHub project metrics for complexity scoring
+        "ALTER TABLE project ADD COLUMN metrics TEXT DEFAULT '{}'",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

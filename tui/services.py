@@ -848,6 +848,18 @@ def ingest_resume_file(file_path: str) -> str:
         return f"Ingestion failed: {e}"
 
 
+def _build_repo_metrics(repos: list) -> dict:
+    """Map repo name -> GitHub signals for project complexity scoring (issue #46)."""
+    return {
+        repo["name"]: {
+            "stars": repo.get("stars", 0),
+            "languages": repo.get("languages", []),
+            "readme_length": len(repo.get("readme") or ""),
+        }
+        for repo in repos
+    }
+
+
 def ingest_github(username: str = "", token: str | None = None) -> str:
     """Fetch GitHub repos for a user and save skills/projects to DB.
 
@@ -887,6 +899,7 @@ def ingest_github(username: str = "", token: str | None = None) -> str:
                 "source_file": f"github:{target}",
                 "full_text": "\n".join(lines),
                 "parsed_sections": {},
+                "repo_metrics": _build_repo_metrics(repos),
             })
         if user:
             return _format_ingestion_diff(user.user_id, pre[0], pre[1], pre[2], f"github:{target} ({len(repos)} repos)")
@@ -949,6 +962,7 @@ def ingest_github_repo(repo_ref: str, token: str | None = None) -> str:
                 "source_file": f"github:{owner}/{repo_name}",
                 "full_text": "\n".join(lines),
                 "parsed_sections": {},
+                "repo_metrics": _build_repo_metrics([repo]),
             })
         has_readme = "yes" if repo.get("readme") else "no"
         has_deps = "yes" if repo.get("dependencies") else "no"

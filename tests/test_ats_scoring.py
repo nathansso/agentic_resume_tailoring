@@ -173,7 +173,7 @@ def test_score_and_select_projects_ranking():
     assert len(selected) == 2
     # ML Pipeline should rank first
     assert selected[0]["name"] == "ML Pipeline"
-    assert selected[0]["keyword_score"] > selected[1]["keyword_score"]
+    assert selected[0]["selection_score"] > selected[1]["selection_score"]
 
 
 def test_score_and_select_projects_max_cap():
