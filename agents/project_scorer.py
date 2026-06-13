@@ -21,13 +21,22 @@ score_project() is a pure function over a project dict — no DB or LLM access.
 Callers (agents/tailor.py) attach 'linked_skills' and 'metrics' to the dict
 before scoring.
 """
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from agents.ats_scorer import ATSScoringEngine
 
 # Component weights — must sum to 1.0. Tune selection behavior here.
 RELEVANCE_WEIGHT = 0.65
 COMPLEXITY_WEIGHT = 0.35
+
+# Dynamic top-k selection bounds (issue #47). k is chosen by a "drop-off + bounds"
+# rule rather than a hardcoded count: always include MIN_PROJECTS, then keep adding
+# the next project only while its score holds up against both the previous kept
+# project and the top project, clamped at MAX_PROJECTS.
+MIN_PROJECTS = 2
+MAX_PROJECTS = 5
+DROPOFF_RATIO = 0.60   # keep next project only if its score >= 60% of the previous kept score
+TOP_RATIO = 0.50       # ...and >= 50% of the top score
 
 # Saturation caps: a sub-signal reaches its maximum contribution at the cap.
 LINKED_SKILLS_CAP = 8      # distinct knowledge-graph skills evidencing the project
@@ -120,3 +129,45 @@ def score_project(proj: Dict, jd_text: str) -> Dict:
         "relevance": relevance,
         "complexity": complexity,
     }
+
+
+def select_top_k(
+    scored: List[Dict],
+    *,
+    score_key: str = "selection_score",
+    min_k: int = MIN_PROJECTS,
+    max_k: int = MAX_PROJECTS,
+) -> List[Dict]:
+    """
+    Choose how many top projects to include using a drop-off + bounds rule (issue #47).
+
+    `scored` must already be sorted descending by `score_key`. Returns the leading
+    slice of `scored`:
+      - always the first `min_k` (clamped to the list length),
+      - then each subsequent project up to `max_k` only while its score is both
+        >= DROPOFF_RATIO * the previous kept score and >= TOP_RATIO * the top score,
+      - stopping at the first project that fails either test (the low-relevance tail
+        is excluded).
+
+    This balances including the most relevant projects against simply including too
+    many: a gentle slope of strong scores fills up to `max_k`, while a sharp drop-off
+    cuts the tail early.
+    """
+    if not scored:
+        return []
+    if len(scored) <= min_k:
+        return list(scored)
+
+    top_score = scored[0].get(score_key, 0) or 0
+    selected = list(scored[:min_k])
+    prev_score = selected[-1].get(score_key, 0) or 0
+
+    for proj in scored[min_k:max_k]:
+        score = proj.get(score_key, 0) or 0
+        if score >= DROPOFF_RATIO * prev_score and score >= TOP_RATIO * top_score:
+            selected.append(proj)
+            prev_score = score
+        else:
+            break
+
+    return selected

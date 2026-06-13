@@ -168,28 +168,31 @@ def test_score_and_select_projects_ranking():
         {"name": "ML Pipeline", "description": "python tensorflow scikit-learn machine learning", "blurbs": {}},
     ]
     jd_text = "machine learning python tensorflow data scientist"
-    selected = ResumeTailorAgent._score_and_select_projects(projects, jd_text, max_projects=2)
+    selected = ResumeTailorAgent._score_and_select_projects(projects, jd_text)
 
-    assert len(selected) == 2
+    # Only ML Pipeline matches the JD; the min-k floor keeps a second project.
+    assert len(selected) >= 2
     # ML Pipeline should rank first
     assert selected[0]["name"] == "ML Pipeline"
     assert selected[0]["selection_score"] > selected[1]["selection_score"]
 
 
 def test_score_and_select_projects_max_cap():
+    # Ten equally-scored projects fill up to the dynamic MAX_PROJECTS clamp.
+    from agents.project_scorer import MAX_PROJECTS
     projects = [{"name": f"Project {i}", "description": "python", "blurbs": {}} for i in range(10)]
-    selected = ResumeTailorAgent._score_and_select_projects(projects, "python developer", max_projects=4)
-    assert len(selected) == 4
+    selected = ResumeTailorAgent._score_and_select_projects(projects, "python developer")
+    assert len(selected) == MAX_PROJECTS
 
 
 def test_score_and_select_projects_empty():
-    assert ResumeTailorAgent._score_and_select_projects([], "python", max_projects=4) == []
+    assert ResumeTailorAgent._score_and_select_projects([], "python") == []
 
 
 def test_score_and_select_projects_no_jd():
     projects = [{"name": "My Project", "description": "cool stuff", "blurbs": {}}]
-    # Empty JD → falls back to first max_projects with no scoring
-    selected = ResumeTailorAgent._score_and_select_projects(projects, "", max_projects=4)
+    # Empty JD → falls back to the first MAX_PROJECTS with no scoring
+    selected = ResumeTailorAgent._score_and_select_projects(projects, "")
     assert len(selected) == 1
 
 

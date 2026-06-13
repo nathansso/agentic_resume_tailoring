@@ -19,7 +19,10 @@ from agents.project_scorer import (
     STARS_CAP,
     LANGUAGES_CAP,
     README_LENGTH_CAP,
+    MIN_PROJECTS,
+    MAX_PROJECTS,
     score_project,
+    select_top_k,
 )
 from agents.tailor import ResumeTailorAgent
 from conftest import _seed_user_and_skill
@@ -127,7 +130,7 @@ def test_weights_and_caps_are_named_constants():
 
 def test_select_projects_sorts_by_composite_and_attaches_breakdown():
     selected = ResumeTailorAgent._score_and_select_projects(
-        [THIN_PROJECT, RICH_PROJECT], JD_TEXT, max_projects=4
+        [THIN_PROJECT, RICH_PROJECT], JD_TEXT
     )
     assert [p["name"] for p in selected] == ["Distributed Pipeline Platform", "ML Demo"]
     scores = [p["selection_score"] for p in selected]
@@ -137,18 +140,71 @@ def test_select_projects_sorts_by_composite_and_attaches_breakdown():
 
 
 def test_select_projects_strips_scoring_inputs_from_llm_payload():
-    selected = ResumeTailorAgent._score_and_select_projects(
-        [RICH_PROJECT], JD_TEXT, max_projects=4
-    )
+    selected = ResumeTailorAgent._score_and_select_projects([RICH_PROJECT], JD_TEXT)
     assert "linked_skills" not in selected[0]
     assert "metrics" not in selected[0]
 
     # No-JD fallback path strips them too
-    fallback = ResumeTailorAgent._score_and_select_projects(
-        [RICH_PROJECT], "", max_projects=4
-    )
+    fallback = ResumeTailorAgent._score_and_select_projects([RICH_PROJECT], "")
     assert "linked_skills" not in fallback[0]
     assert "metrics" not in fallback[0]
+
+
+# ── Dynamic top-k selection (issue #47) ───────────────────────────────────────
+
+def _scored(*scores):
+    """Build a descending-sorted list of scored project dicts from raw scores."""
+    items = [{"name": f"p{i}", "selection_score": s} for i, s in enumerate(scores)]
+    return sorted(items, key=lambda x: x["selection_score"], reverse=True)
+
+
+def test_select_top_k_excludes_low_relevance_tail():
+    # Two strong, then a sharp drop-off: the tail is excluded even though more exist.
+    selected = select_top_k(_scored(90, 85, 20, 10, 5))
+    assert [p["selection_score"] for p in selected] == [90, 85]
+
+
+def test_select_top_k_fills_up_to_max_on_gentle_slope():
+    # A gentle slope of strong scores fills to MAX_PROJECTS and no further.
+    selected = select_top_k(_scored(90, 88, 86, 84, 82, 80, 78))
+    assert len(selected) == MAX_PROJECTS
+    assert [p["selection_score"] for p in selected] == [90, 88, 86, 84, 82]
+
+
+def test_select_top_k_respects_min_even_on_immediate_dropoff():
+    # A sharp drop after the first project still keeps MIN_PROJECTS.
+    selected = select_top_k(_scored(90, 10, 5))
+    assert len(selected) == MIN_PROJECTS
+    assert [p["selection_score"] for p in selected] == [90, 10]
+
+
+def test_select_top_k_handles_small_and_empty_lists():
+    assert select_top_k([]) == []
+    one = _scored(50)
+    assert select_top_k(one) == one
+    two = _scored(50, 40)
+    assert select_top_k(two) == two
+
+
+def test_select_top_k_all_equal_fills_to_max():
+    selected = select_top_k(_scored(*([70] * 8)))
+    assert len(selected) == MAX_PROJECTS
+
+
+# ── Order preservation across the LLM round-trip (issue #47) ───────────────────
+
+def test_order_projects_by_selection_restores_ranked_order():
+    # LLM returned the projects shuffled and renamed one ("Mystery").
+    generated = [
+        {"name": "B", "bullets": ["b"]},
+        {"name": "Mystery", "bullets": ["x"]},
+        {"name": "A", "bullets": ["a"]},
+        {"name": "C", "bullets": ["c"]},
+    ]
+    order_names = ["A", "B", "C"]  # descending-score selection order
+    ordered = ResumeTailorAgent._order_projects_by_selection(generated, order_names)
+    # Known names follow the selection order; the unknown one is appended last.
+    assert [p["name"] for p in ordered] == ["A", "B", "C", "Mystery"]
 
 
 # ── Tailor wiring: _count_linked_skills ───────────────────────────────────────

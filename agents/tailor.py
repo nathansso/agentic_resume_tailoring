@@ -24,14 +24,11 @@ from database.models import (
     JobDescription, JobSkill, UserJobResult,
 )
 from agents.ats_scorer import ATSScoringEngine
-from agents.project_scorer import score_project
+from agents.project_scorer import MAX_PROJECTS, score_project, select_top_k
 
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 2
-
-
-MAX_PROJECTS = 4  # Max projects to pass to the LLM after selection scoring
 
 # Section ordering (issue #22). The name/contact header is rendered by the
 # formatter above all sections and is never part of section_order; education
@@ -121,10 +118,9 @@ class ResumeTailorAgent:
                 kd = result.score_breakdown.get("keyword_coverage", {})
                 priority_keywords = (kd.get("missing_keywords") or [])[:15]
 
-            # Project pre-selection: score projects by JD keyword coverage
-            proj_dicts = self._score_and_select_projects(
-                proj_dicts_all, jd_text, max_projects=MAX_PROJECTS
-            )
+            # Project pre-selection: score projects by JD relevance + depth and
+            # dynamically choose the top-k (issue #47), ordered descending by score.
+            proj_dicts = self._score_and_select_projects(proj_dicts_all, jd_text)
 
         initial_state: TailorState = {
             "user_id": str(user_id),
@@ -216,6 +212,7 @@ class ResumeTailorAgent:
              "- NEVER fabricate experiences, skills, or metrics the candidate doesn't have\n"
              "- Emphasize matched skills by reordering bullets and adjusting language\n"
              "- For projects with multiple blurb styles, select the style that best fits the job\n"
+             "- Keep projects in the given order; they are pre-ranked by job relevance (most relevant first)\n"
              "- Rewrite experience bullets to highlight relevant skills where truthful\n"
              "- Incorporate PRIORITY JD KEYWORDS naturally into bullets where truthfully applicable\n"
              "- List the most relevant experiences first based on keyword relevance\n"
@@ -247,6 +244,12 @@ class ResumeTailorAgent:
                 "projects": proj_str,
                 "feedback": feedback,
             })
+            # Guarantee projects stay in the pre-ranked (descending-score) order even
+            # if the LLM reorders or drops them in its JSON output (issue #47).
+            if isinstance(tailored, dict) and tailored.get("projects"):
+                tailored["projects"] = self._order_projects_by_selection(
+                    tailored["projects"], [p["name"] for p in state["projects"]]
+                )
             state["tailored_content"] = tailored
         except Exception as e:
             logger.error(f"Generation failed: {e}")
@@ -379,6 +382,23 @@ class ResumeTailorAgent:
                 skill_ids.add(skill_id)
         return len(skill_ids)
 
+    @staticmethod
+    def _order_projects_by_selection(
+        generated: List[Dict], order_names: List[str]
+    ) -> List[Dict]:
+        """
+        Reorder LLM-generated projects to match the pre-ranked selection order
+        (descending by score, issue #47). Projects are keyed by 'name'; any whose
+        name isn't in `order_names` (e.g. renamed by the LLM) are kept in their
+        original relative order and appended at the end. Stable on ties.
+        """
+        rank = {name: i for i, name in enumerate(order_names)}
+        fallback = len(order_names)
+        return sorted(
+            generated,
+            key=lambda p: rank.get(p.get("name"), fallback),
+        )
+
     # Keys consumed by the selection scorer but not meant for the LLM prompt
     _SCORING_INPUT_KEYS = ("linked_skills", "metrics")
 
@@ -387,13 +407,13 @@ class ResumeTailorAgent:
         cls,
         proj_dicts: List[Dict],
         jd_text: str,
-        max_projects: int = MAX_PROJECTS,
     ) -> List[Dict]:
         """
         Rank projects by composite selection score (ATS relevance + complexity,
-        issue #46) and return the top max_projects. Adds a 'selection_score'
-        and per-component 'selection_breakdown' hint to each selected project
-        so the LLM knows which are most relevant.
+        issue #46) and dynamically select the top-k via the drop-off + bounds rule
+        (issue #47). Adds a 'selection_score' and per-component 'selection_breakdown'
+        hint to each selected project so the LLM knows which are most relevant, and
+        returns them ordered descending by score.
         """
         if not proj_dicts:
             return []
@@ -403,7 +423,8 @@ class ResumeTailorAgent:
 
         jd_keywords = ATSScoringEngine._extract_keywords(jd_text)
         if not jd_keywords:
-            return [strip(p) for p in proj_dicts[:max_projects]]
+            # No JD signal to score against — fall back to the first MAX_PROJECTS.
+            return [strip(p) for p in proj_dicts[:MAX_PROJECTS]]
 
         scored = []
         for p in proj_dicts:
@@ -418,9 +439,10 @@ class ResumeTailorAgent:
             })
 
         scored.sort(key=lambda x: x["selection_score"], reverse=True)
-        selected = scored[:max_projects]
+        selected = select_top_k(scored)
         logger.debug(
-            "Project selection: %s",
+            "Project selection (k=%d of %d): %s",
+            len(selected), len(scored),
             [(p["name"], p["selection_score"], p["selection_breakdown"]) for p in selected],
         )
         return selected
