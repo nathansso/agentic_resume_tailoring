@@ -984,6 +984,76 @@ def ingest_github_repo(repo_ref: str, token: str | None = None) -> str:
         return f"Repo ingestion failed: {e}"
 
 
+def _set_linkedin_status(
+    user_id: Optional[UUID],
+    status: Optional[str],
+    error: Optional[str] = None,
+    ingested_url: Optional[str] = None,
+) -> None:
+    """Record the LinkedIn ingestion lifecycle on the user row."""
+    if user_id is None:
+        return
+    from datetime import datetime
+    try:
+        with Session(engine) as session:
+            db_user = session.get(User, user_id)
+            if not db_user:
+                return
+            db_user.linkedin_ingest_status = status
+            db_user.linkedin_ingest_error = error
+            if status == "done":
+                db_user.linkedin_ingested_at = datetime.utcnow()
+                if ingested_url:
+                    db_user.linkedin_ingested_url = ingested_url
+            session.add(db_user)
+            session.commit()
+    except Exception as e:
+        logger.error("Failed to update LinkedIn ingest status: %s", e)
+
+
+def ingest_linkedin(profile_url: str, user_id: Optional[UUID] = None) -> str:
+    """
+    Scrape a LinkedIn profile via Bright Data and save it to the DB.
+
+    Records the ingestion lifecycle (importing/done/failed) on the user row so
+    the UI can poll for progress. Never raises — returns a plain-English result.
+    """
+    from database.db import init_db
+    from database.user_utils import get_active_profile
+    from ingestion.linkedin import LinkedInIngestor, LinkedInIngestionError
+    from agents.parser import ResumeParserAgent
+
+    init_db()
+    if user_id is None:
+        user = get_active_profile()
+        user_id = user.user_id if user else None
+    else:
+        # Point the parser at this user (parse_and_save uses the active profile).
+        from database.user_utils import ACTIVE_PROFILE_FILE, ART_DIR
+        ART_DIR.mkdir(parents=True, exist_ok=True)
+        ACTIVE_PROFILE_FILE.write_text(str(user_id))
+
+    _set_linkedin_status(user_id, "importing")
+    pre = _snapshot_user_data(user_id) if user_id else (set(), set(), set())
+    try:
+        with _suppress_output():
+            data = LinkedInIngestor().ingest_brightdata(profile_url)
+            ResumeParserAgent().parse_and_save(data)
+    except LinkedInIngestionError as e:
+        _set_linkedin_status(user_id, "failed", error=str(e))
+        return f"LinkedIn import failed: {e}"
+    except Exception as e:
+        logger.error("LinkedIn ingestion failed: %s", e)
+        _set_linkedin_status(user_id, "failed", error=str(e))
+        return f"LinkedIn import failed: {e}"
+
+    ingested_url = data.get("source_file", "").replace("linkedin:", "")
+    _set_linkedin_status(user_id, "done", ingested_url=ingested_url)
+    if user_id:
+        return _format_ingestion_diff(user_id, pre[0], pre[1], pre[2], "LinkedIn")
+    return "LinkedIn profile ingested."
+
+
 def ingest_linkedin_pdf(file_path: str) -> str:
     """Parse a LinkedIn PDF export and save to DB."""
     from pathlib import Path

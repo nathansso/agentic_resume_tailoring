@@ -17,6 +17,11 @@ class User(SQLModel, table=True):
     password_hash: Optional[str] = Field(default=None)
     supabase_uid: Optional[str] = Field(default=None, unique=True)
     linkedin_url: Optional[str] = None
+    # LinkedIn ingestion lifecycle (issue 13: Bright Data)
+    linkedin_ingested_url: Optional[str] = None       # last URL successfully scraped
+    linkedin_ingest_status: Optional[str] = None       # None | "importing" | "done" | "failed"
+    linkedin_ingest_error: Optional[str] = None        # last failure message, if any
+    linkedin_ingested_at: Optional[datetime] = None
     github_username: Optional[str] = None
     github_access_token: Optional[str] = None
     phone: Optional[str] = None

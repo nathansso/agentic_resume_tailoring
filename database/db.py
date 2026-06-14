@@ -65,6 +65,11 @@ def _migrate_db() -> None:
         "ALTER TABLE userjobresult ADD COLUMN tailored_score_breakdown TEXT DEFAULT '{}'",
         # issue 46: GitHub project metrics for complexity scoring
         "ALTER TABLE project ADD COLUMN metrics TEXT DEFAULT '{}'",
+        # issue 13: LinkedIn (Bright Data) ingestion lifecycle
+        'ALTER TABLE "user" ADD COLUMN linkedin_ingested_url TEXT',
+        'ALTER TABLE "user" ADD COLUMN linkedin_ingest_status TEXT',
+        'ALTER TABLE "user" ADD COLUMN linkedin_ingest_error TEXT',
+        'ALTER TABLE "user" ADD COLUMN linkedin_ingested_at TIMESTAMP',
     ]
     with engine.connect() as conn:
         for stmt in migrations:
