@@ -27,6 +27,17 @@ export function ProfilePanel() {
       .catch(() => {});
   }, []);
 
+  // Poll while a background LinkedIn import is running so status updates live.
+  useEffect(() => {
+    if (profile?.linkedin_ingest_status !== "importing") return;
+    const id = setInterval(() => {
+      getProfile()
+        .then(p => { setProfile(p); if (!editing) setForm(p); })
+        .catch(() => {});
+    }, 4000);
+    return () => clearInterval(id);
+  }, [profile?.linkedin_ingest_status, editing]);
+
   function onChange(field: keyof ProfileData) {
     return (e: ChangeEvent<HTMLInputElement>) =>
       setForm(prev => ({ ...prev, [field]: e.target.value }));
@@ -110,6 +121,18 @@ export function ProfilePanel() {
           </div>
         ))}
       </div>
+
+      {profile?.linkedin_ingest_status === "importing" && (
+        <p style={{ ...s.muted, color: colors.accent }}>LinkedIn import in progress…</p>
+      )}
+      {profile?.linkedin_ingest_status === "done" && (
+        <p style={{ ...s.muted, color: colors.accent }}>LinkedIn profile imported.</p>
+      )}
+      {profile?.linkedin_ingest_status === "failed" && (
+        <p style={{ ...s.muted, color: colors.error }}>
+          LinkedIn import failed{profile.linkedin_ingest_error ? `: ${profile.linkedin_ingest_error}` : ""}.
+        </p>
+      )}
 
       {profile && (
         <div style={s.stats}>

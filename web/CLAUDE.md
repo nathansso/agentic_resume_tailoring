@@ -111,3 +111,5 @@ Required env vars (set as Fly.io secrets):
 - `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` — LLM access
 - `AI_DAILY_LIMIT` — per-user daily AI call cap (default 20)
 - `OWNER_EMAIL` — email address exempt from rate limiting
+- `BRIGHTDATA_API_KEY` — platform-wide Bright Data key for LinkedIn ingestion (optional; LinkedIn auto-import is disabled and the PDF-upload fallback is used when unset)
+- `BRIGHTDATA_LINKEDIN_DATASET_ID` — Bright Data People Profiles dataset id (defaults to `gd_l1viktl72bvl7bjuj0`)
