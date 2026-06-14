@@ -1,0 +1,27 @@
+name: Add issues to project board
+
+# Keeps the "ART Development Plan" project (number 2, owner nathansso) in sync
+# with the repo: every newly opened / reopened / transferred issue is added to
+# the board automatically. Status (Ready/Backlog/etc.) is still assigned by the
+# /new-issue workflow or by hand — this only guarantees nothing is ever missing.
+#
+# Requires a repo secret `ADD_TO_PROJECT_PAT`: a fine-grained or classic PAT with
+# `project` (read/write) scope. The default GITHUB_TOKEN cannot write to a
+# user-owned Project, so a PAT is mandatory here.
+
+on:
+  issues:
+    types: [opened, reopened, transferred]
+
+permissions:
+  contents: read
+
+jobs:
+  add-to-project:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add issue to ART Development Plan
+        uses: actions/add-to-project@v1.0.2
+        with:
+          project-url: https://github.com/users/nathansso/projects/2
+          github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
