@@ -65,7 +65,11 @@ Session token stored in `access_token` cookie (httponly, samesite=strict, 30-day
 - `check_ai_quota` — FastAPI dependency; raises HTTP 429 when the daily limit is hit.
 - `increment_ai_usage(user_id, session)` — call after a successful AI response to record usage.
 - `AI_DAILY_LIMIT` env var (default 20) controls the cap. `OWNER_EMAIL` env var is always exempt.
-- The `AIUsage` table stores one row per (user_id, date) with a running `call_count`.
+- The `AIUsage` table stores one row per (user_id, date, kind) with a running `call_count`.
+- **LinkedIn (Bright Data) scrapes are billed per call**, so they get a separate, much tighter cap via `check_linkedin_quota` / `increment_linkedin_usage` (kind `"linkedin"`), controlled by `LINKEDIN_DAILY_LIMIT` (default 2). `OWNER_EMAIL` is exempt; resets at midnight UTC. There are three trigger paths, all gated by the same daily cap:
+  1. **Data ingestion** — `PATCH /api/profile/` auto-triggers a background scrape when the LinkedIn URL is newly set/changed (onboarding). The background task (`_linkedin_ingest_task`) self-guards the quota and increments.
+  2. **Sign-in** — `POST /api/auth/login` calls `_maybe_refresh_linkedin_on_login`, which schedules a background refresh **at most once per day** (skipped if `linkedin_ingested_at` is today) and only if quota remains. Deliberately hooked on `login`, not `/me`, so it does not fire on every cookie-authed page load.
+  3. **Discretionary** — the manual `POST /api/ingest/linkedin` endpoint (`check_linkedin_quota` dependency + up-front increment so retries still count).
 
 ---
 
@@ -110,6 +114,7 @@ Required env vars (set as Fly.io secrets):
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET` — Supabase Auth (optional; local fallback used if absent)
 - `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` — LLM access
 - `AI_DAILY_LIMIT` — per-user daily AI call cap (default 20)
+- `LINKEDIN_DAILY_LIMIT` — per-user daily LinkedIn (Bright Data) scrape cap (default 2)
 - `OWNER_EMAIL` — email address exempt from rate limiting
 - `BRIGHTDATA_API_KEY` — platform-wide Bright Data key for LinkedIn ingestion (optional; LinkedIn auto-import is disabled and the PDF-upload fallback is used when unset)
 - `BRIGHTDATA_LINKEDIN_DATASET_ID` — Bright Data People Profiles dataset id (defaults to `gd_l1viktl72bvl7bjuj0`)

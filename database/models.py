@@ -169,4 +169,7 @@ class AIUsage(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: UUID = Field(foreign_key="user.user_id", index=True)
     date: str  # YYYY-MM-DD UTC
+    # Usage category: "ai" for LLM calls, "linkedin" for paid Bright Data scrapes.
+    # Tracked separately so each kind gets its own daily cap.
+    kind: str = Field(default="ai")
     call_count: int = Field(default=0)

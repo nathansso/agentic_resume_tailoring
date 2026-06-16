@@ -1,23 +1,49 @@
+from datetime import datetime, timezone
 from urllib.parse import urlencode
 from uuid import UUID
 
 import requests as _requests
-from fastapi import APIRouter, HTTPException, Response, Depends
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Response, Depends
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
-from config import GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
+from config import BRIGHTDATA_API_KEY, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
 from database.auth import hash_password, supabase_sign_in, supabase_sign_up
 from database.db import engine
 from database.user_utils import authenticate_local, create_profile, get_user_by_email, get_user_by_username
+from ingestion.linkedin import LinkedInIngestor
 from web.auth import get_current_user, make_session_token, _SESSION_SECRET
+from web.routers.dependencies import linkedin_quota_remaining
+from web.routers.profile_router import _linkedin_ingest_task
 from database.models import User
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 _COOKIE_OPTS = dict(httponly=True, samesite="strict", max_age=86400 * 30)
+
+
+def _maybe_refresh_linkedin_on_login(background: BackgroundTasks, user: User) -> None:
+    """On sign-in, refresh LinkedIn data — at most once per day, quota permitting.
+
+    Only fires when the user has a LinkedIn URL on file and we don't already
+    have a scrape from today. The daily cap is the hard backstop; this staleness
+    gate keeps rapid re-logins from each spending a paid Bright Data call.
+    """
+    if not BRIGHTDATA_API_KEY or not (user.linkedin_url or "").strip():
+        return
+    ingested_at = user.linkedin_ingested_at
+    if ingested_at and ingested_at.date() == datetime.now(timezone.utc).date():
+        return  # already refreshed today
+    with Session(engine) as session:
+        if not linkedin_quota_remaining(session, user.user_id, user.email):
+            return
+    try:
+        normalized = LinkedInIngestor._normalize_url(user.linkedin_url)
+    except Exception:
+        return
+    background.add_task(_linkedin_ingest_task, user.user_id, normalized, user.email)
 
 
 def _set_session(response: Response, user: User, password: str) -> None:
@@ -46,7 +72,7 @@ class RegisterRequest(BaseModel):
 
 
 @router.post("/login")
-def login(body: LoginRequest, response: Response):
+def login(body: LoginRequest, response: Response, background: BackgroundTasks):
     user = authenticate_local(body.username, body.password)
     if not user:
         existing = get_user_by_username(body.username)
@@ -54,6 +80,7 @@ def login(body: LoginRequest, response: Response):
             raise HTTPException(status_code=401, detail="No account found with that username")
         raise HTTPException(status_code=401, detail="Incorrect password")
     _set_session(response, user, body.password)
+    _maybe_refresh_linkedin_on_login(background, user)
     return {"user": _user_dict(user)}
 
 
