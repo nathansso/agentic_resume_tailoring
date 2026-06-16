@@ -452,3 +452,19 @@ def test_export_section_order_fallback(isolated_engine, monkeypatch, tmp_path):
 
     assert captured["section_order"] is None
 
+
+def test_as_obj_coerces_json_string_columns():
+    """Regression: SQLite can round-trip JSON columns as strings, which crashed
+    the tailor read-path with `'str' object has no attribute 'get'`. `_as_obj`
+    normalises them so downstream .get()/iteration stays safe."""
+    from agents.tailor import _as_obj
+
+    # JSON-string round-trip (the SQLite failure mode) is parsed back to dict/list
+    assert _as_obj('{"composite": 84.8}', {}) == {"composite": 84.8}
+    assert _as_obj('["Python", "SQL"]', []) == ["Python", "SQL"]
+    # Already-decoded values pass through untouched
+    assert _as_obj({"a": 1}, {}) == {"a": 1}
+    # None and unparseable strings fall back to the supplied default
+    assert _as_obj(None, {}) == {}
+    assert _as_obj("not json", {}) == {}
+
