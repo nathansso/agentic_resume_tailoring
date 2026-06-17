@@ -4,7 +4,7 @@ CLI for Agentic Resume Tailoring (ART)
 Usage:
     python cli.py ingest-resume <file>       Ingest and parse your resume
     python cli.py ingest-github [username]   Fetch GitHub repos and extract skills/projects
-    python cli.py ingest-linkedin <url>      Scrape LinkedIn profile via browser
+    python cli.py ingest-linkedin <url>      Scrape LinkedIn profile via Bright Data API
     python cli.py ingest-linkedin-pdf <pdf>  Parse LinkedIn PDF export (fallback)
     python cli.py tailor <job_file_or_text>   Analyze job + match + tailor resume
     python cli.py status                      Show your profile summary
@@ -127,7 +127,7 @@ def cmd_ingest_github(args):
 
 
 def cmd_ingest_linkedin(args):
-    """Scrape a LinkedIn profile via Playwright browser automation."""
+    """Scrape a LinkedIn profile via the Bright Data Web Scraper API."""
     _check_config()
     from database.db import init_db
     init_db()
@@ -135,20 +135,11 @@ def cmd_ingest_linkedin(args):
     profile_url = args.url
     print(f"Scraping LinkedIn profile: {profile_url}")
 
-    from ingestion.linkedin import LinkedInIngestor
-    ingestor = LinkedInIngestor()
-
-    try:
-        data = ingestor.ingest_web(profile_url)
-    except RuntimeError as e:
-        print(f"\nError: {e}")
+    from tui.services import ingest_linkedin
+    result = ingest_linkedin(profile_url)
+    print(result)
+    if result.startswith("LinkedIn import failed"):
         sys.exit(1)
-
-    from agents.parser import ResumeParserAgent
-    parser = ResumeParserAgent()
-    parser.parse_and_save(data)
-
-    print("LinkedIn profile scraped and parsed successfully.")
 
 
 def cmd_ingest_linkedin_pdf(args):
@@ -490,7 +481,7 @@ def main():
     p_github.add_argument("--force", action="store_true", help="Re-scan all repos even if unchanged since last scan")
 
     # ingest-linkedin (web scraping)
-    p_linkedin = subparsers.add_parser("ingest-linkedin", help="Scrape your LinkedIn profile via browser")
+    p_linkedin = subparsers.add_parser("ingest-linkedin", help="Scrape your LinkedIn profile via Bright Data API")
     p_linkedin.add_argument("url", help="LinkedIn profile URL or username (e.g. https://linkedin.com/in/username)")
 
     # ingest-linkedin-pdf (fallback)

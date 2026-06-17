@@ -17,6 +17,11 @@ class User(SQLModel, table=True):
     password_hash: Optional[str] = Field(default=None)
     supabase_uid: Optional[str] = Field(default=None, unique=True)
     linkedin_url: Optional[str] = None
+    # LinkedIn ingestion lifecycle (issue 13: Bright Data)
+    linkedin_ingested_url: Optional[str] = None       # last URL successfully scraped
+    linkedin_ingest_status: Optional[str] = None       # None | "importing" | "done" | "failed"
+    linkedin_ingest_error: Optional[str] = None        # last failure message, if any
+    linkedin_ingested_at: Optional[datetime] = None
     github_username: Optional[str] = None
     github_access_token: Optional[str] = None
     phone: Optional[str] = None
@@ -82,6 +87,7 @@ class Project(SQLModel, table=True):
     repo_url: Optional[str] = None
     start_date: Optional[str] = None
     end_date: Optional[str] = None
+    metrics: Dict = Field(default={}, sa_column=Column(JSON)) # GitHub signals: stars, languages, readme_length (issue #46)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -138,6 +144,8 @@ class UserJobResult(SQLModel, table=True):
     matched_skills: Dict = Field(default={}, sa_column=Column(JSON))
     missing_skills: List[str] = Field(default=[], sa_column=Column(JSON))
     tailored_resume_content: Dict = Field(default={}, sa_column=Column(JSON)) # The JSON structure of the new resume
+    score_breakdown: Dict = Field(default={}, sa_column=Column(JSON))
+    tailored_score_breakdown: Dict = Field(default={}, sa_column=Column(JSON)) # Algorithmic score of tailored output (issue #12)
     revision_notes: Optional[str] = None
     export_path: Optional[str] = None
 

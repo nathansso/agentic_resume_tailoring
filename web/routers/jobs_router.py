@@ -44,6 +44,8 @@ def _job_detail(job: JobDescription, result: UserJobResult | None) -> dict:
         matched, missing = [], []
     base["matched_skills"] = matched
     base["missing_skills"] = missing
+    base["score_breakdown"] = result.score_breakdown if result else {}
+    base["tailored_score_breakdown"] = result.tailored_score_breakdown if result else {}
     return base
 
 
@@ -243,11 +245,12 @@ async def export_job(job_id: str, format: str = "pdf", user: User = Depends(get_
     def _render():
         from agents.formatter import ResumeFormatterAgent
         agent = ResumeFormatterAgent(user.user_id)
+        section_order = tailored_content.get("_section_order")
         if format == "pdf":
-            return agent.format_pdf(tailored_content, job_title=job.title)
+            return agent.format_pdf(tailored_content, job_title=job.title, section_order=section_order)
         if format == "tex":
-            return agent.format_tex(tailored_content, job_title=job.title)
-        return agent.format_docx(tailored_content, job_title=job.title)
+            return agent.format_tex(tailored_content, job_title=job.title, section_order=section_order)
+        return agent.format_docx(tailored_content, job_title=job.title, section_order=section_order)
 
     content = await asyncio.to_thread(_render)
 

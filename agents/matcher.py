@@ -11,6 +11,7 @@ from database.models import (
 )
 from knowledge_graph.builder import SkillGraphBuilder
 from config import EMBEDDING_MODEL
+from agents.ats_scorer import ATSScoringEngine
 
 logger = logging.getLogger(__name__)
 
@@ -139,23 +140,37 @@ class SkillMatcherAgent:
 
                 missing_skills.append(skill_name)
 
-            # Calculate score
-            ats_score = (matched_weight / total_weight * 100) if total_weight > 0 else 0.0
+            # Calculate skill coverage score
+            skill_coverage = (matched_weight / total_weight * 100) if total_weight > 0 else 0.0
+
+            # Compute multi-factor ATS score (resume-matcher algorithm)
+            scorer = ATSScoringEngine()
+            try:
+                breakdown = scorer.score(user_id, job_id, session, skill_coverage)
+                composite = breakdown.get("composite", skill_coverage)
+            except Exception as e:
+                logger.warning(f"ATSScoringEngine failed, using skill coverage only: {e}")
+                breakdown = {}
+                composite = skill_coverage
 
             # Save result
             result = UserJobResult(
                 user_id=user_id,
                 job_id=job_id,
-                ats_score=round(ats_score, 1),
+                ats_score=round(composite, 1),
                 matched_skills=matched_skills,
                 missing_skills=missing_skills,
+                score_breakdown=breakdown,
             )
             session.add(result)
             session.commit()
             session.refresh(result)
 
-            logger.info(f"Match complete — ATS Score: {result.ats_score}%, "
-                        f"Matched: {len(matched_skills)}, Missing: {len(missing_skills)}")
+            logger.info(
+                f"Match complete — ATS Score: {result.ats_score}% (composite), "
+                f"Skill Coverage: {round(skill_coverage, 1)}%, "
+                f"Matched: {len(matched_skills)}, Missing: {len(missing_skills)}"
+            )
             return result
 
     def _check_indirect_match(self, job_skill_name: str, user_skill_names: set) -> str:
