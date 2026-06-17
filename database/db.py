@@ -70,6 +70,8 @@ def _migrate_db() -> None:
         'ALTER TABLE "user" ADD COLUMN linkedin_ingest_status TEXT',
         'ALTER TABLE "user" ADD COLUMN linkedin_ingest_error TEXT',
         'ALTER TABLE "user" ADD COLUMN linkedin_ingested_at TIMESTAMP',
+        # issue 13: per-kind usage cap (LinkedIn scrapes are paid; capped separately)
+        "ALTER TABLE aiusage ADD COLUMN kind TEXT DEFAULT 'ai'",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

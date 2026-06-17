@@ -1,19 +1,33 @@
 import { useState, useRef, type CSSProperties, type ChangeEvent } from "react";
 import { colors, font } from "../theme";
-import { ingestResume, ingestGithub, ingestGithubRepo } from "../api/ingest";
+import {
+  ingestResume, ingestGithub, ingestGithubRepo,
+  ingestLinkedin, ingestLinkedinPdf,
+} from "../api/ingest";
 
-type IngestTab = "resume" | "github";
+type IngestTab = "resume" | "github" | "linkedin";
 type GithubMode = "user" | "repo";
+type LinkedinMode = "url" | "pdf";
+
+const TAB_LABELS: Record<IngestTab, string> = {
+  resume: "Resume",
+  github: "GitHub",
+  linkedin: "LinkedIn",
+};
 
 export function IngestPanel() {
   const [tab, setTab] = useState<IngestTab>("resume");
   const [file, setFile] = useState<File | null>(null);
   const [githubMode, setGithubMode] = useState<GithubMode>("user");
   const [githubInput, setGithubInput] = useState("");
+  const [linkedinMode, setLinkedinMode] = useState<LinkedinMode>("url");
+  const [linkedinInput, setLinkedinInput] = useState("");
+  const [linkedinPdf, setLinkedinPdf] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const linkedinPdfRef = useRef<HTMLInputElement>(null);
 
   function reset() { setResult(null); setError(null); }
 
@@ -44,18 +58,33 @@ export function IngestPanel() {
     }
   }
 
+  async function handleIngestLinkedin() {
+    if (linkedinMode === "url" ? !linkedinInput.trim() : !linkedinPdf) return;
+    setLoading(true); reset();
+    try {
+      const { result: r } = linkedinMode === "url"
+        ? await ingestLinkedin(linkedinInput.trim())
+        : await ingestLinkedinPdf(linkedinPdf as File);
+      setResult(r);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ingestion failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div style={s.panel}>
       <h2 style={s.title}>Ingest</h2>
 
       <div style={s.tabStrip}>
-        {(["resume", "github"] as IngestTab[]).map(t => (
+        {(["resume", "github", "linkedin"] as IngestTab[]).map(t => (
           <button
             key={t}
             style={{ ...s.tabBtn, ...(tab === t ? s.tabBtnActive : {}) }}
             onClick={() => { setTab(t); reset(); }}
           >
-            {t === "resume" ? "Resume" : "GitHub"}
+            {TAB_LABELS[t]}
           </button>
         ))}
       </div>
@@ -116,6 +145,70 @@ export function IngestPanel() {
             disabled={!githubInput.trim() || loading}
           >
             {loading ? "Ingesting… (this may take a minute)" : "Ingest GitHub"}
+          </button>
+        </div>
+      )}
+
+      {tab === "linkedin" && (
+        <div style={s.section}>
+          <div style={s.modeRow}>
+            {(["url", "pdf"] as LinkedinMode[]).map(m => (
+              <label key={m} style={s.modeLabel}>
+                <input
+                  type="radio"
+                  name="linkedin-mode"
+                  value={m}
+                  checked={linkedinMode === m}
+                  onChange={() => { setLinkedinMode(m); reset(); }}
+                  style={{ accentColor: colors.accent }}
+                />
+                {m === "url" ? "Profile URL (auto-import)" : "Upload PDF export (fallback)"}
+              </label>
+            ))}
+          </div>
+
+          {linkedinMode === "url" ? (
+            <>
+              <p style={s.hint}>
+                Enter your LinkedIn profile URL or username. It also imports
+                automatically when you save your profile.
+              </p>
+              <input
+                style={s.textInput}
+                placeholder="e.g. https://www.linkedin.com/in/username"
+                value={linkedinInput}
+                onChange={e => setLinkedinInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleIngestLinkedin()}
+              />
+            </>
+          ) : (
+            <>
+              <p style={s.hint}>Upload a LinkedIn PDF export (Profile → More → Save to PDF).</p>
+              <input
+                ref={linkedinPdfRef}
+                type="file"
+                accept=".pdf"
+                style={{ display: "none" }}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setLinkedinPdf(e.target.files?.[0] ?? null)}
+              />
+              <div style={s.fileRow}>
+                <button style={s.chooseBtn} onClick={() => linkedinPdfRef.current?.click()}>
+                  Choose file
+                </button>
+                <span style={s.fileName}>{linkedinPdf ? linkedinPdf.name : "No file selected"}</span>
+              </div>
+            </>
+          )}
+
+          <button
+            style={{
+              ...s.ingestBtn,
+              opacity: (linkedinMode === "url" ? linkedinInput.trim() : linkedinPdf) && !loading ? 1 : 0.5,
+            }}
+            onClick={handleIngestLinkedin}
+            disabled={(linkedinMode === "url" ? !linkedinInput.trim() : !linkedinPdf) || loading}
+          >
+            {loading ? "Importing… (this may take a minute)" : "Import LinkedIn"}
           </button>
         </div>
       )}

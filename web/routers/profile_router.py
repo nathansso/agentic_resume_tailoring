@@ -7,13 +7,22 @@ from database.db import engine
 from database.models import User, UserSkill, Experience, Project
 from ingestion.linkedin import LinkedInIngestor
 from web.auth import get_current_user
+from web.routers.dependencies import linkedin_quota_remaining, increment_linkedin_usage
 from tui import services
 
 router = APIRouter(prefix="/api/profile", tags=["profile"])
 
 
-def _linkedin_ingest_task(user_id, url: str) -> None:
-    """Background job: scrape LinkedIn via Bright Data after a profile update."""
+def _linkedin_ingest_task(user_id, url: str, email: str = "") -> None:
+    """Background job: scrape LinkedIn via Bright Data after a profile update.
+
+    Self-guards against the daily LinkedIn cap so the auto-trigger path can't
+    bypass the rate limit enforced on the manual endpoint.
+    """
+    with Session(engine) as session:
+        if not linkedin_quota_remaining(session, user_id, email):
+            return
+        increment_linkedin_usage(user_id, session)
     services.ingest_linkedin(url, user_id)
 
 
@@ -92,7 +101,9 @@ def update_profile(
             normalized = None
         already = LinkedInIngestor._normalize_url(prev_ingested) if prev_ingested else None
         if normalized and normalized != already:
-            background.add_task(_linkedin_ingest_task, user.user_id, normalized)
+            background.add_task(
+                _linkedin_ingest_task, user.user_id, normalized, user.email
+            )
 
     return {"result": result}
 

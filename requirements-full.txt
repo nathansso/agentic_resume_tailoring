@@ -1,9 +1,6 @@
 # Full dependencies — adds heavyweight optional extras on top of core.
-# After installing, run: playwright install chromium
 #
-# For a lighter install without browser/ML, use requirements-core.txt instead.
+# For a lighter install without ML, use requirements-core.txt instead.
 -r requirements-core.txt
 # Semantic skill matching (downloads ~90 MB model on first use)
 sentence-transformers
-# LinkedIn web scraping via Chromium (requires: playwright install chromium)
-playwright

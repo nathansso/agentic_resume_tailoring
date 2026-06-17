@@ -4,6 +4,27 @@ All completed PRD deliveries are recorded here. PRDs remain as pure forward-look
 
 ---
 
+## Issue 13 — LinkedIn Ingestion via Bright Data
+**Status:** complete | **Tests:** 332 pass (10 new)
+
+Replaced the Playwright LinkedIn scraper with Bright Data's Web Scraper API and surfaced LinkedIn ingestion in the web app for the first time. The scrape auto-triggers when a user sets/changes their LinkedIn URL (the "initialize/update knowledge graph" moment) and runs in the background; PDF upload remains as a fallback.
+
+### What shipped
+- `ingestion/linkedin.py` — new `ingest_brightdata()` (trigger → poll `/progress` → download `/snapshot`) + `_brightdata_to_text()` flattener; removed `ingest_web` and the Playwright/bs4 scraping path. `ingest_pdf` fallback retained.
+- `config.py` — `BRIGHTDATA_API_KEY` (platform-wide) and `BRIGHTDATA_LINKEDIN_DATASET_ID` (default `gd_l1viktl72bvl7bjuj0`).
+- `database/models.py` + `database/db.py` — `User.linkedin_ingested_url/linkedin_ingest_status/linkedin_ingest_error/linkedin_ingested_at` columns + backward-compatible ALTER migrations.
+- `tui/services.py` — `ingest_linkedin(url, user_id)` records the importing/done/failed lifecycle; never raises.
+- `web/routers/ingest_router.py` — `POST /api/ingest/linkedin` and `/linkedin/pdf`.
+- `web/routers/profile_router.py` — `PATCH /api/profile` schedules a background ingest when the URL changes; GET exposes ingest status.
+- Frontend — LinkedIn tab in `IngestPanel` (URL + PDF fallback) and a live import-status indicator in `ProfilePanel`.
+- `cli.py` — `ingest-linkedin` rewired to Bright Data.
+- Deps — removed `playwright` from `requirements*.txt`, lockfile, and generator; repointed `test_deps_split.py` heavyweight checks to `sentence-transformers`.
+
+### Deviations from spec
+- Issue framed an optional per-user key with a "users without API access" fallback; shipped a platform-wide key (hosted SaaS) with PDF upload as the fallback when the key is unset.
+
+---
+
 ## PRD 10 — Persistent Per-Job Chat Memory
 **Status:** complete | **Tests:** 108 pass (6 new)
 

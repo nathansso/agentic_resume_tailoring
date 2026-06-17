@@ -5,10 +5,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, UploadFile
 from pydantic import BaseModel
+from sqlmodel import Session
 
+from database.db import get_session
 from database.models import User
 from database.user_utils import ACTIVE_PROFILE_FILE, ART_DIR
 from web.auth import get_current_user
+from web.routers.dependencies import check_linkedin_quota, increment_linkedin_usage
 from tui import services
 
 router = APIRouter(prefix="/api/ingest", tags=["ingest"])
@@ -75,9 +78,14 @@ async def ingest_github_repo(
 async def ingest_linkedin(
     body: LinkedInBody,
     user: User = Depends(get_current_user),
+    _: None = Depends(check_linkedin_quota),
+    session: Session = Depends(get_session),
 ):
-    """Manually trigger a Bright Data LinkedIn scrape (blocking)."""
+    """Manually trigger a Bright Data LinkedIn scrape (blocking, rate-limited)."""
     _write_active_profile(user.user_id)
+    # Count the attempt up front: a Bright Data call is about to be made, so a
+    # retry on a bad URL still consumes quota and can't hammer the paid API.
+    increment_linkedin_usage(user.user_id, session)
     result = await asyncio.to_thread(
         services.ingest_linkedin, body.url.strip(), user.user_id
     )
