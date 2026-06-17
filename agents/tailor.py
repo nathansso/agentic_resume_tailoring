@@ -30,6 +30,16 @@ logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 2
 
+
+def _as_obj(value, default):
+    """Normalise a JSON column that may round-trip as a JSON string on SQLite."""
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (ValueError, TypeError):
+            return default
+    return value if value is not None else default
+
 # Section ordering (issue #22). The name/contact header is rendered by the
 # formatter above all sections and is never part of section_order; education
 # stays pinned at the top of the reorderable body.
@@ -77,6 +87,12 @@ class ResumeTailorAgent:
             # Load context
             job = session.exec(select(JobDescription).where(JobDescription.job_id == job_id)).first()
             result = session.exec(select(UserJobResult).where(UserJobResult.result_id == result_id)).first()
+            # Defensive: JSON columns can round-trip as a JSON string on SQLite;
+            # normalise so downstream .get()/iteration is safe.
+            if result:
+                result.score_breakdown = _as_obj(result.score_breakdown, {})
+                result.matched_skills = _as_obj(result.matched_skills, {})
+                result.missing_skills = _as_obj(result.missing_skills, [])
             experiences = session.exec(select(Experience).where(Experience.user_id == user_id)).all()
             projects = session.exec(select(Project).where(Project.user_id == user_id)).all()
 
@@ -108,7 +124,7 @@ class ResumeTailorAgent:
                     "description": p.description,
                     "blurbs": {b.style: b.content for b in blurbs},
                     "linked_skills": self._count_linked_skills(p.name, p.repo_url, evidence_rows),
-                    "metrics": p.metrics or {},
+                    "metrics": _as_obj(p.metrics, {}),
                 })
 
             # Priority keywords: top missing JD keywords from latest score_breakdown

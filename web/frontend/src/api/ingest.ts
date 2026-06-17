@@ -33,3 +33,22 @@ export async function ingestGithubRepo(repoRef: string): Promise<{ result: strin
     credentials: "include",
   }));
 }
+
+export async function ingestLinkedin(url: string): Promise<{ result: string }> {
+  return json(await fetch("/api/ingest/linkedin", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+    credentials: "include",
+  }));
+}
+
+export async function ingestLinkedinPdf(file: File): Promise<{ result: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  return json(await fetch("/api/ingest/linkedin/pdf", {
+    method: "POST",
+    body: form,
+    credentials: "include",
+  }));
+}

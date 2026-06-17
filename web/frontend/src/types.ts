@@ -95,6 +95,9 @@ export interface ProfileData {
   location: string;
   github_username: string;
   linkedin_url: string;
+  linkedin_ingest_status: string | null;   // null | "importing" | "done" | "failed"
+  linkedin_ingest_error: string | null;
+  linkedin_ingested_at: string | null;
   skills: number;
   experiences: number;
   projects: number;

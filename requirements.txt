@@ -14,8 +14,7 @@ nltk
 scikit-learn
 # Optional but good for graph
 networkx
-# LinkedIn scraping
-playwright
+# HTML parsing (skill post-processing)
 beautifulsoup4
 # TUI
 textual

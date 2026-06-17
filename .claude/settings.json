@@ -1,16 +1,3 @@
 {
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "shell": "bash",
-            "statusMessage": "Committing and pushing Python changes...",
-            "command": "git status --porcelain -- '*.py' | grep -q . && git add -- '*.py' && git commit -m \"auto: $(git diff --cached --name-only | tr '\\n' ' ' | sed 's/ *$//')\" && git push || true"
-          }
-        ]
-      }
-    ]
-  }
+  "hooks": {}
 }

@@ -1,5 +1,4 @@
 import logging
-import time
 from typing import Dict, Any, List, Optional
 
 import requests
@@ -10,9 +9,9 @@ logger = logging.getLogger(__name__)
 
 # Bright Data Web Scraper API (issue 13)
 _BRIGHTDATA_BASE = "https://api.brightdata.com/datasets/v3"
-# Total time we'll wait for a snapshot to become ready before giving up.
-_POLL_TIMEOUT_SECONDS = 180
-_POLL_INTERVAL_SECONDS = 5
+# The synchronous /scrape endpoint blocks until the profile is collected; a
+# single LinkedIn profile is comfortably within this budget.
+_SCRAPE_TIMEOUT_SECONDS = 180
 
 
 class LinkedInIngestionError(RuntimeError):
@@ -40,10 +39,12 @@ class LinkedInIngestor:
 
     def ingest_brightdata(self, profile_url: str) -> Dict[str, Any]:
         """
-        Scrape a LinkedIn profile via Bright Data's Web Scraper API.
+        Scrape a single LinkedIn profile via Bright Data's Web Scraper API.
 
-        Flow: trigger a collection -> poll progress until ready -> download the
-        snapshot -> flatten the structured record into profile text.
+        Uses the synchronous /scrape endpoint: one POST collects the public
+        profile and returns the structured record directly, which we then
+        flatten into profile text. This is Bright Data's recommended flow for
+        per-profile (rather than bulk dataset) lookups.
 
         Args:
             profile_url: Full LinkedIn profile URL or a bare username.
@@ -58,16 +59,14 @@ class LinkedInIngestor:
             )
 
         profile_url = self._normalize_url(profile_url)
-        logger.info("Bright Data: triggering LinkedIn scrape for %s", profile_url)
+        logger.info("Bright Data: scraping LinkedIn profile %s", profile_url)
 
         headers = {
             "Authorization": f"Bearer {BRIGHTDATA_API_KEY}",
             "Content-Type": "application/json",
         }
 
-        snapshot_id = self._trigger(profile_url, headers)
-        self._wait_until_ready(snapshot_id, headers)
-        record = self._download(snapshot_id, headers)
+        record = self._scrape(profile_url, headers)
 
         profile_text = self._brightdata_to_text(record, profile_url)
         if len(profile_text.strip()) < 50:
@@ -87,18 +86,19 @@ class LinkedInIngestor:
             "full_text": profile_text,
         }
 
-    def _trigger(self, profile_url: str, headers: Dict[str, str]) -> str:
-        """Kick off a collection and return the snapshot id."""
+    def _scrape(self, profile_url: str, headers: Dict[str, str]) -> Dict[str, Any]:
+        """Synchronously scrape one profile and return the structured record."""
         try:
             resp = requests.post(
-                f"{_BRIGHTDATA_BASE}/trigger",
+                f"{_BRIGHTDATA_BASE}/scrape",
                 headers=headers,
                 params={
                     "dataset_id": BRIGHTDATA_LINKEDIN_DATASET_ID,
+                    "format": "json",
                     "include_errors": "true",
                 },
                 json=[{"url": profile_url}],
-                timeout=30,
+                timeout=_SCRAPE_TIMEOUT_SECONDS,
             )
             resp.raise_for_status()
         except requests.RequestException as exc:
@@ -106,59 +106,8 @@ class LinkedInIngestor:
                 f"Could not reach the LinkedIn import service: {exc}"
             ) from exc
 
-        snapshot_id = (resp.json() or {}).get("snapshot_id")
-        if not snapshot_id:
-            raise LinkedInIngestionError(
-                "LinkedIn import service did not return a snapshot id."
-            )
-        return snapshot_id
-
-    def _wait_until_ready(self, snapshot_id: str, headers: Dict[str, str]) -> None:
-        """Poll the progress endpoint until the snapshot is ready or fails."""
-        deadline = time.monotonic() + _POLL_TIMEOUT_SECONDS
-        while time.monotonic() < deadline:
-            try:
-                resp = requests.get(
-                    f"{_BRIGHTDATA_BASE}/progress/{snapshot_id}",
-                    headers=headers,
-                    timeout=30,
-                )
-                resp.raise_for_status()
-            except requests.RequestException as exc:
-                raise LinkedInIngestionError(
-                    f"Lost contact with the LinkedIn import service: {exc}"
-                ) from exc
-
-            status = (resp.json() or {}).get("status", "")
-            if status == "ready":
-                return
-            if status == "failed":
-                raise LinkedInIngestionError(
-                    "LinkedIn import failed — the profile could not be collected."
-                )
-            time.sleep(_POLL_INTERVAL_SECONDS)
-
-        raise LinkedInIngestionError(
-            "LinkedIn import timed out. Please try again in a few minutes."
-        )
-
-    def _download(self, snapshot_id: str, headers: Dict[str, str]) -> Dict[str, Any]:
-        """Download the snapshot and return the first profile record."""
-        try:
-            resp = requests.get(
-                f"{_BRIGHTDATA_BASE}/snapshot/{snapshot_id}",
-                headers=headers,
-                params={"format": "json"},
-                timeout=60,
-            )
-            resp.raise_for_status()
-        except requests.RequestException as exc:
-            raise LinkedInIngestionError(
-                f"Could not download the LinkedIn profile data: {exc}"
-            ) from exc
-
         data = resp.json()
-        # The snapshot may be a single object or a list of records.
+        # The response may be a single object or a list of records.
         if isinstance(data, list):
             records = [r for r in data if isinstance(r, dict)]
             if not records:
