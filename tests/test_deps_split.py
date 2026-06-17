@@ -14,8 +14,9 @@ REQ_CORE = ROOT / "requirements-core.txt"
 REQ_FULL = ROOT / "requirements-full.txt"
 REQ_ALL  = ROOT / "requirements.txt"
 
-# Packages deliberately excluded from core
-HEAVYWEIGHT = {"sentence_transformers"}
+# Packages deliberately excluded from core (full-only extras; require heavy
+# post-install steps — e.g. `playwright install chromium`).
+HEAVYWEIGHT = {"sentence_transformers", "playwright"}
 
 
 def _direct_packages(path: Path) -> set[str]:
