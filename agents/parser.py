@@ -37,7 +37,8 @@ class ResumeParserAgent:
 
         # 2. Extract Projects
         projects = self._extract_projects(raw_text)
-        self._save_projects(projects, source_file)
+        repo_metrics = ingestion_data.get("repo_metrics") or {}
+        self._save_projects(projects, source_file, repo_metrics)
 
         # 3. Extract Skills — use specialized prompt for GitHub repos
         if is_github:
@@ -153,10 +154,14 @@ class ResumeParserAgent:
                 session.add(exp)
             session.commit()
 
-    def _save_projects(self, data: List[Dict], source: str):
+    def _save_projects(self, data: List[Dict], source: str, repo_metrics: Dict[str, Dict] = None):
+        # GitHub signals keyed by repo name (issue #46) — matched case-insensitively
+        # against extracted project names so complexity scoring can use them later.
+        metrics_by_name = {k.lower(): v for k, v in (repo_metrics or {}).items()}
         with Session(engine) as session:
             for item in data:
                 name = item.get("name", "Unknown")
+                metrics = metrics_by_name.get(name.lower(), {})
 
                 # Dedup by project name for this user
                 existing = session.exec(
@@ -166,6 +171,10 @@ class ResumeParserAgent:
                     )
                 ).first()
                 if existing:
+                    if metrics:
+                        # Re-ingest: refresh GitHub signals on the existing row
+                        existing.metrics = metrics
+                        session.add(existing)
                     logger.debug(f"Skipping duplicate project: {name}")
                     continue
 
@@ -175,7 +184,8 @@ class ResumeParserAgent:
                     description=item.get("description"),
                     repo_url=item.get("repo_url"),
                     start_date=item.get("start_date"),
-                    end_date=item.get("end_date")
+                    end_date=item.get("end_date"),
+                    metrics=metrics,
                 )
                 session.add(proj)
             session.commit()

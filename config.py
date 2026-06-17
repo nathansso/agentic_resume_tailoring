@@ -32,6 +32,13 @@ GITHUB_USERNAME = os.getenv("GITHUB_USERNAME")
 GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
 GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
 
+# Bright Data LinkedIn scraping (issue 13) — platform-wide key; LinkedIn
+# ingestion is disabled (falls back to PDF upload) when the key is unset.
+BRIGHTDATA_API_KEY = os.getenv("BRIGHTDATA_API_KEY")
+BRIGHTDATA_LINKEDIN_DATASET_ID = os.getenv(
+    "BRIGHTDATA_LINKEDIN_DATASET_ID", "gd_l1viktl72bvl7bjuj0"
+)
+
 # LLM Provider Config
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")  # "anthropic" or "openai"
 

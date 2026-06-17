@@ -20,6 +20,9 @@ from agents.formatter import (
     _compile_tex_to_pdf,
     _convert_inline,
     _escape_tex,
+    _fit_to_one_page,
+    _pdf_page_count,
+    _trim_one_bullet,
 )
 from database.models import Skill, User, UserSkill
 
@@ -257,6 +260,17 @@ def test_tex_section_order_respected(isolated_engine, monkeypatch):
     )
     assert tex.index(r"\section{Projects}") < tex.index(r"\section{Experience}")
 
+def test_tex_header_stays_above_sections_with_custom_order(isolated_engine, monkeypatch):
+    """Name/contact header is pinned at the top regardless of section_order (issue 22)."""
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(
+        _JAKE_CONTENT, section_order=["projects", "skills", "experience", "education"]
+    )
+    first_section = tex.index(r"\section{")
+    assert tex.index("Jake Ryan") < first_section
+    assert tex.index("123-456-7890") < first_section
+
 def test_tex_special_chars_escaped(isolated_engine, monkeypatch):
     monkeypatch.setattr(fmt_module, "engine", isolated_engine)
     content = {
@@ -357,3 +371,161 @@ def test_pdflatex_produces_valid_pdf(isolated_engine, monkeypatch):
     with open(downloads, "wb") as f:
         f.write(pdf_bytes)
     assert os.path.exists(downloads)
+
+
+# ── one-page fit enforcement (issue #34), pure logic — no LaTeX engine ─────────
+
+def test_trim_one_bullet_drops_lowest_project_first():
+    content = {
+        "projects": [
+            {"name": "A", "bullets": ["a1", "a2"]},
+            {"name": "B", "bullets": ["b1", "b2"]},
+        ],
+    }
+    trimmed = _trim_one_bullet(content)
+    # Lowest-priority project is last (B) — its last bullet goes first.
+    assert trimmed["projects"][1]["bullets"] == ["b1"]
+    assert trimmed["projects"][0]["bullets"] == ["a1", "a2"]
+    # Original is untouched (operates on a copy).
+    assert content["projects"][1]["bullets"] == ["b1", "b2"]
+
+
+def test_trim_one_bullet_never_empties_a_project():
+    content = {"projects": [{"name": "A", "bullets": ["only"]}]}
+    # A single-bullet project can't be trimmed; with no other text, returns None.
+    assert _trim_one_bullet(content) is None
+
+
+def test_trim_one_bullet_falls_back_to_experiences():
+    content = {
+        "projects": [{"name": "A", "bullets": ["a1"]}],
+        "experiences": [{"title": "T", "bullets": ["e1", "e2"]}],
+    }
+    trimmed = _trim_one_bullet(content)
+    assert trimmed["experiences"][0]["bullets"] == ["e1"]
+    assert trimmed["projects"][0]["bullets"] == ["a1"]
+
+
+def test_trim_one_bullet_exhausted_returns_none():
+    content = {
+        "projects": [{"name": "A", "bullets": ["a"]}],
+        "experiences": [{"title": "T", "bullets": ["e"]}],
+    }
+    assert _trim_one_bullet(content) is None
+
+
+def test_fit_to_one_page_trims_until_it_fits():
+    # Fake render/page-count: "fits" once total bullets <= 3.
+    def total_bullets(c):
+        return sum(len(i["bullets"]) for i in c.get("projects", []))
+
+    def page_count(rendered):
+        return 1 if rendered <= 3 else 2
+
+    content = {
+        "projects": [
+            {"name": "A", "bullets": ["a1", "a2", "a3"]},
+            {"name": "B", "bullets": ["b1", "b2", "b3"]},
+        ],
+    }
+    fitted = _fit_to_one_page(content, total_bullets, page_count)
+    assert total_bullets(fitted) == 3
+    # Trimming came out of the lowest project (B) first.
+    assert len(fitted["projects"][0]["bullets"]) >= len(fitted["projects"][1]["bullets"])
+
+
+def test_fit_to_one_page_stops_when_exhausted():
+    # Never fits, but the reducer bottoms out — loop must terminate, not hang.
+    content = {"projects": [{"name": "A", "bullets": ["a1", "a2"]}]}
+    fitted = _fit_to_one_page(content, lambda c: 0, lambda r: 2)
+    assert fitted["projects"][0]["bullets"] == ["a1"]  # trimmed to the floor, then stopped
+
+
+def test_fit_enforcement_keeps_preamble_byte_identical(isolated_engine, monkeypatch):
+    """Trimming text must not alter the preamble/geometry/font (issue #34)."""
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    agent = ResumeFormatterAgent(user.user_id)
+
+    trimmed_content = _trim_one_bullet(_JAKE_CONTENT)
+    assert trimmed_content is not None
+
+    baseline_tex = agent.format_tex(_JAKE_CONTENT)
+    trimmed_tex = agent.format_tex(trimmed_content)
+
+    def preamble(tex):
+        return tex.split(r"\begin{document}")[0]
+
+    assert preamble(baseline_tex) == preamble(trimmed_tex)
+
+
+# ── one-page fit enforcement (issue #34), integration — requires a LaTeX engine ─
+
+# A deliberately long resume: 4 dense projects + 3 experiences overflow one page.
+_OVERFLOW_CONTENT = {
+    "experiences": [
+        {
+            "title": f"Senior Engineer {n}",
+            "company": f"Company {n}",
+            "start_date": "Jan 2020",
+            "end_date": "Present",
+            "location": "Remote",
+            "bullets": [
+                "Built scalable distributed services handling millions of requests per day with python and go",
+                "Led a team designing fault-tolerant data pipelines on kubernetes with terraform and airflow",
+                "Reduced infrastructure cost 40% by re-architecting the streaming layer around kafka and redis",
+                "Mentored five engineers and drove adoption of rigorous integration testing and observability",
+            ],
+        }
+        for n in range(3)
+    ],
+    "projects": [
+        {
+            "name": f"Project {n}",
+            "tech_stack": "Python, FastAPI, React, PostgreSQL, Docker, Kubernetes",
+            "dates": "2021 -- Present",
+            "bullets": [
+                "Developed a full-stack platform with fastapi and react serving thousands of users",
+                "Implemented oauth, role-based access control, and audit logging across the system",
+                "Containerized the deployment with docker and kubernetes and automated ci/cd pipelines",
+                "Instrumented grafana dashboards and structured logging for production observability",
+            ],
+        }
+        for n in range(4)
+    ],
+    "skills_emphasized": ["Python", "React", "Kubernetes"],
+}
+
+
+def _no_latex_engine() -> bool:
+    return not shutil.which("tectonic") and not shutil.which("pdflatex") and not any(
+        os.path.exists(os.path.join(os.path.dirname(__import__("sys").executable), exe))
+        for exe in ("tectonic.exe", "tectonic")
+    )
+
+
+@pytest.mark.integration
+def test_format_pdf_overflow_fits_one_page(isolated_engine, monkeypatch):
+    """A long 4-project resume is trimmed down to exactly one page (k=4 case)."""
+    if _no_latex_engine():
+        pytest.skip("no LaTeX engine (tectonic/pdflatex) installed")
+
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    pdf_bytes = ResumeFormatterAgent(user.user_id).format_pdf(_OVERFLOW_CONTENT)
+
+    assert pdf_bytes[:4] == b"%PDF"
+    assert _pdf_page_count(pdf_bytes) == 1
+
+
+@pytest.mark.integration
+def test_format_pdf_short_resume_stays_one_page(isolated_engine, monkeypatch):
+    """A 2-project resume already fits and is returned as one page (k=2 case)."""
+    if _no_latex_engine():
+        pytest.skip("no LaTeX engine (tectonic/pdflatex) installed")
+
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    pdf_bytes = ResumeFormatterAgent(user.user_id).format_pdf(_JAKE_CONTENT)
+
+    assert _pdf_page_count(pdf_bytes) == 1

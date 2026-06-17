@@ -1,6 +1,8 @@
-# TUI — Local Guidelines
+# TUI — Local Guidelines (DEPRECATED)
 
-Use this file for work under `tui/`.
+> **The TUI is deprecated.** The web app (https://artie-resume-tailoring.fly.dev/) is the primary implementation. TUI code is retained for reference only — do not add new features, screens, or tests here. All new work goes in `web/`.
+
+Use this file for work under `tui/` if reading legacy code.
 
 ## Scope and precedence
 

@@ -1,13 +1,20 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
+from config import BRIGHTDATA_API_KEY
 from database.db import engine
 from database.models import User, UserSkill, Experience, Project
+from ingestion.linkedin import LinkedInIngestor
 from web.auth import get_current_user
 from tui import services
 
 router = APIRouter(prefix="/api/profile", tags=["profile"])
+
+
+def _linkedin_ingest_task(user_id, url: str) -> None:
+    """Background job: scrape LinkedIn via Bright Data after a profile update."""
+    services.ingest_linkedin(url, user_id)
 
 
 class UpdateProfileBody(BaseModel):
@@ -47,6 +54,9 @@ def get_profile(user: User = Depends(get_current_user)):
         "location": user.location or "",
         "github_username": user.github_username or "",
         "linkedin_url": user.linkedin_url or "",
+        "linkedin_ingest_status": user.linkedin_ingest_status,
+        "linkedin_ingest_error": user.linkedin_ingest_error,
+        "linkedin_ingested_at": user.linkedin_ingested_at.isoformat() if user.linkedin_ingested_at else None,
         "skills": skill_count,
         "experiences": exp_count,
         "projects": proj_count,
@@ -55,7 +65,12 @@ def get_profile(user: User = Depends(get_current_user)):
 
 
 @router.patch("/")
-def update_profile(body: UpdateProfileBody, user: User = Depends(get_current_user)):
+def update_profile(
+    body: UpdateProfileBody,
+    background: BackgroundTasks,
+    user: User = Depends(get_current_user),
+):
+    prev_ingested = user.linkedin_ingested_url
     result = services.update_profile(
         user_id=user.user_id,
         name=body.name,
@@ -65,6 +80,20 @@ def update_profile(body: UpdateProfileBody, user: User = Depends(get_current_use
         email=body.email,
         location=body.location,
     )
+
+    # Auto-trigger LinkedIn ingestion when the URL is newly set or changed.
+    # This is the "initialize / update the knowledge graph" hook: the scrape
+    # runs in the background so the save returns immediately.
+    new_url = (body.linkedin_url or "").strip()
+    if new_url and BRIGHTDATA_API_KEY:
+        try:
+            normalized = LinkedInIngestor._normalize_url(new_url)
+        except Exception:
+            normalized = None
+        already = LinkedInIngestor._normalize_url(prev_ingested) if prev_ingested else None
+        if normalized and normalized != already:
+            background.add_task(_linkedin_ingest_task, user.user_id, normalized)
+
     return {"result": result}
 
 

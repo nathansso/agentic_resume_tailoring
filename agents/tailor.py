@@ -9,6 +9,7 @@ Flow:
 """
 import logging
 import json
+import re
 from typing import Dict, Any, List, TypedDict, Annotated
 from uuid import UUID
 from sqlmodel import Session, select
@@ -22,10 +23,18 @@ from database.models import (
     User, Experience, Project, ProjectBlurb, Skill, UserSkill,
     JobDescription, JobSkill, UserJobResult,
 )
+from agents.ats_scorer import ATSScoringEngine
+from agents.project_scorer import MAX_PROJECTS, score_project, select_top_k
 
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 2
+
+# Section ordering (issue #22). The name/contact header is rendered by the
+# formatter above all sections and is never part of section_order; education
+# stays pinned at the top of the reorderable body.
+PINNED_SECTIONS = ["education"]
+REORDERABLE_SECTIONS = ["experience", "projects", "skills"]
 
 
 class TailorState(TypedDict):
@@ -37,6 +46,8 @@ class TailorState(TypedDict):
     job_text: str             # Raw job description
     matched_skills: Dict      # From SkillMatcherAgent
     missing_skills: List[str]
+    priority_keywords: List[str]  # Top missing JD keywords from ATSScoringEngine
+    baseline_breakdown: Dict  # Pre-tailor score_breakdown for delta comparison (issue #12)
     experiences: List[Dict]
     projects: List[Dict]
     tailored_content: Dict    # The generated tailored resume sections
@@ -81,25 +92,46 @@ class ResumeTailorAgent:
                 for e in experiences
             ]
 
-            proj_dicts = []
+            # Skill evidence rows for the knowledge-graph degree signal (issue #46)
+            evidence_rows = session.exec(
+                select(UserSkill.skill_id, UserSkill.evidence_source, UserSkill.evidence_detail)
+                .where(UserSkill.user_id == user_id)
+            ).all()
+
+            proj_dicts_all = []
             for p in projects:
                 blurbs = session.exec(
                     select(ProjectBlurb).where(ProjectBlurb.project_id == p.project_id)
                 ).all()
-                proj_dicts.append({
+                proj_dicts_all.append({
                     "name": p.name,
                     "description": p.description,
                     "blurbs": {b.style: b.content for b in blurbs},
+                    "linked_skills": self._count_linked_skills(p.name, p.repo_url, evidence_rows),
+                    "metrics": p.metrics or {},
                 })
+
+            # Priority keywords: top missing JD keywords from latest score_breakdown
+            jd_text = job.description if job else ""
+            priority_keywords: List[str] = []
+            if result and result.score_breakdown:
+                kd = result.score_breakdown.get("keyword_coverage", {})
+                priority_keywords = (kd.get("missing_keywords") or [])[:15]
+
+            # Project pre-selection: score projects by JD relevance + depth and
+            # dynamically choose the top-k (issue #47), ordered descending by score.
+            proj_dicts = self._score_and_select_projects(proj_dicts_all, jd_text)
 
         initial_state: TailorState = {
             "user_id": str(user_id),
             "job_id": str(job_id),
             "result_id": str(result_id),
             "resume_text": resume_text,
-            "job_text": job.description if job else "",
+            "job_text": jd_text,
             "matched_skills": result.matched_skills if result else {},
             "missing_skills": result.missing_skills if result else [],
+            "priority_keywords": priority_keywords,
+            "baseline_breakdown": (result.score_breakdown or {}) if result else {},
             "experiences": exp_dicts,
             "projects": proj_dicts,
             "tailored_content": {},
@@ -110,6 +142,14 @@ class ResumeTailorAgent:
 
         final_state = self.graph.invoke(initial_state)
 
+        # Job-specific section order (issue #22), persisted with the content so
+        # the stateless export endpoints can read it later.
+        tailored = final_state["tailored_content"]
+        if tailored and "error" not in tailored:
+            tailored["_section_order"] = self._ranked_section_order(
+                tailored, final_state["matched_skills"], final_state["job_text"]
+            )
+
         # Save to DB
         with Session(engine) as session:
             result = session.exec(
@@ -117,6 +157,7 @@ class ResumeTailorAgent:
             ).first()
             if result:
                 result.tailored_resume_content = final_state["tailored_content"]
+                result.tailored_score_breakdown = final_state["evaluation"].get("ats_breakdown", {})
                 session.add(result)
                 session.commit()
 
@@ -146,10 +187,15 @@ class ResumeTailorAgent:
 
         feedback = ""
         if state["evaluation"]:
+            ev = state["evaluation"]
+            skill_gaps = ev.get("gaps", [])
+            kw_gaps = ev.get("kw_gaps", [])
             feedback = (
                 f"\n\nPREVIOUS ATTEMPT FEEDBACK:\n"
-                f"Coverage was {state['evaluation'].get('coverage_pct', 0)}%. "
-                f"Missing emphasis on: {', '.join(state['evaluation'].get('gaps', []))}. "
+                f"Skill coverage: {ev.get('coverage_pct', 0)}%. "
+                f"Keyword coverage: {ev.get('kw_coverage', 0)}%.\n"
+                f"Missing skill emphasis: {', '.join(skill_gaps) or 'none'}.\n"
+                f"Missing keywords to incorporate naturally: {', '.join(kw_gaps) or 'none'}.\n"
                 f"Please address these gaps."
             )
 
@@ -157,6 +203,7 @@ class ResumeTailorAgent:
         missing_str = ", ".join(state["missing_skills"])
         exp_str = json.dumps(state["experiences"], indent=2)
         proj_str = json.dumps(state["projects"], indent=2)
+        kw_str = ", ".join(state.get("priority_keywords", []))
 
         prompt = ChatPromptTemplate.from_messages([
             ("system",
@@ -165,15 +212,19 @@ class ResumeTailorAgent:
              "- NEVER fabricate experiences, skills, or metrics the candidate doesn't have\n"
              "- Emphasize matched skills by reordering bullets and adjusting language\n"
              "- For projects with multiple blurb styles, select the style that best fits the job\n"
+             "- Keep projects in the given order; they are pre-ranked by job relevance (most relevant first)\n"
              "- Rewrite experience bullets to highlight relevant skills where truthful\n"
+             "- Incorporate PRIORITY JD KEYWORDS naturally into bullets where truthfully applicable\n"
+             "- List the most relevant experiences first based on keyword relevance\n"
              "- Keep the same structure: experiences and projects sections\n"
              "- Respond with ONLY valid JSON, no extra text"),
             ("user",
              "JOB DESCRIPTION:\n{job_text}\n\n"
              "MATCHED SKILLS:\n{matched_skills}\n\n"
-             "MISSING SKILLS (do NOT fabricate these):\n{missing_skills}\n\n"
+             "MISSING SKILLS:\n{missing_skills}\n\n"
+             "PRIORITY JD KEYWORDS — incorporate naturally where truthful (do NOT add if not applicable):\n{priority_keywords}\n\n"
              "CANDIDATE EXPERIENCES:\n{experiences}\n\n"
-             "CANDIDATE PROJECTS (with style variants):\n{projects}\n\n"
+             "CANDIDATE PROJECTS (with style variants, pre-scored by job relevance + project depth):\n{projects}\n\n"
              "{feedback}\n\n"
              "Return JSON with this structure:\n"
              '{{"experiences": [{{"title": "...", "company": "...", "start_date": "...", '
@@ -188,10 +239,17 @@ class ResumeTailorAgent:
                 "job_text": state["job_text"][:3000],  # Truncate to fit context
                 "matched_skills": matched_str,
                 "missing_skills": missing_str,
+                "priority_keywords": kw_str or "(none)",
                 "experiences": exp_str,
                 "projects": proj_str,
                 "feedback": feedback,
             })
+            # Guarantee projects stay in the pre-ranked (descending-score) order even
+            # if the LLM reorders or drops them in its JSON output (issue #47).
+            if isinstance(tailored, dict) and tailored.get("projects"):
+                tailored["projects"] = self._order_projects_by_selection(
+                    tailored["projects"], [p["name"] for p in state["projects"]]
+                )
             state["tailored_content"] = tailored
         except Exception as e:
             logger.error(f"Generation failed: {e}")
@@ -209,31 +267,48 @@ class ResumeTailorAgent:
             state["done"] = True
             return state
 
-        # Count how many matched skills appear in the tailored output
-        tailored_str = json.dumps(state["tailored_content"]).lower()
-        matched = state["matched_skills"]
-        total = len(matched)
-        covered = 0
-        gaps = []
+        # Algorithmic ATS breakdown of the tailored output (issue #12): same
+        # engine as the pre-tailor baseline, so the two are directly comparable.
+        breakdown = ATSScoringEngine.score_tailored(
+            state["tailored_content"],
+            state["job_text"],
+            matched_skills=state["matched_skills"],
+            baseline_breakdown=state.get("baseline_breakdown") or None,
+        )
 
-        for skill_name in matched:
-            if skill_name.lower() in tailored_str:
-                covered += 1
-            else:
-                gaps.append(skill_name)
+        skill = breakdown["skill_coverage"]
+        skill_coverage_pct = skill["score"]
 
-        coverage_pct = (covered / total * 100) if total > 0 else 100
+        # Retry threshold stays priority-keyword based: full-JD coverage of a
+        # sections-only output is structurally low and would always trigger retries.
+        tailored_str = ATSScoringEngine.flatten_tailored_text(state["tailored_content"]).lower()
+        priority_keywords = state.get("priority_keywords", [])
+        kw_hits = sum(1 for kw in priority_keywords if kw in tailored_str)
+        kw_coverage = kw_hits / len(priority_keywords) if priority_keywords else 1.0
+        kw_gaps = [kw for kw in priority_keywords if kw not in tailored_str]
+        if not kw_gaps:
+            kw_gaps = breakdown["keyword_coverage"]["missing_keywords"]
 
         state["evaluation"] = {
-            "coverage_pct": round(coverage_pct, 1),
-            "covered": covered,
-            "total": total,
-            "gaps": gaps,
+            "coverage_pct": round(skill_coverage_pct, 1),
+            "covered": skill["covered"],
+            "total": skill["total"],
+            "gaps": skill["gaps"],
+            "kw_coverage": round(kw_coverage * 100, 1),
+            "kw_gaps": kw_gaps[:10],
+            "ats_breakdown": breakdown,
         }
 
-        logger.info(f"Coverage: {coverage_pct:.1f}% ({covered}/{total} skills mentioned)")
+        logger.info(
+            f"Coverage: skills {skill_coverage_pct:.1f}% ({skill['covered']}/{skill['total']}), "
+            f"priority keywords {kw_coverage * 100:.1f}% ({kw_hits}/{len(priority_keywords)}), "
+            f"algorithmic composite {breakdown['composite']}"
+            + (f" (baseline {breakdown['baseline_composite']}, delta {breakdown['delta']:+})"
+               if "delta" in breakdown else "")
+        )
 
-        if coverage_pct >= 75 or state["attempt"] >= MAX_RETRIES:
+        coverage_ok = skill_coverage_pct >= 75 and kw_coverage >= 0.60
+        if coverage_ok or state["attempt"] >= MAX_RETRIES:
             state["done"] = True
 
         return state
@@ -243,3 +318,131 @@ class ResumeTailorAgent:
         if state["done"]:
             return "done"
         return "retry"
+
+    @staticmethod
+    def _score_section_relevance(
+        section_key: str,
+        tailored_content: Dict,
+        matched_skills: Dict,
+        jd_text: str,
+    ) -> float:
+        """
+        Fraction of a section's content tokens that overlap the matched skill
+        names and JD keywords. Higher = more relevant to this job (issue #22).
+        """
+        text = ATSScoringEngine.flatten_section_text(tailored_content, section_key)
+        tokens = ATSScoringEngine._extract_keywords(text)
+        if not tokens:
+            return 0.0
+        relevant = ATSScoringEngine._extract_keywords(
+            " ".join(matched_skills or {}) + " " + (jd_text or "")
+        )
+        if not relevant:
+            return 0.0
+        return len(tokens & relevant) / len(tokens)
+
+    @classmethod
+    def _ranked_section_order(
+        cls,
+        tailored_content: Dict,
+        matched_skills: Dict,
+        jd_text: str,
+    ) -> List[str]:
+        """Pinned sections first, then reorderable sections by relevance score."""
+        scores = {
+            key: cls._score_section_relevance(key, tailored_content, matched_skills, jd_text)
+            for key in REORDERABLE_SECTIONS
+        }
+        # Stable sort: ties keep the default section order
+        ranked = sorted(REORDERABLE_SECTIONS, key=lambda k: scores[k], reverse=True)
+        logger.debug("Section relevance: %s", scores)
+        return PINNED_SECTIONS + ranked
+
+    @staticmethod
+    def _count_linked_skills(project_name: str, repo_url: str, evidence_rows: List) -> int:
+        """
+        Knowledge-graph degree: distinct skills whose evidence references this
+        project, matched by repo slug (owner/repo from repo_url) or project
+        name against UserSkill.evidence_source/evidence_detail (issue #46).
+        """
+        needles = set()
+        if repo_url:
+            m = re.search(r"github\.com/([^/\s]+/[^/\s]+?)(?:\.git)?/?$", repo_url)
+            if m:
+                needles.add(m.group(1).lower())
+        if project_name:
+            needles.add(project_name.lower())
+        if not needles:
+            return 0
+
+        skill_ids = set()
+        for skill_id, source, detail in evidence_rows:
+            haystack = f"{source or ''} {detail or ''}".lower()
+            if any(n in haystack for n in needles):
+                skill_ids.add(skill_id)
+        return len(skill_ids)
+
+    @staticmethod
+    def _order_projects_by_selection(
+        generated: List[Dict], order_names: List[str]
+    ) -> List[Dict]:
+        """
+        Reorder LLM-generated projects to match the pre-ranked selection order
+        (descending by score, issue #47). Projects are keyed by 'name'; any whose
+        name isn't in `order_names` (e.g. renamed by the LLM) are kept in their
+        original relative order and appended at the end. Stable on ties.
+        """
+        rank = {name: i for i, name in enumerate(order_names)}
+        fallback = len(order_names)
+        return sorted(
+            generated,
+            key=lambda p: rank.get(p.get("name"), fallback),
+        )
+
+    # Keys consumed by the selection scorer but not meant for the LLM prompt
+    _SCORING_INPUT_KEYS = ("linked_skills", "metrics")
+
+    @classmethod
+    def _score_and_select_projects(
+        cls,
+        proj_dicts: List[Dict],
+        jd_text: str,
+    ) -> List[Dict]:
+        """
+        Rank projects by composite selection score (ATS relevance + complexity,
+        issue #46) and dynamically select the top-k via the drop-off + bounds rule
+        (issue #47). Adds a 'selection_score' and per-component 'selection_breakdown'
+        hint to each selected project so the LLM knows which are most relevant, and
+        returns them ordered descending by score.
+        """
+        if not proj_dicts:
+            return []
+
+        def strip(p: Dict) -> Dict:
+            return {k: v for k, v in p.items() if k not in cls._SCORING_INPUT_KEYS}
+
+        jd_keywords = ATSScoringEngine._extract_keywords(jd_text)
+        if not jd_keywords:
+            # No JD signal to score against — fall back to the first MAX_PROJECTS.
+            return [strip(p) for p in proj_dicts[:MAX_PROJECTS]]
+
+        scored = []
+        for p in proj_dicts:
+            breakdown = score_project(p, jd_text)
+            scored.append({
+                **strip(p),
+                "selection_score": breakdown["composite"],
+                "selection_breakdown": {
+                    "relevance": breakdown["relevance"]["score"],
+                    "complexity": breakdown["complexity"]["score"],
+                },
+            })
+
+        scored.sort(key=lambda x: x["selection_score"], reverse=True)
+        selected = select_top_k(scored)
+        logger.debug(
+            "Project selection (k=%d of %d): %s",
+            len(selected), len(scored),
+            [(p["name"], p["selection_score"], p["selection_breakdown"]) for p in selected],
+        )
+        return selected

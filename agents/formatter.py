@@ -196,6 +196,70 @@ def _compile_tex_to_pdf(tex_str: str) -> bytes:
             return f.read()
 
 
+# ── One-page fit enforcement (issue #34) ──────────────────────────────────────
+
+
+def _pdf_page_count(pdf_bytes: bytes) -> int:
+    """Number of pages in a PDF byte string, via pypdf."""
+    import io
+
+    from pypdf import PdfReader
+
+    return len(PdfReader(io.BytesIO(pdf_bytes)).pages)
+
+
+def _trim_one_bullet(content: Dict) -> Optional[Dict]:
+    """
+    Return a copy of `content` with exactly one bullet removed, or None when
+    nothing more can be trimmed (issue #34). Text-only reduction — never touches
+    the preamble, geometry, font, section list, or skills.
+
+    Ladder (so the space cost of richer content comes out of the least valuable
+    text first):
+      1. Drop the last bullet of the lowest-priority project, walking projects
+         bottom-up. Projects are pre-ordered descending by relevance (issue #47),
+         so the last project is the least relevant. Never empty a project below one
+         bullet so it still reads.
+      2. As a last resort (project-light resumes), drop the last bullet of the
+         lowest experience, also keeping at least one bullet.
+    """
+    import copy
+
+    trimmed = copy.deepcopy(content)
+
+    for section in ("projects", "experiences"):
+        items = trimmed.get(section)
+        if not isinstance(items, list):
+            continue
+        for item in reversed(items):
+            bullets = item.get("bullets")
+            if isinstance(bullets, list) and len(bullets) > 1:
+                bullets.pop()
+                return trimmed
+
+    return None
+
+
+def _fit_to_one_page(content: Dict, render_fn, page_count_fn, max_iters: int = 30) -> Dict:
+    """
+    Deterministically shrink `content` until it renders to one page (issue #34).
+
+    `render_fn(content) -> pdf_bytes` and `page_count_fn(pdf_bytes) -> int` are
+    injected so the loop is testable without a real LaTeX engine. Returns the final
+    content dict (the caller renders it once more, or reuses the last render). Stops
+    when the content fits, the reducer is exhausted, or `max_iters` is reached.
+    """
+    current = content
+    for _ in range(max_iters):
+        if page_count_fn(render_fn(current)) <= 1:
+            return current
+        reduced = _trim_one_bullet(current)
+        if reduced is None:
+            return current
+        current = reduced
+    return current
+
+
 def sanitize_text(text: str) -> str:
     """Replace common Unicode characters with ASCII-safe equivalents."""
     for char, rep in {
@@ -251,10 +315,23 @@ class ResumeFormatterAgent:
         job_title: str = "",
         section_order: Optional[List[str]] = None,
     ) -> bytes:
-        """Compile to PDF via pdflatex and return raw bytes."""
-        return _compile_tex_to_pdf(
-            self._build_tex(tailored_content, section_order=section_order)
-        )
+        """
+        Compile to PDF and return raw bytes, enforcing a strict one-page layout
+        (issue #34). A resume that already fits compiles exactly once (fast path);
+        an overflowing one has bullet text trimmed deterministically and is
+        recompiled until it fits — font, margins, and spacing are never changed.
+        """
+        def render(content: Dict) -> bytes:
+            return _compile_tex_to_pdf(
+                self._build_tex(content, section_order=section_order)
+            )
+
+        pdf_bytes = render(tailored_content)
+        if _pdf_page_count(pdf_bytes) <= 1:
+            return pdf_bytes
+
+        fitted = _fit_to_one_page(tailored_content, render, _pdf_page_count)
+        return render(fitted)
 
     # ── DOCX ──────────────────────────────────────────────────────────────────
 

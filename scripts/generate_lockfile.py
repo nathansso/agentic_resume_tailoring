@@ -25,7 +25,6 @@ HEADER = """\
 # so this file is safe to use on Linux (e.g. Docker) without modification.
 #
 # Install:  pip install -r requirements-lock.txt
-#           playwright install chromium   (required post-install step)
 #
 """
 
