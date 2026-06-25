@@ -503,29 +503,19 @@ class ResumeFormatterAgent:
                         _bullet(b)
 
             elif key == "skills":
-                cats = self._get_skill_categories()
+                ranked = tailored_content.get("skills_ranked")
+                cats = self._get_skill_categories(ranked)
                 if not cats:
                     continue
                 _section_heading("Technical Skills")
-                cat_order = [
-                    "Languages & Libraries", "AI & Machine Learning",
-                    "Data Engineering", "Tools", "Cloud", "Other",
-                ]
                 p = doc.add_paragraph()
                 p.paragraph_format.space_before = Pt(2)
                 p.paragraph_format.space_after  = Pt(2)
-                for cat in cat_order:
-                    if cat in cats:
-                        r_bold = p.add_run(cat + ": ")
-                        r_bold.bold = True
-                        r_bold.font.size = Pt(10)
-                        r_text = p.add_run(", ".join(sorted(cats.pop(cat))) + "    ")
-                        r_text.font.size = Pt(10)
-                for cat, skills in cats.items():
+                for cat, skills in self._ordered_skill_cats(cats, ranked):
                     r_bold = p.add_run(cat + ": ")
                     r_bold.bold = True
                     r_bold.font.size = Pt(10)
-                    r_text = p.add_run(", ".join(sorted(skills)) + "    ")
+                    r_text = p.add_run(", ".join(skills) + "    ")
                     r_text.font.size = Pt(10)
 
         buf = io.BytesIO()
@@ -550,7 +540,9 @@ class ResumeFormatterAgent:
             "projects": lambda: self._build_tex_projects(
                 tailored_content.get("projects", [])
             ),
-            "skills": self._build_tex_skills,
+            "skills": lambda: self._build_tex_skills(
+                tailored_content.get("skills_ranked")
+            ),
         }
 
         body_parts = [self._build_tex_header()]
@@ -692,26 +684,15 @@ class ResumeFormatterAgent:
         lines.append(r"    \resumeSubHeadingListEnd")
         return "\n".join(lines)
 
-    def _build_tex_skills(self) -> str:
+    def _build_tex_skills(self, ranked: Optional[List[Dict]] = None) -> str:
         """Jake's Technical Skills section: \\textbf{Category}{: skill, skill, ...} \\\\."""
-        cats = self._get_skill_categories()
+        cats = self._get_skill_categories(ranked)
         if not cats:
             return ""
 
-        cat_order = [
-            "Languages & Libraries", "AI & Machine Learning",
-            "Data Engineering", "Tools", "Cloud", "Other",
-        ]
-
         skill_lines = []
-        for cat in cat_order:
-            if cat in cats:
-                skills_str = _escape_tex(", ".join(sorted(cats.pop(cat))))
-                skill_lines.append(
-                    rf"     \textbf{{{_escape_tex(cat)}}}{{: {skills_str}}} \\"
-                )
-        for cat, skills in cats.items():
-            skills_str = _escape_tex(", ".join(sorted(skills)))
+        for cat, skills in self._ordered_skill_cats(cats, ranked):
+            skills_str = _escape_tex(", ".join(skills))
             skill_lines.append(
                 rf"     \textbf{{{_escape_tex(cat)}}}{{: {skills_str}}} \\"
             )
@@ -725,13 +706,41 @@ class ResumeFormatterAgent:
             r" \end{itemize}",
         ])
 
-    def _get_skill_categories(self) -> Dict[str, List[str]]:
-        """Return {category: [skill_name, ...]} from the user's skill table."""
+    # Static fallback category order, used only when no JD-ranked list is given.
+    _STATIC_CAT_ORDER = [
+        "Languages & Libraries", "AI & Machine Learning",
+        "Data Engineering", "Tools", "Cloud", "Other",
+    ]
+
+    def _get_skill_categories(
+        self, ranked: Optional[List[Dict]] = None
+    ) -> Dict[str, List[str]]:
+        """
+        Return {category: [skill_name, ...]}.
+
+        When `ranked` (a JD-scored list of {name, category, score} from the
+        tailoring pipeline, issue #54) is given, categories and within-category
+        skills preserve that relevance order. Otherwise fall back to the user's
+        full skill table (rendered later in the static order, sorted A→Z).
+        """
+        if ranked:
+            cats: Dict[str, List[str]] = {}
+            for item in ranked:
+                name = item.get("name")
+                if not name or should_reject_skill(name):
+                    continue
+                canonical = normalize_skill_name(name)
+                cat = self._normalize_category(item.get("category") or "Other")
+                cats.setdefault(cat, [])
+                if canonical not in cats[cat]:
+                    cats[cat].append(canonical)
+            return cats
+
         with Session(engine) as session:
             user_skills = session.exec(
                 select(UserSkill).where(UserSkill.user_id == self.user_id)
             ).all()
-            cats: Dict[str, List[str]] = {}
+            cats = {}
             for us in user_skills:
                 skill = session.exec(
                     select(Skill).where(Skill.skill_id == us.skill_id)
@@ -744,6 +753,27 @@ class ResumeFormatterAgent:
                 if canonical not in cats[cat]:
                     cats[cat].append(canonical)
         return cats
+
+    def _ordered_skill_cats(
+        self, cats: Dict[str, List[str]], ranked: Optional[List[Dict]] = None
+    ) -> List[tuple]:
+        """
+        Resolve final (category, [skills]) render order.
+
+        Ranked input is already relevance-ordered (categories by first
+        appearance, skills by score), so it is rendered as-is. The untailored
+        fallback uses the static category order with skills sorted A→Z.
+        """
+        if ranked:
+            return list(cats.items())
+        cats = dict(cats)
+        pairs: List[tuple] = []
+        for cat in self._STATIC_CAT_ORDER:
+            if cat in cats:
+                pairs.append((cat, sorted(cats.pop(cat))))
+        for cat, skills in cats.items():
+            pairs.append((cat, sorted(skills)))
+        return pairs
 
     # ── Deprecated: Markdown ──────────────────────────────────────────────────
 
@@ -780,8 +810,8 @@ class ResumeFormatterAgent:
                 bullet_prefix=bullet,
             ),
             "skills": lambda: self._build_skills(
-                tailored_content.get("skills_emphasized", []),
                 label=self._resolve_label("skills"),
+                ranked=tailored_content.get("skills_ranked"),
             ),
         }
 
@@ -857,18 +887,13 @@ class ResumeFormatterAgent:
             lines.append("")
         return "\n".join(lines)
 
-    def _build_skills(self, emphasized_skills, label="Skills"):
-        cats = self._get_skill_categories()
+    def _build_skills(self, label="Skills", ranked: Optional[List[Dict]] = None):
+        cats = self._get_skill_categories(ranked)
         if not cats:
             return ""
-        order = ["Languages & Libraries", "AI & Machine Learning",
-                 "Data Engineering", "Tools", "Cloud", "Other"]
         lines = [label]
-        for cat in order:
-            if cat in cats:
-                lines.append(f"**{cat}:** {', '.join(sorted(cats.pop(cat)))}")
-        for cat, skills in cats.items():
-            lines.append(f"**{cat}:** {', '.join(sorted(skills))}")
+        for cat, skills in self._ordered_skill_cats(cats, ranked):
+            lines.append(f"**{cat}:** {', '.join(skills)}")
         return "\n".join(lines)
 
     @staticmethod
