@@ -191,12 +191,13 @@ class ResumeParserAgent:
             session.commit()
 
     def _save_skills(self, data: List[Dict], source: str):
+        touched_skill_ids = set()
         with Session(engine) as session:
             for item in data:
                 # Normalize name via alias map
                 raw_name = normalize_skill_name(item.get("name", "").strip())
                 if not raw_name: continue
-                
+
                 # Get or create the Skill node
                 skill = session.exec(select(Skill).where(Skill.name == raw_name)).first()
                 if not skill:
@@ -204,7 +205,8 @@ class ResumeParserAgent:
                     session.add(skill)
                     session.commit()
                     session.refresh(skill)
-                
+                touched_skill_ids.add(skill.skill_id)
+
                 # Check if this exact user+skill+source edge already exists
                 existing_link = session.exec(
                     select(UserSkill).where(
@@ -231,3 +233,12 @@ class ResumeParserAgent:
                 )
                 session.add(link)
             session.commit()
+
+            # Recompute cached embeddings for skills touched by this ingest
+            # (issue #54). Bounded to new/changed skills; degrades to a no-op if
+            # the embedding model is unavailable.
+            try:
+                from agents.skill_embeddings import ensure_skill_embeddings
+                ensure_skill_embeddings(session, touched_skill_ids)
+            except Exception as exc:
+                logger.warning("Skill embedding refresh skipped: %s", exc)

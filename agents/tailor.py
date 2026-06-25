@@ -167,7 +167,7 @@ class ResumeTailorAgent:
         tailored = final_state["tailored_content"]
         if tailored and "error" not in tailored:
             ranked_skills = self._rank_skills(
-                user_id, final_state["job_text"], final_state["matched_skills"]
+                user_id, job_id, final_state["job_text"], final_state["matched_skills"]
             )
             if ranked_skills:
                 tailored["skills_ranked"] = ranked_skills
@@ -345,37 +345,63 @@ class ResumeTailorAgent:
         return "retry"
 
     @staticmethod
-    def _rank_skills(user_id: UUID, jd_text: str, matched_skills: Dict) -> List[Dict]:
+    def _rank_skills(
+        user_id: UUID, job_id: UUID, jd_text: str, matched_skills: Dict
+    ) -> List[Dict]:
         """
         Rank the user's skills by JD relevance and select the most relevant subset
         (issue #54). Returns [{name, category, score}, ...] in render order, or an
         empty list when there is no JD signal (caller falls back to the full list).
+
+        Phase 2: blends a semantic component from the cached skill/JD embeddings
+        (issue #54). Embeddings degrade gracefully — if unavailable, scoring falls
+        back to the lexical + metadata signals.
         """
+        from agents.skill_embeddings import ensure_job_embedding, load_skill_vectors
+
         with Session(engine) as session:
             rows = session.exec(
                 select(UserSkill).where(UserSkill.user_id == user_id)
             ).all()
             skills: List[Dict] = []
+            id_by_name: Dict[str, UUID] = {}
             for us in rows:
                 skill = session.exec(
                     select(Skill).where(Skill.skill_id == us.skill_id)
                 ).first()
                 if not skill or should_reject_skill(skill.name):
                     continue
+                cname = normalize_skill_name(skill.name)
                 skills.append({
-                    "name": normalize_skill_name(skill.name),
+                    "name": cname,
                     "category": skill.category or "Other",
                     "proficiency": us.proficiency,
                     "confidence": us.confidence_score,
                 })
+                id_by_name[cname] = skill.skill_id
             # JD corpus for IDF: every stored job description (term-rarity signal).
             corpus = [
                 d for d in session.exec(select(JobDescription.description)).all() if d
             ]
+            # Phase 2: cached semantic vectors (shared with the matcher).
+            vecs_by_id = load_skill_vectors(session, list(id_by_name.values()))
+            skill_vectors = {
+                name: vecs_by_id[sid]
+                for name, sid in id_by_name.items()
+                if sid in vecs_by_id
+            }
+            jd_vector = None
+            job = session.exec(
+                select(JobDescription).where(JobDescription.job_id == job_id)
+            ).first()
+            if job:
+                jd_vector = ensure_job_embedding(session, job)
 
         if not skills:
             return []
-        ranked = rank_and_select_skills(skills, jd_text, matched_skills or {}, corpus)
+        ranked = rank_and_select_skills(
+            skills, jd_text, matched_skills or {}, corpus, skill_vectors, jd_vector
+        )
         return ranked or []
 
     @staticmethod

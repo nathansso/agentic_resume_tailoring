@@ -56,20 +56,35 @@ class SkillMatcherAgent:
 
             # Load user skill names for matching
             user_skill_map = {}  # lowercase -> original name
+            name_to_id = {}      # original name -> skill_id
             for us in user_skills:
                 skill = session.exec(select(Skill).where(Skill.skill_id == us.skill_id)).first()
                 if skill:
                     user_skill_map[skill.name.lower().strip()] = skill.name
+                    name_to_id[skill.name] = skill.skill_id
             user_skill_names = set(user_skill_map.keys())
 
-            # Pre-compute user skill embeddings for semantic matching
+            # Pre-compute user skill embeddings for semantic matching. Read the
+            # persisted cache shared with the skill scorer (issue #54) and only
+            # encode names that are missing a cached vector; the model is still
+            # loaded to embed job skills at query time.
             user_skill_names_list = list(user_skill_map.values())
             user_embeddings = None
             model = None
             try:
                 model = get_embedding_model()
                 if user_skill_names_list:
-                    user_embeddings = model.encode(user_skill_names_list, normalize_embeddings=True)
+                    from agents.skill_embeddings import load_skill_vectors
+                    vecs_by_id = load_skill_vectors(
+                        session, [name_to_id[n] for n in user_skill_names_list]
+                    )
+                    cached = [vecs_by_id.get(name_to_id[n]) for n in user_skill_names_list]
+                    if all(v is not None for v in cached):
+                        user_embeddings = np.vstack(cached)
+                    else:
+                        user_embeddings = model.encode(
+                            user_skill_names_list, normalize_embeddings=True
+                        )
             except Exception as e:
                 logger.warning(f"Semantic embedding failed, falling back to exact match: {e}")
 

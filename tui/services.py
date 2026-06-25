@@ -570,6 +570,12 @@ def add_skill_to_profile(user_id: UUID, skill_name: str, target: Optional[str] =
             )
             session.add(user_skill)
             session.commit()
+            # Refresh the cached embedding for the new skill (issue #54).
+            try:
+                from agents.skill_embeddings import ensure_skill_embeddings
+                ensure_skill_embeddings(session, [skill.skill_id])
+            except Exception as exc:
+                logger.warning("Skill embedding refresh skipped: %s", exc)
         return f"Added '{skill_name}' to your profile."
     except Exception as e:
         logger.error("add_skill_to_profile failed: %s", e)
