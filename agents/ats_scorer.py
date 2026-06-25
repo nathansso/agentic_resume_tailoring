@@ -179,9 +179,18 @@ class ATSScoringEngine:
                 parts.append(proj.get("name", ""))
                 parts.extend(proj.get("bullets") or [])
         elif section_key == "skills":
-            skills = tailored_content.get("skills_emphasized") or []
-            if skills:
-                parts.append("Skills: " + ", ".join(skills))
+            # Prefer the JD-ranked/capped skill list (issue #54) so the scored
+            # text matches what the formatter actually renders; fall back to the
+            # legacy skills_emphasized list when no ranking was produced.
+            ranked = tailored_content.get("skills_ranked")
+            if ranked:
+                names = [it.get("name", "") for it in ranked if it.get("name")]
+                if names:
+                    parts.append("Skills: " + ", ".join(names))
+            else:
+                skills = tailored_content.get("skills_emphasized") or []
+                if skills:
+                    parts.append("Skills: " + ", ".join(skills))
         return "\n".join(p for p in parts if p)
 
     @staticmethod

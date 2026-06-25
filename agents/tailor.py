@@ -25,6 +25,8 @@ from database.models import (
 )
 from agents.ats_scorer import ATSScoringEngine
 from agents.project_scorer import MAX_PROJECTS, score_project, select_top_k
+from agents.skill_scorer import rank_and_select_skills
+from agents.skill_postprocessor import normalize_skill_name, should_reject_skill
 
 logger = logging.getLogger(__name__)
 
@@ -158,10 +160,17 @@ class ResumeTailorAgent:
 
         final_state = self.graph.invoke(initial_state)
 
-        # Job-specific section order (issue #22), persisted with the content so
-        # the stateless export endpoints can read it later.
+        # Job-specific section order (issue #22) and JD-ranked skills (issue #54),
+        # persisted with the content so the stateless export endpoints can read
+        # them later. Skills are ranked first so the section-order relevance signal
+        # (which flattens skills_ranked) sees the tailored skill set.
         tailored = final_state["tailored_content"]
         if tailored and "error" not in tailored:
+            ranked_skills = self._rank_skills(
+                user_id, final_state["job_text"], final_state["matched_skills"]
+            )
+            if ranked_skills:
+                tailored["skills_ranked"] = ranked_skills
             tailored["_section_order"] = self._ranked_section_order(
                 tailored, final_state["matched_skills"], final_state["job_text"]
             )
@@ -334,6 +343,40 @@ class ResumeTailorAgent:
         if state["done"]:
             return "done"
         return "retry"
+
+    @staticmethod
+    def _rank_skills(user_id: UUID, jd_text: str, matched_skills: Dict) -> List[Dict]:
+        """
+        Rank the user's skills by JD relevance and select the most relevant subset
+        (issue #54). Returns [{name, category, score}, ...] in render order, or an
+        empty list when there is no JD signal (caller falls back to the full list).
+        """
+        with Session(engine) as session:
+            rows = session.exec(
+                select(UserSkill).where(UserSkill.user_id == user_id)
+            ).all()
+            skills: List[Dict] = []
+            for us in rows:
+                skill = session.exec(
+                    select(Skill).where(Skill.skill_id == us.skill_id)
+                ).first()
+                if not skill or should_reject_skill(skill.name):
+                    continue
+                skills.append({
+                    "name": normalize_skill_name(skill.name),
+                    "category": skill.category or "Other",
+                    "proficiency": us.proficiency,
+                    "confidence": us.confidence_score,
+                })
+            # JD corpus for IDF: every stored job description (term-rarity signal).
+            corpus = [
+                d for d in session.exec(select(JobDescription.description)).all() if d
+            ]
+
+        if not skills:
+            return []
+        ranked = rank_and_select_skills(skills, jd_text, matched_skills or {}, corpus)
+        return ranked or []
 
     @staticmethod
     def _score_section_relevance(
