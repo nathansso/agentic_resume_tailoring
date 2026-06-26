@@ -4,8 +4,10 @@ Resume Tailoring Agent — Uses LangGraph for a generate-then-evaluate loop.
 Flow:
   1. Generate tailored resume content based on matched/missing skills
   2. Evaluate coverage of job requirements in the tailored output
-  3. If coverage is insufficient, retry with feedback (up to MAX_RETRIES)
-  4. Save final tailored content to UserJobResult
+  3. Retry with feedback until an attempt clears the high "great" bar or the
+     iteration budget (MAX_RETRIES) is spent — generation is stochastic, so we
+     run the budget rather than stopping at the first acceptable attempt
+  4. Save the best-scoring attempt (not the last) to UserJobResult (issue #58)
 """
 import logging
 import json
@@ -25,12 +27,18 @@ from database.models import (
 )
 from agents.ats_scorer import ATSScoringEngine
 from agents.project_scorer import MAX_PROJECTS, score_project, select_top_k
-from agents.skill_scorer import rank_and_select_skills
+from agents.skill_scorer import _env_float, _env_int, rank_and_select_skills
 from agents.skill_postprocessor import normalize_skill_name, should_reject_skill
 
 logger = logging.getLogger(__name__)
 
-MAX_RETRIES = 2
+# Iteration budget for the generate→evaluate loop. Generation is stochastic
+# (temp 0.3), so we run the full budget by default and ship the best-scoring
+# attempt rather than the last (issue #58). The high "great" bar is an early
+# exit: once an attempt clears it, further iteration isn't worth the LLM call.
+MAX_RETRIES = _env_int("TAILOR_MAX_RETRIES", 2)
+GREAT_SKILL_COVERAGE = _env_float("TAILOR_GREAT_SKILL_COVERAGE", 90.0)
+GREAT_KW_COVERAGE = _env_float("TAILOR_GREAT_KW_COVERAGE", 0.80)
 
 
 def _as_obj(value, default):
@@ -62,8 +70,11 @@ class TailorState(TypedDict):
     baseline_breakdown: Dict  # Pre-tailor score_breakdown for delta comparison (issue #12)
     experiences: List[Dict]
     projects: List[Dict]
-    tailored_content: Dict    # The generated tailored resume sections
-    evaluation: Dict          # Self-evaluation results
+    tailored_content: Dict    # The most recent generated tailored resume sections
+    evaluation: Dict          # Self-evaluation of the most recent attempt
+    best_content: Dict        # Highest-scoring attempt seen so far (issue #58)
+    best_evaluation: Dict     # Evaluation backing best_content
+    best_score: float         # Composite ATS score of best_content (-1 = none yet)
     attempt: int
     done: bool
 
@@ -154,17 +165,26 @@ class ResumeTailorAgent:
             "projects": proj_dicts,
             "tailored_content": {},
             "evaluation": {},
+            "best_content": {},
+            "best_evaluation": {},
+            "best_score": -1.0,
             "attempt": 0,
             "done": False,
         }
 
         final_state = self.graph.invoke(initial_state)
 
+        # Best-of-N: ship the highest-scoring attempt, not whatever the last retry
+        # produced — generation is stochastic and a later attempt can regress
+        # (issue #58). Fall back to the last content when no attempt scored (e.g.
+        # every generation errored), so the error path below still triggers.
+        tailored = final_state.get("best_content") or final_state["tailored_content"]
+        evaluation = final_state.get("best_evaluation") or final_state["evaluation"]
+
         # Job-specific section order (issue #22) and JD-ranked skills (issue #54),
         # persisted with the content so the stateless export endpoints can read
         # them later. Skills are ranked first so the section-order relevance signal
         # (which flattens skills_ranked) sees the tailored skill set.
-        tailored = final_state["tailored_content"]
         if tailored and "error" not in tailored:
             ranked_skills = self._rank_skills(
                 user_id, job_id, final_state["job_text"], final_state["matched_skills"]
@@ -181,13 +201,16 @@ class ResumeTailorAgent:
                 select(UserJobResult).where(UserJobResult.result_id == result_id)
             ).first()
             if result:
-                result.tailored_resume_content = final_state["tailored_content"]
-                result.tailored_score_breakdown = final_state["evaluation"].get("ats_breakdown", {})
+                result.tailored_resume_content = tailored
+                result.tailored_score_breakdown = evaluation.get("ats_breakdown", {})
                 session.add(result)
                 session.commit()
 
-        logger.info(f"Tailoring complete after {final_state['attempt']} attempt(s)")
-        return final_state["tailored_content"]
+        logger.info(
+            "Tailoring complete after %d attempt(s); shipped best (composite %s)",
+            final_state["attempt"], final_state.get("best_score"),
+        )
+        return tailored
 
     def _build_graph(self) -> StateGraph:
         """Build the LangGraph state graph for the tailoring loop."""
@@ -314,7 +337,7 @@ class ResumeTailorAgent:
         if not kw_gaps:
             kw_gaps = breakdown["keyword_coverage"]["missing_keywords"]
 
-        state["evaluation"] = {
+        evaluation = {
             "coverage_pct": round(skill_coverage_pct, 1),
             "covered": skill["covered"],
             "total": skill["total"],
@@ -323,6 +346,16 @@ class ResumeTailorAgent:
             "kw_gaps": kw_gaps[:10],
             "ats_breakdown": breakdown,
         }
+        state["evaluation"] = evaluation
+
+        # Best-of-N: retain the highest-scoring attempt by algorithmic composite,
+        # since a stochastic retry can regress and we must never ship a worse
+        # output than one we already produced (issue #58).
+        composite = breakdown["composite"]
+        if composite > state["best_score"]:
+            state["best_score"] = composite
+            state["best_content"] = state["tailored_content"]
+            state["best_evaluation"] = evaluation
 
         logger.info(
             f"Coverage: skills {skill_coverage_pct:.1f}% ({skill['covered']}/{skill['total']}), "
@@ -332,8 +365,12 @@ class ResumeTailorAgent:
                if "delta" in breakdown else "")
         )
 
-        coverage_ok = skill_coverage_pct >= 75 and kw_coverage >= 0.60
-        if coverage_ok or state["attempt"] >= MAX_RETRIES:
+        # Stop when an attempt clears the high "great" bar (early exit — further
+        # iteration isn't worth the LLM call) or the iteration budget is spent.
+        # Below the bar we keep iterating and keep the best; we no longer halt at
+        # a mediocre "good enough" floor (issue #58).
+        great = skill_coverage_pct >= GREAT_SKILL_COVERAGE and kw_coverage >= GREAT_KW_COVERAGE
+        if great or state["attempt"] >= MAX_RETRIES:
             state["done"] = True
 
         return state

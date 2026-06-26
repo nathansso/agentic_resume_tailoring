@@ -288,7 +288,9 @@ def test_evaluate_node_attaches_algorithmic_breakdown(monkeypatch):
         "baseline_breakdown": {"composite": 40.0},
         "experiences": [], "projects": [],
         "tailored_content": _TAILORED,
-        "evaluation": {}, "attempt": 2, "done": False,
+        "evaluation": {},
+        "best_content": {}, "best_evaluation": {}, "best_score": -1.0,
+        "attempt": 2, "done": False,
     }
     out = agent._evaluate_node(state)
     ev = out["evaluation"]
