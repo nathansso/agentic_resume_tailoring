@@ -259,6 +259,25 @@ def cmd_tailor(args):
     print()
 
 
+def cmd_pin_skill(args):
+    """Pin or unpin a skill as 'core' so it always renders in tailored resumes."""
+    _check_config()
+    from database.db import init_db, engine
+    from sqlmodel import Session, select
+    from database.models import User
+    from tui import services
+
+    init_db()
+    with Session(engine) as session:
+        user = session.exec(select(User).limit(1)).first()
+        if not user:
+            print("No user profile found. Run 'ingest-resume' first.")
+            return
+        uid = user.user_id
+
+    print(services.set_skill_core(uid, args.name, not args.unpin))
+
+
 def cmd_status(args):
     """Show the current user profile summary."""
     _check_config()
@@ -494,6 +513,13 @@ def main():
     p_tailor.add_argument("--resume", help="Path to resume (only needed on first run)", default="")
 
     # status
+    p_pin = subparsers.add_parser(
+        "pin-skill",
+        help="Pin (or --unpin) a skill as 'core' so it always appears in tailored resumes",
+    )
+    p_pin.add_argument("name", help="Skill name to pin")
+    p_pin.add_argument("--unpin", action="store_true", help="Unpin instead of pin")
+
     subparsers.add_parser("status", help="Show your profile summary")
 
     # tui
@@ -534,6 +560,8 @@ def main():
         cmd_ingest_linkedin_pdf(args)
     elif args.command == "tailor":
         cmd_tailor(args)
+    elif args.command == "pin-skill":
+        cmd_pin_skill(args)
     elif args.command == "status":
         cmd_status(args)
     elif args.command == "tui":

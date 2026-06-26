@@ -77,6 +77,8 @@ def _migrate_db() -> None:
         "ALTER TABLE skill ADD COLUMN embedding_model TEXT",
         "ALTER TABLE jobdescription ADD COLUMN embedding TEXT",
         "ALTER TABLE jobdescription ADD COLUMN embedding_model TEXT",
+        # issue 54: user-pinned core skills (always rendered)
+        "ALTER TABLE userskill ADD COLUMN is_core BOOLEAN DEFAULT FALSE",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

@@ -226,6 +226,7 @@ def score_skills(
             "category": s.get("category") or "Other",
             "score": round(composite, 4),
             "proficiency": s.get("proficiency"),
+            "is_core": bool(s.get("is_core")),
             "components": {k: round(v, 4) for k, v in comps.items()},
         })
 
@@ -246,9 +247,17 @@ def select_skills(scored: List[Dict]) -> List[Dict]:
     Apply the dynamic cap (drop-off + MIN/MAX bounds) and the core-skill floor.
     `scored` must be sorted descending by 'score'. Output stays in score order;
     floored core skills with low JD relevance naturally sort to the end.
+
+    The floor is the user's explicitly pinned skills (UserSkill.is_core, issue
+    #54) when any exist — they are always rendered, bypassing the cap. When none
+    are pinned, fall back to the inferred floor of the strongest skills by
+    proficiency, so the section is never just low-relevance noise.
     """
     if not scored:
         return []
+
+    pinned = [s for s in scored if s.get("is_core")]
+
     if len(scored) <= MIN_SKILLS:
         return list(scored)
 
@@ -263,13 +272,11 @@ def select_skills(scored: List[Dict]) -> List[Dict]:
         else:
             break
 
-    # Core-skill floor: guarantee the strongest skills (by proficiency) appear
-    # even on an off-domain JD, so the section is never just low-relevance noise.
-    chosen = {s["name"] for s in selected}
-    core = sorted(
+    floor = pinned if pinned else sorted(
         scored, key=lambda x: ((x["proficiency"] or 0), x["score"]), reverse=True
     )[:CORE_FLOOR_K]
-    for c in core:
+    chosen = {s["name"] for s in selected}
+    for c in floor:
         if c["name"] not in chosen:
             selected.append(c)
             chosen.add(c["name"])
