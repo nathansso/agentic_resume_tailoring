@@ -4,6 +4,25 @@ All completed PRD deliveries are recorded here. PRDs remain as pure forward-look
 
 ---
 
+## Issues 54 & 58 — Skills Section Tailoring + Best-of-N Attempt Selection
+**Status:** complete | **Tests:** 381 pass (38 new)
+
+Reworked how the Technical Skills section is built and how the tailoring loop selects its final output. Previously the skills section rendered the full skill list under static alphabetical categories (never consulting the job description), and the generate→evaluate loop shipped whatever the last retry produced. Now skills are JD-relevance ranked, capped, and role-aware ordered with a semantic signal and persistent pinned "core" skills, and the loop ships the best-scoring attempt rather than the last. Delivered as #54 Phases 1–4 plus the #58 follow-up.
+
+### What shipped
+- **Phase 1 (#55) — JD-relevance ranking, cap, role-aware ordering.** `agents/skill_scorer.py` (**created**) — pure-function scorer (`score_skills`, `select_skills`, `rank_and_select_skills`) blending TF-IDF (with IDF over the JD corpus), JD weight, match confidence, proficiency, and evidence; dynamic cap via drop-off + min/max bounds. `agents/tailor.py` — `_rank_skills()` persists `tailored_content["skills_ranked"]`. `agents/formatter.py` — renders the JD-ranked list in relevance order (falls back to the full DB list). `agents/ats_scorer.py` — skills flattening prefers `skills_ranked`.
+- **Phase 2 (#56) — persistent embeddings + semantic component.** `agents/skill_embeddings.py` (**created**) — shared MiniLM cache (`ensure_skill_embeddings`, `load_skill_vectors`, `ensure_job_embedding`), degrades gracefully when the model is unavailable. `database/models.py` + `database/db.py` — `Skill.embedding/embedding_model` and `JobDescription.embedding/embedding_model` columns + backward-compatible ALTER migrations. Reingest hooks recompute embeddings (`agents/parser.py`, `tui/services.py`); `agents/chat.py` invalidates the cached JD embedding on job re-analysis. `scripts/backfill_skill_embeddings.py` (**created**).
+- **Phase 3 (#57) — pinned core skills.** `database/models.py` — `UserSkill.is_core` (+ migration). Pinned skills always render and seed a relevance floor. Surfaced end-to-end: `web/routers/profile_router.py` (`POST /api/profile/skills/core`), web frontend ★ pin toggle in the Skills tab, `cli.py` `pin-skill` command, and `tui/services.py` `set_skill_core`.
+- **Phase 4 (#54) — tunable weights + offline tuning harness.** `agents/skill_scorer.py` — all weights and cap bounds env-overridable (`SKILL_W_*`, `SKILL_MIN/MAX`, etc.) with unchanged defaults, plus per-call `weights`/`bounds` overrides and a `selection_recall` metric. `eval/skill_selection_eval.py` (**created**) — LLM-free harness over checked-in fixtures comparing weight presets by recall + rendered count.
+- **Issue 58 — best-of-N attempt selection.** `agents/tailor.py` — the generate→evaluate loop tracks the highest-scoring attempt by algorithmic composite and ships the argmax (falling back to the last content only when no attempt scored), runs the full `MAX_RETRIES` budget by default, and early-exits only above a high "great" bar. Budget and great-bar thresholds are env-overridable (`TAILOR_MAX_RETRIES`, `TAILOR_GREAT_SKILL_COVERAGE`, `TAILOR_GREAT_KW_COVERAGE`).
+- **Tests** — `tests/test_skill_scorer.py` (12), `tests/test_skill_embeddings.py` (8), `tests/test_skill_pinning.py` (7, incl. web `TestClient`), `tests/test_skill_tuning.py` (7), and 4 best-of-N tests in `tests/test_prd04.py`.
+
+### Deviations from spec
+- Kept the local MiniLM embedding model rather than adding a provider-swappable embedding config — semantic scoring degrades to lexical + metadata signals when the model is unavailable.
+- Final calibration of the skill-scoring weights and the #58 great-bar thresholds is deferred to the #51 ATS efficacy benchmark; this arc ships the tunable mechanism with sensible (un-calibrated) defaults.
+
+---
+
 ## Issue 13 — LinkedIn Ingestion via Bright Data
 **Status:** complete | **Tests:** 332 pass (10 new)
 
