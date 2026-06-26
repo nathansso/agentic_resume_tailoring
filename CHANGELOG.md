@@ -1,6 +1,6 @@
 # Changelog
 
-All completed PRD deliveries are recorded here. PRDs remain as pure forward-looking specs.
+All completed deliveries are recorded here — both PRD deliveries and self-contained issue-level work (issues or arcs that ship outside a PRD). PRDs remain as pure forward-looking specs.
 
 ---
 
