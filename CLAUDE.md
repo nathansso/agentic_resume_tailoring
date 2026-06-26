@@ -65,7 +65,10 @@ Keep these roles separate:
 
 - Use the PRDs in `docs/prd/` as forward-looking specs.
 - Do not retroactively edit PRD task checklists. Update only the `## Progress` section while work is in flight.
-- When a PRD is complete, add a new top entry to `CHANGELOG.md` immediately.
+- `CHANGELOG.md` records completed deliveries — both PRD deliveries and self-contained issue-level work (issues/arcs that ship outside a PRD). Add a new top entry when the work merges to `main`.
+  - Title the entry by its source: `PRD NN — …` for PRD work, `Issue NN — …` (or `Issues NN & MM — …` for a multi-issue arc) for issue-level work.
+  - Include a `**Status:** complete | **Tests:** N pass (M new)` line, a short summary, a `### What shipped` list, and a `### Deviations from spec` section.
+  - The entry must reflect shipped (merged) state. When a PR carries the entry, the entry only reaches `main` on merge, so it may describe everything in that PR.
 - Keep one logical unit of work per commit.
 - For issue resolution, follow the workflow in `ISSUE_WORKFLOW.md`.
 
