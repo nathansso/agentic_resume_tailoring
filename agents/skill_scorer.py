@@ -144,11 +144,20 @@ def _present_components(skills: List[Dict], matched_skills: Dict) -> set:
     return present
 
 
+def _semantic_similarity(skill_vec, jd_vec) -> float:
+    """Cosine of two normalized vectors, clamped to [0, 1] (negatives → 0)."""
+    if skill_vec is None or jd_vec is None:
+        return 0.0
+    return max(0.0, min(1.0, float(skill_vec @ jd_vec)))
+
+
 def score_skills(
     skills: List[Dict],
     jd_text: str,
     matched_skills: Optional[Dict] = None,
     corpus_texts: Optional[Sequence[str]] = None,
+    skill_vectors: Optional[Dict] = None,
+    jd_vector=None,
 ) -> Optional[List[Dict]]:
     """
     Score every skill against the JD and return them sorted by composite score
@@ -157,8 +166,12 @@ def score_skills(
 
     Each input skill dict: {name, category, proficiency?, confidence?}.
     Each output skill dict adds {score, components}.
+
+    When `skill_vectors` ({name: vector}) and `jd_vector` are supplied (Phase 2),
+    a 'semantic' component is blended in per skill that has a cached vector.
     """
     matched_skills = matched_skills or {}
+    skill_vectors = skill_vectors or {}
     if not jd_text or not jd_text.strip():
         return None
     jd_counts = _jd_token_counts(jd_text)
@@ -167,6 +180,7 @@ def score_skills(
 
     idf = compute_idf(corpus_texts or [])
     present = _present_components(skills, matched_skills)
+    use_semantic = jd_vector is not None and bool(skill_vectors)
 
     # Normalize JD requirement weight by the strongest matched weight.
     max_weight = 1.0
@@ -182,6 +196,9 @@ def score_skills(
             continue
         tokens = ATSScoringEngine._extract_keywords(name)
         comps: Dict[str, float] = {"tfidf": _tfidf_component(tokens, jd_counts, idf)}
+
+        if use_semantic and name in skill_vectors:
+            comps["semantic"] = _semantic_similarity(skill_vectors[name], jd_vector)
 
         match = _lookup_match(matched_skills, name)
         if "jd_weight" in present:
@@ -269,13 +286,17 @@ def rank_and_select_skills(
     jd_text: str,
     matched_skills: Optional[Dict] = None,
     corpus_texts: Optional[Sequence[str]] = None,
+    skill_vectors: Optional[Dict] = None,
+    jd_vector=None,
 ) -> Optional[List[Dict]]:
     """
     Full path: score → cap/floor. Returns the rendered skill list as
     [{name, category, score}, ...] in display order, or None when there is no
     JD signal (caller falls back to the untailored full list).
     """
-    scored = score_skills(skills, jd_text, matched_skills, corpus_texts)
+    scored = score_skills(
+        skills, jd_text, matched_skills, corpus_texts, skill_vectors, jd_vector
+    )
     if scored is None:
         return None
     selected = select_skills(scored)

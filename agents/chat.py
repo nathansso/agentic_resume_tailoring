@@ -737,6 +737,10 @@ class ChatAgent:
                         weight=item.get("weight", 1.0),
                     ))
 
+                # Re-extracted skills invalidate the cached JD embedding (issue #54);
+                # ensure_job_embedding recomputes it on the next tailoring run.
+                job_db.embedding = None
+                job_db.embedding_model = None
                 job_db.status = "analyzed"
                 job_db.updated_at = datetime.utcnow()
                 session.add(job_db)
