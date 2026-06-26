@@ -45,6 +45,11 @@ class Skill(SQLModel, table=True):
     name: str = Field(index=True) # Normalized name
     category: Optional[str] = None
     description: Optional[str] = None
+    # Cached embedding of the canonical name (issue #54): JSON-encoded float list,
+    # shared by the matcher and the skill scorer. embedding_model records which
+    # model produced it so a model change invalidates the cache cleanly.
+    embedding: Optional[str] = None
+    embedding_model: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -116,6 +121,11 @@ class JobDescription(SQLModel, table=True):
     source_url: Optional[str] = None
     status: str = Field(default="created")  # created, analyzed, tailored, exported
     chat_summary: Optional[str] = None
+    # Cached JD embedding centroid (issue #54): JSON-encoded float list of the
+    # required-skill phrases, for the scorer's semantic component. Refreshed when
+    # the description is re-ingested.
+    embedding: Optional[str] = None
+    embedding_model: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

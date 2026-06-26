@@ -72,6 +72,11 @@ def _migrate_db() -> None:
         'ALTER TABLE "user" ADD COLUMN linkedin_ingested_at TIMESTAMP',
         # issue 13: per-kind usage cap (LinkedIn scrapes are paid; capped separately)
         "ALTER TABLE aiusage ADD COLUMN kind TEXT DEFAULT 'ai'",
+        # issue 54: cached skill/JD embeddings for the semantic scoring component
+        "ALTER TABLE skill ADD COLUMN embedding TEXT",
+        "ALTER TABLE skill ADD COLUMN embedding_model TEXT",
+        "ALTER TABLE jobdescription ADD COLUMN embedding TEXT",
+        "ALTER TABLE jobdescription ADD COLUMN embedding_model TEXT",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
