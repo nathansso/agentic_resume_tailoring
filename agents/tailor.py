@@ -363,7 +363,10 @@ class ResumeTailorAgent:
             rows = session.exec(
                 select(UserSkill).where(UserSkill.user_id == user_id)
             ).all()
-            skills: List[Dict] = []
+            # Dedup by canonical name — a skill may have several UserSkill rows
+            # (one per evidence source). Merge: keep the strongest proficiency /
+            # confidence and treat the skill as pinned if any row is pinned.
+            by_name: Dict[str, Dict] = {}
             id_by_name: Dict[str, UUID] = {}
             for us in rows:
                 skill = session.exec(
@@ -372,13 +375,23 @@ class ResumeTailorAgent:
                 if not skill or should_reject_skill(skill.name):
                     continue
                 cname = normalize_skill_name(skill.name)
-                skills.append({
-                    "name": cname,
-                    "category": skill.category or "Other",
-                    "proficiency": us.proficiency,
-                    "confidence": us.confidence_score,
-                })
-                id_by_name[cname] = skill.skill_id
+                entry = by_name.get(cname)
+                if entry is None:
+                    by_name[cname] = {
+                        "name": cname,
+                        "category": skill.category or "Other",
+                        "proficiency": us.proficiency,
+                        "confidence": us.confidence_score,
+                        "is_core": bool(us.is_core),
+                    }
+                    id_by_name[cname] = skill.skill_id
+                else:
+                    if (us.proficiency or 0) > (entry["proficiency"] or 0):
+                        entry["proficiency"] = us.proficiency
+                    if (us.confidence_score or 0) > (entry["confidence"] or 0):
+                        entry["confidence"] = us.confidence_score
+                    entry["is_core"] = entry["is_core"] or bool(us.is_core)
+            skills: List[Dict] = list(by_name.values())
             # JD corpus for IDF: every stored job description (term-rarity signal).
             corpus = [
                 d for d in session.exec(select(JobDescription.description)).all() if d

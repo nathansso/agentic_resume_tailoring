@@ -66,6 +66,7 @@ export interface SkillRow {
   source: string;
   proficiency: string;
   confidence: string;
+  is_core: boolean;
 }
 
 export interface ExpRow {

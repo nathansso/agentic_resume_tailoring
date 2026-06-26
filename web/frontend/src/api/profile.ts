@@ -25,6 +25,15 @@ export async function getSkills(): Promise<SkillRow[]> {
   return json(await fetch("/api/profile/skills", { credentials: "include" }));
 }
 
+export async function setSkillCore(name: string, is_core: boolean): Promise<{ result: string }> {
+  return json(await fetch("/api/profile/skills/core", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, is_core }),
+    credentials: "include",
+  }));
+}
+
 export async function getExperiences(): Promise<ExpRow[]> {
   return json(await fetch("/api/profile/experiences", { credentials: "include" }));
 }

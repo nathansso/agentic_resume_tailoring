@@ -64,6 +64,9 @@ class UserSkill(SQLModel, table=True):
     evidence_source: Optional[str] = None # Resume, GitHub, etc.
     evidence_detail: Optional[str] = None # Specific bullet or repo
     confidence_score: float = 0.0
+    # Pinned "core" skill (issue #54): always rendered in the tailored skills
+    # section, bypassing the JD-relevance cap and ordering floor.
+    is_core: bool = Field(default=False)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
