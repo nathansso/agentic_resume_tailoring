@@ -1,7 +1,7 @@
 import { useState, useEffect, type CSSProperties } from "react";
 import type { SkillRow, ExpRow, ProjectRow, GraphData } from "../types";
 import { colors, font } from "../theme";
-import { getSkills, getExperiences, getProjects, getGraph } from "../api/profile";
+import { getSkills, getExperiences, getProjects, getGraph, setSkillCore } from "../api/profile";
 
 type Tab = "skills" | "experiences" | "projects" | "graph" | "charts";
 
@@ -21,6 +21,16 @@ export function DataExplorer() {
       .catch(err => setError(err instanceof Error ? err.message : "Failed to load data"))
       .finally(() => setLoading(false));
   }, []);
+
+  // Optimistic pin/unpin of a core skill (issue #54); revert on failure.
+  const toggleCore = async (name: string, next: boolean) => {
+    setSkills(prev => prev.map(s => (s.name === name ? { ...s, is_core: next } : s)));
+    try {
+      await setSkillCore(name, next);
+    } catch {
+      setSkills(prev => prev.map(s => (s.name === name ? { ...s, is_core: !next } : s)));
+    }
+  };
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "skills", label: `Skills (${skills.length})` },
@@ -47,7 +57,7 @@ export function DataExplorer() {
       <div style={s.content}>
         {loading && <p style={s.muted}>Loading…</p>}
         {error && <p style={{ ...s.muted, color: colors.error }}>{error}</p>}
-        {!loading && !error && tab === "skills" && <SkillsTab skills={skills} />}
+        {!loading && !error && tab === "skills" && <SkillsTab skills={skills} onToggleCore={toggleCore} />}
         {!loading && !error && tab === "experiences" && <ExpsTab exps={exps} />}
         {!loading && !error && tab === "projects" && <ProjectsTab projects={projects} />}
         {!loading && !error && tab === "graph" && <GraphTab graph={graph ?? { top_skills: [], by_category: {}, evidence: {} }} />}
@@ -57,7 +67,13 @@ export function DataExplorer() {
   );
 }
 
-function SkillsTab({ skills }: { skills: SkillRow[] }) {
+function SkillsTab({
+  skills,
+  onToggleCore,
+}: {
+  skills: SkillRow[];
+  onToggleCore: (name: string, next: boolean) => void;
+}) {
   if (skills.length === 0) return <p style={sInner.empty}>No skills yet — ingest your resume to get started.</p>;
 
   const byCategory: Record<string, SkillRow[]> = {};
@@ -68,12 +84,25 @@ function SkillsTab({ skills }: { skills: SkillRow[] }) {
 
   return (
     <div style={sInner.skillsRoot}>
+      <p style={sInner.pinHint}>★ Pin a skill to always include it in tailored resumes.</p>
       {Object.keys(byCategory).sort().map(cat => (
         <div key={cat} style={sInner.catBlock}>
           <div style={sInner.catHeader}>{cat} <span style={sInner.catCount}>({byCategory[cat].length})</span></div>
           <div style={sInner.skillGrid}>
-            {byCategory[cat].sort((a, b) => a.name.localeCompare(b.name)).map(sk => (
-              <div key={sk.name} style={sInner.skillChip}>
+            {byCategory[cat]
+              // Pinned skills first, then alphabetical.
+              .sort((a, b) => (Number(b.is_core) - Number(a.is_core)) || a.name.localeCompare(b.name))
+              .map(sk => (
+              <div key={sk.name} style={{ ...sInner.skillChip, ...(sk.is_core ? sInner.skillChipPinned : {}) }}>
+                <button
+                  type="button"
+                  title={sk.is_core ? "Unpin core skill" : "Pin as core skill"}
+                  aria-pressed={sk.is_core}
+                  style={{ ...sInner.pinBtn, ...(sk.is_core ? sInner.pinBtnActive : {}) }}
+                  onClick={() => onToggleCore(sk.name, !sk.is_core)}
+                >
+                  {sk.is_core ? "★" : "☆"}
+                </button>
                 <span style={sInner.skillName}>{sk.name}</span>
                 {sk.proficiency !== "N/A" && <span style={sInner.skillMeta}>lvl {sk.proficiency}</span>}
                 <div style={sInner.confBarBg}>
@@ -289,14 +318,22 @@ const s: Record<string, CSSProperties> = {
 const sInner: Record<string, CSSProperties> = {
   empty: { color: colors.textMuted, fontSize: font.size.sm, margin: 0 },
   skillsRoot: { display: "flex", flexDirection: "column", gap: "1.25rem" },
+  pinHint: { color: colors.textMuted, fontSize: "0.7rem", margin: 0 },
   catBlock: {},
   catHeader: { fontWeight: 700, color: colors.accent, fontSize: font.size.sm, marginBottom: "0.5rem" },
   catCount: { color: colors.textMuted, fontWeight: 400 },
   skillGrid: { display: "flex", flexWrap: "wrap", gap: "0.5rem" },
   skillChip: {
-    background: colors.surface, border: `1px solid ${colors.primary}`,
-    padding: "0.375rem 0.625rem", display: "flex", flexDirection: "column", gap: "0.2rem", minWidth: "10ch",
+    background: colors.surface, border: `1px solid ${colors.primary}`, position: "relative",
+    padding: "0.375rem 1.25rem 0.375rem 0.625rem", display: "flex", flexDirection: "column",
+    gap: "0.2rem", minWidth: "10ch",
   },
+  skillChipPinned: { border: `1px solid ${colors.accent}` },
+  pinBtn: {
+    position: "absolute", top: "0.125rem", right: "0.25rem", background: "none", border: "none",
+    color: colors.textMuted, cursor: "pointer", fontSize: "0.8rem", lineHeight: 1, padding: 0,
+  },
+  pinBtnActive: { color: colors.accent },
   skillName: { color: colors.text, fontSize: font.size.sm, fontWeight: 600 },
   skillMeta: { color: colors.textMuted, fontSize: "0.7rem" },
   skillSource: { color: colors.textMuted, fontSize: "0.7rem" },

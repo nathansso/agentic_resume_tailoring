@@ -113,6 +113,17 @@ def get_skills(user: User = Depends(get_current_user)):
     return services.get_skills(user.user_id)
 
 
+class SkillCoreUpdate(BaseModel):
+    name: str
+    is_core: bool
+
+
+@router.post("/skills/core")
+def set_skill_core(body: SkillCoreUpdate, user: User = Depends(get_current_user)):
+    """Pin/unpin a skill as 'core' so it always renders in tailored output (issue #54)."""
+    return {"result": services.set_skill_core(user.user_id, body.name, body.is_core)}
+
+
 @router.get("/experiences")
 def get_experiences(user: User = Depends(get_current_user)):
     return services.get_experiences(user.user_id)

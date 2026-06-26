@@ -281,6 +281,7 @@ def get_skills(user_id: Optional[UUID]) -> list[dict]:
                     "proficiency": us.proficiency,
                     "confidence": confidence,
                     "sources": {source} if source else set(),
+                    "is_core": bool(us.is_core),
                 }
             else:
                 if confidence > merged[key]["confidence"]:
@@ -289,6 +290,7 @@ def get_skills(user_id: Optional[UUID]) -> list[dict]:
                         merged[key]["proficiency"] = us.proficiency
                 if source:
                     merged[key]["sources"].add(source)
+                merged[key]["is_core"] = merged[key]["is_core"] or bool(us.is_core)
 
         rows = []
         for entry in merged.values():
@@ -299,8 +301,50 @@ def get_skills(user_id: Optional[UUID]) -> list[dict]:
                 "source": ", ".join(sorted(entry["sources"])) if entry["sources"] else "",
                 "proficiency": str(prof) if prof is not None else "N/A",
                 "confidence": f"{entry['confidence']:.1f}",
+                "is_core": entry["is_core"],
             })
         return rows
+
+
+def set_skill_core(user_id: UUID, skill_name: str, is_core: bool) -> str:
+    """Pin/unpin a skill as 'core' on the user's profile. Returns plain-English. Never raises.
+
+    A pinned skill is always rendered in the tailored skills section, bypassing
+    the JD-relevance cap (issue #54). Applies to every UserSkill row for the
+    skill (matched case-insensitively by name).
+    """
+    try:
+        skill_name = (skill_name or "").strip()
+        if not skill_name:
+            return "Please provide a skill name."
+        with Session(engine) as session:
+            skill = session.exec(select(Skill).where(Skill.name == skill_name)).first()
+            if not skill:
+                all_skills = session.exec(select(Skill)).all()
+                skill = next(
+                    (s for s in all_skills if s.name.lower() == skill_name.lower()), None
+                )
+            if not skill:
+                return f"'{skill_name}' is not in your profile."
+            display_name = skill.name
+            links = session.exec(
+                select(UserSkill).where(
+                    UserSkill.user_id == user_id,
+                    UserSkill.skill_id == skill.skill_id,
+                )
+            ).all()
+            if not links:
+                return f"'{skill_name}' is not in your profile."
+            for link in links:
+                link.is_core = is_core
+                session.add(link)
+            session.commit()
+        if is_core:
+            return f"Pinned '{display_name}' as a core skill."
+        return f"Unpinned '{display_name}'."
+    except Exception as e:
+        logger.error("set_skill_core failed: %s", e)
+        return f"Failed to update skill: {e}"
 
 
 def get_experiences(user_id: Optional[UUID]) -> list[dict]:
