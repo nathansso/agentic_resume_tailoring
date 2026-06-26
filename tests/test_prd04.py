@@ -453,6 +453,146 @@ def test_export_section_order_fallback(isolated_engine, monkeypatch, tmp_path):
     assert captured["section_order"] is None
 
 
+# ── best-of-N attempt selection (issue #58) ──────────────────────────────────
+
+
+def _fake_breakdown(score):
+    return {
+        "composite": score,
+        "skill_coverage": {"score": score, "covered": 1, "total": 1, "gaps": []},
+        "keyword_coverage": {"missing_keywords": []},
+    }
+
+
+def _eval_state(content, attempt, best_score=-1.0, best_content=None):
+    return {
+        "user_id": "u", "job_id": "j", "result_id": "r",
+        "resume_text": "", "job_text": "jd", "matched_skills": {},
+        "missing_skills": [], "priority_keywords": [], "baseline_breakdown": {},
+        "experiences": [], "projects": [],
+        "tailored_content": content,
+        "evaluation": {},
+        "best_content": best_content or {},
+        "best_evaluation": {},
+        "best_score": best_score,
+        "attempt": attempt, "done": False,
+    }
+
+
+def _eval_agent(monkeypatch, score_of):
+    """A ResumeTailorAgent whose ATS scorer returns score_of(content)."""
+    import agents.tailor as tm
+    monkeypatch.setattr(tm, "get_llm", lambda *a, **k: object())
+
+    def fake_score(content, job_text, matched_skills=None, baseline_breakdown=None):
+        return _fake_breakdown(score_of(content))
+
+    monkeypatch.setattr(tm.ATSScoringEngine, "score_tailored", fake_score)
+    return tm.ResumeTailorAgent()
+
+
+def test_evaluate_keeps_best_across_regression(monkeypatch):
+    """A worse later attempt must not overwrite a better earlier one (issue #58)."""
+    agent = _eval_agent(monkeypatch, lambda c: c["_score"])
+
+    # Attempt 1 scores 80 — below the great bar (90), so the loop keeps going.
+    s = _eval_state({"experiences": [], "projects": [], "_score": 80}, attempt=1)
+    agent._evaluate_node(s)
+    assert s["best_score"] == 80
+    assert s["best_content"]["_score"] == 80
+    assert s["done"] is False  # below great bar, budget remains
+
+    # Attempt 2 (the budget cap) regresses to 60 — best stays at 80, loop ends.
+    s["attempt"] = 2
+    s["tailored_content"] = {"experiences": [], "projects": [], "_score": 60}
+    agent._evaluate_node(s)
+    assert s["best_score"] == 80
+    assert s["best_content"]["_score"] == 80
+    assert s["done"] is True  # MAX_RETRIES reached
+
+
+def test_evaluate_early_exits_at_great_bar(monkeypatch):
+    """Clearing the high bar stops the loop early to save an LLM call (issue #58)."""
+    agent = _eval_agent(monkeypatch, lambda c: c["_score"])
+
+    s = _eval_state({"experiences": [], "projects": [], "_score": 95}, attempt=1)
+    agent._evaluate_node(s)
+    assert s["done"] is True  # 95 >= 90 and kw_coverage 1.0 >= 0.80
+    assert s["best_score"] == 95
+
+
+def test_tailor_ships_best_attempt_not_last(isolated_engine, monkeypatch):
+    """tailor() persists the best-scoring attempt, not whatever ran last (issue #58)."""
+    import agents.tailor as tailor_module
+    from conftest import _seed_user_and_skill
+
+    monkeypatch.setattr(tailor_module, "engine", isolated_engine)
+    monkeypatch.setattr(tailor_module, "get_llm", lambda *a, **kw: object())
+
+    user = _seed_user_and_skill(isolated_engine)
+    job = _make_job(isolated_engine, title="MLE", company="Lab",
+                    status="analyzed", description=_RESEARCH_JD)
+    with Session(isolated_engine) as session:
+        result = UserJobResult(user_id=user.user_id, job_id=job.job_id)
+        session.add(result)
+        session.commit()
+        result_id = result.result_id
+
+    agent = tailor_module.ResumeTailorAgent()
+
+    class FakeGraph:
+        def invoke(self, state):
+            return {**state,
+                    "tailored_content": {"experiences": [], "projects": [], "marker": "last"},
+                    "best_content": {"experiences": [], "projects": [], "marker": "best"},
+                    "evaluation": {"ats_breakdown": {"composite": 60}},
+                    "best_evaluation": {"ats_breakdown": {"composite": 90}},
+                    "best_score": 90.0, "attempt": 3, "done": True}
+
+    agent.graph = FakeGraph()
+    shipped = agent.tailor(user.user_id, job.job_id, result_id)
+
+    assert shipped["marker"] == "best"
+    with Session(isolated_engine) as session:
+        stored = session.get(UserJobResult, result_id)
+        assert stored.tailored_resume_content["marker"] == "best"
+        assert stored.tailored_score_breakdown == {"composite": 90}
+
+
+def test_tailor_falls_back_to_last_when_no_best(isolated_engine, monkeypatch):
+    """When no attempt scored (all errored), ship the last content so the error
+    path still surfaces (issue #58)."""
+    import agents.tailor as tailor_module
+    from conftest import _seed_user_and_skill
+
+    monkeypatch.setattr(tailor_module, "engine", isolated_engine)
+    monkeypatch.setattr(tailor_module, "get_llm", lambda *a, **kw: object())
+
+    user = _seed_user_and_skill(isolated_engine)
+    job = _make_job(isolated_engine, title="MLE", company="Lab", status="analyzed")
+    with Session(isolated_engine) as session:
+        result = UserJobResult(user_id=user.user_id, job_id=job.job_id)
+        session.add(result)
+        session.commit()
+        result_id = result.result_id
+
+    agent = tailor_module.ResumeTailorAgent()
+
+    class FakeGraph:
+        def invoke(self, state):
+            return {**state,
+                    "tailored_content": {"error": "boom"},
+                    "best_content": {},
+                    "evaluation": {"coverage_pct": 0, "gaps": ["generation_failed"]},
+                    "best_evaluation": {},
+                    "best_score": -1.0, "attempt": 3, "done": True}
+
+    agent.graph = FakeGraph()
+    shipped = agent.tailor(user.user_id, job.job_id, result_id)
+
+    assert "error" in shipped
+
+
 def test_as_obj_coerces_json_string_columns():
     """Regression: SQLite can round-trip JSON columns as strings, which crashed
     the tailor read-path with `'str' object has no attribute 'get'`. `_as_obj`
