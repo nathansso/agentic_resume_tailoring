@@ -1,0 +1,25 @@
+{
+  "name": "Backend Engineer",
+  "jd_text": "Backend engineer to design REST APIs in Python with FastAPI and PostgreSQL. Experience with Redis caching, Docker, and AWS deployment is required. Strong SQL skills expected.",
+  "matched_skills": {
+    "Python": {"match_type": "direct", "required": true, "weight": 3.0},
+    "FastAPI": {"match_type": "direct", "required": true, "weight": 2.0},
+    "PostgreSQL": {"match_type": "name_match", "required": true, "weight": 2.0},
+    "SQL": {"match_type": "direct", "required": true, "weight": 2.0}
+  },
+  "relevant": ["Python", "FastAPI", "PostgreSQL", "Redis", "Docker", "AWS", "SQL"],
+  "skills": [
+    {"name": "Python", "category": "Languages & Libraries", "proficiency": 5, "confidence": 0.95},
+    {"name": "FastAPI", "category": "Languages & Libraries", "proficiency": 4, "confidence": 0.8},
+    {"name": "PostgreSQL", "category": "Data Engineering", "proficiency": 4, "confidence": 0.8},
+    {"name": "Redis", "category": "Data Engineering", "proficiency": 3, "confidence": 0.6},
+    {"name": "Docker", "category": "Tools", "proficiency": 4, "confidence": 0.7},
+    {"name": "AWS", "category": "Cloud", "proficiency": 3, "confidence": 0.6},
+    {"name": "SQL", "category": "Data Engineering", "proficiency": 5, "confidence": 0.9},
+    {"name": "React", "category": "Languages & Libraries", "proficiency": 3, "confidence": 0.5},
+    {"name": "Photoshop", "category": "Tools", "proficiency": 1, "confidence": 0.2},
+    {"name": "Figma", "category": "Tools", "proficiency": 2, "confidence": 0.3},
+    {"name": "Excel", "category": "Tools", "proficiency": 2, "confidence": 0.3},
+    {"name": "MATLAB", "category": "Languages & Libraries", "proficiency": 2, "confidence": 0.3}
+  ]
+}

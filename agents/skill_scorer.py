@@ -24,6 +24,7 @@ Pure functions over plain dicts — no DB or LLM access. agents/tailor.py loads
 the skill rows + JD corpus and calls rank_and_select_skills().
 """
 import math
+import os
 from typing import Dict, List, Optional, Sequence
 
 from agents.ats_scorer import (
@@ -34,24 +35,44 @@ from agents.ats_scorer import (
     _STOP_WORDS,
 )
 
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.environ[name])
+    except (KeyError, ValueError):
+        return default
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.environ[name])
+    except (KeyError, ValueError):
+        return default
+
+
 # ── Component weights (issue #54) ──────────────────────────────────────────────
 # Composite = sum(weight * value) / sum(weight) over the components present for a
-# run. The Phase-2 'semantic' key can be added without rebalancing the others.
+# run. The 'semantic' key can be omitted (Phase 1) without rebalancing the rest.
+#
+# Every weight and cap bound is env-overridable (issue #54 Phase 4) so they can
+# be calibrated against the #51 efficacy benchmark without code changes; the
+# defaults below are the shipped baseline. score_skills()/select_skills() also
+# accept per-call overrides for programmatic sweeps (see eval/skill_selection_eval.py).
 WEIGHTS = {
-    "semantic": 0.30,   # Phase 2 (embeddings) — not produced in Phase 1
-    "tfidf": 0.20,
-    "jd_weight": 0.20,
-    "match_confidence": 0.10,
-    "proficiency": 0.10,
-    "evidence": 0.10,
+    "semantic":         _env_float("SKILL_W_SEMANTIC", 0.30),
+    "tfidf":            _env_float("SKILL_W_TFIDF", 0.20),
+    "jd_weight":        _env_float("SKILL_W_JD_WEIGHT", 0.20),
+    "match_confidence": _env_float("SKILL_W_MATCH_CONFIDENCE", 0.10),
+    "proficiency":      _env_float("SKILL_W_PROFICIENCY", 0.10),
+    "evidence":         _env_float("SKILL_W_EVIDENCE", 0.10),
 }
 
 # ── Dynamic cap bounds (mirrors project_scorer's drop-off + bounds rule, #47) ──
-MIN_SKILLS = 8
-MAX_SKILLS = 18
-DROPOFF_RATIO = 0.55   # keep next skill only while >= 55% of previous kept score
-TOP_RATIO = 0.20       # ...and >= 20% of the top score
-CORE_FLOOR_K = 4       # always retain this many strongest skills (by proficiency)
+MIN_SKILLS = _env_int("SKILL_MIN", 8)
+MAX_SKILLS = _env_int("SKILL_MAX", 18)
+DROPOFF_RATIO = _env_float("SKILL_DROPOFF_RATIO", 0.55)  # keep next while >= 55% of prev kept
+TOP_RATIO = _env_float("SKILL_TOP_RATIO", 0.20)          # ...and >= 20% of the top score
+CORE_FLOOR_K = _env_int("SKILL_CORE_FLOOR_K", 4)         # inferred floor size (by proficiency)
 
 PROFICIENCY_MAX = 5
 
@@ -158,6 +179,7 @@ def score_skills(
     corpus_texts: Optional[Sequence[str]] = None,
     skill_vectors: Optional[Dict] = None,
     jd_vector=None,
+    weights: Optional[Dict] = None,
 ) -> Optional[List[Dict]]:
     """
     Score every skill against the JD and return them sorted by composite score
@@ -169,9 +191,12 @@ def score_skills(
 
     When `skill_vectors` ({name: vector}) and `jd_vector` are supplied (Phase 2),
     a 'semantic' component is blended in per skill that has a cached vector.
+
+    `weights` overrides the module WEIGHTS for a single call (Phase 4 tuning).
     """
     matched_skills = matched_skills or {}
     skill_vectors = skill_vectors or {}
+    weights = weights or WEIGHTS
     if not jd_text or not jd_text.strip():
         return None
     jd_counts = _jd_token_counts(jd_text)
@@ -218,8 +243,11 @@ def score_skills(
         if "evidence" in present:
             comps["evidence"] = min(float(s.get("confidence") or 0.0), 1.0)
 
-        total_w = sum(WEIGHTS[k] for k in comps)
-        composite = sum(WEIGHTS[k] * v for k, v in comps.items()) / total_w if total_w else 0.0
+        total_w = sum(weights.get(k, 0.0) for k in comps)
+        composite = (
+            sum(weights.get(k, 0.0) * v for k, v in comps.items()) / total_w
+            if total_w else 0.0
+        )
 
         scored.append({
             "name": name,
@@ -242,7 +270,15 @@ def _neg_name(name: str):
     return tuple(-ord(c) for c in name.lower())
 
 
-def select_skills(scored: List[Dict]) -> List[Dict]:
+def select_skills(
+    scored: List[Dict],
+    *,
+    min_k: Optional[int] = None,
+    max_k: Optional[int] = None,
+    dropoff: Optional[float] = None,
+    top_ratio: Optional[float] = None,
+    core_floor_k: Optional[int] = None,
+) -> List[Dict]:
     """
     Apply the dynamic cap (drop-off + MIN/MAX bounds) and the core-skill floor.
     `scored` must be sorted descending by 'score'. Output stays in score order;
@@ -252,21 +288,29 @@ def select_skills(scored: List[Dict]) -> List[Dict]:
     #54) when any exist — they are always rendered, bypassing the cap. When none
     are pinned, fall back to the inferred floor of the strongest skills by
     proficiency, so the section is never just low-relevance noise.
+
+    Bounds default to the module constants; pass overrides for tuning sweeps.
     """
+    min_k = MIN_SKILLS if min_k is None else min_k
+    max_k = MAX_SKILLS if max_k is None else max_k
+    dropoff = DROPOFF_RATIO if dropoff is None else dropoff
+    top_ratio = TOP_RATIO if top_ratio is None else top_ratio
+    core_floor_k = CORE_FLOOR_K if core_floor_k is None else core_floor_k
+
     if not scored:
         return []
 
     pinned = [s for s in scored if s.get("is_core")]
 
-    if len(scored) <= MIN_SKILLS:
+    if len(scored) <= min_k:
         return list(scored)
 
     top = scored[0]["score"] or 0.0
-    selected = list(scored[:MIN_SKILLS])
+    selected = list(scored[:min_k])
     prev = selected[-1]["score"] or 0.0
-    for s in scored[MIN_SKILLS:MAX_SKILLS]:
+    for s in scored[min_k:max_k]:
         score = s["score"] or 0.0
-        if score >= DROPOFF_RATIO * prev and score >= TOP_RATIO * top:
+        if score >= dropoff * prev and score >= top_ratio * top:
             selected.append(s)
             prev = score
         else:
@@ -274,7 +318,7 @@ def select_skills(scored: List[Dict]) -> List[Dict]:
 
     floor = pinned if pinned else sorted(
         scored, key=lambda x: ((x["proficiency"] or 0), x["score"]), reverse=True
-    )[:CORE_FLOOR_K]
+    )[:core_floor_k]
     chosen = {s["name"] for s in selected}
     for c in floor:
         if c["name"] not in chosen:
@@ -295,16 +339,35 @@ def rank_and_select_skills(
     corpus_texts: Optional[Sequence[str]] = None,
     skill_vectors: Optional[Dict] = None,
     jd_vector=None,
+    weights: Optional[Dict] = None,
+    bounds: Optional[Dict] = None,
 ) -> Optional[List[Dict]]:
     """
     Full path: score → cap/floor. Returns the rendered skill list as
     [{name, category, score}, ...] in display order, or None when there is no
     JD signal (caller falls back to the untailored full list).
+
+    `weights` and `bounds` (keys: min_k, max_k, dropoff, top_ratio, core_floor_k)
+    override the defaults for a single call — used by the tuning harness.
     """
     scored = score_skills(
-        skills, jd_text, matched_skills, corpus_texts, skill_vectors, jd_vector
+        skills, jd_text, matched_skills, corpus_texts, skill_vectors, jd_vector, weights
     )
     if scored is None:
         return None
-    selected = select_skills(scored)
+    selected = select_skills(scored, **(bounds or {}))
     return [{"name": s["name"], "category": s["category"], "score": s["score"]} for s in selected]
+
+
+def selection_recall(selected: List[Dict], relevant_names: Sequence[str]) -> float:
+    """
+    Fraction of the JD-relevant skills (e.g. required/matched skills the user
+    has) that survive into the rendered selection. The headline quality metric
+    for tuning weights/bounds against the #51 efficacy benchmark (issue #54).
+    Returns 1.0 when there is nothing relevant to recall.
+    """
+    rel = {n.lower().strip() for n in relevant_names if n and n.strip()}
+    if not rel:
+        return 1.0
+    chosen = {s.get("name", "").lower().strip() for s in selected}
+    return len(rel & chosen) / len(rel)

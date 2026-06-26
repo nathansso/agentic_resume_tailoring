@@ -1,0 +1,27 @@
+{
+  "name": "ML Engineer",
+  "jd_text": "We are hiring a machine learning engineer with strong PyTorch and TensorFlow experience to build and train deep learning models and deploy them with Docker and Kubernetes on AWS. Python required.",
+  "matched_skills": {
+    "PyTorch": {"match_type": "direct", "required": true, "weight": 3.0},
+    "TensorFlow": {"match_type": "direct", "required": true, "weight": 2.0},
+    "Docker": {"match_type": "name_match", "required": false, "weight": 1.0},
+    "Python": {"match_type": "direct", "required": true, "weight": 2.0}
+  },
+  "relevant": ["PyTorch", "TensorFlow", "Docker", "Kubernetes", "AWS", "Python"],
+  "skills": [
+    {"name": "PyTorch", "category": "AI & Machine Learning", "proficiency": 5, "confidence": 0.9},
+    {"name": "TensorFlow", "category": "AI & Machine Learning", "proficiency": 4, "confidence": 0.8},
+    {"name": "Docker", "category": "Tools", "proficiency": 3, "confidence": 0.6},
+    {"name": "Kubernetes", "category": "Cloud", "proficiency": 3, "confidence": 0.6},
+    {"name": "AWS", "category": "Cloud", "proficiency": 3, "confidence": 0.7},
+    {"name": "Python", "category": "Languages & Libraries", "proficiency": 5, "confidence": 0.95},
+    {"name": "scikit-learn", "category": "AI & Machine Learning", "proficiency": 4, "confidence": 0.7},
+    {"name": "Pandas", "category": "Languages & Libraries", "proficiency": 4, "confidence": 0.7},
+    {"name": "Microsoft Excel", "category": "Tools", "proficiency": 2, "confidence": 0.3},
+    {"name": "Photoshop", "category": "Tools", "proficiency": 1, "confidence": 0.2},
+    {"name": "jQuery", "category": "Languages & Libraries", "proficiency": 2, "confidence": 0.3},
+    {"name": "PHP", "category": "Languages & Libraries", "proficiency": 1, "confidence": 0.2},
+    {"name": "WordPress", "category": "Tools", "proficiency": 1, "confidence": 0.2},
+    {"name": "Figma", "category": "Tools", "proficiency": 2, "confidence": 0.3}
+  ]
+}
