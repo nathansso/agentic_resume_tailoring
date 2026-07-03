@@ -16,7 +16,4 @@ scikit-learn
 networkx
 # HTML parsing (skill post-processing)
 beautifulsoup4
-# TUI
-textual
-plotext
 # PDF export — LaTeX/pdflatex (installed via apt in Dockerfile; no Python deps needed)

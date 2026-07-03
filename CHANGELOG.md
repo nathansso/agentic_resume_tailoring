@@ -4,6 +4,25 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Repo hygiene — public-readiness cleanup + service-layer extraction
+**Status:** complete | **Tests:** 344 pass (0 new; net −37 from removing the TUI test suite)
+
+Prepared the repository to be made public: removed personal data and the
+deprecated Textual TUI, extracted the shared service layer to a top-level
+module, and added a proper README. No product behavior changed.
+
+### What shipped
+- **Service-layer extraction.** `tui/services.py` → `services.py` (self-contained business logic used by the web app, agents, and CLI); rewrote 45 import sites. The `tui.services` string key in the eval stub map was updated to `services`.
+- **TUI retirement.** Deleted `tui/` (app, screens, widgets), `tests/test_tui.py`, the textual-web `tui`/`serve` CLI commands + `cmd_serve`, `launch.bat`, `launch.ps1`, `textual-web.toml`, and `scripts/automation_smoke_check.py`. Dropped `textual`/`plotext` from `requirements*.txt`. Web-deploy structural checks preserved as `tests/test_web_deploy.py`.
+- **Personal data + artifact removal.** Removed personal resume/cover-letter/parsed-resume files, `notebooks/`, one-off `debug_*`/`test_*` scripts (kept operational scripts), the empty `agentic_resume.db`, `test.txt`, `knowledge_graph.png`, and tracked `__pycache__/*.pyc`. Made `tests/test_integration.py` self-contained via synthetic `tests/fixtures/` (`sample_resume.md`, `sample_job.txt`). Expanded `.gitignore` for personal materials and local DBs.
+- **Docs.** Added `README.md` (overview, architecture, quickstart, deploy). Rewrote `docker-compose.yml` and `INSTALL.md` to serve the web app (uvicorn) instead of the TUI. Deleted the obsolete `STARTUP.md` and `.github/instructions/tui.instructions.md`. Updated `CLAUDE.md`, `agents/CLAUDE.md`, `.github/copilot-instructions.md`, and `supabase/README.md` to drop TUI references.
+
+### Deviations from spec
+- Historical `CHANGELOG.md` entries, `docs/prd/`, and `docs/ROADMAP.md` were left untouched — they accurately describe past work (including the then-existing `tui/services.py`) and are treated as historical records.
+- The PII purge from git *history* (via `git filter-repo`) is performed as a separate final step outside this commit, since it rewrites all commits.
+
+---
+
 ## Issues 54 & 58 — Skills Section Tailoring + Best-of-N Attempt Selection
 **Status:** complete | **Tests:** 381 pass (38 new)
 

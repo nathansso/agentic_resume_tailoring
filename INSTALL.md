@@ -14,8 +14,10 @@ cp .env.example .env
 # Edit .env and set ANTHROPIC_API_KEY (or OPENAI_API_KEY if using OpenAI)
 
 # 3. Launch
-docker compose run --rm art
+docker compose up --build
 ```
+
+Open http://localhost:8000.
 
 Your data (database, exports, uploads) is stored in a Docker named volume (`art_data`) and persists across runs.
 
@@ -46,33 +48,30 @@ pip install -r requirements-full.txt   # includes Playwright + sentence-transfor
 
 # 4. Configure
 cp .env.example .env
-# Edit .env and set your API key
+# Edit .env and set your API key + SESSION_SECRET_KEY
 
-# 5. Launch
-python -m tui.app
-# or
-python cli.py tui
+# 5. Launch the web server
+DEV_MODE=1 uvicorn web.app:app --port 8000 --reload
 ```
 
-### Windows one-click launcher
-Double-click `launch.ps1` (PowerShell) after completing steps 1-4 above.
+Open http://localhost:8000. For frontend hot-reloading, run the Vite dev server
+in a second terminal (`cd web/frontend && npm install && npm run dev`) — it
+proxies `/api` to port 8000. See the README for the full dev workflow.
+
+The CLI mirrors the core pipeline without the web UI:
+
+```bash
+python cli.py ingest-resume <file>
+python cli.py ingest-github [username]
+python cli.py tailor <job_file_or_text>
+python cli.py status
+```
 
 ---
 
-## Option C — Browser (textual-web)
+## Option C — Cloud deploy
 
-Serve the TUI to any browser over WebSocket — no local install required for end users.
-
-### Local browser access
-
-```bash
-python cli.py serve          # opens on the default textual-web port
-python cli.py serve --port 8080
-```
-
-Open the printed URL in any browser.
-
-### Cloud deploy — Fly.io
+### Fly.io
 
 > **Pre-requisites:** [flyctl installed](https://fly.io/docs/hands-on/install-flyctl/),
 > a Fly.io account, and a Supabase project with auth enabled.
@@ -108,7 +107,7 @@ After deploy, visit `https://<your-app>.fly.dev` — users see the login screen 
 **Notes:**
 - Use the Supabase **pooler** connection string (port 6543) for production, not the direct connection (port 5432).
 - `SUPABASE_SERVICE_ROLE_KEY` is backend-only — never expose it to clients.
-- Each browser session spawns an isolated app process; Supabase RLS enforces per-user data isolation automatically.
+- Supabase RLS enforces per-user data isolation automatically for every request.
 - To verify RLS isolation: log in as two different users and confirm each can only see their own jobs and resume data.
 
 ### Cloud deploy — Render

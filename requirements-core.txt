@@ -19,9 +19,6 @@ scikit-learn
 networkx
 # LinkedIn scraping (PDF/HTML path only — browser not required)
 beautifulsoup4
-# TUI (local use only)
-textual
-plotext
 # Web API
 fastapi
 uvicorn[standard]

@@ -6,7 +6,7 @@ ART is a resume-tailoring platform that ingests resume, GitHub, and LinkedIn dat
 **Web app (primary):** https://artie-resume-tailoring.fly.dev/  
 Deployed on Fly.io. React + TypeScript frontend served as static files by a FastAPI backend. Supabase Postgres in production (via `DATABASE_URL` Fly.io secret); falls back to SQLite locally. Supabase Auth used for JWT session tokens when env vars are present; falls back to local signed cookies.
 
-**TUI (deprecated):** Textual-based terminal UI — retained for reference, not actively maintained. All new work targets the web layer.
+A `cli.py` command surface mirrors the core ingestion/tailoring pipeline for scripting and tests. The web app is the only user-facing product; a Textual TUI existed previously and was removed — its shared service layer now lives in `services.py`.
 
 **Stack:**
 - Frontend: React 18, TypeScript, Vite — lives in `web/frontend/`
@@ -14,12 +14,10 @@ Deployed on Fly.io. React + TypeScript frontend served as static files by a Fast
 - Database: SQLModel ORM — Supabase Postgres in production (via `DATABASE_URL` Fly.io secret); falls back to SQLite locally when `DATABASE_URL` is unset
 - Auth: Supabase Auth (JWT) with local `itsdangerous` cookie fallback
 - AI: LangGraph, LangChain, OpenAI / Anthropic
-- TUI: Textual
 
 **Entry points:**
 - `uvicorn web.app:app --port 8000` — web server (production uses Fly.io Docker deploy)
 - `npm run dev` (in `web/frontend/`) — Vite dev server on port 5173, proxies `/api` to port 8000
-- `python cli.py tui` or `python tui/app.py` — TUI
 - `python cli.py <command>` — CLI surface
 
 **Deploy:** `fly deploy` from repo root — builds Docker image (Node 20 → Python 3.12), pushes to Fly.io.
@@ -30,7 +28,7 @@ source .venv/Scripts/activate   # bash
 .venv\Scripts\Activate.ps1      # PowerShell
 ```
 
-Do not break the CLI when making web changes. TUI is deprecated — no new TUI features needed.
+Do not break the CLI when making web changes.
 
 ---
 
@@ -175,7 +173,6 @@ gh api graphql -f query='mutation($proj:ID!,$item:ID!,$field:ID!,$opt:String!){
 For folder-specific rules:
 - See `web/CLAUDE.md` for FastAPI routers, React components, auth flow, and deploy.
 - See `agents/CLAUDE.md` for chat routing, prompt, and tool-calling work.
-- See `tui/CLAUDE.md` for TUI reference (deprecated — no new features).
 
 When adding more guidance, prefer updating one of those local files over expanding this file with transient implementation detail.
 
@@ -201,7 +198,6 @@ Test layout:
 - All tests live under `tests/` — one file per concern.
 - `tests/conftest.py` — shared `isolated_engine` fixture and `_seed_user_and_skill` helper.
 - `tests/test_chat.py` — chat routing, fast-path, trace tests.
-- `tests/test_tui.py` — TUI screens, slash commands, service boundaries.
 - `tests/test_services.py` — services, ingestion diff, profile.
 - `tests/test_db.py` — DB and user-utils tests.
 - `tests/test_llm.py` — LLM factory tests.
@@ -211,8 +207,6 @@ Test layout:
 
 Testing conventions:
 - Use the `isolated_engine` fixture for DB-related tests.
-- Wrap async Textual tests in `asyncio.run(_run())`.
-- Access Textual `Static` content with `str(widget._Static__content)`.
 - Mark slow or network-dependent tests with `@pytest.mark.integration` and `@pytest.mark.slow`.
 - Import `_seed_user_and_skill` from `conftest` when tests need a seeded user+skill.
 

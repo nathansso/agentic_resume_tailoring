@@ -34,9 +34,9 @@ DATABASE_URL=postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/
 On first run, `init_db()` calls `SQLModel.metadata.create_all(engine)` which creates all tables automatically. Just launch the app:
 
 ```bash
-python -m tui.app
+uvicorn web.app:app --port 8000
 # or via Docker:
-docker compose run --rm art
+docker compose up --build
 ```
 
 Tables created: `user`, `skill`, `userskill`, `experience`, `project`, `projectblurb`, `jobdescription`, `jobskill`, `userjobresult`, `chatmessage`.

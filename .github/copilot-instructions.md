@@ -4,18 +4,18 @@ This file is a thin planning summary for VS Code tooling.
 
 Authoritative guidance lives here:
 - Root `CLAUDE.md` for repo-wide rules
-- Local `agents/CLAUDE.md` and `tui/CLAUDE.md` for folder-specific implementation rules
+- Local `agents/CLAUDE.md` and `web/CLAUDE.md` for folder-specific implementation rules
 - Active PRDs in `docs/prd/` for task scope and acceptance
 
 ## Build and Test
 - Activate `.venv` when present before running Python commands.
-- Run `python -m pytest test_smoke_formal.py -q` for behavior changes.
-- Do not mark a task complete until the feature works, has a test, and the full smoke test file passes.
+- Run `python run_tests.py` for behavior changes.
+- Do not mark a task complete until the feature works, has a test, and the full test suite passes.
 
 ## Architecture
-- Preserve the CLI surface in `cli.py` when changing the TUI.
+- Preserve the CLI surface in `cli.py` when changing the web app.
 - Use `database/user_utils.py::get_active_profile()` for active-user lookups.
-- Keep TUI database access in `tui/services.py`; widgets and screens should not query the DB directly.
+- Keep shared business logic in `services.py`; routers and agents call into it rather than querying the DB directly where a service already exists.
 - Keep schema changes backward-compatible for existing local SQLite databases.
 
 ## Workflow

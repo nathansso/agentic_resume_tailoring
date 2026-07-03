@@ -21,7 +21,7 @@ Use this file for work under `agents/`.
 - Tool-facing functions should return plain-English result strings.
 - Do not leak raw tracebacks to the user from chat or tool wrappers.
 - Keep account-level and repo-level GitHub ingestion as separate capabilities if both exist.
-- Preserve the public contract that `ChatAgent.chat()` returns a plain string for the TUI.
+- Preserve the public contract that `ChatAgent.chat()` returns a plain string for the web/API layer.
 
 ## Tests
 
