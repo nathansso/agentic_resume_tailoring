@@ -137,7 +137,7 @@ def save_description(job_id: str, body: DescriptionBody, user: User = Depends(ge
 def delete_job(job_id: str, user: User = Depends(get_current_user)):
     job, session = _get_owned_job(job_id, user)
     session.close()
-    from tui import services
+    import services
     result = services.delete_job(job_id)
     if result.startswith("Failed"):
         raise HTTPException(status_code=500, detail=result)
@@ -198,7 +198,7 @@ async def tailor_job(job_id: str, user: User = Depends(get_current_user), _quota
 
     def _run():
         from agents.tailor import ResumeTailorAgent
-        from tui.services import get_resume_style
+        from services import get_resume_style
         from sqlmodel import Session as S
         resume_text = ""
         with S(engine) as s:

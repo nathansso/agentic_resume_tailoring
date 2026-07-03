@@ -156,7 +156,7 @@ def test_ingest_github_uses_provided_token(monkeypatch):
     with patch("database.db.init_db"), \
          patch("database.user_utils.get_active_profile", return_value=None), \
          patch("ingestion.github.GitHubIngestor", FakeIngestor):
-        from tui.services import ingest_github
+        from services import ingest_github
         ingest_github("testuser", token="gho_mytoken")
 
     assert captured.get("token") == "gho_mytoken"
@@ -179,7 +179,7 @@ def test_ingest_github_falls_back_to_env_token(monkeypatch):
     with patch("database.db.init_db"), \
          patch("database.user_utils.get_active_profile", return_value=None), \
          patch("ingestion.github.GitHubIngestor", FakeIngestor):
-        from tui.services import ingest_github
+        from services import ingest_github
         ingest_github("testuser")
 
     assert captured.get("token") == "env_pat"

@@ -135,7 +135,7 @@ def cmd_ingest_linkedin(args):
     profile_url = args.url
     print(f"Scraping LinkedIn profile: {profile_url}")
 
-    from tui.services import ingest_linkedin
+    from services import ingest_linkedin
     result = ingest_linkedin(profile_url)
     print(result)
     if result.startswith("LinkedIn import failed"):
@@ -265,7 +265,7 @@ def cmd_pin_skill(args):
     from database.db import init_db, engine
     from sqlmodel import Session, select
     from database.models import User
-    from tui import services
+    import services
 
     init_db()
     with Session(engine) as session:
@@ -333,15 +333,6 @@ def cmd_status(args):
         print()
 
 
-def cmd_serve(args):
-    """Serve the TUI in a browser via textual-web."""
-    import subprocess
-    cmd = ["textual-web", "serve", "--config", "textual-web.toml"]
-    if getattr(args, "port", None):
-        cmd += ["--port", str(args.port)]
-    subprocess.run(cmd)
-
-
 def cmd_supabase_setup(args):
     """Apply the Phase 2 schema migration and RLS policies to the Supabase database."""
     import os
@@ -394,9 +385,8 @@ def cmd_chat_eval(args):
     from database import db as db_module
     from database import user_utils as uu_module
     import agents.chat as chat_module
-    import tui.services as services_module
+    import services as services_module
     import knowledge_graph.builder as kg_module
-    import tui.app as tui_module_ref
 
     # Use an isolated in-memory DB so eval runs never touch the user's real data.
     tmp_db = tempfile.mktemp(suffix=".db", prefix="art_eval_")
@@ -522,13 +512,6 @@ def main():
 
     subparsers.add_parser("status", help="Show your profile summary")
 
-    # tui
-    subparsers.add_parser("tui", help="Launch interactive TUI")
-
-    # serve
-    p_serve = subparsers.add_parser("serve", help="Serve the TUI in a browser via textual-web")
-    p_serve.add_argument("--port", type=int, default=None, help="Port to listen on (default: textual-web default)")
-
     # supabase-setup
     subparsers.add_parser(
         "supabase-setup",
@@ -564,11 +547,6 @@ def main():
         cmd_pin_skill(args)
     elif args.command == "status":
         cmd_status(args)
-    elif args.command == "tui":
-        from tui.app import main as tui_main
-        tui_main()
-    elif args.command == "serve":
-        cmd_serve(args)
     elif args.command == "supabase-setup":
         cmd_supabase_setup(args)
     elif args.command == "chat-eval":

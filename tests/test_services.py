@@ -1,8 +1,8 @@
-"""tui/services.py — ingestion diff, profile, and job query tests."""
+"""services.py — ingestion diff, profile, and job query tests."""
 import pytest
 from sqlmodel import Session
 
-import tui.services as services_module
+import services as services_module
 import agents.chat as chat_module
 from database.models import Skill, User, UserSkill, JobDescription, UserJobResult
 from conftest import _seed_user_and_skill

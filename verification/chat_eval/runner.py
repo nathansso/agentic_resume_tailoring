@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 # Services that get stubbed in --stubbed mode to avoid network/file I/O.
 _STUB_MAP = {
-    "tui.services": {
+    "services": {
         "ingest_github": lambda username="": f"[STUBBED] GitHub ingested for {username}",
         "ingest_github_repo": lambda ref="": f"[STUBBED] Repo ingested: {ref}",
         "ingest_resume_file": lambda path="": f"[STUBBED] Resume ingested: {path}",

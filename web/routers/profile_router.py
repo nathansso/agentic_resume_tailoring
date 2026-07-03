@@ -8,7 +8,7 @@ from database.models import User, UserSkill, Experience, Project
 from ingestion.linkedin import LinkedInIngestor
 from web.auth import get_current_user
 from web.routers.dependencies import linkedin_quota_remaining, increment_linkedin_usage
-from tui import services
+import services
 
 router = APIRouter(prefix="/api/profile", tags=["profile"])
 

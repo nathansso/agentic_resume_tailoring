@@ -5,7 +5,7 @@ from sqlmodel import Session
 
 from conftest import _seed_user_and_skill
 from database.models import User, Skill, UserSkill
-from tui import services
+import services
 from agents.skill_scorer import MAX_SKILLS, rank_and_select_skills
 
 

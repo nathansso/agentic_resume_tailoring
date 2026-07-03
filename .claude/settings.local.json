@@ -87,7 +87,19 @@
       "Bash(pip download *)",
       "Bash(fly logs *)",
       "PowerShell(npm *)",
-      "PowerShell(Invoke-WebRequest -Uri \"https://artie-resume-tailoring.fly.dev/api/health\" -UseBasicParsing -TimeoutSec 60 2>&1 | Select-Object StatusCode, Content)"
+      "PowerShell(Invoke-WebRequest -Uri \"https://artie-resume-tailoring.fly.dev/api/health\" -UseBasicParsing -TimeoutSec 60 2>&1 | Select-Object StatusCode, Content)",
+      "Bash(sqlite3 agentic_resume.db \".schema\")",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/test_github_oauth.py -v)",
+      "Bash(curl *)",
+      "Bash(echo \"exit: $?\")",
+      "PowerShell(gh api *)",
+      "Read(//c/Users/noliv/documents/github/portfolio/**)",
+      "Read(//c/Users/noliv/Desktop/documents/github/**)",
+      "Bash(gh label *)",
+      "WebSearch",
+      "Bash(git checkout *)",
+      "Bash(git pull *)",
+      "Bash(grep -iE '\\\\.env|secret|credential|\\\\.key|\\\\.pem|token|\\\\.db$|\\\\.sqlite|password')"
     ]
   }
 }

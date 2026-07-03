@@ -45,3 +45,6 @@ knowledge_graph.png
 
 # Memory eval results
 tests/memory_evals/results/
+
+# Personal job-application materials (resumes, cover letters, interview prep)
+personal/

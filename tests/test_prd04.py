@@ -268,7 +268,7 @@ def test_set_active_job_restores_prior_history(isolated_engine):
 
 def test_get_job_details_no_results_yet(isolated_engine):
     """get_job_details returns a dict without 'ats_score' when no results exist for the job."""
-    import tui.services as services_module
+    import services as services_module
     job = _make_job(isolated_engine, title="Fresh Job", company="Startup")
 
     detail = services_module.get_job_details(str(job.job_id))
@@ -282,7 +282,7 @@ def test_get_job_details_no_results_yet(isolated_engine):
 
 def test_get_jobs_score_display_no_results(isolated_engine):
     """get_jobs returns an empty score string for a job with no UserJobResult rows."""
-    import tui.services as services_module
+    import services as services_module
     _make_job(isolated_engine, title="Unseen Job", company="Nobody Inc")
 
     jobs = services_module.get_jobs()

@@ -20,8 +20,7 @@ import agents.chat as chat_module
 import database.db as db_module
 import database.user_utils as user_utils_module
 import knowledge_graph.builder as kg_builder_module
-import tui.app as tui_module
-import tui.services as services_module
+import services as services_module
 from database.models import User, Skill, UserSkill
 
 
@@ -36,15 +35,11 @@ def isolated_engine(tmp_path, monkeypatch):
 
     monkeypatch.setattr(db_module, "engine", engine)
     monkeypatch.setattr(chat_module, "engine", engine)
-    monkeypatch.setattr(tui_module, "engine", engine)
     monkeypatch.setattr(kg_builder_module, "engine", engine)
     monkeypatch.setattr(services_module, "engine", engine)
     monkeypatch.setattr(user_utils_module, "engine", engine)
     monkeypatch.setattr(user_utils_module, "ACTIVE_PROFILE_FILE", profile_file)
     monkeypatch.setattr(user_utils_module, "ART_DIR", tmp_path)
-    monkeypatch.setattr(tui_module, "init_db", lambda: None)
-    # Suppress the auth screen in all unit tests — avoids LoginScreen blocking main UI.
-    monkeypatch.setattr(tui_module.ArtApp, "_show_auth_screen", lambda self: None)
 
     engine._test_profile_file = profile_file
     return engine

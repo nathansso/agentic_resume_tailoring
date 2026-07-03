@@ -1,6 +1,6 @@
 """PRD 06 — chat eval harness regression tests."""
 import agents.chat as chat_module
-import tui.services as services_module
+import services as services_module
 
 
 def test_scenario_loading():

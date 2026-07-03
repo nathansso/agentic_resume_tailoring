@@ -113,7 +113,7 @@ def test_brightdata_to_text_flattening():
 # ── services.ingest_linkedin lifecycle ──────────────────────────────────────────
 
 def test_service_ingest_linkedin_marks_done(isolated_engine, monkeypatch):
-    import tui.services as services
+    import services as services
     with Session(isolated_engine) as s:
         user = User(name="U", email="u@example.com")
         s.add(user); s.commit(); s.refresh(user)
@@ -138,7 +138,7 @@ def test_service_ingest_linkedin_marks_done(isolated_engine, monkeypatch):
 
 
 def test_service_ingest_linkedin_marks_failed(isolated_engine, monkeypatch):
-    import tui.services as services
+    import services as services
     with Session(isolated_engine) as s:
         user = User(name="U", email="u2@example.com")
         s.add(user); s.commit(); s.refresh(user)

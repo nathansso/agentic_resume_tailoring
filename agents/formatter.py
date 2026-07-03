@@ -282,7 +282,7 @@ class ResumeFormatterAgent:
 
     def _load_style(self) -> Optional[dict]:
         try:
-            from tui.services import get_resume_style
+            from services import get_resume_style
             return get_resume_style(self.user_id)
         except Exception:
             return None

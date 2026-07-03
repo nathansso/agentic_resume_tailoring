@@ -15,7 +15,7 @@ from sqlmodel import Session, select
 
 from llm import get_llm
 from database.db import engine
-from tui import services
+import services
 from database.models import (
     User, Skill, UserSkill, Experience, Project,
     JobDescription, JobSkill, UserJobResult,
@@ -657,7 +657,7 @@ class ChatAgent:
             self.history = self.history[-_COMPRESS_KEEP:]
             logger.debug("[chat] history compressed to %d msgs", _COMPRESS_KEEP)
             try:
-                from tui import services as _svc
+                import services as _svc
                 _svc.save_chat_summary(self._active_job_id, summary)
             except Exception:
                 pass
@@ -673,14 +673,14 @@ class ChatAgent:
         self.active_job_id = job_id  # backward-compat attribute
         self.history = list(self._job_histories.get(job_id, []))
         try:
-            from tui import services as _svc
+            import services as _svc
             db_history = _svc.load_chat_history(job_id, limit=50)
         except Exception:
             db_history = []
         if db_history:
             self.history = db_history
         try:
-            from tui import services as _svc
+            import services as _svc
             persisted_summary = _svc.load_chat_summary(job_id)
             if persisted_summary and job_id not in self._job_summaries:
                 self._job_summaries[job_id] = persisted_summary
@@ -1375,7 +1375,7 @@ class ChatAgent:
             self.history.append({"role": "user", "content": user_message})
             self.history.append({"role": "assistant", "content": routed})
             try:
-                from tui import services as _svc
+                import services as _svc
                 _svc.save_chat_message(self._active_job_id, "user", user_message)
                 _svc.save_chat_message(self._active_job_id, "assistant", routed)
             except Exception:
@@ -1395,7 +1395,7 @@ class ChatAgent:
 
         self.history.append({"role": "user", "content": user_message})
         try:
-            from tui import services as _svc
+            import services as _svc
             _svc.save_chat_message(self._active_job_id, "user", user_message)
         except Exception:
             pass
@@ -1461,7 +1461,7 @@ class ChatAgent:
             self.history.append({"role": "assistant", "content": text})
             self.history.append({"role": "assistant", "content": rendered})
             try:
-                from tui import services as _svc
+                import services as _svc
                 _svc.save_chat_message(self._active_job_id, "assistant", rendered)
             except Exception:
                 pass
@@ -1481,7 +1481,7 @@ class ChatAgent:
             # CLARIFY, RESPONSE, or RAW (malformed) — strip envelope prefix and return.
             self.history.append({"role": "assistant", "content": clean_content})
             try:
-                from tui import services as _svc
+                import services as _svc
                 _svc.save_chat_message(self._active_job_id, "assistant", clean_content)
             except Exception:
                 pass

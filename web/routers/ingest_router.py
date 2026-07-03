@@ -12,7 +12,7 @@ from database.models import User
 from database.user_utils import ACTIVE_PROFILE_FILE, ART_DIR
 from web.auth import get_current_user
 from web.routers.dependencies import check_linkedin_quota, increment_linkedin_usage
-from tui import services
+import services
 
 router = APIRouter(prefix="/api/ingest", tags=["ingest"])
 

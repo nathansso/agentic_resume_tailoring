@@ -103,7 +103,7 @@ def _append_scenario_block(lines: List[str], result: dict, failed: bool) -> None
     lines.append("```\n")
 
     if failed:
-        lines.append("**Likely owning files:** `agents/chat.py`, `tui/services.py`\n")
+        lines.append("**Likely owning files:** `agents/chat.py`, `services.py`\n")
 
 
 def _route_distribution(traces: List[dict]) -> dict:

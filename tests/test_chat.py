@@ -5,7 +5,7 @@ import pytest
 from sqlmodel import Session, select
 
 import agents.chat as chat_module
-import tui.services as services_module
+import services as services_module
 from database.models import ChatMessage, JobDescription, UserJobResult
 from conftest import _seed_user_and_skill
 
