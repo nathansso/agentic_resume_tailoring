@@ -134,7 +134,7 @@ export function IngestPanel() {
           </div>
           <input
             style={s.textInput}
-            placeholder={githubMode === "user" ? "e.g. nathansso" : "e.g. openai/evals"}
+            placeholder={githubMode === "user" ? "e.g. octocat" : "e.g. openai/evals"}
             value={githubInput}
             onChange={e => setGithubInput(e.target.value)}
             onKeyDown={e => e.key === "Enter" && handleIngestGithub()}

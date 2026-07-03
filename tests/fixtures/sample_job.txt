@@ -1,0 +1,13 @@
+Backend Software Engineer
+
+We are hiring a backend engineer to build and scale our Python services.
+
+Responsibilities:
+- Design and maintain FastAPI services and REST APIs.
+- Model data in Postgres and optimize queries.
+- Containerize and deploy services with Docker.
+
+Requirements:
+- Strong Python; experience with FastAPI or similar frameworks.
+- Familiarity with SQL databases (Postgres preferred).
+- Experience with machine learning tooling is a plus.

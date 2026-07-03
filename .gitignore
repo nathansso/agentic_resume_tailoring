@@ -1,8 +1,10 @@
 # Environment variables
 .env
 
-# Database
+# Database (local dev DBs)
 art.db
+agentic_resume.db
+*.db
 
 # Python
 __pycache__/
@@ -46,5 +48,12 @@ knowledge_graph.png
 # Memory eval results
 tests/memory_evals/results/
 
-# Personal job-application materials (resumes, cover letters, interview prep)
+# Personal job-application materials (resumes, cover letters, interview prep).
+# Keep real personal docs in personal/ (ignored). Synthetic test fixtures live
+# in tests/fixtures/ and are intentionally tracked.
 personal/
+omnium_interview_prep/
+# Generated resume-parse / tailoring artifacts (root-level only)
+/ai_parsed_resume.json
+/*.docx
+/*.pdf

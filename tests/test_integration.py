@@ -5,6 +5,7 @@ import pytest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
 @pytest.mark.integration
@@ -12,10 +13,13 @@ ROOT = Path(__file__).resolve().parent.parent
 def test_full_cli_ingestion_and_tailor_pipeline():
     py = sys.executable
 
+    resume = str(FIXTURES / "sample_resume.md")
+    job = str(FIXTURES / "sample_job.txt")
+
     steps = [
-        [py, "cli.py", "ingest-resume", "Nathaniel Oliver Resume - 3_27_6.md"],
+        [py, "cli.py", "ingest-resume", resume],
         [py, "cli.py", "ingest-github"],
-        [py, "cli.py", "tailor", "test.txt"],
+        [py, "cli.py", "tailor", job],
     ]
 
     for cmd in steps:
