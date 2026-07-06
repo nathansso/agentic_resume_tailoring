@@ -28,6 +28,7 @@ class JobAnalyzerAgent:
         """
         raw_text = job_data.get("raw_text", "")
         source = job_data.get("source", "unknown")
+        job_id = job_data.get("job_id")
 
         logger.info(f"Analyzing job description from {source}...")
 
@@ -37,8 +38,9 @@ class JobAnalyzerAgent:
         # 2. Extract required/preferred skills
         skills = self._extract_skills(raw_text)
 
-        # 3. Save to DB
-        job = self._save_job(metadata, skills, raw_text, source)
+        # 3. Save to DB — onto the caller's existing job when one is given
+        #    (web flow), else as a new JobDescription (CLI/pipeline flow)
+        job = self._save_job(metadata, skills, raw_text, source, job_id=job_id)
 
         logger.info(f"Job analysis complete: {metadata.get('title', 'Unknown')} at {metadata.get('company', 'Unknown')}")
         return job
@@ -76,17 +78,38 @@ class JobAnalyzerAgent:
             logger.error(f"Skill extraction failed: {e}")
             return []
 
-    def _save_job(self, metadata: Dict, skills: List[Dict], raw_text: str, source: str) -> JobDescription:
+    def _save_job(
+        self, metadata: Dict, skills: List[Dict], raw_text: str, source: str,
+        job_id: str | None = None,
+    ) -> JobDescription:
+        from uuid import UUID
         with Session(engine) as session:
-            job = JobDescription(
-                title=metadata.get("title", "Unknown"),
-                company=metadata.get("company", "Unknown"),
-                description=raw_text,
-                source_url=source if source.startswith("http") else None,
-            )
-            session.add(job)
-            session.commit()
-            session.refresh(job)
+            job = session.get(JobDescription, UUID(str(job_id))) if job_id else None
+            if job:
+                # Re-analysis of an existing job: keep the user's own title and
+                # company, replace the extracted skill rows, and invalidate the
+                # cached JD embedding so it is recomputed from the new skills.
+                # Previously the extracted skills were attached to a brand-new
+                # orphan job, leaving the web-created job with zero JobSkills.
+                for old in session.exec(
+                    select(JobSkill).where(JobSkill.job_id == job.job_id)
+                ).all():
+                    session.delete(old)
+                job.embedding = None
+                job.embedding_model = None
+                session.add(job)
+                session.commit()
+                session.refresh(job)
+            else:
+                job = JobDescription(
+                    title=metadata.get("title", "Unknown"),
+                    company=metadata.get("company", "Unknown"),
+                    description=raw_text,
+                    source_url=source if source.startswith("http") else None,
+                )
+                session.add(job)
+                session.commit()
+                session.refresh(job)
 
             for item in skills:
                 skill_name = item.get("name", "").strip()

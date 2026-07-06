@@ -608,3 +608,83 @@ def test_as_obj_coerces_json_string_columns():
     assert _as_obj(None, {}) == {}
     assert _as_obj("not json", {}) == {}
 
+
+
+# ── analyzer honors an existing job_id (web analyze flow, issue #51 arc) ──────
+
+
+def _analyzer_with_stub(monkeypatch, engine, skills):
+    """JobAnalyzerAgent with LLM extraction stubbed and engine isolated."""
+    import agents.job_analyzer as ja_module
+
+    monkeypatch.setattr(ja_module, "engine", engine)
+    monkeypatch.setattr(ja_module, "get_llm", lambda *a, **kw: object())
+    agent = ja_module.JobAnalyzerAgent()
+    monkeypatch.setattr(agent, "_extract_metadata", lambda text: {"title": "LLM Title", "company": "LLM Co"})
+    monkeypatch.setattr(agent, "_extract_skills", lambda text: skills)
+    return agent
+
+
+def test_analyze_attaches_skills_to_existing_job(isolated_engine, monkeypatch):
+    """Regression: the web analyze flow passes job_id, but the analyzer used to
+    attach the extracted JobSkills to a brand-new orphan JobDescription — the
+    user's job kept zero skills, so matching/tailoring had no signal."""
+    job = _make_job(isolated_engine, title="My Title", company="My Co", description="Python role")
+    agent = _analyzer_with_stub(
+        monkeypatch, isolated_engine,
+        [{"name": "Python", "category": "Language", "required": True, "weight": 0.9}],
+    )
+
+    returned = agent.analyze_and_save(
+        {"raw_text": "Python role", "source": "web", "job_id": str(job.job_id)}
+    )
+
+    assert returned.job_id == job.job_id
+    with Session(isolated_engine) as s:
+        # Skills landed on the caller's job, and no orphan job was created.
+        job_skills = s.exec(select(JobSkill).where(JobSkill.job_id == job.job_id)).all()
+        assert len(job_skills) == 1
+        assert len(s.exec(select(JobDescription)).all()) == 1
+        # The user's own title/company are preserved (not LLM-overwritten).
+        refreshed = s.get(JobDescription, job.job_id)
+        assert refreshed.title == "My Title" and refreshed.company == "My Co"
+
+
+def test_reanalyze_replaces_skills_and_invalidates_embedding(isolated_engine, monkeypatch):
+    job = _make_job(isolated_engine, description="Kafka role")
+    with Session(isolated_engine) as s:
+        j = s.get(JobDescription, job.job_id)
+        j.embedding, j.embedding_model = "[1.0]", "stale-model"
+        s.add(j)
+        s.commit()
+
+    agent = _analyzer_with_stub(
+        monkeypatch, isolated_engine,
+        [{"name": "Kafka", "category": "Tool", "required": True, "weight": 0.8}],
+    )
+    agent.analyze_and_save({"raw_text": "Kafka role", "source": "web", "job_id": str(job.job_id)})
+    agent2 = _analyzer_with_stub(
+        monkeypatch, isolated_engine,
+        [{"name": "Spark", "category": "Tool", "required": True, "weight": 0.7}],
+    )
+    agent2.analyze_and_save({"raw_text": "Spark role", "source": "web", "job_id": str(job.job_id)})
+
+    with Session(isolated_engine) as s:
+        job_skills = s.exec(select(JobSkill).where(JobSkill.job_id == job.job_id)).all()
+        names = {
+            s.exec(select(Skill).where(Skill.skill_id == js.skill_id)).first().name
+            for js in job_skills
+        }
+        assert names == {"Spark"}  # replaced, not appended
+        refreshed = s.get(JobDescription, job.job_id)
+        assert refreshed.embedding is None  # stale JD embedding invalidated
+
+def test_analyze_without_job_id_still_creates_new_job(isolated_engine, monkeypatch):
+    agent = _analyzer_with_stub(
+        monkeypatch, isolated_engine,
+        [{"name": "Go", "category": "Language", "required": True, "weight": 0.5}],
+    )
+    returned = agent.analyze_and_save({"raw_text": "Go role", "source": "cli"})
+    with Session(isolated_engine) as s:
+        assert s.get(JobDescription, returned.job_id) is not None
+        assert returned.title == "LLM Title"
