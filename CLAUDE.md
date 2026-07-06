@@ -106,7 +106,7 @@ gh issue list --repo nathansso/agentic_resume_tailoring --state all --limit 100 
   | python -c "
 import json, sys, subprocess
 repo_issues = {i['number']: i['url'] for i in json.loads(sys.stdin.read())}
-board = json.loads(subprocess.check_output(['gh','project','item-list','2','--owner','nathansso','--format','json']))
+board = json.loads(subprocess.check_output(['gh','project','item-list','2','--owner','nathansso','--limit','300','--format','json']))
 on_board = {i['content']['number'] for i in board['items'] if i.get('content')}
 for num, url in sorted(repo_issues.items()):
     if num not in on_board:
