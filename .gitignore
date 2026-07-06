@@ -57,3 +57,6 @@ omnium_interview_prep/
 /ai_parsed_resume.json
 /*.docx
 /*.pdf
+
+# Tailoring benchmark artifacts (issue #51) - outputs, not source
+eval/results/
