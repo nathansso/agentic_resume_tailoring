@@ -688,3 +688,95 @@ def test_analyze_without_job_id_still_creates_new_job(isolated_engine, monkeypat
     with Session(isolated_engine) as s:
         assert s.get(JobDescription, returned.job_id) is not None
         assert returned.title == "LLM Title"
+
+
+# ── relevance-based bullet budgets + anti-redundancy (#51 arc) ────────────────
+
+
+def _exp(title, company, bullets):
+    return {"title": title, "company": company, "start_date": "2022-01",
+            "end_date": "Present", "description": "", "bullets": bullets}
+
+
+def test_experiences_ranked_and_budgeted_by_relevance():
+    from agents.tailor import MAX_EXP_BULLETS, MIN_EXP_BULLETS, ResumeTailorAgent
+
+    jd = "Kubernetes and Terraform for cloud infrastructure platform work"
+    exps = [
+        _exp("Barista", "Cafe", ["Made espresso", "Cleaned machines"]),
+        _exp("Platform Engineer", "Cloud Co",
+             ["Ran Kubernetes clusters", "Wrote Terraform for cloud infrastructure"]),
+    ]
+    out = ResumeTailorAgent._score_and_budget_experiences(exps, jd)
+
+    assert [e["title"] for e in out] == ["Platform Engineer", "Barista"]
+    assert out[0]["relevance_score"] > out[1]["relevance_score"]
+    assert out[0]["bullet_budget"] == MAX_EXP_BULLETS
+    assert MIN_EXP_BULLETS <= out[1]["bullet_budget"] < out[0]["bullet_budget"]
+
+
+def test_budgeting_no_jd_signal_is_passthrough():
+    from agents.tailor import ResumeTailorAgent
+
+    exps = [_exp("A", "X", ["b1"]), _exp("B", "Y", ["b2"])]
+    out = ResumeTailorAgent._score_and_budget_experiences(exps, "")
+    assert out == exps  # untouched: no reorder, no budget keys
+
+
+def test_enforce_bullet_budgets_truncates_and_reorders():
+    from agents.tailor import ResumeTailorAgent
+
+    budgeted = [
+        {**_exp("Platform Engineer", "Cloud Co", []), "bullet_budget": 3},
+        {**_exp("Barista", "Cafe", []), "bullet_budget": 1},
+    ]
+    generated = [  # LLM returned them in the wrong order and over budget
+        {"title": "Barista", "company": "Cafe", "bullets": ["b1", "b2", "b3"]},
+        {"title": "Platform Engineer", "company": "Cloud Co",
+         "bullets": ["k1", "k2", "k3", "k4"]},
+    ]
+    out = ResumeTailorAgent._enforce_bullet_budgets(generated, budgeted)
+
+    assert [e["title"] for e in out] == ["Platform Engineer", "Barista"]
+    assert out[0]["bullets"] == ["k1", "k2", "k3"]  # truncated to budget 3
+    assert out[1]["bullets"] == ["b1"]              # truncated to budget 1
+
+
+def test_enforce_bullet_budgets_keeps_renamed_experience():
+    from agents.tailor import ResumeTailorAgent
+
+    budgeted = [{**_exp("Engineer", "Acme", []), "bullet_budget": 2}]
+    generated = [{"title": "Software Engineer (renamed)", "company": "Acme",
+                  "bullets": ["b1", "b2", "b3"]}]
+    out = ResumeTailorAgent._enforce_bullet_budgets(generated, budgeted)
+    # Unrecognized name: kept, sorted last, bullets untouched (no budget known).
+    assert len(out) == 1 and out[0]["bullets"] == ["b1", "b2", "b3"]
+
+
+def test_over_repeated_terms_boundary_aware():
+    from agents.tailor import MAX_TERM_MENTIONS, ResumeTailorAgent
+
+    content = {
+        "experiences": [{"title": "Eng", "company": "A", "bullets":
+                         ["Python service", "Python jobs", "Python tools", "Python APIs"]}],
+        "projects": [],
+        "skills_emphasized": ["Python", "SQL"],
+    }
+    over = ResumeTailorAgent._over_repeated_terms(content)
+    assert over.get("python", 0) > MAX_TERM_MENTIONS
+    # "sql" appears once (skills line) — not over-repeated, and never counted
+    # inside other words.
+    assert "sql" not in over
+
+
+def test_evaluation_carries_over_repeated_feedback(monkeypatch):
+    agent = _eval_agent(monkeypatch, lambda c: 50.0)
+    content = {
+        "experiences": [{"title": "E", "company": "C", "bullets":
+                         ["Docker x", "Docker y", "Docker z", "Docker w"]}],
+        "projects": [],
+        "skills_emphasized": ["Docker"],
+    }
+    state = _eval_state(content, attempt=1)
+    out = agent._evaluate_node(state)
+    assert "docker" in out["evaluation"]["over_repeated"]
