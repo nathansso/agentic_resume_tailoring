@@ -608,3 +608,175 @@ def test_as_obj_coerces_json_string_columns():
     assert _as_obj(None, {}) == {}
     assert _as_obj("not json", {}) == {}
 
+
+
+# ── analyzer honors an existing job_id (web analyze flow, issue #51 arc) ──────
+
+
+def _analyzer_with_stub(monkeypatch, engine, skills):
+    """JobAnalyzerAgent with LLM extraction stubbed and engine isolated."""
+    import agents.job_analyzer as ja_module
+
+    monkeypatch.setattr(ja_module, "engine", engine)
+    monkeypatch.setattr(ja_module, "get_llm", lambda *a, **kw: object())
+    agent = ja_module.JobAnalyzerAgent()
+    monkeypatch.setattr(agent, "_extract_metadata", lambda text: {"title": "LLM Title", "company": "LLM Co"})
+    monkeypatch.setattr(agent, "_extract_skills", lambda text: skills)
+    return agent
+
+
+def test_analyze_attaches_skills_to_existing_job(isolated_engine, monkeypatch):
+    """Regression: the web analyze flow passes job_id, but the analyzer used to
+    attach the extracted JobSkills to a brand-new orphan JobDescription — the
+    user's job kept zero skills, so matching/tailoring had no signal."""
+    job = _make_job(isolated_engine, title="My Title", company="My Co", description="Python role")
+    agent = _analyzer_with_stub(
+        monkeypatch, isolated_engine,
+        [{"name": "Python", "category": "Language", "required": True, "weight": 0.9}],
+    )
+
+    returned = agent.analyze_and_save(
+        {"raw_text": "Python role", "source": "web", "job_id": str(job.job_id)}
+    )
+
+    assert returned.job_id == job.job_id
+    with Session(isolated_engine) as s:
+        # Skills landed on the caller's job, and no orphan job was created.
+        job_skills = s.exec(select(JobSkill).where(JobSkill.job_id == job.job_id)).all()
+        assert len(job_skills) == 1
+        assert len(s.exec(select(JobDescription)).all()) == 1
+        # The user's own title/company are preserved (not LLM-overwritten).
+        refreshed = s.get(JobDescription, job.job_id)
+        assert refreshed.title == "My Title" and refreshed.company == "My Co"
+
+
+def test_reanalyze_replaces_skills_and_invalidates_embedding(isolated_engine, monkeypatch):
+    job = _make_job(isolated_engine, description="Kafka role")
+    with Session(isolated_engine) as s:
+        j = s.get(JobDescription, job.job_id)
+        j.embedding, j.embedding_model = "[1.0]", "stale-model"
+        s.add(j)
+        s.commit()
+
+    agent = _analyzer_with_stub(
+        monkeypatch, isolated_engine,
+        [{"name": "Kafka", "category": "Tool", "required": True, "weight": 0.8}],
+    )
+    agent.analyze_and_save({"raw_text": "Kafka role", "source": "web", "job_id": str(job.job_id)})
+    agent2 = _analyzer_with_stub(
+        monkeypatch, isolated_engine,
+        [{"name": "Spark", "category": "Tool", "required": True, "weight": 0.7}],
+    )
+    agent2.analyze_and_save({"raw_text": "Spark role", "source": "web", "job_id": str(job.job_id)})
+
+    with Session(isolated_engine) as s:
+        job_skills = s.exec(select(JobSkill).where(JobSkill.job_id == job.job_id)).all()
+        names = {
+            s.exec(select(Skill).where(Skill.skill_id == js.skill_id)).first().name
+            for js in job_skills
+        }
+        assert names == {"Spark"}  # replaced, not appended
+        refreshed = s.get(JobDescription, job.job_id)
+        assert refreshed.embedding is None  # stale JD embedding invalidated
+
+def test_analyze_without_job_id_still_creates_new_job(isolated_engine, monkeypatch):
+    agent = _analyzer_with_stub(
+        monkeypatch, isolated_engine,
+        [{"name": "Go", "category": "Language", "required": True, "weight": 0.5}],
+    )
+    returned = agent.analyze_and_save({"raw_text": "Go role", "source": "cli"})
+    with Session(isolated_engine) as s:
+        assert s.get(JobDescription, returned.job_id) is not None
+        assert returned.title == "LLM Title"
+
+
+# ── relevance-based bullet budgets + anti-redundancy (#51 arc) ────────────────
+
+
+def _exp(title, company, bullets):
+    return {"title": title, "company": company, "start_date": "2022-01",
+            "end_date": "Present", "description": "", "bullets": bullets}
+
+
+def test_experiences_ranked_and_budgeted_by_relevance():
+    from agents.tailor import MAX_EXP_BULLETS, MIN_EXP_BULLETS, ResumeTailorAgent
+
+    jd = "Kubernetes and Terraform for cloud infrastructure platform work"
+    exps = [
+        _exp("Barista", "Cafe", ["Made espresso", "Cleaned machines"]),
+        _exp("Platform Engineer", "Cloud Co",
+             ["Ran Kubernetes clusters", "Wrote Terraform for cloud infrastructure"]),
+    ]
+    out = ResumeTailorAgent._score_and_budget_experiences(exps, jd)
+
+    assert [e["title"] for e in out] == ["Platform Engineer", "Barista"]
+    assert out[0]["relevance_score"] > out[1]["relevance_score"]
+    assert out[0]["bullet_budget"] == MAX_EXP_BULLETS
+    assert MIN_EXP_BULLETS <= out[1]["bullet_budget"] < out[0]["bullet_budget"]
+
+
+def test_budgeting_no_jd_signal_is_passthrough():
+    from agents.tailor import ResumeTailorAgent
+
+    exps = [_exp("A", "X", ["b1"]), _exp("B", "Y", ["b2"])]
+    out = ResumeTailorAgent._score_and_budget_experiences(exps, "")
+    assert out == exps  # untouched: no reorder, no budget keys
+
+
+def test_enforce_bullet_budgets_truncates_and_reorders():
+    from agents.tailor import ResumeTailorAgent
+
+    budgeted = [
+        {**_exp("Platform Engineer", "Cloud Co", []), "bullet_budget": 3},
+        {**_exp("Barista", "Cafe", []), "bullet_budget": 1},
+    ]
+    generated = [  # LLM returned them in the wrong order and over budget
+        {"title": "Barista", "company": "Cafe", "bullets": ["b1", "b2", "b3"]},
+        {"title": "Platform Engineer", "company": "Cloud Co",
+         "bullets": ["k1", "k2", "k3", "k4"]},
+    ]
+    out = ResumeTailorAgent._enforce_bullet_budgets(generated, budgeted)
+
+    assert [e["title"] for e in out] == ["Platform Engineer", "Barista"]
+    assert out[0]["bullets"] == ["k1", "k2", "k3"]  # truncated to budget 3
+    assert out[1]["bullets"] == ["b1"]              # truncated to budget 1
+
+
+def test_enforce_bullet_budgets_keeps_renamed_experience():
+    from agents.tailor import ResumeTailorAgent
+
+    budgeted = [{**_exp("Engineer", "Acme", []), "bullet_budget": 2}]
+    generated = [{"title": "Software Engineer (renamed)", "company": "Acme",
+                  "bullets": ["b1", "b2", "b3"]}]
+    out = ResumeTailorAgent._enforce_bullet_budgets(generated, budgeted)
+    # Unrecognized name: kept, sorted last, bullets untouched (no budget known).
+    assert len(out) == 1 and out[0]["bullets"] == ["b1", "b2", "b3"]
+
+
+def test_over_repeated_terms_boundary_aware():
+    from agents.tailor import MAX_TERM_MENTIONS, ResumeTailorAgent
+
+    content = {
+        "experiences": [{"title": "Eng", "company": "A", "bullets":
+                         ["Python service", "Python jobs", "Python tools", "Python APIs"]}],
+        "projects": [],
+        "skills_emphasized": ["Python", "SQL"],
+    }
+    over = ResumeTailorAgent._over_repeated_terms(content)
+    assert over.get("python", 0) > MAX_TERM_MENTIONS
+    # "sql" appears once (skills line) — not over-repeated, and never counted
+    # inside other words.
+    assert "sql" not in over
+
+
+def test_evaluation_carries_over_repeated_feedback(monkeypatch):
+    agent = _eval_agent(monkeypatch, lambda c: 50.0)
+    content = {
+        "experiences": [{"title": "E", "company": "C", "bullets":
+                         ["Docker x", "Docker y", "Docker z", "Docker w"]}],
+        "projects": [],
+        "skills_emphasized": ["Docker"],
+    }
+    state = _eval_state(content, attempt=1)
+    out = agent._evaluate_node(state)
+    assert "docker" in out["evaluation"]["over_repeated"]

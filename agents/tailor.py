@@ -40,6 +40,16 @@ MAX_RETRIES = _env_int("TAILOR_MAX_RETRIES", 2)
 GREAT_SKILL_COVERAGE = _env_float("TAILOR_GREAT_SKILL_COVERAGE", 90.0)
 GREAT_KW_COVERAGE = _env_float("TAILOR_GREAT_KW_COVERAGE", 0.80)
 
+# Per-experience bullet budgets: the most JD-relevant experience gets up to
+# MAX_EXP_BULLETS bullets, the least relevant as few as MIN_EXP_BULLETS, so
+# text volume tracks relevance instead of every experience getting equal space.
+MAX_EXP_BULLETS = _env_int("TAILOR_MAX_EXP_BULLETS", 4)
+MIN_EXP_BULLETS = _env_int("TAILOR_MIN_EXP_BULLETS", 1)
+
+# A skill term used more than this many times across the tailored output reads
+# as keyword stuffing; the evaluator flags offenders into retry feedback.
+MAX_TERM_MENTIONS = _env_int("TAILOR_MAX_TERM_MENTIONS", 3)
+
 
 def _as_obj(value, default):
     """Normalise a JSON column that may round-trip as a JSON string on SQLite."""
@@ -142,6 +152,9 @@ class ResumeTailorAgent:
 
             # Priority keywords: top missing JD keywords from latest score_breakdown
             jd_text = job.description if job else ""
+            # Relevance-rank experiences and attach per-experience bullet budgets
+            # so text volume tracks JD relevance (most relevant = most detail).
+            exp_dicts = self._score_and_budget_experiences(exp_dicts, jd_text)
             priority_keywords: List[str] = []
             if result and result.score_breakdown:
                 kd = result.score_breakdown.get("keyword_coverage", {})
@@ -238,13 +251,17 @@ class ResumeTailorAgent:
             ev = state["evaluation"]
             skill_gaps = ev.get("gaps", [])
             kw_gaps = ev.get("kw_gaps", [])
+            over = ev.get("over_repeated", {})
+            over_str = ", ".join(f"{t} ({n}x)" for t, n in over.items())
             feedback = (
                 f"\n\nPREVIOUS ATTEMPT FEEDBACK:\n"
                 f"Skill coverage: {ev.get('coverage_pct', 0)}%. "
                 f"Keyword coverage: {ev.get('kw_coverage', 0)}%.\n"
                 f"Missing skill emphasis: {', '.join(skill_gaps) or 'none'}.\n"
                 f"Missing keywords to incorporate naturally: {', '.join(kw_gaps) or 'none'}.\n"
-                f"Please address these gaps."
+                + (f"Overused terms — mentioned too often, vary the wording or cut "
+                   f"mentions to at most {MAX_TERM_MENTIONS} each: {over_str}.\n" if over_str else "")
+                + f"Please address these gaps."
             )
 
         matched_str = json.dumps(state["matched_skills"], indent=2)
@@ -263,7 +280,12 @@ class ResumeTailorAgent:
              "- Keep projects in the given order; they are pre-ranked by job relevance (most relevant first)\n"
              "- Rewrite experience bullets to highlight relevant skills where truthful\n"
              "- Incorporate PRIORITY JD KEYWORDS naturally into bullets where truthfully applicable\n"
-             "- List the most relevant experiences first based on keyword relevance\n"
+             "- Keep experiences in the given order; they are pre-ranked by job relevance (most relevant first)\n"
+             "- Each experience has a bullet_budget: write AT MOST that many bullets for it. "
+             "Budgets are relevance-based — spend words on what this job cares about, and keep "
+             "only the strongest, most job-relevant bullets for low-budget experiences\n"
+             f"- Avoid repeating the same skill or keyword: use each term at most {MAX_TERM_MENTIONS} times "
+             "across ALL bullets combined. Vary phrasing instead of restating the same technology\n"
              "- Keep the same structure: experiences and projects sections\n"
              "- Respond with ONLY valid JSON, no extra text"),
             ("user",
@@ -297,6 +319,12 @@ class ResumeTailorAgent:
             if isinstance(tailored, dict) and tailored.get("projects"):
                 tailored["projects"] = self._order_projects_by_selection(
                     tailored["projects"], [p["name"] for p in state["projects"]]
+                )
+            # Same guarantee for experiences: relevance order + bullet budgets
+            # hold even when the LLM ignores the prompt rules.
+            if isinstance(tailored, dict) and tailored.get("experiences"):
+                tailored["experiences"] = self._enforce_bullet_budgets(
+                    tailored["experiences"], state["experiences"]
                 )
             state["tailored_content"] = tailored
         except Exception as e:
@@ -344,6 +372,7 @@ class ResumeTailorAgent:
             "gaps": skill["gaps"],
             "kw_coverage": round(kw_coverage * 100, 1),
             "kw_gaps": kw_gaps[:10],
+            "over_repeated": self._over_repeated_terms(state["tailored_content"]),
             "ats_breakdown": breakdown,
         }
         state["evaluation"] = evaluation
@@ -380,6 +409,82 @@ class ResumeTailorAgent:
         if state["done"]:
             return "done"
         return "retry"
+
+    @staticmethod
+    def _score_and_budget_experiences(exp_dicts: List[Dict], jd_text: str) -> List[Dict]:
+        """
+        Order experiences by JD relevance (keyword overlap, like project
+        selection) and attach a bullet_budget: the most relevant experience may
+        keep up to MAX_EXP_BULLETS bullets, the least relevant as few as
+        MIN_EXP_BULLETS. No JD signal → order and budgets left untouched.
+        """
+        jd_keywords = ATSScoringEngine._extract_keywords(jd_text)
+        if not exp_dicts or not jd_keywords:
+            return exp_dicts
+
+        scored = []
+        for e in exp_dicts:
+            text = " ".join(
+                [e.get("title") or "", e.get("description") or ""]
+                + list(e.get("bullets") or [])
+            )
+            tokens = ATSScoringEngine._extract_keywords(text)
+            rel = len(tokens & jd_keywords) / len(tokens) if tokens else 0.0
+            scored.append((rel, e))
+
+        max_rel = max(rel for rel, _ in scored)
+        out = []
+        # Stable sort: relevance ties keep the original (chronological) order.
+        for rel, e in sorted(scored, key=lambda t: t[0], reverse=True):
+            norm = rel / max_rel if max_rel > 0 else 1.0
+            budget = MIN_EXP_BULLETS + round(norm * (MAX_EXP_BULLETS - MIN_EXP_BULLETS))
+            out.append({**e, "relevance_score": round(rel, 3), "bullet_budget": budget})
+        return out
+
+    @staticmethod
+    def _enforce_bullet_budgets(generated: List[Dict], budgeted: List[Dict]) -> List[Dict]:
+        """
+        Deterministic guarantee behind the prompt's bullet_budget rule: reorder
+        the LLM's experiences to the pre-ranked relevance order and truncate any
+        that exceed their budget. Experiences the LLM renamed keep their bullets
+        and sort after the recognized ones, in original relative order.
+        """
+        def key(e: Dict) -> tuple:
+            return ((e.get("title") or "").strip().lower(),
+                    (e.get("company") or "").strip().lower())
+
+        rank = {key(e): i for i, e in enumerate(budgeted)}
+        budgets = {key(e): e.get("bullet_budget") for e in budgeted}
+        fallback = len(budgeted)
+
+        out = []
+        for e in sorted(generated or [], key=lambda e: rank.get(key(e), fallback)):
+            budget = budgets.get(key(e))
+            bullets = e.get("bullets") or []
+            if budget and len(bullets) > budget:
+                e = {**e, "bullets": bullets[:budget]}
+            out.append(e)
+        return out
+
+    @classmethod
+    def _over_repeated_terms(cls, tailored_content: Dict) -> Dict[str, int]:
+        """
+        Skill terms mentioned more than MAX_TERM_MENTIONS times across the whole
+        tailored output (bullets + skills), boundary-aware so "sql" does not
+        match inside "mysql". Fed back to the generator as anti-stuffing gaps.
+        """
+        terms = {
+            str(t).lower()
+            for t in tailored_content.get("skills_emphasized") or []
+            if t
+        }
+        text = ATSScoringEngine.flatten_tailored_text(tailored_content).lower()
+        over: Dict[str, int] = {}
+        for term in terms:
+            count = len(re.findall(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", text))
+            if count > MAX_TERM_MENTIONS:
+                over[term] = count
+        return dict(sorted(over.items(), key=lambda kv: -kv[1]))
 
     @staticmethod
     def _rank_skills(
