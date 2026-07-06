@@ -23,20 +23,27 @@ export async function logout(): Promise<void> {
   await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
 }
 
+export interface RegisterResult {
+  user: User;
+  /** True when Supabase email confirmation is on: no session was issued, so the
+   *  user must click the emailed link before they can sign in. */
+  emailConfirmationRequired: boolean;
+}
+
 export async function register(
   name: string,
   email: string,
   username: string,
   password: string
-): Promise<User> {
+): Promise<RegisterResult> {
   const res = await fetch("/api/auth/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, email, username, password }),
     credentials: "include",
   });
-  const data = await json<{ user: User }>(res);
-  return data.user;
+  const data = await json<{ user: User; email_confirmation_required?: boolean }>(res);
+  return { user: data.user, emailConfirmationRequired: data.email_confirmation_required === true };
 }
 
 export async function getMe(): Promise<User | null> {
