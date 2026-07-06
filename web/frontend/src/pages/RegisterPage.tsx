@@ -31,6 +31,7 @@ export function RegisterPage() {
   const [form, setForm] = useState<FormState>(INITIAL);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [confirmEmail, setConfirmEmail] = useState<string | null>(null);
   const { setUser } = useAuth();
   const navigate = useNavigate();
 
@@ -51,7 +52,16 @@ export function RegisterPage() {
     setSubmitting(true);
     try {
       const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
-      const user = await register(fullName, form.email, form.username, form.password);
+      const { user, emailConfirmationRequired } = await register(
+        fullName, form.email, form.username, form.password
+      );
+      if (emailConfirmationRequired) {
+        // No session was issued — the user must confirm via the emailed link
+        // before any authenticated request will succeed. Do NOT log them in
+        // (that would drop them into a cookieless app that 401s everywhere).
+        setConfirmEmail(user.email);
+        return;
+      }
       setUser(user);
       navigate("/");
     } catch (err) {
@@ -59,6 +69,23 @@ export function RegisterPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (confirmEmail) {
+    return (
+      <div style={s.page}>
+        <div style={s.card}>
+          <h1 style={s.title}>Confirm your email</h1>
+          <p style={s.confirmBody}>
+            We sent a confirmation link to <strong>{confirmEmail}</strong>. Click it to
+            activate your account, then sign in to finish setting up your profile.
+          </p>
+          <p style={s.hint}>
+            Already confirmed? <Link to="/login" style={s.link}>Sign in</Link>
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -133,6 +160,10 @@ const s: Record<string, CSSProperties> = {
     fontSize: font.size.base,
     fontFamily: "inherit",
     letterSpacing: "0.03em",
+  },
+  confirmBody: {
+    margin: "0 0 0.5rem", color: colors.text,
+    fontSize: font.size.base, lineHeight: 1.5,
   },
   hint: {
     marginTop: "1.25rem", textAlign: "center",

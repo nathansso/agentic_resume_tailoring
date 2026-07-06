@@ -4,6 +4,27 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issues 61 & 62 — Supabase-only auth migration + password recovery
+**Status:** complete | **Tests:** 362 pass (18 new)
+
+Made Supabase the single source of truth for authentication in production and added a self-service password-recovery flow on top of it. Previously `/login` verified a local PBKDF2 hash *first* and only then minted a Supabase JWT, so a Supabase-only password reset would have locked users out — the dual credential stores had to stay in sync. Login is now by **email + password**, production authenticates against Supabase alone (**fail-closed**: the local password/cookie path can never run when Supabase is configured), and password reset "just works" because there is no local hash to reconcile. An offline local fallback is retained for dev/tests only.
+
+### What shipped
+- **Auth mode gate.** `database/auth.py::supabase_configured()` — single source of truth for the mode (env vars set AND `supabase` importable). `web/auth.py::get_current_user` is fail-closed: Supabase JWT only when configured, local signed cookie only when not.
+- **Email login + Supabase-owned credential.** `web/routers/auth_router.py` — `/login` takes `email`+`password` with a generic "Invalid email or password" error (no enumeration); in Supabase mode `/register` stores **no** local `password_hash` (column kept for schema back-compat) and handles the email-confirmation-pending case. Login/reset backfill `supabase_uid` so pre-migration accounts resolve from the JWT `sub`. New `database/user_utils.py` helpers: `authenticate_local_email`, `set_supabase_uid`, `set_local_password`.
+- **Password recovery.** New Supabase helpers `supabase_send_password_reset` and `supabase_update_password` (recovery-session `set_session`→`update_user`, least-privilege — no service-role key). New endpoints: `GET /api/auth/capabilities`, `POST /api/auth/forgot-password` (generic 200, 503 in local fallback), `POST /api/auth/reset-password` (min 8-char strength enforced before Supabase is called; invalid/expired token → 400).
+- **Frontend.** `LoginPage` switched to email + conditional "Forgot password?" link (gated on `capabilities`); new `ForgotPasswordPage` and `ResetPasswordPage` (reads recovery tokens from the URL fragment, strips them from history, confirm + strength validation); routes wired in `App.tsx`; `api/auth.ts` gains `getAuthCapabilities`/`forgotPassword`/`resetPassword` and email login.
+- **Email-confirmation redirect (#62).** `supabase_sign_up` now accepts `email_redirect_to`, and `/register` passes `<APP_BASE_URL>/login` so the sign-up confirmation link lands on the login page instead of the Supabase Site URL / app root. Generalized the router's `_app_url(request, path)` helper (shared with the reset redirect).
+- **Tests.** `tests/test_password_reset.py` (18) — capabilities, dev-fallback email login, Supabase-mode login + uid backfill, no-local-hash register, sign-up confirmation `/login` redirect, no-enumeration forgot-password, reset success/invalid-token/weak-password, and local-fallback 503s.
+- **Docs.** `web/CLAUDE.md` auth-flow section rewritten; `.env.example` documents the all-Supabase behavior + `APP_BASE_URL` (reset-link redirect origin, must be allowlisted in Supabase → Auth → URL Configuration).
+
+### Deviations from spec
+- Scope expanded beyond the original "add password recovery" issue to a full Supabase-only auth migration (agreed with the maintainer), because reset could not be made safe while login depended on a separately-synced local hash.
+- Local dev/tests deliberately retain the offline password path; it is unreachable in production (Supabase always configured there), so it is not a production attack surface.
+- Reset uses the recovery session (`set_session` + `update_user`) rather than the service-role admin API, keeping the flow least-privilege. `SUPABASE_SERVICE_ROLE_KEY` remains unused by this feature.
+
+---
+
 ## Repo hygiene — public-readiness cleanup + service-layer extraction
 **Status:** complete | **Tests:** 344 pass (0 new; net −37 from removing the TUI test suite)
 

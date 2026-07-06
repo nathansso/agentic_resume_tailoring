@@ -1,18 +1,33 @@
+import os
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 from uuid import UUID
 
 import requests as _requests
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Response, Depends
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response, Depends
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
 from config import BRIGHTDATA_API_KEY, GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
-from database.auth import hash_password, supabase_sign_in, supabase_sign_up
+from database.auth import (
+    hash_password,
+    supabase_configured,
+    supabase_send_password_reset,
+    supabase_sign_in,
+    supabase_sign_up,
+    supabase_update_password,
+)
 from database.db import engine
-from database.user_utils import authenticate_local, create_profile, get_user_by_email, get_user_by_username
+from database.user_utils import (
+    authenticate_local_email,
+    create_profile,
+    get_user_by_email,
+    get_user_by_supabase_uid,
+    get_user_by_username,
+    set_supabase_uid,
+)
 from ingestion.linkedin import LinkedInIngestor
 from web.auth import get_current_user, make_session_token, _SESSION_SECRET
 from web.routers.dependencies import linkedin_quota_remaining
@@ -22,6 +37,32 @@ from database.models import User
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 _COOKIE_OPTS = dict(httponly=True, samesite="strict", max_age=86400 * 30)
+
+_MIN_PASSWORD_LENGTH = 8
+
+
+def _validate_password_strength(password: str) -> None:
+    """Reject weak passwords with HTTP 422. Supabase enforces its own policy too."""
+    if len(password or "") < _MIN_PASSWORD_LENGTH:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Password must be at least {_MIN_PASSWORD_LENGTH} characters",
+        )
+
+
+def _app_url(request: Request, path: str) -> str:
+    """Absolute URL to *path* on the public app origin.
+
+    Prefers the APP_BASE_URL env var (set in production) and otherwise derives
+    the origin from the incoming request so local dev works without config.
+    """
+    base = os.getenv("APP_BASE_URL") or str(request.base_url)
+    return f"{base.rstrip('/')}{path}"
+
+
+def _reset_redirect_url(request: Request) -> str:
+    """Absolute URL of the reset-password page for the Supabase recovery link."""
+    return _app_url(request, "/reset-password")
 
 
 def _maybe_refresh_linkedin_on_login(background: BackgroundTasks, user: User) -> None:
@@ -46,21 +87,12 @@ def _maybe_refresh_linkedin_on_login(background: BackgroundTasks, user: User) ->
     background.add_task(_linkedin_ingest_task, user.user_id, normalized, user.email)
 
 
-def _set_session(response: Response, user: User, password: str) -> None:
-    supabase_session = supabase_sign_in(user.email, password)
-    if supabase_session and supabase_session.get("access_token"):
-        token = supabase_session["access_token"]
-    else:
-        token = make_session_token(user.user_id)
-    response.set_cookie("access_token", token, **_COOKIE_OPTS)
-
-
 def _user_dict(user: User) -> dict:
     return {"id": str(user.user_id), "name": user.name, "email": user.email, "username": user.username}
 
 
 class LoginRequest(BaseModel):
-    username: str
+    email: str
     password: str
 
 
@@ -73,13 +105,28 @@ class RegisterRequest(BaseModel):
 
 @router.post("/login")
 def login(body: LoginRequest, response: Response, background: BackgroundTasks):
-    user = authenticate_local(body.username, body.password)
-    if not user:
-        existing = get_user_by_username(body.username)
-        if not existing:
-            raise HTTPException(status_code=401, detail="No account found with that username")
-        raise HTTPException(status_code=401, detail="Incorrect password")
-    _set_session(response, user, body.password)
+    # Generic credential error — never reveals whether the email exists.
+    invalid = HTTPException(status_code=401, detail="Invalid email or password")
+    email = body.email.strip().lower()
+
+    if supabase_configured():
+        session = supabase_sign_in(email, body.password)
+        if not session or not session.get("access_token"):
+            raise invalid
+        user = get_user_by_supabase_uid(session["supabase_uid"]) or get_user_by_email(email)
+        if not user:
+            raise invalid
+        # Backfill the Supabase UID so JWT resolution (sub → user) works for
+        # accounts created before this mapping existed.
+        set_supabase_uid(user.user_id, session["supabase_uid"])
+        response.set_cookie("access_token", session["access_token"], **_COOKIE_OPTS)
+    else:
+        # Offline dev/tests only — production always has Supabase configured.
+        user = authenticate_local_email(email, body.password)
+        if not user:
+            raise invalid
+        response.set_cookie("access_token", make_session_token(user.user_id), **_COOKIE_OPTS)
+
     _maybe_refresh_linkedin_on_login(background, user)
     return {"user": _user_dict(user)}
 
@@ -91,41 +138,120 @@ def logout(response: Response):
 
 
 @router.post("/register")
-def register(body: RegisterRequest, response: Response):
+def register(body: RegisterRequest, response: Response, request: Request):
     if not body.name.strip():
         raise HTTPException(status_code=422, detail="Name is required")
     if not body.username.strip():
         raise HTTPException(status_code=422, detail="Username is required")
+    email = body.email.strip().lower()
     if get_user_by_username(body.username):
         raise HTTPException(status_code=409, detail="Username already taken")
-    if get_user_by_email(body.email):
+    if get_user_by_email(email):
         raise HTTPException(status_code=409, detail="An account with that email already exists")
 
-    supabase_session = supabase_sign_up(body.email, body.password)
-    supabase_uid = supabase_session.get("supabase_uid") if supabase_session else None
+    if supabase_configured():
+        # Supabase owns the credential — no local password hash is stored.
+        # Land the confirmation-email link on /login (not the app root).
+        supabase_session = supabase_sign_up(
+            email, body.password, email_redirect_to=_app_url(request, "/login")
+        )
+        supabase_uid = supabase_session.get("supabase_uid") if supabase_session else None
+        if not supabase_uid:
+            raise HTTPException(status_code=400, detail="Could not create account. Try a different email or a stronger password.")
+        password_hash = None
+    else:
+        # Offline dev/tests only.
+        supabase_session = None
+        supabase_uid = None
+        password_hash = hash_password(body.password)
 
     try:
         user = create_profile(
             name=body.name,
-            email=body.email,
+            email=email,
             username=body.username,
-            password_hash=hash_password(body.password),
+            password_hash=password_hash,
             supabase_uid=supabase_uid,
         )
     except IntegrityError:
         raise HTTPException(status_code=409, detail="An account with that email or username already exists")
 
-    if supabase_session and supabase_session.get("access_token"):
-        token = supabase_session["access_token"]
+    if supabase_configured():
+        if supabase_session and supabase_session.get("access_token"):
+            response.set_cookie("access_token", supabase_session["access_token"], **_COOKIE_OPTS)
+        else:
+            # Email confirmation is enabled on the Supabase project — the user must
+            # confirm before a session exists. Don't set a cookie; signal the client.
+            return {"user": _user_dict(user), "email_confirmation_required": True}
     else:
-        token = make_session_token(user.user_id)
-    response.set_cookie("access_token", token, **_COOKIE_OPTS)
+        response.set_cookie("access_token", make_session_token(user.user_id), **_COOKIE_OPTS)
+
     return {"user": _user_dict(user)}
 
 
 @router.get("/me")
 def me(user: User = Depends(get_current_user)):
     return _user_dict(user)
+
+
+# ── Password recovery ─────────────────────────────────────────
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    access_token: str
+    refresh_token: str
+    new_password: str
+
+
+@router.get("/capabilities")
+def auth_capabilities():
+    """Public: tells the frontend which auth features are available."""
+    enabled = supabase_configured()
+    return {
+        "password_reset_enabled": enabled,
+        "auth_mode": "supabase" if enabled else "local",
+    }
+
+
+@router.post("/forgot-password")
+def forgot_password(body: ForgotPasswordRequest, request: Request):
+    """Trigger a Supabase password-reset email.
+
+    Always returns the same generic response so callers cannot tell whether the
+    address maps to a real account (no enumeration). Requires Supabase — the
+    offline dev fallback has no email transport, so it returns 503.
+    """
+    if not supabase_configured():
+        raise HTTPException(status_code=503, detail="Password reset is not available in this environment")
+    # Fire-and-forget; ignore the result to avoid leaking account existence.
+    supabase_send_password_reset(body.email.strip().lower(), _reset_redirect_url(request))
+    return {"ok": True, "message": "If an account exists for that email, a reset link has been sent."}
+
+
+@router.post("/reset-password")
+def reset_password(body: ResetPasswordRequest):
+    """Consume a Supabase recovery token and set a new password.
+
+    The recovery tokens come from the emailed link's URL fragment. Supabase
+    validates that they are unexpired and single-use; we additionally enforce a
+    minimum password strength before applying the change.
+    """
+    if not supabase_configured():
+        raise HTTPException(status_code=503, detail="Password reset is not available in this environment")
+    _validate_password_strength(body.new_password)
+    result = supabase_update_password(body.access_token, body.refresh_token, body.new_password)
+    if not result:
+        raise HTTPException(status_code=400, detail="This reset link is invalid or has expired. Request a new one.")
+    # Keep the local profile mapping consistent for post-reset JWT resolution.
+    uid = result.get("supabase_uid")
+    email = result.get("email")
+    user = (get_user_by_supabase_uid(uid) if uid else None) or (get_user_by_email(email) if email else None)
+    if user and uid:
+        set_supabase_uid(user.user_id, uid)
+    return {"ok": True}
 
 
 # ── GitHub OAuth ──────────────────────────────────────────────

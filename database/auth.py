@@ -36,6 +36,17 @@ def _supabase_client():
         return None
 
 
+def supabase_configured() -> bool:
+    """True when Supabase Auth is usable (env vars set AND the client library is importable).
+
+    This is the single gate that decides auth mode. When True the app runs in
+    Supabase-only mode and MUST NOT fall back to local password/cookie auth
+    (fail-closed in production). When False — env vars absent or the ``supabase``
+    package not installed, i.e. offline local dev/tests — the local fallback is used.
+    """
+    return _supabase_client() is not None
+
+
 def _session_dict(response) -> Optional[dict]:
     """Extract a session dict from a supabase-py AuthResponse."""
     user = response.user
@@ -52,8 +63,14 @@ def _session_dict(response) -> Optional[dict]:
     return result
 
 
-def supabase_sign_up(email: str, password: str) -> Optional[dict]:
+def supabase_sign_up(
+    email: str, password: str, email_redirect_to: Optional[str] = None
+) -> Optional[dict]:
     """Sign up via Supabase Auth using the user's real email address.
+
+    *email_redirect_to*, when provided, is where the confirmation email link
+    returns the user after verifying (e.g. the app's ``/login`` page). Without
+    it, Supabase falls back to the project's Site URL.
 
     Returns ``{supabase_uid, access_token, refresh_token, expires_at}`` on
     success. If email confirmation is enabled the session keys will be absent
@@ -64,7 +81,10 @@ def supabase_sign_up(email: str, password: str) -> Optional[dict]:
     if not client:
         return None
     try:
-        return _session_dict(client.auth.sign_up({"email": email, "password": password}))
+        credentials: dict = {"email": email, "password": password}
+        if email_redirect_to:
+            credentials["options"] = {"email_redirect_to": email_redirect_to}
+        return _session_dict(client.auth.sign_up(credentials))
     except Exception:
         return None
 
@@ -94,6 +114,55 @@ def supabase_refresh_session(refresh_token: str) -> Optional[dict]:
         return _session_dict(client.auth.refresh_session(refresh_token))
     except Exception:
         return None
+
+
+def supabase_send_password_reset(email: str, redirect_to: str) -> bool:
+    """Ask Supabase to email a password-reset link to *email*.
+
+    *redirect_to* is the app URL the recovery link should return the user to
+    (the reset-password page). Returns True if the request was dispatched.
+    Returns False when Supabase is not configured. Never raises and never
+    reveals whether the address maps to a real account — callers must respond
+    generically regardless of the return value to avoid account enumeration.
+    """
+    client = _supabase_client()
+    if not client:
+        return False
+    try:
+        client.auth.reset_password_for_email(email, {"redirect_to": redirect_to})
+        return True
+    except Exception:
+        return False
+
+
+def supabase_update_password(
+    access_token: str, refresh_token: str, new_password: str
+) -> Optional[dict]:
+    """Set a new password using a Supabase recovery session.
+
+    *access_token* / *refresh_token* come from the recovery link that Supabase
+    emailed the user. Establishing the session proves ownership of the account
+    (least privilege — no service-role key needed), after which the password is
+    updated. Returns ``{supabase_uid, email}`` of the updated user, or None on
+    failure (invalid/expired token, Supabase not configured, or any error).
+    """
+    client = _supabase_client()
+    if not client:
+        return None
+    try:
+        client.auth.set_session(access_token, refresh_token)
+        response = client.auth.update_user({"password": new_password})
+        user = getattr(response, "user", None)
+        if not user:
+            return None
+        return {"supabase_uid": str(user.id), "email": getattr(user, "email", None)}
+    except Exception:
+        return None
+    finally:
+        try:
+            client.auth.sign_out()
+        except Exception:
+            pass
 
 
 def supabase_restore_session() -> Optional[str]:

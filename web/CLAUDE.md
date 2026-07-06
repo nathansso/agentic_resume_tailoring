@@ -40,11 +40,18 @@ web/
 
 ## Auth flow
 
-Session token stored in `access_token` cookie (httponly, samesite=strict, 30-day TTL).
+**Login is by email + password.** Session token stored in `access_token` cookie (httponly, samesite=strict, 30-day TTL).
 
-- **Supabase path**: if `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET` are set, register/login go through Supabase Auth and the Supabase JWT is stored as the cookie.
-- **Local fallback**: if Supabase env vars are absent, `make_session_token()` issues a signed cookie via `itsdangerous`. Passwords are always hashed locally with PBKDF2-HMAC-SHA256.
-- `get_current_user` in `web/auth.py` tries Supabase JWT first, then local cookie.
+`database/auth.py::supabase_configured()` is the single gate that picks the mode (env vars set AND the `supabase` package importable). It is **fail-closed**: whenever Supabase is configured, the local password/cookie path is never used.
+
+- **Supabase path (production):** register/login go through Supabase Auth; the Supabase JWT is the cookie. **No local password hash is stored** (`password_hash` stays `NULL` — the column is kept only for schema back-compat). `get_current_user` accepts *only* Supabase JWTs. On login/reset the local profile's `supabase_uid` is backfilled so pre-migration accounts resolve from the JWT `sub`.
+- **Local fallback (offline dev/tests only):** when Supabase is absent, `make_session_token()` issues an `itsdangerous` signed cookie and passwords are hashed locally with PBKDF2-HMAC-SHA256. This path can never run in production.
+
+### Password recovery (issue #61)
+- `GET /api/auth/capabilities` → `{password_reset_enabled, auth_mode}`; the login page shows "Forgot password?" only when enabled.
+- `POST /api/auth/forgot-password {email}` → Supabase `reset_password_for_email` with `redirect_to` = `<APP_BASE_URL or request origin>/reset-password`. **Always returns the same generic 200** (no account enumeration). Returns 503 in the local fallback (no email transport).
+- Recovery link lands on the frontend `/reset-password` page, which reads the Supabase recovery tokens from the URL fragment and strips them from history.
+- `POST /api/auth/reset-password {access_token, refresh_token, new_password}` → re-establishes the recovery session and calls Supabase `update_user`. Enforces min 8-char password (422) before touching Supabase; invalid/expired token → 400. Supabase guarantees single-use/expiry of the recovery token.
 
 ---
 

@@ -1,23 +1,30 @@
-import { useState, type FormEvent, type CSSProperties } from "react";
+import { useState, useEffect, type FormEvent, type CSSProperties } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { login } from "../api/auth";
+import { login, getAuthCapabilities } from "../api/auth";
 import { useAuth } from "../context/AuthContext";
 import { colors, font } from "../theme";
 
 export function LoginPage() {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [resetEnabled, setResetEnabled] = useState(false);
   const { setUser } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    getAuthCapabilities()
+      .then((c) => setResetEnabled(c.password_reset_enabled))
+      .catch(() => setResetEnabled(false));
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
-      const user = await login(username, password);
+      const user = await login(email, password);
       setUser(user);
       navigate("/");
     } catch (err) {
@@ -35,9 +42,10 @@ export function LoginPage() {
         <form onSubmit={handleSubmit} style={s.form}>
           <input
             style={s.input}
-            placeholder="Username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             autoComplete="username"
             required
           />
@@ -55,6 +63,11 @@ export function LoginPage() {
             {submitting ? "Signing in…" : "Sign In"}
           </button>
         </form>
+        {resetEnabled && (
+          <p style={s.hint}>
+            <Link to="/forgot-password" style={s.link}>Forgot password?</Link>
+          </p>
+        )}
         <p style={s.hint}>
           No account? <Link to="/register" style={s.link}>Create one</Link>
         </p>
