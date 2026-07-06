@@ -216,3 +216,59 @@ def test_benchmark_end_to_end_stub_smoke(tmp_path):
     # Rendered .tex + raw content written for the notebook's resume viewer.
     renders = list((tmp_path / "renders").rglob("*.tex"))
     assert renders and renders[0].read_text(encoding="utf-8").startswith("%----")
+
+
+# ── LLM-as-judge quality scoring (issue #27's aim, applied to tailoring) ──────
+
+def _fake_judge_llm(payload):
+    """Runnable standing in for the judge model."""
+    import json as _json
+
+    from langchain_core.messages import AIMessage
+    from langchain_core.runnables import RunnableLambda
+    return RunnableLambda(lambda _pv: AIMessage(content=_json.dumps(payload)))
+
+
+def test_llm_judge_parses_scores_and_means():
+    from eval.llm_judge import judge_resume_quality
+
+    payload = {
+        "relevance_balance": {"score": 4, "rationale": "top exp detailed"},
+        "redundancy": {"score": 3, "rationale": "python repeated"},
+        "faithfulness": {"score": 5, "rationale": "all claims sourced"},
+    }
+    out = judge_resume_quality(_content(), "jd", "profile", llm=_fake_judge_llm(payload))
+    assert out["mean_score"] == 4.0
+    assert out["redundancy"]["score"] == 3
+
+
+@pytest.mark.parametrize("payload", [
+    {"relevance_balance": {"score": 9, "rationale": "x"},
+     "redundancy": {"score": 3, "rationale": "x"},
+     "faithfulness": {"score": 3, "rationale": "x"}},          # out of range
+    {"relevance_balance": {"rationale": "no score"},
+     "redundancy": {"score": 3, "rationale": "x"},
+     "faithfulness": {"score": 3, "rationale": "x"}},          # missing score
+    {"redundancy": {"score": 3, "rationale": "x"}},            # missing axis
+])
+def test_llm_judge_rejects_malformed_output(payload):
+    from eval.llm_judge import judge_resume_quality
+
+    assert judge_resume_quality(_content(), "jd", "profile", llm=_fake_judge_llm(payload)) is None
+
+
+@pytest.mark.integration
+def test_llm_judge_scores_real_resume():
+    """End-to-end judge call against the real eval model (needs API keys)."""
+    from eval.llm_judge import judge_resume_quality
+    from eval.tailoring_benchmark import DEFAULT_PROFILE, STUB_EXPERIENCES, STUB_PROJECTS
+
+    content = {
+        "experiences": STUB_EXPERIENCES,
+        "projects": [{"name": p["name"], "bullets": p["bullets"]} for p in STUB_PROJECTS],
+        "skills_emphasized": ["Python", "PyTorch", "FastAPI"],
+    }
+    jd = "Machine Learning Engineer role: PyTorch, model serving, feature stores, AWS."
+    out = judge_resume_quality(content, jd, DEFAULT_PROFILE.read_text(encoding="utf-8"))
+    assert out is not None
+    assert 1 <= out["mean_score"] <= 5

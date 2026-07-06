@@ -277,7 +277,8 @@ def _api(client, method: str, url: str, **kwargs):
     return resp
 
 
-def _run_task(client, task: Dict, renders_dir: Path) -> Dict:
+def _run_task(client, task: Dict, renders_dir: Path,
+              judge: bool = False, profile_text: str = "") -> Dict:
     """Drive one JD through the exact user flow and compute its metrics."""
     from sqlmodel import Session, select
 
@@ -316,6 +317,13 @@ def _run_task(client, task: Dict, renders_dir: Path) -> Dict:
         tailored_content, task["description"], matched_skills,
         total_profile_skills, baseline_breakdown, tailored_breakdown,
     )
+    if judge:
+        # LLM-as-judge quality axes (issue #27's aim, applied to tailoring):
+        # what the structural metrics can't see — how the resume *reads*.
+        from eval.llm_judge import judge_resume_quality
+        metrics["llm_judge"] = judge_resume_quality(
+            tailored_content, task["description"], profile_text
+        )
 
     (renders_dir / f"{task['id']}.tex").write_text(tex, encoding="utf-8")
     (renders_dir / f"{task['id']}.json").write_text(
@@ -361,6 +369,7 @@ def _aggregate(task_results: List[Dict]) -> Dict:
         "max_term_repetition": stats(collect(["redundancy", "max_term_repetition"])),
         "over_repeated_count": stats(collect(["redundancy", "over_repeated_count"])),
         "bullet_type_token_ratio": stats(collect(["redundancy", "bullet_type_token_ratio"])),
+        "judge_mean_score": stats(collect(["llm_judge", "mean_score"])),
     }
 
 
@@ -371,6 +380,7 @@ def run_benchmark(
     limit: int = 0,
     out_dir: Path = RESULTS_DIR,
     workdir: Optional[Path] = None,
+    judge: bool = False,
 ) -> Dict:
     """Full benchmark run. Returns the results dict (also persisted to out_dir)."""
     tasks = load_tasks(task_ids, limit)
@@ -409,11 +419,15 @@ def run_benchmark(
         renders_dir = out_dir / "renders" / ts
         renders_dir.mkdir(parents=True, exist_ok=True)
 
+        profile_text = profile_path.read_text(encoding="utf-8")
         task_results = []
         for i, task in enumerate(tasks, 1):
             print(f"[{i}/{len(tasks)}] {task['id']} ...", flush=True)
             try:
-                task_results.append(_run_task(client, task, renders_dir))
+                task_results.append(
+                    _run_task(client, task, renders_dir,
+                              judge=judge and not stub, profile_text=profile_text)
+                )
             except Exception as e:
                 print(f"  FAILED: {e}", file=sys.stderr)
                 task_results.append({"task_id": task["id"], "error": str(e)})
@@ -484,11 +498,13 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=0, help="run only the first N tasks")
     ap.add_argument("--profile", type=Path, default=DEFAULT_PROFILE, help="resume fixture to ingest")
     ap.add_argument("--out", type=Path, default=RESULTS_DIR, help="results directory")
+    ap.add_argument("--judge", action="store_true",
+                    help="add LLM-as-judge quality scores (real-LLM mode only)")
     args = ap.parse_args()
 
     results = run_benchmark(
         task_ids=args.tasks, profile_path=args.profile, stub=args.stub,
-        limit=args.limit, out_dir=args.out,
+        limit=args.limit, out_dir=args.out, judge=args.judge,
     )
     agg = results["aggregate"]
     print(json.dumps(agg, indent=2))
