@@ -43,7 +43,14 @@ def get_current_user(request: Request) -> User:
     token = request.cookies.get("access_token")
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    user = _user_from_supabase_jwt(token) or _user_from_local_cookie(token)
+    # Fail-closed: once Supabase is configured (production), only Supabase-issued
+    # JWTs are accepted. The local signed-cookie path is reachable only in
+    # offline dev/tests where Supabase is absent.
+    from database.auth import supabase_configured
+    if supabase_configured():
+        user = _user_from_supabase_jwt(token)
+    else:
+        user = _user_from_local_cookie(token)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
     return user

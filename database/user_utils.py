@@ -50,6 +50,43 @@ def authenticate_local(username: str, password: str) -> Optional[User]:
     return None
 
 
+def authenticate_local_email(email: str, password: str) -> Optional[User]:
+    """Verify email + password against the local DB. Returns the User or None.
+
+    Used by the dev/offline auth fallback (when Supabase is not configured).
+    In production, auth goes through Supabase and this is never called.
+    """
+    from database.auth import verify_password
+    user = get_user_by_email(email)
+    if user and user.password_hash and verify_password(password, user.password_hash):
+        return user
+    return None
+
+
+def set_local_password(user_id: UUID, password_hash: str) -> None:
+    """Update a user's local password hash (dev/offline fallback only)."""
+    with Session(engine) as session:
+        user = session.get(User, user_id)
+        if user:
+            user.password_hash = password_hash
+            session.add(user)
+            session.commit()
+
+
+def set_supabase_uid(user_id: UUID, supabase_uid: str) -> None:
+    """Link a local profile to its Supabase Auth UID.
+
+    Backfilled on login/reset so users created before Supabase auth (or without
+    the mapping) resolve correctly from their Supabase JWT's ``sub`` claim.
+    """
+    with Session(engine) as session:
+        user = session.get(User, user_id)
+        if user and user.supabase_uid != supabase_uid:
+            user.supabase_uid = supabase_uid
+            session.add(user)
+            session.commit()
+
+
 def create_profile(
     name: str,
     email: str,
