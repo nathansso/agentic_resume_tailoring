@@ -203,6 +203,7 @@ Test layout:
 - `tests/test_llm.py` — LLM factory tests.
 - `tests/test_eval.py` — PRD 06 eval harness tests.
 - `tests/test_prd04.py` — PRD 04 job lifecycle and tailoring tests.
+- `tests/test_tailoring_benchmark.py` — #51 benchmark metrics, stub, and end-to-end smoke.
 - `tests/test_integration.py` — full pipeline (marked `@pytest.mark.integration`).
 
 Testing conventions:
