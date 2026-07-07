@@ -75,6 +75,15 @@ def test_full_includes_docling():
         "docling must appear in requirements-full.txt"
 
 
+def test_core_includes_both_llm_provider_packages():
+    """llm.py::get_llm imports langchain_openai or langchain_anthropic depending on
+    LLM_PROVIDER — both must ship in core or the web image 500s on ingest/chat/tailor
+    when that provider is selected."""
+    core = _direct_packages(REQ_CORE)
+    assert "langchain_openai" in core, "langchain-openai must appear in requirements-core.txt"
+    assert "langchain_anthropic" in core, "langchain-anthropic must appear in requirements-core.txt"
+
+
 def test_full_references_core():
     """requirements-full.txt must extend core via -r rather than duplicating it."""
     content = REQ_FULL.read_text(encoding="utf-8")

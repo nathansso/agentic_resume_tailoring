@@ -5,6 +5,7 @@ python-dotenv
 sqlmodel
 langchain
 langchain-openai
+langchain-anthropic
 langgraph
 requests
 python-docx

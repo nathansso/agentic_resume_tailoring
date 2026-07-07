@@ -10,6 +10,8 @@ python-dotenv
 sqlmodel
 langchain
 langchain-openai
+# Anthropic provider for llm.py::get_llm (LLM_PROVIDER=anthropic in prod)
+langchain-anthropic
 langgraph
 requests
 python-docx
