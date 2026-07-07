@@ -134,12 +134,22 @@ def _escape_tex(text: str) -> str:
     return _TEX_ESCAPE_RE.sub(lambda m: _TEX_SPECIAL[m.group()], text)
 
 
+_MD_LINK_RE = re.compile(r"\[[^\]]+\]\([^)]+\)")
+
+
 def _convert_inline(text: str) -> str:
-    """Convert **bold** / *italic* markdown to LaTeX, escaping surrounding text."""
-    parts = re.split(r"(\*\*[^*]+\*\*|\*[^*]+\*)", text)
+    """Convert **bold** / *italic* / [text](url) markdown to LaTeX, escaping surrounding text."""
+    parts = re.split(r"(\[[^\]]+\]\([^)]+\)|\*\*[^*]+\*\*|\*[^*]+\*)", text)
     result = []
     for part in parts:
-        if part.startswith("**") and part.endswith("**"):
+        link = _MD_LINK_RE.match(part)
+        if link:
+            label, url = part[1:].split("](", 1)
+            url = url[:-1]
+            result.append(
+                rf"\href{{{_escape_tex(url)}}}{{\underline{{{_escape_tex(label)}}}}}"
+            )
+        elif part.startswith("**") and part.endswith("**"):
             result.append(r"\textbf{" + _escape_tex(part[2:-2]) + "}")
         elif part.startswith("*") and part.endswith("*"):
             result.append(r"\textit{" + _escape_tex(part[1:-1]) + "}")
@@ -432,8 +442,9 @@ class ResumeFormatterAgent:
             p.paragraph_format.left_indent   = Inches(0.25)
             p.paragraph_format.space_before  = Pt(0)
             p.paragraph_format.space_after   = Pt(1)
-            # Strip markdown bold/italic — add as plain text
+            # Strip markdown bold/italic and flatten [text](url) links to "text (url)" — add as plain text
             clean = re.sub(r"\*+([^*]+)\*+", r"\1", text.strip())
+            clean = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1 (\2)", clean)
             p.add_run(clean).font.size = Pt(10)
 
         # ── Header ────────────────────────────────────────────────────────────
@@ -456,6 +467,8 @@ class ResumeFormatterAgent:
                 parts.append(user.linkedin_url)
             if user.github_username:
                 parts.append(f"github.com/{user.github_username}")
+            if user.portfolio_url:
+                parts.append(user.portfolio_url)
             if user.location:
                 parts.append(user.location)
 
@@ -518,6 +531,9 @@ class ResumeFormatterAgent:
                     techs = proj.get("tech_stack", proj.get("technologies", ""))
                     dates = proj.get("date_range", proj.get("dates", ""))
                     heading = f"{name} | {techs}" if techs else name
+                    links = [u for u in (proj.get("repo_url"), proj.get("demo_url")) if u]
+                    if links:
+                        heading += " | " + " | ".join(links)
                     _subheading(heading, dates)
                     for b in proj.get("bullets", []):
                         _bullet(b)
@@ -606,6 +622,10 @@ class ResumeFormatterAgent:
             u   = _escape_tex(f"https://github.com/{user.github_username}")
             dis = f"github.com/{_escape_tex(user.github_username)}"
             parts.append(rf"\href{{{u}}}{{\underline{{{dis}}}}}")
+        if user.portfolio_url:
+            u = _escape_tex(user.portfolio_url)
+            display = u.replace("https://", "").replace("http://", "")
+            parts.append(rf"\href{{{u}}}{{\underline{{{display}}}}}")
         if user.location:
             parts.append(_escape_tex(user.location))
 
@@ -697,6 +717,14 @@ class ResumeFormatterAgent:
                 rf"\textbf{{{name}}} $|$ \emph{{{techs}}}" if techs
                 else rf"\textbf{{{name}}}"
             )
+
+            links = []
+            if proj.get("repo_url"):
+                links.append(rf"\href{{{_escape_tex(proj['repo_url'])}}}{{\underline{{Repo}}}}")
+            if proj.get("demo_url"):
+                links.append(rf"\href{{{_escape_tex(proj['demo_url'])}}}{{\underline{{Demo}}}}")
+            if links:
+                heading += " $|$ " + " $|$ ".join(links)
 
             lines += [
                 r"      \resumeProjectHeading",

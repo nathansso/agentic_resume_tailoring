@@ -744,6 +744,73 @@ def test_ingest_resume_md_saves_style_profile(isolated_engine, tmp_path, monkeyp
     assert style["section_labels"].get("skills") == "Technical Skills"
 
 
+def test_ingest_resume_backfills_contact_fields(isolated_engine, tmp_path, monkeypatch):
+    """ingest_resume_file backfills linkedin/github/portfolio from the resume header (issue #75)."""
+    import agents.parser as parser_module
+
+    _seed_user_and_skill(isolated_engine)
+
+    class _FakeParser:
+        def parse_and_save(self, data):
+            pass
+
+    monkeypatch.setattr(parser_module, "ResumeParserAgent", lambda: _FakeParser())
+
+    resume = tmp_path / "contact_resume.md"
+    resume.write_text(
+        "Jane Smith\n"
+        "jane@example.com | linkedin.com/in/jane | github.com/janesmith | janesmith.dev\n\n"
+        "Education\nUCSD 2024\n\n"
+        "Work Experience\nEngineer @ Corp\n- Built things\n\n"
+        "Projects\nCool App\n- Did stuff\n\n"
+        "Technical Skills\n- Python\n",
+        encoding="utf-8",
+    )
+
+    services_module.ingest_resume_file(str(resume))
+
+    from database.user_utils import get_active_profile
+    user = get_active_profile()
+    assert user.linkedin_url == "https://linkedin.com/in/jane"
+    assert user.github_username == "janesmith"
+    assert user.portfolio_url == "https://janesmith.dev"
+
+
+def test_ingest_resume_does_not_clobber_existing_contact_fields(isolated_engine, tmp_path, monkeypatch):
+    """Re-ingesting a resume never overwrites a manually-curated contact field (issue #75)."""
+    import agents.parser as parser_module
+
+    user = _seed_user_and_skill(isolated_engine)
+    with Session(isolated_engine) as s:
+        db_user = s.get(User, user.user_id)
+        db_user.linkedin_url = "https://linkedin.com/in/manually-set"
+        s.add(db_user)
+        s.commit()
+
+    class _FakeParser:
+        def parse_and_save(self, data):
+            pass
+
+    monkeypatch.setattr(parser_module, "ResumeParserAgent", lambda: _FakeParser())
+
+    resume = tmp_path / "reupload_resume.md"
+    resume.write_text(
+        "Jane Smith\n"
+        "jane@example.com | linkedin.com/in/jane-new\n\n"
+        "Education\nUCSD 2024\n\n"
+        "Work Experience\nEngineer @ Corp\n- Built things\n\n"
+        "Projects\nCool App\n- Did stuff\n\n"
+        "Technical Skills\n- Python\n",
+        encoding="utf-8",
+    )
+
+    services_module.ingest_resume_file(str(resume))
+
+    from database.user_utils import get_active_profile
+    refreshed = get_active_profile()
+    assert refreshed.linkedin_url == "https://linkedin.com/in/manually-set"
+
+
 def test_get_resume_style_returns_none_without_ingestion(isolated_engine):
     """get_resume_style returns None for a user who has not ingested a resume."""
     user = _seed_user_and_skill(isolated_engine)

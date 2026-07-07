@@ -4,6 +4,23 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issue 75 — Unwanted resume link removal
+**Status:** complete | **Tests:** 476 pass (10 new)
+
+Tailored resumes were losing links: header contact links (LinkedIn/GitHub/portfolio) were missing from exports, and project repo/demo links were never surfaced at all.
+
+### What shipped
+- **Root cause for the header.** The tailoring LLM never touches the header — `_build_tex_header` always renders it fresh from the `User` row. The real gap was upstream: resume ingestion detected *which* contact field types were present in the header (email/linkedin/github/phone/location) but discarded the actual values, so `User.linkedin_url`/`github_username` stayed empty unless manually retyped into the profile form.
+- **Header contact backfill.** `ingestion/resume.py::extract_style_profile` now also returns `header.contact_values` (parsed email, LinkedIn URL, GitHub username, phone, and a new generic portfolio/website URL). `services.py::ingest_resume_file` backfills `User.linkedin_url`/`github_username`/`phone`/`location`/`portfolio_url` from it — **only when the field is currently empty**, so re-ingestion never clobbers a manually-curated value. New `User.portfolio_url` field, rendered in both the LaTeX and DOCX headers and exposed via `PATCH /api/profile/`.
+- **Inline links preserved in body content.** The resume-parsing and tailoring LLM prompts now explicitly instruct link preservation (`[text](url)` markdown), and `agents/formatter.py::_convert_inline` gained markdown-link → `\href` conversion (previously it only handled `**bold**`/`*italic*` and silently dropped any embedded link).
+- **Project repo/demo links auto-embedded (the issue's second ask).** New `Project.demo_url` field. `repo_url`/`demo_url` are no longer dropped before reaching the tailoring pipeline, but — since the LLM rewrite step is unreliable for verbatim field passthrough — they're re-attached deterministically after generation (`ResumeTailorAgent._merge_project_links`, matching the existing `_order_projects_by_selection`/`_enforce_bullet_budgets` guardrail pattern) rather than trusted to the model's JSON output. Rendered as `\href` links in the LaTeX projects section and as plain-text URLs in the DOCX export.
+- **Tests (10 new).** Markdown-link → `\href` conversion, header portfolio-link rendering, project repo/demo link rendering (tex + docx) and omission when absent, contact-field backfill on ingest, no-clobber on re-ingest, and `_merge_project_links` passthrough (including the unrecognized-name case).
+
+### Deviations from spec
+- None — both asks in the issue (header preservation, auto-embedded project links) are addressed as scoped.
+
+---
+
 ## Issue 73 — Data leakage across users
 **Status:** complete | **Tests:** 466 pass (25 new)
 

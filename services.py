@@ -216,6 +216,7 @@ def update_profile(
     phone: str = "",
     email: str = "",
     location: str = "",
+    portfolio_url: str = "",
 ) -> str:
     """Update the active profile's personal info fields."""
     from datetime import datetime
@@ -229,6 +230,7 @@ def update_profile(
             user.linkedin_url = linkedin_url.strip() or None
             user.phone = phone.strip() or None
             user.location = location.strip() or None
+            user.portfolio_url = portfolio_url.strip() or None
             if email.strip() and email.strip() != "user@example.com":
                 user.email = email.strip()
             user.updated_at = datetime.utcnow()
@@ -912,6 +914,27 @@ def load_chat_summary(job_id: Optional[str]) -> Optional[str]:
 # ── Ingestion service functions ─────────────────────────────
 # Each returns a plain-English result string and never raises.
 
+def _backfill_contact_fields(user: User, style: dict) -> None:
+    """Fill in header contact fields from a freshly-ingested resume (issue #75).
+
+    Only sets a field when it's currently empty — never overwrites a value
+    the user already has (manually entered, or from GitHub/LinkedIn connect).
+    """
+    values = (style or {}).get("header", {}).get("contact_values", {})
+    if not values:
+        return
+    if not user.linkedin_url and values.get("linkedin"):
+        user.linkedin_url = values["linkedin"]
+    if not user.github_username and values.get("github"):
+        user.github_username = values["github"]
+    if not user.portfolio_url and values.get("portfolio"):
+        user.portfolio_url = values["portfolio"]
+    if not user.phone and values.get("phone"):
+        user.phone = values["phone"]
+    if not user.location and values.get("location"):
+        user.location = values["location"]
+
+
 def ingest_resume_file(file_path: str, display_name: str | None = None) -> str:
     """Parse a resume file (MD, PDF, DOCX) and save to DB.
 
@@ -950,6 +973,7 @@ def ingest_resume_file(file_path: str, display_name: str | None = None) -> str:
                 if db_user:
                     db_user.resume_markdown = full_text
                     db_user.resume_style = style
+                    _backfill_contact_fields(db_user, style)
                     session.add(db_user)
                     session.commit()
             return _format_ingestion_diff(

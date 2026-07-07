@@ -148,6 +148,8 @@ class ResumeTailorAgent:
                     "blurbs": {b.style: b.content for b in blurbs},
                     "linked_skills": self._count_linked_skills(p.name, p.repo_url, evidence_rows),
                     "metrics": _as_obj(p.metrics, {}),
+                    "repo_url": p.repo_url,
+                    "demo_url": p.demo_url,
                 })
 
             # Priority keywords: top missing JD keywords from latest score_breakdown
@@ -267,7 +269,13 @@ class ResumeTailorAgent:
         matched_str = json.dumps(state["matched_skills"], indent=2)
         missing_str = ", ".join(state["missing_skills"])
         exp_str = json.dumps(state["experiences"], indent=2)
-        proj_str = json.dumps(state["projects"], indent=2)
+        # repo_url/demo_url are re-attached deterministically after generation
+        # (see _merge_project_links) rather than trusted to the LLM round trip.
+        proj_str = json.dumps(
+            [{k: v for k, v in p.items() if k not in ("repo_url", "demo_url")}
+             for p in state["projects"]],
+            indent=2,
+        )
         kw_str = ", ".join(state.get("priority_keywords", []))
 
         prompt = ChatPromptTemplate.from_messages([
@@ -275,6 +283,8 @@ class ResumeTailorAgent:
              "You are an expert resume tailoring assistant. Your job is to rewrite resume content "
              "to best match a specific job description. Rules:\n"
              "- NEVER fabricate experiences, skills, or metrics the candidate doesn't have\n"
+             "- Preserve any `[text](url)` markdown links present in the source bullets verbatim; "
+             "never strip or invent URLs\n"
              "- Emphasize matched skills by reordering bullets and adjusting language\n"
              "- For projects with multiple blurb styles, select the style that best fits the job\n"
              "- Keep projects in the given order; they are pre-ranked by job relevance (most relevant first)\n"
@@ -319,6 +329,9 @@ class ResumeTailorAgent:
             if isinstance(tailored, dict) and tailored.get("projects"):
                 tailored["projects"] = self._order_projects_by_selection(
                     tailored["projects"], [p["name"] for p in state["projects"]]
+                )
+                tailored["projects"] = self._merge_project_links(
+                    tailored["projects"], state["projects"]
                 )
             # Same guarantee for experiences: relevance order + bullet budgets
             # hold even when the LLM ignores the prompt rules.
@@ -638,6 +651,21 @@ class ResumeTailorAgent:
             generated,
             key=lambda p: rank.get(p.get("name"), fallback),
         )
+
+    @staticmethod
+    def _merge_project_links(generated: List[Dict], source: List[Dict]) -> List[Dict]:
+        """Re-attach repo_url/demo_url by project name (issue #75).
+
+        The LLM rewrite is unreliable for verbatim field passthrough, so these
+        links are sourced from the DB-backed project list rather than the
+        model's JSON output — never fabricated, never silently dropped.
+        """
+        links = {p["name"]: (p.get("repo_url"), p.get("demo_url")) for p in source}
+        out = []
+        for p in generated:
+            repo_url, demo_url = links.get(p.get("name"), (None, None))
+            out.append({**p, "repo_url": repo_url, "demo_url": demo_url})
+        return out
 
     # Keys consumed by the selection scorer but not meant for the LLM prompt
     _SCORING_INPUT_KEYS = ("linked_skills", "metrics")

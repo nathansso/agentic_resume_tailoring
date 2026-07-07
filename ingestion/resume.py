@@ -20,6 +20,52 @@ SECTION_KEYWORDS = {
     "certifications": "certifications"
 }
 
+# Header contact-line parsing (issue #75): pull actual values, not just field
+# presence, so ingestion can backfill User.linkedin_url/github_username/etc.
+_MD_LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
+_EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+_LINKEDIN_RE = re.compile(r"(?:https?://)?(?:www\.)?linkedin\.com/in/([\w-]+)", re.I)
+_GITHUB_RE = re.compile(r"(?:https?://)?(?:www\.)?github\.com/([\w.-]+)", re.I)
+_PHONE_RE = re.compile(r"\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}")
+_DOMAIN_RE = re.compile(r"^(?:https?://)?(?:www\.)?[\w-]+(?:\.[\w-]+)+(?:/\S*)?$", re.I)
+
+
+def _parse_contact_part(part: str) -> tuple[str, str] | None:
+    """Classify one header contact token, returning (kind, value) or None.
+
+    *value* is the piece worth persisting: full URL for linkedin/portfolio,
+    bare username for github, the raw string for email/phone/location.
+    """
+    md = _MD_LINK_RE.search(part)
+    label, url = (md.group(1), md.group(2)) if md else (part, part)
+    haystack = f"{label} {url}"
+
+    m = _EMAIL_RE.search(haystack)
+    if m:
+        return "email", m.group()
+
+    m = _LINKEDIN_RE.search(haystack)
+    if m:
+        value = url if _LINKEDIN_RE.search(url) else haystack
+        u = value if value.startswith("http") else f"https://{value.lstrip('/')}"
+        return "linkedin", u
+
+    m = _GITHUB_RE.search(haystack)
+    if m:
+        return "github", m.group(1)
+
+    if _PHONE_RE.search(part):
+        return "phone", _PHONE_RE.search(part).group()
+
+    if re.match(r"[A-Za-z].*,\s+[A-Z]{2}$", label.strip()):
+        return "location", label.strip()
+
+    if _DOMAIN_RE.match(url.strip()):
+        u = url if url.startswith("http") else f"https://{url.lstrip('/')}"
+        return "portfolio", u
+
+    return None
+
 def extract_style_profile(markdown_text: str) -> dict:
     """Heuristically extract resume style metadata from Docling markdown output."""
     lines = markdown_text.split("\n")
@@ -49,6 +95,7 @@ def extract_style_profile(markdown_text: str) -> dict:
 
     contact_sep = " | "
     contact_fields: List[str] = []
+    contact_values: Dict[str, str] = {}
     for line in header_lines[1:]:
         if " | " in line:
             contact_sep = " | "
@@ -58,6 +105,8 @@ def extract_style_profile(markdown_text: str) -> dict:
             contact_sep = " • "
         for part in re.split(r"\s*[|·•]\s*", line):
             p = part.strip()
+            if not p:
+                continue
             if "@" in p and "email" not in contact_fields:
                 contact_fields.append("email")
             elif "linkedin" in p.lower() and "linkedin" not in contact_fields:
@@ -69,6 +118,10 @@ def extract_style_profile(markdown_text: str) -> dict:
             elif re.match(r"[A-Za-z].*,\s+[A-Z]{2}", p) and "location" not in contact_fields:
                 contact_fields.append("location")
 
+            parsed = _parse_contact_part(p)
+            if parsed and parsed[0] not in contact_values:
+                contact_values[parsed[0]] = parsed[1]
+
     top = max(bullet_counts, key=bullet_counts.get)
     bullet_prefix = f"{top} " if bullet_counts[top] > 0 else "- "
 
@@ -78,6 +131,7 @@ def extract_style_profile(markdown_text: str) -> dict:
         "header": {
             "contact_separator": contact_sep,
             "contact_fields": contact_fields or ["email", "linkedin"],
+            "contact_values": contact_values,
         },
         "bullet_prefix": bullet_prefix,
     }

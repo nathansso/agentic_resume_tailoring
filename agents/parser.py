@@ -91,7 +91,8 @@ class ResumeParserAgent:
     def _extract_experiences(self, text: str) -> List[Dict]:
         prompt = ChatPromptTemplate.from_messages([
             ("system", "You are an expert resume parser. Extract work experiences from the text."),
-            ("user", "Text:\n{text}\n\nReturn a JSON list of objects with keys: title, company, start_date (YYYY-MM), end_date (YYYY-MM or Present), description (summary), bullets (list of strings).")
+            ("user", "Text:\n{text}\n\nReturn a JSON list of objects with keys: title, company, start_date (YYYY-MM), end_date (YYYY-MM or Present), description (summary), bullets (list of strings). "
+             "If a bullet references a URL (e.g. an embedded demo or repo link), preserve it verbatim as markdown `[text](url)` inside the bullet string — never drop it.")
         ])
         chain = prompt | self.llm | JsonOutputParser()
         try:
@@ -115,7 +116,10 @@ class ResumeParserAgent:
     def _extract_projects(self, text: str) -> List[Dict]:
         prompt = ChatPromptTemplate.from_messages([
             ("system", "You are an expert resume parser. Extract projects."),
-            ("user", "Text:\n{text}\n\nReturn a JSON list with keys: name, description, start_date, end_date. If a URL is found, include 'repo_url'.")
+            ("user", "Text:\n{text}\n\nReturn a JSON list with keys: name, description, start_date, end_date. "
+             "If a source-code/repository URL is found, include 'repo_url'. "
+             "If a separate live/demo URL is found (distinct from the repo link), include 'demo_url'. "
+             "Preserve any other URL referenced in the description verbatim as markdown `[text](url)` — never drop it.")
         ])
         chain = prompt | self.llm | JsonOutputParser()
         try:
@@ -263,6 +267,7 @@ class ResumeParserAgent:
                     name=name,
                     description=item.get("description"),
                     repo_url=item.get("repo_url"),
+                    demo_url=item.get("demo_url"),
                     start_date=item.get("start_date"),
                     end_date=item.get("end_date"),
                     metrics=metrics,
