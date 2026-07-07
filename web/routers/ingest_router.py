@@ -3,7 +3,7 @@ import tempfile
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlmodel import Session
 
@@ -18,7 +18,8 @@ router = APIRouter(prefix="/api/ingest", tags=["ingest"])
 
 
 class GithubBody(BaseModel):
-    username: str
+    # Optional: when omitted, the connected OAuth account's username is used.
+    username: str | None = None
 
 
 class GithubRepoBody(BaseModel):
@@ -46,7 +47,9 @@ async def ingest_resume(
         tmp.write(contents)
         tmp_path = tmp.name
     try:
-        result = await asyncio.to_thread(services.ingest_resume_file, tmp_path)
+        result = await asyncio.to_thread(
+            services.ingest_resume_file, tmp_path, file.filename or None
+        )
     finally:
         Path(tmp_path).unlink(missing_ok=True)
     return {"result": result}
@@ -58,8 +61,14 @@ async def ingest_github(
     user: User = Depends(get_current_user),
 ):
     _write_active_profile(user.user_id)
+    username = (body.username or "").strip() or (user.github_username or "").strip()
+    if not username:
+        raise HTTPException(
+            status_code=400,
+            detail="No GitHub username available — connect GitHub or enter a username.",
+        )
     token = user.github_access_token or None
-    result = await asyncio.to_thread(services.ingest_github, body.username.strip(), token=token)
+    result = await asyncio.to_thread(services.ingest_github, username, token=token)
     return {"result": result}
 
 
@@ -105,7 +114,9 @@ async def ingest_linkedin_pdf(
         tmp.write(contents)
         tmp_path = tmp.name
     try:
-        result = await asyncio.to_thread(services.ingest_linkedin_pdf, tmp_path)
+        result = await asyncio.to_thread(
+            services.ingest_linkedin_pdf, tmp_path, file.filename or None
+        )
     finally:
         Path(tmp_path).unlink(missing_ok=True)
     return {"result": result}

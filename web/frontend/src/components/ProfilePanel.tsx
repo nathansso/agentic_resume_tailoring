@@ -3,6 +3,7 @@ import type { ProfileData } from "../types";
 import { colors, font } from "../theme";
 import { getProfile, updateProfile } from "../api/profile";
 import { getGithubStatus, disconnectGithub } from "../api/auth";
+import { ProgressBar } from "./ProgressBar";
 
 export function ProfilePanel() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -123,7 +124,9 @@ export function ProfilePanel() {
       </div>
 
       {profile?.linkedin_ingest_status === "importing" && (
-        <p style={{ ...s.muted, color: colors.accent }}>LinkedIn import in progress…</p>
+        <div style={{ margin: "0.75rem 0" }}>
+          <ProgressBar label="LinkedIn import in progress…" showElapsed={false} />
+        </div>
       )}
       {profile?.linkedin_ingest_status === "done" && (
         <p style={{ ...s.muted, color: colors.accent }}>LinkedIn profile imported.</p>

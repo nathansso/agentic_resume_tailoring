@@ -84,6 +84,10 @@ class LinkedInIngestor:
             "source_type": "linkedin",
             "source_file": f"linkedin:{profile_url}",
             "full_text": profile_text,
+            # Structured record for deterministic entity mapping — the parser
+            # saves projects/experiences from this directly instead of
+            # re-deriving them from full_text with an LLM.
+            "linkedin_record": record,
         }
 
     def _scrape(self, profile_url: str, headers: Dict[str, str]) -> Dict[str, Any]:
@@ -232,8 +236,20 @@ class LinkedInIngestor:
             "education",
             ["title", "degree", "field", "start_year", "end_year", "description"],
         )
+        _section(
+            "Projects",
+            "projects",
+            ["title", "start_date", "end_date", "description"],
+        )
+        _section("Courses", "courses", ["title", "subtitle"])
+        _section(
+            "Honors and awards",
+            "honors_and_awards",
+            ["title", "publication", "date", "description"],
+        )
         _section("Certifications", "certifications", ["title", "name", "subtitle", "issuer"])
         _section("Languages", "languages", ["title", "name", "subtitle"])
+        _section("Links", "bio_links", ["title", "link"])
 
         skills = record.get("skills")
         if isinstance(skills, list) and skills:

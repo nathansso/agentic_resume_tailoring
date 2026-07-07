@@ -10,11 +10,12 @@ export async function ingestResume(file: File): Promise<{ result: string }> {
   }));
 }
 
-export async function ingestGithub(username: string): Promise<{ result: string }> {
+/** Omit username to ingest the connected GitHub account (server defaults it). */
+export async function ingestGithub(username?: string): Promise<{ result: string }> {
   return json(await fetch("/api/ingest/github", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username }),
+    body: JSON.stringify({ username: username ?? null }),
     credentials: "include",
   }));
 }

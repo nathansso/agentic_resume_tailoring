@@ -1,12 +1,13 @@
-import { useState, useRef, type CSSProperties, type ChangeEvent } from "react";
+import { useState, useEffect, useRef, type CSSProperties, type ChangeEvent } from "react";
 import { colors, font } from "../theme";
 import {
   ingestResume, ingestGithub, ingestGithubRepo,
   ingestLinkedin, ingestLinkedinPdf,
 } from "../api/ingest";
+import { getGithubStatus } from "../api/auth";
+import { ProgressBar } from "./ProgressBar";
 
-type IngestTab = "resume" | "github" | "linkedin";
-type GithubMode = "user" | "repo";
+export type IngestTab = "resume" | "github" | "linkedin";
 type LinkedinMode = "url" | "pdf";
 
 const TAB_LABELS: Record<IngestTab, string> = {
@@ -15,62 +16,165 @@ const TAB_LABELS: Record<IngestTab, string> = {
   linkedin: "LinkedIn",
 };
 
-export function IngestPanel() {
-  const [tab, setTab] = useState<IngestTab>("resume");
+interface GithubStatus {
+  connected: boolean;
+  oauthConfigured: boolean;
+  username: string | null;
+}
+
+interface Props {
+  initialTab?: IngestTab;
+}
+
+export function IngestPanel({ initialTab }: Props) {
+  const [tab, setTab] = useState<IngestTab>(initialTab ?? "resume");
   const [file, setFile] = useState<File | null>(null);
-  const [githubMode, setGithubMode] = useState<GithubMode>("user");
-  const [githubInput, setGithubInput] = useState("");
+  const [githubStatus, setGithubStatus] = useState<GithubStatus | null>(null);
+  const [repoInput, setRepoInput] = useState("");
+  const [usernameInput, setUsernameInput] = useState("");
   const [linkedinMode, setLinkedinMode] = useState<LinkedinMode>("url");
   const [linkedinInput, setLinkedinInput] = useState("");
   const [linkedinPdf, setLinkedinPdf] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingLabel, setLoadingLabel] = useState("");
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const linkedinPdfRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    getGithubStatus()
+      .then(s => setGithubStatus({
+        connected: s.connected,
+        oauthConfigured: s.oauth_configured,
+        username: s.github_username,
+      }))
+      .catch(() => setGithubStatus({ connected: false, oauthConfigured: false, username: null }));
+  }, []);
+
   function reset() { setResult(null); setError(null); }
 
-  async function handleIngestResume() {
-    if (!file) return;
-    setLoading(true); reset();
+  async function run(label: string, fn: () => Promise<{ result: string }>) {
+    setLoading(true); setLoadingLabel(label); reset();
     try {
-      const { result: r } = await ingestResume(file);
+      const { result: r } = await fn();
       setResult(r);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Ingestion failed");
     } finally {
       setLoading(false);
+      setLoadingLabel("");
     }
   }
 
-  async function handleIngestGithub() {
-    if (!githubInput.trim()) return;
-    setLoading(true); reset();
-    try {
-      const fn = githubMode === "user" ? ingestGithub : ingestGithubRepo;
-      const { result: r } = await fn(githubInput.trim());
-      setResult(r);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ingestion failed");
-    } finally {
-      setLoading(false);
-    }
+  function handleIngestResume() {
+    if (!file || loading) return;
+    void run(`Ingesting ${file.name}…`, () => ingestResume(file));
   }
 
-  async function handleIngestLinkedin() {
+  function handleIngestConnectedGithub() {
+    if (loading) return;
+    const who = githubStatus?.username ? `@${githubStatus.username}` : "your GitHub account";
+    void run(`Importing repositories from ${who}…`, () => ingestGithub());
+  }
+
+  function handleIngestGithubUsername() {
+    if (!usernameInput.trim() || loading) return;
+    void run(`Importing repositories from @${usernameInput.trim()}…`,
+      () => ingestGithub(usernameInput.trim()));
+  }
+
+  function handleIngestGithubRepo() {
+    if (!repoInput.trim() || loading) return;
+    void run(`Importing ${repoInput.trim()}…`, () => ingestGithubRepo(repoInput.trim()));
+  }
+
+  function handleIngestLinkedin() {
+    if (loading) return;
     if (linkedinMode === "url" ? !linkedinInput.trim() : !linkedinPdf) return;
-    setLoading(true); reset();
-    try {
-      const { result: r } = linkedinMode === "url"
-        ? await ingestLinkedin(linkedinInput.trim())
-        : await ingestLinkedinPdf(linkedinPdf as File);
-      setResult(r);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Ingestion failed");
-    } finally {
-      setLoading(false);
+    void run(
+      linkedinMode === "url" ? "Importing LinkedIn profile…" : `Ingesting ${linkedinPdf?.name}…`,
+      () => linkedinMode === "url"
+        ? ingestLinkedin(linkedinInput.trim())
+        : ingestLinkedinPdf(linkedinPdf as File),
+    );
+  }
+
+  function renderGithubTab() {
+    if (!githubStatus) {
+      return <p style={s.hint}>Checking GitHub connection…</p>;
     }
+
+    return (
+      <div style={s.section}>
+        {githubStatus.oauthConfigured ? (
+          githubStatus.connected ? (
+            <>
+              <p style={s.hint}>
+                Connected as{" "}
+                <span style={{ color: colors.accent }}>
+                  {githubStatus.username ? `@${githubStatus.username}` : "your GitHub account"}
+                </span>
+                . Import your repositories to extract skills and projects.
+              </p>
+              <button
+                style={{ ...s.ingestBtn, opacity: loading ? 0.5 : 1 }}
+                onClick={handleIngestConnectedGithub}
+                disabled={loading}
+              >
+                Import My Repositories
+              </button>
+              <p style={s.hint}>Manage the connection from the Profile menu (top right).</p>
+            </>
+          ) : (
+            <>
+              <p style={s.hint}>
+                Connect your GitHub account to import your repositories — including private
+                ones — and extract skills and projects.
+              </p>
+              <a href="/api/auth/github" style={s.connectBtn}>Connect GitHub</a>
+            </>
+          )
+        ) : (
+          <>
+            <p style={s.hint}>
+              Enter a public GitHub username to import that account's repositories.
+            </p>
+            <input
+              style={s.textInput}
+              placeholder="e.g. octocat"
+              value={usernameInput}
+              onChange={e => setUsernameInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleIngestGithubUsername()}
+            />
+            <button
+              style={{ ...s.ingestBtn, opacity: usernameInput.trim() && !loading ? 1 : 0.5 }}
+              onClick={handleIngestGithubUsername}
+              disabled={!usernameInput.trim() || loading}
+            >
+              Import Repositories
+            </button>
+          </>
+        )}
+
+        <div style={s.divider} />
+        <p style={s.hint}>Or import a single public repository:</p>
+        <input
+          style={s.textInput}
+          placeholder="owner/repo, e.g. openai/evals"
+          value={repoInput}
+          onChange={e => setRepoInput(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && handleIngestGithubRepo()}
+        />
+        <button
+          style={{ ...s.secondaryBtn, opacity: repoInput.trim() && !loading ? 1 : 0.5 }}
+          onClick={handleIngestGithubRepo}
+          disabled={!repoInput.trim() || loading}
+        >
+          Import Single Repo
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -110,44 +214,12 @@ export function IngestPanel() {
             onClick={handleIngestResume}
             disabled={!file || loading}
           >
-            {loading ? "Ingesting…" : "Ingest Resume"}
+            Ingest Resume
           </button>
         </div>
       )}
 
-      {tab === "github" && (
-        <div style={s.section}>
-          <div style={s.modeRow}>
-            {(["user", "repo"] as GithubMode[]).map(m => (
-              <label key={m} style={s.modeLabel}>
-                <input
-                  type="radio"
-                  name="github-mode"
-                  value={m}
-                  checked={githubMode === m}
-                  onChange={() => setGithubMode(m)}
-                  style={{ accentColor: colors.accent }}
-                />
-                {m === "user" ? "All repos for username" : "Single repo (owner/repo)"}
-              </label>
-            ))}
-          </div>
-          <input
-            style={s.textInput}
-            placeholder={githubMode === "user" ? "e.g. octocat" : "e.g. openai/evals"}
-            value={githubInput}
-            onChange={e => setGithubInput(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && handleIngestGithub()}
-          />
-          <button
-            style={{ ...s.ingestBtn, opacity: githubInput.trim() && !loading ? 1 : 0.5 }}
-            onClick={handleIngestGithub}
-            disabled={!githubInput.trim() || loading}
-          >
-            {loading ? "Ingesting… (this may take a minute)" : "Ingest GitHub"}
-          </button>
-        </div>
-      )}
+      {tab === "github" && renderGithubTab()}
 
       {tab === "linkedin" && (
         <div style={s.section}>
@@ -208,12 +280,18 @@ export function IngestPanel() {
             onClick={handleIngestLinkedin}
             disabled={(linkedinMode === "url" ? !linkedinInput.trim() : !linkedinPdf) || loading}
           >
-            {loading ? "Importing… (this may take a minute)" : "Import LinkedIn"}
+            Import LinkedIn
           </button>
         </div>
       )}
 
-      {(result || error) && (
+      {loading && (
+        <div style={s.progressWrap}>
+          <ProgressBar label={loadingLabel || "Working…"} />
+        </div>
+      )}
+
+      {(result || error) && !loading && (
         <div style={s.resultBox}>
           <pre style={{ ...s.resultText, color: error ? colors.error : colors.text }}>
             {error ?? result}
@@ -248,6 +326,18 @@ const s: Record<string, CSSProperties> = {
     fontWeight: 700, fontSize: font.size.base, padding: "0.5rem 1rem",
     cursor: "pointer", fontFamily: "inherit", borderRadius: 0, alignSelf: "flex-start",
   },
+  secondaryBtn: {
+    background: "transparent", border: `1px solid ${colors.primary}`,
+    color: colors.text, fontSize: font.size.sm, padding: "0.375rem 0.75rem",
+    cursor: "pointer", fontFamily: "inherit", borderRadius: 0, alignSelf: "flex-start",
+  },
+  connectBtn: {
+    background: colors.accent, border: "none", color: colors.background,
+    fontWeight: 700, fontSize: font.size.base, padding: "0.5rem 1rem",
+    cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
+    textDecoration: "none", display: "inline-block", alignSelf: "flex-start",
+  },
+  divider: { borderTop: `1px solid ${colors.primary}`, margin: "0.5rem 0" },
   modeRow: { display: "flex", flexDirection: "column", gap: "0.375rem" },
   modeLabel: { display: "flex", alignItems: "center", gap: "0.5rem", color: colors.text, fontSize: font.size.sm, cursor: "pointer" },
   textInput: {
@@ -255,6 +345,7 @@ const s: Record<string, CSSProperties> = {
     color: colors.text, fontSize: font.size.base, padding: "0.375rem 0.75rem",
     fontFamily: "inherit", outline: "none", borderRadius: 0,
   },
+  progressWrap: { marginTop: "1rem" },
   resultBox: {
     marginTop: "1rem", background: colors.surface,
     border: `1px solid ${colors.primary}`, padding: "0.75rem",

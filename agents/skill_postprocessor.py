@@ -130,7 +130,13 @@ def postprocess_skills(skills: List[Dict]) -> List[Dict]:
     seen = {}  # canonical_name_lower -> skill dict
 
     for skill in skills:
-        raw_name = skill.get("name", "").strip()
+        # LLM output can contain bare strings or other non-dict junk
+        if isinstance(skill, str):
+            skill = {"name": skill}
+        elif not isinstance(skill, dict):
+            continue
+        name_val = skill.get("name")
+        raw_name = name_val.strip() if isinstance(name_val, str) else ""
         if not raw_name:
             continue
 

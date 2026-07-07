@@ -1,5 +1,6 @@
 import logging
 import json
+import re
 from datetime import datetime
 from typing import Dict, Any, List
 from sqlmodel import Session, select
@@ -28,17 +29,24 @@ class ResumeParserAgent:
         
         logger.info(f"Parsing resume content from {source_file}...")
 
-        # Skip experience extraction for non-resume sources (e.g. GitHub)
         is_github = source_file.startswith("github:")
-        if not is_github:
-            # 1. Extract Experiences
-            experiences = self._extract_experiences(raw_text)
-            self._save_experiences(experiences, source_file)
+        linkedin_record = ingestion_data.get("linkedin_record")
 
-        # 2. Extract Projects
-        projects = self._extract_projects(raw_text)
-        repo_metrics = ingestion_data.get("repo_metrics") or {}
-        self._save_projects(projects, source_file, repo_metrics)
+        if linkedin_record:
+            # Bright Data already returns structured entities — map them
+            # directly instead of a lossy text → LLM → structure round trip.
+            self._save_linkedin_structured(linkedin_record)
+        else:
+            # Skip experience extraction for non-resume sources (e.g. GitHub)
+            if not is_github:
+                # 1. Extract Experiences
+                experiences = self._extract_experiences(raw_text)
+                self._save_experiences(experiences, source_file)
+
+            # 2. Extract Projects
+            projects = self._extract_projects(raw_text)
+            repo_metrics = ingestion_data.get("repo_metrics") or {}
+            self._save_projects(projects, source_file, repo_metrics)
 
         # 3. Extract Skills — use specialized prompt for GitHub repos
         if is_github:
@@ -52,6 +60,30 @@ class ResumeParserAgent:
 
         logger.info("Parsing complete and saved to DB.")
 
+    @staticmethod
+    def _coerce_records(data: Any, str_key: str | None = None) -> List[Dict]:
+        """Normalize LLM JSON output into a list of dicts.
+
+        Models sometimes wrap the list in an object ({"skills": [...]}) or
+        return bare strings instead of objects; both crash downstream
+        .get() calls if passed through untouched.
+
+        str_key: when set, bare-string items become {str_key: item};
+        otherwise they are dropped.
+        """
+        if isinstance(data, dict):
+            wrapped = next((v for v in data.values() if isinstance(v, list)), None)
+            data = wrapped if wrapped is not None else [data]
+        if not isinstance(data, list):
+            return []
+        records: List[Dict] = []
+        for item in data:
+            if isinstance(item, dict):
+                records.append(item)
+            elif isinstance(item, str) and str_key and item.strip():
+                records.append({str_key: item.strip()})
+        return records
+
     def _extract_experiences(self, text: str) -> List[Dict]:
         prompt = ChatPromptTemplate.from_messages([
             ("system", "You are an expert resume parser. Extract work experiences from the text."),
@@ -59,7 +91,7 @@ class ResumeParserAgent:
         ])
         chain = prompt | self.llm | JsonOutputParser()
         try:
-            return chain.invoke({"text": text})
+            return self._coerce_records(chain.invoke({"text": text}), str_key="title")
         except Exception as e:
             logger.error(f"Experience extraction failed: {e}")
             return []
@@ -71,7 +103,7 @@ class ResumeParserAgent:
         ])
         chain = prompt | self.llm | JsonOutputParser()
         try:
-            return chain.invoke({"text": text})
+            return self._coerce_records(chain.invoke({"text": text}), str_key="name")
         except Exception as e:
             logger.error(f"Project extraction failed: {e}")
             return []
@@ -83,7 +115,7 @@ class ResumeParserAgent:
         ])
         chain = prompt | self.llm | JsonOutputParser()
         try:
-            return chain.invoke({"text": text})
+            return self._coerce_records(chain.invoke({"text": text}), str_key="name")
         except Exception as e:
             logger.error(f"Skill extraction failed: {e}")
             return []
@@ -119,7 +151,7 @@ class ResumeParserAgent:
         ])
         chain = prompt | self.llm | JsonOutputParser()
         try:
-            return chain.invoke({"text": text})
+            return self._coerce_records(chain.invoke({"text": text}), str_key="name")
         except Exception as e:
             logger.error(f"Repo skill extraction failed: {e}")
             return []
@@ -188,6 +220,119 @@ class ResumeParserAgent:
                     metrics=metrics,
                 )
                 session.add(proj)
+            session.commit()
+
+    # ── Deterministic LinkedIn mapping (issue #68 follow-up) ─────────────────
+    # Bright Data returns projects/experiences as structured records; save them
+    # verbatim, merging into rows already ingested from other sources.
+
+    @staticmethod
+    def _norm_name(name: Any) -> str:
+        name = re.sub(r"[^a-z0-9 ]+", " ", str(name or "").lower())
+        return re.sub(r"\s+", " ", name).strip()
+
+    @classmethod
+    def _names_match(cls, a: Any, b: Any) -> bool:
+        """Equal after normalization, ignoring spacing ('IDXExchange' ==
+        'IDX Exchange'), or containment for long names so
+        'Recipe Review Analysis - Classification Model …' merges with
+        'Recipe Review Analysis' instead of duplicating it."""
+        na, nb = cls._norm_name(a), cls._norm_name(b)
+        if not na or not nb:
+            return False
+        if na == nb or na.replace(" ", "") == nb.replace(" ", ""):
+            return True
+        shorter, longer = sorted((na, nb), key=len)
+        return len(shorter) >= 10 and shorter in longer
+
+    @staticmethod
+    def _enrich(row, item: Dict, fields: List[str]) -> bool:
+        """Fill missing scalar fields; append genuinely new description text.
+        Idempotent: re-ingesting the same record changes nothing."""
+        changed = False
+        for field in fields:
+            val = str(item.get(field) or "").strip()
+            if val and not getattr(row, field, None):
+                setattr(row, field, val)
+                changed = True
+        desc = str(item.get("description") or "").strip()
+        if desc and row.description and desc not in row.description:
+            row.description = f"{row.description}\n\n[LinkedIn] {desc}"
+            changed = True
+        if changed:
+            row.updated_at = datetime.utcnow()
+        return changed
+
+    def _save_linkedin_structured(self, record: Dict[str, Any]) -> None:
+        projects = self._coerce_records(record.get("projects"), str_key="title")
+        experiences = self._coerce_records(record.get("experience"), str_key="title")
+
+        with Session(engine) as session:
+            existing_projects = list(session.exec(
+                select(Project).where(Project.user_id == self.user.user_id)
+            ).all())
+            for item in projects:
+                name = str(item.get("title") or item.get("name") or "").strip()
+                if not name:
+                    continue
+                match = next(
+                    (p for p in existing_projects if self._names_match(p.name, name)),
+                    None,
+                )
+                if match:
+                    if self._enrich(match, item, ["description", "start_date", "end_date"]):
+                        session.add(match)
+                    logger.debug(f"Merged LinkedIn project into: {match.name}")
+                    continue
+                proj = Project(
+                    user_id=self.user.user_id,
+                    name=name,
+                    description=item.get("description"),
+                    start_date=item.get("start_date"),
+                    end_date=item.get("end_date"),
+                )
+                session.add(proj)
+                existing_projects.append(proj)
+
+            existing_exps = list(session.exec(
+                select(Experience).where(Experience.user_id == self.user.user_id)
+            ).all())
+            placeholders = {"", "unknown", "unknown position"}
+            for item in experiences:
+                title = str(item.get("title") or "").strip()
+                company = str(item.get("company") or "").strip()
+                if not title and not company:
+                    continue
+                # Same company + same title merges; a missing/placeholder title
+                # on either side still merges on company alone, so a sparse
+                # LinkedIn entry enriches the resume-ingested row.
+                match = next(
+                    (e for e in existing_exps
+                     if company and self._names_match(e.company, company)
+                     and (self._names_match(e.title, title)
+                          or self._norm_name(title) in placeholders
+                          or self._norm_name(e.title) in placeholders)),
+                    None,
+                )
+                if match:
+                    if self._norm_name(match.title) in placeholders and title:
+                        match.title = title
+                        match.updated_at = datetime.utcnow()
+                        session.add(match)
+                    if self._enrich(match, item, ["description", "start_date", "end_date"]):
+                        session.add(match)
+                    logger.debug(f"Merged LinkedIn experience into: {match.title} @ {match.company}")
+                    continue
+                exp = Experience(
+                    user_id=self.user.user_id,
+                    title=title or "Unknown Position",
+                    company=company or "Unknown",
+                    start_date=item.get("start_date"),
+                    end_date=item.get("end_date"),
+                    description=item.get("description"),
+                )
+                session.add(exp)
+                existing_exps.append(exp)
             session.commit()
 
     def _save_skills(self, data: List[Dict], source: str):

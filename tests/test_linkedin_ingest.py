@@ -32,6 +32,14 @@ _RECORD = {
     ],
     "education": [{"title": "UCSD", "degree": "BS", "field": "CS"}],
     "skills": ["Python", "PyTorch"],
+    "projects": [
+        {"title": "Recipe Review Analysis - Classification Model",
+         "start_date": "Nov 2024",
+         "description": "Random Forest pipeline on Food.com reviews."},
+    ],
+    "courses": [{"subtitle": "DSC 106", "title": "Data Visualization"}],
+    "honors_and_awards": [{"title": "Dean's List", "date": "2023"}],
+    "bio_links": [{"title": "Portfolio", "link": "https://example.dev"}],
 }
 
 
@@ -108,6 +116,184 @@ def test_brightdata_to_text_flattening():
     assert "Current company: Acme" in text
     assert "Education:" in text
     assert "UCSD" in text
+
+
+def test_brightdata_to_text_is_lossless():
+    """Projects, courses, honors, and bio links must survive flattening —
+    they feed LLM skill extraction (issue #68 follow-up)."""
+    text = LinkedInIngestor()._brightdata_to_text(_RECORD, "https://x")
+    assert "Projects:" in text
+    assert "Recipe Review Analysis" in text
+    assert "Random Forest pipeline" in text
+    assert "Courses:" in text
+    assert "Data Visualization" in text
+    assert "Honors and awards:" in text
+    assert "Dean's List" in text
+    assert "https://example.dev" in text
+
+
+def test_ingest_brightdata_returns_structured_record(monkeypatch):
+    _install_fake_http(monkeypatch)
+    result = LinkedInIngestor().ingest_brightdata("janedev")
+    assert result["linkedin_record"]["name"] == "Jane Dev"
+
+
+# ── Deterministic structured mapping (parser) ───────────────────────────────────
+
+def _make_parser(isolated_engine, monkeypatch, user):
+    """ResumeParserAgent wired to the test DB without touching the LLM or the
+    default-user machinery (__init__ bypassed — structured saves need neither)."""
+    import agents.parser as parser_module
+    monkeypatch.setattr(parser_module, "engine", isolated_engine)
+    agent = parser_module.ResumeParserAgent.__new__(parser_module.ResumeParserAgent)
+    agent.user = user
+    agent.llm = None
+    return agent
+
+
+def _make_user(isolated_engine, email):
+    with Session(isolated_engine) as s:
+        user = User(name="U", email=email)
+        s.add(user); s.commit(); s.refresh(user)
+        return user
+
+
+def test_structured_projects_saved_verbatim(isolated_engine, monkeypatch):
+    from database.models import Project
+    from sqlmodel import select
+    user = _make_user(isolated_engine, "sv1@example.com")
+    agent = _make_parser(isolated_engine, monkeypatch, user)
+
+    agent._save_linkedin_structured(_RECORD)
+
+    with Session(isolated_engine) as s:
+        projs = s.exec(select(Project).where(Project.user_id == user.user_id)).all()
+    assert len(projs) == 1
+    assert projs[0].name == "Recipe Review Analysis - Classification Model"
+    assert projs[0].description == "Random Forest pipeline on Food.com reviews."
+    assert projs[0].start_date == "Nov 2024"
+
+
+def test_structured_project_merges_with_similar_existing(isolated_engine, monkeypatch):
+    """A resume-ingested project with a shorter variant of the name is enriched,
+    not duplicated."""
+    from database.models import Project
+    from sqlmodel import select
+    user = _make_user(isolated_engine, "sv2@example.com")
+    agent = _make_parser(isolated_engine, monkeypatch, user)
+
+    with Session(isolated_engine) as s:
+        s.add(Project(user_id=user.user_id, name="Recipe Review Analysis"))
+        s.commit()
+
+    agent._save_linkedin_structured(_RECORD)
+
+    with Session(isolated_engine) as s:
+        projs = s.exec(select(Project).where(Project.user_id == user.user_id)).all()
+    assert len(projs) == 1
+    assert projs[0].name == "Recipe Review Analysis"  # original name kept
+    assert projs[0].description == "Random Forest pipeline on Food.com reviews."
+    assert projs[0].start_date == "Nov 2024"
+
+
+def test_structured_merge_appends_new_description_idempotently(isolated_engine, monkeypatch):
+    from database.models import Project
+    from sqlmodel import select
+    user = _make_user(isolated_engine, "sv3@example.com")
+    agent = _make_parser(isolated_engine, monkeypatch, user)
+
+    with Session(isolated_engine) as s:
+        s.add(Project(user_id=user.user_id,
+                      name="Recipe Review Analysis",
+                      description="Resume version of the description."))
+        s.commit()
+
+    agent._save_linkedin_structured(_RECORD)
+    agent._save_linkedin_structured(_RECORD)  # re-ingest must not re-append
+
+    with Session(isolated_engine) as s:
+        projs = s.exec(select(Project).where(Project.user_id == user.user_id)).all()
+    assert len(projs) == 1
+    desc = projs[0].description
+    assert desc.startswith("Resume version of the description.")
+    assert desc.count("[LinkedIn] Random Forest pipeline") == 1
+
+
+def test_structured_experience_merges_company_variants(isolated_engine, monkeypatch):
+    """'IDXExchange' (LinkedIn) merges into 'IDX Exchange' (resume); a
+    placeholder LinkedIn title doesn't block the merge."""
+    from database.models import Experience
+    from sqlmodel import select
+    user = _make_user(isolated_engine, "sv4@example.com")
+    agent = _make_parser(isolated_engine, monkeypatch, user)
+
+    with Session(isolated_engine) as s:
+        s.add(Experience(user_id=user.user_id, title="Data Science Intern",
+                         company="IDX Exchange"))
+        s.commit()
+
+    record = {"experience": [
+        {"title": "", "company": "IDXExchange",
+         "start_date": "2026-01", "description": "Internship program."},
+    ]}
+    agent._save_linkedin_structured(record)
+
+    with Session(isolated_engine) as s:
+        exps = s.exec(select(Experience).where(Experience.user_id == user.user_id)).all()
+    assert len(exps) == 1
+    assert exps[0].title == "Data Science Intern"
+    assert exps[0].start_date == "2026-01"
+    assert exps[0].description == "Internship program."
+
+
+def test_structured_experience_new_company_creates_row(isolated_engine, monkeypatch):
+    from database.models import Experience
+    from sqlmodel import select
+    user = _make_user(isolated_engine, "sv5@example.com")
+    agent = _make_parser(isolated_engine, monkeypatch, user)
+
+    record = {"experience": [
+        {"title": "ML Engineer", "company": "Acme", "start_date": "2020"},
+    ]}
+    agent._save_linkedin_structured(record)
+
+    with Session(isolated_engine) as s:
+        exps = s.exec(select(Experience).where(Experience.user_id == user.user_id)).all()
+    assert len(exps) == 1
+    assert exps[0].title == "ML Engineer" and exps[0].company == "Acme"
+
+
+def test_parse_and_save_linkedin_skips_llm_entity_extraction(isolated_engine, monkeypatch):
+    """With a structured record present, the experience/project LLM chains must
+    not run; skills extraction still does."""
+    from database.models import Project
+    from sqlmodel import select
+    import agents.parser as parser_module
+
+    user = _make_user(isolated_engine, "sv6@example.com")
+    agent = _make_parser(isolated_engine, monkeypatch, user)
+
+    def _llm_must_not_run(self, text):
+        raise AssertionError("entity LLM extraction should be bypassed for LinkedIn")
+    monkeypatch.setattr(parser_module.ResumeParserAgent, "_extract_experiences", _llm_must_not_run)
+    monkeypatch.setattr(parser_module.ResumeParserAgent, "_extract_projects", _llm_must_not_run)
+    skills_ran = {"n": 0}
+    monkeypatch.setattr(
+        parser_module.ResumeParserAgent, "_extract_skills",
+        lambda self, text: skills_ran.__setitem__("n", skills_ran["n"] + 1) or [],
+    )
+
+    agent.parse_and_save({
+        "source_type": "linkedin",
+        "source_file": "linkedin:https://www.linkedin.com/in/janedev",
+        "full_text": "flattened text",
+        "linkedin_record": _RECORD,
+    })
+
+    assert skills_ran["n"] == 1
+    with Session(isolated_engine) as s:
+        projs = s.exec(select(Project).where(Project.user_id == user.user_id)).all()
+    assert len(projs) == 1
 
 
 # ── services.ingest_linkedin lifecycle ──────────────────────────────────────────

@@ -4,6 +4,27 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issue 68 — UI overhaul: OAuth-first GitHub ingest, profile menu, progress indicators
+**Status:** complete | **Tests:** 441 pass (24 new)
+
+The web UI still reflected pre-OAuth design: the GitHub ingest tab asked for a raw username even when the account was OAuth-connected, Profile sat as a left nav tab instead of under the user's name, long-running actions gave only a static text label, and ingest results showed the server temp filename (`tmpXXXX.pdf`) instead of the uploaded one.
+
+### What shipped
+- **OAuth-first GitHub ingest.** The GitHub tab now reads `/api/auth/github/status`: not connected → a "Connect GitHub" button that starts the OAuth flow; connected → one-click "Import My Repositories" (no username field). The OAuth callback redirect (`/?github_connected=1`) lands the user back on the GitHub ingest tab. A single public `owner/repo` import remains as a secondary option, and the raw-username form survives only as the fallback when OAuth isn't configured (local dev).
+- **`POST /api/ingest/github` username optional.** Defaults to the connected account's `github_username`; 400 when neither a body username nor a connection exists.
+- **Profile under the top-right user menu.** The header name is now a dropdown (Profile / Sign out); Profile removed from the left nav tabs. GitHub connection management stays on the Profile panel.
+- **Progress indicators.** New `ProgressBar` component (indeterminate sweep + elapsed-time counter) shown during resume/GitHub/LinkedIn ingest, job analyze, and tailor; the background LinkedIn import status on the Profile panel uses it too.
+- **Original filename in ingest results.** `ingest_router` passes `file.filename` through to `services.ingest_resume_file` / `ingest_linkedin_pdf` as a display name.
+- **Parser hardening against malformed LLM output.** LinkedIn URL import crashed with `'str' object has no attribute 'get'` when an extraction model returned a wrapper object (`{"skills": [...]}`) or bare strings instead of a list of objects. `ResumeParserAgent._coerce_records` now normalizes all four extraction chains' output to a list of dicts, and `postprocess_skills` tolerates bare-string and non-dict items.
+- **Deterministic LinkedIn entity mapping.** Bright Data's structured record (`projects`, `experience`) is now saved directly to Project/Experience rows instead of a lossy text → LLM → structure round trip — an audit showed the flattener discarded the four richest sections of a real profile (4,331 chars reduced to 336). Merge-aware upserts enrich entities already ingested from other sources (normalized/containment name matching, fill-missing-fields, `[LinkedIn]`-tagged description appends, idempotent on re-ingest) rather than duplicating them. LLM extraction still runs for skills only.
+- **Lossless LinkedIn flattener.** `_brightdata_to_text` now includes projects, courses, honors and awards, and bio links, so skill extraction sees the whole profile. Verified by replaying a real scrape: 24 skills extracted vs 0 before.
+- **Tests (24 new).** `tests/test_ingest_router.py` — username defaulting, explicit-username precedence, 400 without any username, filename pass-through for resume and LinkedIn PDF uploads. `tests/test_parser_coercion.py` — wrapper-object unwrapping, bare-string mapping, garbage rejection, `postprocess_skills` guards. `tests/test_linkedin_ingest.py` — lossless flattening, verbatim project saves, merge-with-existing (name and company variants, placeholder titles), idempotent description appends, LLM-bypass proof for structured entities.
+
+### Deviations from spec
+- The parser hardening and deterministic LinkedIn mapping were not in the #68 scope — they fix a production crash and a data-loss defect the user hit while testing LinkedIn URL ingestion during this arc. An Education table and raw-scrape persistence were deliberately deferred to a follow-up issue (schema changes).
+
+---
+
 ## Issue 67 — web ingestion OOM and jobs API 404 in production
 **Status:** complete | **Tests:** 416 pass (8 new)
 
@@ -17,6 +38,10 @@ Resume ingestion on the web OOM-killed the 512 MB Fly VM: `requirements-core.txt
 
 ### Deviations from spec
 - None. The ES256 outage fixes referenced in the issue were committed separately (`3585ecd`).
+
+---
+
+## Issue 51 (Phase 1) & issues 15/26/27/54/58 reconciliation — tailoring efficacy benchmark, analyze fix, allocation & redundancy improvements
 **Status:** complete | **Tests:** 387 pass (25 new)
 
 Built the standing apparatus for measuring and improving tailoring quality, and fixed the three reported failure modes (experience text not tracking relevance, unselective skills, term over-repetition) plus a production-grade bug the benchmark's first run exposed.

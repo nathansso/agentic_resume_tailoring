@@ -2,6 +2,7 @@ import { useState, type CSSProperties } from "react";
 import type { JobDetail, TailorResult, ScoreBreakdown } from "../types";
 import { colors, font } from "../theme";
 import { saveDescription, analyzeJob, tailorJob, exportUrl } from "../api/jobs";
+import { ProgressBar } from "./ProgressBar";
 
 interface Props {
   job: JobDetail;
@@ -205,7 +206,7 @@ export function JobDetailPanel({ job, onJobUpdate, onViewChange }: Props) {
       {/* Active step content */}
       <div style={s.stepContent}>
         {error && <p style={s.error}>{error}</p>}
-        {working && <p style={s.working}>{workingLabel}</p>}
+        {working && <ProgressBar label={workingLabel} />}
 
         {!working && step === 1 && (
           <>
@@ -300,7 +301,6 @@ const s: Record<string, CSSProperties> = {
   stepContent: { display: "flex", flexDirection: "column", gap: "0.75rem" },
   hint: { margin: 0, color: colors.textMuted, fontSize: font.size.sm },
   error: { margin: 0, color: colors.error, fontSize: font.size.sm },
-  working: { margin: 0, color: colors.accent, fontSize: font.size.sm, fontStyle: "italic" },
   textarea: {
     background: colors.background, border: `1px solid ${colors.primary}`,
     color: colors.text, fontSize: font.size.base, padding: "0.5rem 0.75rem",

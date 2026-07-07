@@ -856,8 +856,12 @@ def load_chat_summary(job_id: Optional[str]) -> Optional[str]:
 # ── Ingestion service functions ─────────────────────────────
 # Each returns a plain-English result string and never raises.
 
-def ingest_resume_file(file_path: str) -> str:
-    """Parse a resume file (MD, PDF, DOCX) and save to DB."""
+def ingest_resume_file(file_path: str, display_name: str | None = None) -> str:
+    """Parse a resume file (MD, PDF, DOCX) and save to DB.
+
+    display_name: label to show in the result summary — pass the original upload
+    filename when file_path is a server-side temp file.
+    """
     from pathlib import Path
     path = Path(file_path)
     if not path.exists():
@@ -892,8 +896,10 @@ def ingest_resume_file(file_path: str) -> str:
                     db_user.resume_style = style
                     session.add(db_user)
                     session.commit()
-            return _format_ingestion_diff(user.user_id, pre[0], pre[1], pre[2], path.name)
-        return f"Resume ingested: {path.name}."
+            return _format_ingestion_diff(
+                user.user_id, pre[0], pre[1], pre[2], display_name or path.name
+            )
+        return f"Resume ingested: {display_name or path.name}."
     except Exception as e:
         return f"Ingestion failed: {e}"
 
@@ -1104,8 +1110,12 @@ def ingest_linkedin(profile_url: str, user_id: Optional[UUID] = None) -> str:
     return "LinkedIn profile ingested."
 
 
-def ingest_linkedin_pdf(file_path: str) -> str:
-    """Parse a LinkedIn PDF export and save to DB."""
+def ingest_linkedin_pdf(file_path: str, display_name: str | None = None) -> str:
+    """Parse a LinkedIn PDF export and save to DB.
+
+    display_name: label to show in the result summary — pass the original upload
+    filename when file_path is a server-side temp file.
+    """
     from pathlib import Path
     if not Path(file_path).exists():
         return f"File not found: {file_path}"
@@ -1121,7 +1131,9 @@ def ingest_linkedin_pdf(file_path: str) -> str:
             data = LinkedInIngestor().ingest_pdf(file_path)
             ResumeParserAgent().parse_and_save(data)
         if user:
-            return _format_ingestion_diff(user.user_id, pre[0], pre[1], pre[2], Path(file_path).name)
-        return f"LinkedIn PDF ingested: {Path(file_path).name}."
+            return _format_ingestion_diff(
+                user.user_id, pre[0], pre[1], pre[2], display_name or Path(file_path).name
+            )
+        return f"LinkedIn PDF ingested: {display_name or Path(file_path).name}."
     except Exception as e:
         return f"LinkedIn PDF ingestion failed: {e}"
