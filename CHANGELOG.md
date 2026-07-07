@@ -4,6 +4,37 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issue 51 (Phase 1) & issues 15/26/27/54/58 reconciliation — tailoring efficacy benchmark, analyze fix, allocation & redundancy improvements
+**Status:** complete | **Tests:** 387 pass (25 new)
+
+Built the standing apparatus for measuring and improving tailoring quality, and fixed the three reported failure modes (experience text not tracking relevance, unselective skills, term over-repetition) plus a production-grade bug the benchmark's first run exposed.
+
+### What shipped
+- **JD dataset + scraper.** `scripts/scrape_job_descriptions.py` pulls real postings from public Greenhouse/Lever board APIs (role-filtered, HTML-stripped, deduped); 8 SWE/ML postings checked in under `eval/jd_dataset/` with a documented schema, plus a synthetic candidate profile (`eval/profiles/benchmark_profile.md`).
+- **Benchmark harness (#51 Phase 1).** `eval/tailoring_benchmark.py` replays the exact user flow **through the web API** (register → login → upload resume → create job → paste JD → Analyze → Tailor → Export) via FastAPI `TestClient` on an isolated temp DB/env — production data, `~/.art`, and the deployed site are untouched. `--stub` runs fully offline behind a deterministic fake LLM + hash embedder; default mode uses real LLMs. Emits per-task + aggregate JSON, a flat CSV, and per-task `.tex`/`.json` renders under `eval/results/` (gitignored).
+- **Quality metrics.** `eval/metrics.py`: ATS baseline→tailored composite/per-component deltas; experience-allocation balance (Spearman between per-experience JD relevance and bullet-word share); skills selectivity/organization (rendered count vs cap bounds, matched-skill recall, selection ratio, category order); redundancy (boundary-aware term counts — "sql" never matches inside "mysql" — over-repetition rate, bullet type-token ratio).
+- **LLM-as-judge (carries #27's aim).** `eval/llm_judge.py` + `--judge`: 1–5 scores with rationales for relevance_balance / redundancy / faithfulness; malformed judge output rejected; real call integration-gated.
+- **Notebook.** `eval/tailoring_benchmark.ipynb` drives the benchmark and visualizes results: aggregate charts, per-task text-allocation drill-down, tailored-resume viewer over the run's renders, cross-run trend view.
+- **fix(analyze): web jobs got zero skills.** `POST /api/jobs/{id}/analyze` passed `job_id`, but `JobAnalyzerAgent.analyze_and_save` ignored it and attached all extracted `JobSkill` rows to a new orphan `JobDescription` — so web-created jobs matched with **0 skills** and tailoring ran without skill signal. Existing jobs are now analyzed in place (skills replaced idempotently, user's title/company preserved, cached JD embedding invalidated). Found by the benchmark's first run.
+- **feat(tailor): relevance-based bullet budgets.** Experiences are JD-relevance ranked with per-experience `bullet_budget` (up to `TAILOR_MAX_EXP_BULLETS` for the most relevant, down to `TAILOR_MIN_EXP_BULLETS`), injected into the prompt **and enforced deterministically** post-generation.
+- **feat(tailor): anti-redundancy.** Prompt rule against term stuffing; evaluator flags terms mentioned more than `TAILOR_MAX_TERM_MENTIONS` times (boundary-aware) into retry feedback.
+- **Tests (25 new).** `tests/test_tailoring_benchmark.py` (metrics units, stub determinism, dataset sanity, subprocess end-to-end smoke, judge parsing/rejection + integration-gated real call) and `tests/test_prd04.py` additions (analyzer job_id regression ×3, budgets/enforcement/redundancy ×6).
+- **Baseline measurement (real-LLM run, 8/8 tasks):** composite 33.0 → 75.4 (mean delta **+42.4**); allocation correlation mean 0.55/median 0.6; over-repeated terms ≤ 1 per task (mean 0.25); matched-skill recall mean 0.90.
+
+### Issue reconciliation
+- **#54, #58** — already shipped on `main`; closed and moved to Done (they were missing from the project board entirely; added).
+- **#26** — memory-eval framework already shipped; closed.
+- **#27** — closed as superseded: the LLM-as-judge apparatus landed in the tailoring benchmark instead of the chat-memory eval (re-file if chat-memory coherence becomes active).
+- **#15** — closed without the online implementation: its measurable core (a dataset of resume/JD/output/score tuples) now exists offline via the benchmark artifacts; SaaS-scale telemetry + consent/GDPR scope conflicted with the offline-first direction and depended on unbuilt #14.
+- **#51** — Phase 1 delivered by this entry; remains open (In progress) for Phase 2 score-driven tuning.
+
+### Deviations from spec
+- #51 proposed `eval/ats_tasks/` + `eval/ats_efficacy.py`; shipped as `eval/jd_dataset/` + `eval/tailoring_benchmark.py` with a strictly larger metric surface (allocation/skills/redundancy/judge on top of the composite deltas).
+- The end-to-end pytest runs the harness in a **subprocess** with its own temp DB rather than on the in-process `isolated_engine` fixture — too many modules bind `engine` at import time for safe in-process rebinding; the isolation goal is met either way.
+- Known tuning observation from the first real run: the skills cap saturates at `MAX_SKILLS` (18) on every task — drop-off rule never fires for a 37-skill profile. Left for #51 Phase 2 calibration.
+
+---
+
 ## Issues 61 & 62 — Supabase-only auth migration + password recovery
 **Status:** complete | **Tests:** 362 pass (18 new)
 
