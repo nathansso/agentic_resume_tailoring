@@ -56,7 +56,10 @@ def _migrate_db() -> None:
         'ALTER TABLE "user" ADD COLUMN username TEXT',
         'ALTER TABLE "user" ADD COLUMN password_hash TEXT',
         'ALTER TABLE "user" ADD COLUMN supabase_uid TEXT',
-        "ALTER TABLE jobdescription ADD COLUMN user_id TEXT",
+        # UUID, not TEXT: on PostgreSQL a text column can't be compared to the
+        # model's uuid params (SQLite doesn't care). _migrate_pg_uuid_columns
+        # repairs DBs that already got the TEXT version.
+        "ALTER TABLE jobdescription ADD COLUMN user_id UUID",
         # issue 4: GitHub OAuth token per user
         'ALTER TABLE "user" ADD COLUMN github_access_token TEXT',
         # issue 2: ATS scoring breakdown
@@ -89,9 +92,53 @@ def _migrate_db() -> None:
                 conn.rollback()  # PostgreSQL aborts the txn on error; rollback resets it
 
 
+def _uuid_column_fix_statements(text_columns: set) -> list:
+    """ALTER statements converting TEXT columns to uuid where the model says UUID.
+
+    *text_columns* is a set of (table_name, column_name) pairs that are
+    text/varchar in the live database. Columns added by the raw ALTER TABLE
+    migrations above were typed TEXT — fine on SQLite, but on PostgreSQL a
+    `text_col = uuid_param` comparison has no operator and every query
+    filtering on the column 500s. NULLIF handles empty strings left over from
+    SQLite-era rows.
+    """
+    import sqlalchemy as sa
+    stmts = []
+    for table in SQLModel.metadata.tables.values():
+        for col in table.columns:
+            if isinstance(col.type, sa.Uuid) and (table.name, col.name) in text_columns:
+                stmts.append(
+                    f'ALTER TABLE "{table.name}" ALTER COLUMN "{col.name}" '
+                    f"TYPE uuid USING NULLIF(\"{col.name}\", '')::uuid"
+                )
+    return stmts
+
+
+def _migrate_pg_uuid_columns() -> None:
+    """PostgreSQL only: retype UUID-model columns that exist as TEXT."""
+    # Check the live engine's dialect, not DATABASE_URL: tests patch in a
+    # SQLite engine while the env var may still point at PostgreSQL.
+    if engine.dialect.name != "postgresql":
+        return
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        rows = conn.execute(text(
+            "SELECT table_name, column_name FROM information_schema.columns "
+            "WHERE table_schema = current_schema() "
+            "AND data_type IN ('text', 'character varying')"
+        )).fetchall()
+        for stmt in _uuid_column_fix_statements({(r[0], r[1]) for r in rows}):
+            try:
+                conn.execute(text(stmt))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
+
 def init_db():
     SQLModel.metadata.create_all(engine)
     _migrate_db()
+    _migrate_pg_uuid_columns()
 
 def get_session():
     with Session(engine) as session:

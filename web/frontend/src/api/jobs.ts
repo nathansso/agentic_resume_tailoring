@@ -1,12 +1,5 @@
 import type { JobDetail, JobListItem, TailorResult } from "../types";
-
-async function json<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error((body as { detail?: string }).detail ?? `Request failed (${res.status})`);
-  }
-  return res.json() as Promise<T>;
-}
+import { json } from "./http";
 
 export async function listJobs(): Promise<JobListItem[]> {
   return json(await fetch("/api/jobs", { credentials: "include" }));

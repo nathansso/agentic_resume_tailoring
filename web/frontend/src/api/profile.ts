@@ -1,12 +1,5 @@
 import type { ProfileData, SkillRow, ExpRow, ProjectRow, GraphData } from "../types";
-
-async function json<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error((body as { detail?: string }).detail ?? `Request failed (${res.status})`);
-  }
-  return res.json() as Promise<T>;
-}
+import { json } from "./http";
 
 export async function getProfile(): Promise<ProfileData> {
   return json(await fetch("/api/profile/", { credentials: "include" }));

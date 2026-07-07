@@ -1,12 +1,5 @@
 import type { ChatMsg } from "../types";
-
-async function json<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error((body as { detail?: string }).detail ?? `Request failed (${res.status})`);
-  }
-  return res.json() as Promise<T>;
-}
+import { json, errorMessage } from "./http";
 
 export async function loadHistory(jobId: string): Promise<ChatMsg[]> {
   return json(await fetch(`/api/chat/${jobId}/history`, { credentials: "include" }));
@@ -20,8 +13,7 @@ export async function sendMessage(jobId: string, message: string): Promise<strin
     credentials: "include",
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error((body as { detail?: string }).detail ?? `Chat failed (${res.status})`);
+    throw new Error(await errorMessage(res, `Chat failed (${res.status})`));
   }
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
