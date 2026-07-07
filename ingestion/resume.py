@@ -3,7 +3,8 @@ import json
 import re
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-from docling.document_converter import DocumentConverter
+
+from ingestion.document_text import extract_text_lightweight
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +85,9 @@ def extract_style_profile(markdown_text: str) -> dict:
 
 class ResumeIngestor:
     def __init__(self):
-        self.converter = DocumentConverter()
+        # docling loads lazily on first ingest — it pulls in PyTorch, which
+        # OOM-kills low-memory deployments, so it is an optional dependency.
+        self.converter = None
 
     def ingest(self, file_path: str) -> Dict[str, Any]:
         """
@@ -92,8 +95,15 @@ class ResumeIngestor:
         ready for the AI Parser or DB insertion.
         """
         logger.info(f"Ingesting resume: {file_path}")
+        try:
+            from docling.document_converter import DocumentConverter
+        except ImportError:
+            logger.info("docling not installed — using lightweight resume extraction")
+            return self._ingest_lightweight(file_path)
+        if self.converter is None:
+            self.converter = DocumentConverter()
         result = self.converter.convert(file_path)
-        
+
         if result.status != "success":
             raise RuntimeError(f"Docling failed: {result.errors}")
 
@@ -110,6 +120,34 @@ class ResumeIngestor:
             "resume_markdown": full_text,
             "resume_style": extract_style_profile(full_text),
         }
+
+    def _ingest_lightweight(self, file_path: str) -> Dict[str, Any]:
+        """Docling-free path: plain-text extraction + line-based segmentation."""
+        full_text = extract_text_lightweight(file_path)
+        return {
+            "source_file": str(file_path),
+            "parsed_sections": self._segment_text(full_text),
+            "full_text": full_text,
+            "resume_markdown": full_text,
+            "resume_style": extract_style_profile(full_text),
+        }
+
+    def _segment_text(self, text: str) -> Dict[str, List[Dict]]:
+        """Segment plain text into sections by matching heading keywords per line."""
+        sections: Dict[str, List[Dict]] = {"uncategorized": []}
+        current_section = "uncategorized"
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            heading_text = re.sub(r"^#{1,3}\s+", "", line)
+            key = SECTION_KEYWORDS.get(heading_text.lower())
+            if key:
+                current_section = key
+                sections.setdefault(current_section, [])
+                continue
+            sections.setdefault(current_section, []).append({"text": line, "type": "Text"})
+        return sections
 
     def _heuristic_segmentation(self, doc) -> Dict[str, List[Dict]]:
         """

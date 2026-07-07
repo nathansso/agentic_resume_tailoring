@@ -1,4 +1,5 @@
 docling
+pypdf
 openai
 python-dotenv
 sqlmodel

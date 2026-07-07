@@ -129,19 +129,12 @@ class LinkedInIngestor:
 
     def ingest_pdf(self, file_path: str) -> Dict[str, Any]:
         """
-        Fallback: Ingest a LinkedIn PDF profile export via Docling.
+        Fallback: Ingest a LinkedIn PDF profile export.
         """
-        from docling.document_converter import DocumentConverter
+        from ingestion.document_text import extract_markdown
 
         logger.info(f"Ingesting LinkedIn PDF: {file_path}")
-        converter = DocumentConverter()
-        result = converter.convert(file_path)
-
-        if result.status != "success":
-            raise RuntimeError(f"Docling failed: {result.errors}")
-
-        doc = result.document
-        markdown_text = doc.export_to_markdown()
+        markdown_text = extract_markdown(file_path)
 
         return {
             "source_type": "linkedin",

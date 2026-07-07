@@ -4,7 +4,19 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
-## Issue 51 (Phase 1) & issues 15/26/27/54/58 reconciliation — tailoring efficacy benchmark, analyze fix, allocation & redundancy improvements
+## Issue 67 — web ingestion OOM and jobs API 404 in production
+**Status:** complete | **Tests:** 416 pass (8 new)
+
+Resume ingestion on the web OOM-killed the 512 MB Fly VM: `requirements-core.txt` shipped docling, whose converter pulls in PyTorch and loads layout models at parse time. Separately, `GET /api/jobs` 404'd because the SPA catch-all route (ES256 outage fix) fully matches slash-less `/api/*` paths before FastAPI's automatic trailing-slash redirect can fire, and `jobs.ts` fetched the slash-less form — so the job list never loaded.
+
+### What shipped
+- **docling demoted to a full-only dependency.** Removed from `requirements-core.txt` (the Docker image), added to `requirements-full.txt`; `pypdf` added to core as the lightweight fallback.
+- **`ingestion/document_text.py`** — shared extraction helper: docling when installed, otherwise pypdf (PDF) / python-docx (DOCX) / plain read. Used by `ResumeIngestor` (with a new line-based section segmentation fallback) and `LinkedInIngestor.ingest_pdf`.
+- **`/api/jobs` slash tolerance.** List/create routes answer with and without the trailing slash (`include_in_schema=False` aliases); `jobs.ts` now follows the repo's trailing-slash convention.
+- **Tests (8 new).** `tests/test_ingest_fallback.py` — docling-free resume/LinkedIn ingestion, pypdf path, jobs-route slash regression; `tests/test_deps_split.py` — docling excluded from core, pypdf present in core, docling present in full.
+
+### Deviations from spec
+- None. The ES256 outage fixes referenced in the issue were committed separately (`3585ecd`).
 **Status:** complete | **Tests:** 387 pass (25 new)
 
 Built the standing apparatus for measuring and improving tailoring quality, and fixed the three reported failure modes (experience text not tracking relevance, unselective skills, term over-repetition) plus a production-grade bug the benchmark's first run exposed.

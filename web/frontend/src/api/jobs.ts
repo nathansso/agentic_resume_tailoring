@@ -2,11 +2,11 @@ import type { JobDetail, JobListItem, TailorResult } from "../types";
 import { json } from "./http";
 
 export async function listJobs(): Promise<JobListItem[]> {
-  return json(await fetch("/api/jobs", { credentials: "include" }));
+  return json(await fetch("/api/jobs/", { credentials: "include" }));
 }
 
 export async function createJob(title: string, company: string): Promise<JobListItem> {
-  return json(await fetch("/api/jobs", {
+  return json(await fetch("/api/jobs/", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title, company }),

@@ -15,8 +15,9 @@ REQ_FULL = ROOT / "requirements-full.txt"
 REQ_ALL  = ROOT / "requirements.txt"
 
 # Packages deliberately excluded from core (full-only extras; require heavy
-# post-install steps — e.g. `playwright install chromium`).
-HEAVYWEIGHT = {"sentence_transformers", "playwright"}
+# post-install steps — e.g. `playwright install chromium` — or pull in
+# PyTorch, which OOM-kills the 512 MB web VM).
+HEAVYWEIGHT = {"sentence_transformers", "playwright", "docling"}
 
 
 def _direct_packages(path: Path) -> set[str]:
@@ -57,6 +58,21 @@ def test_full_includes_sentence_transformers():
     content = REQ_FULL.read_text(encoding="utf-8").lower()
     assert "sentence-transformers" in content or "sentence_transformers" in content, \
         "sentence-transformers must appear in requirements-full.txt"
+
+
+def test_core_excludes_docling():
+    assert "docling" not in _direct_packages(REQ_CORE), \
+        "docling must NOT appear in requirements-core.txt (pulls in PyTorch; OOM-kills the web VM)"
+
+
+def test_core_includes_pypdf_fallback():
+    assert "pypdf" in _direct_packages(REQ_CORE), \
+        "pypdf must appear in requirements-core.txt — it is the docling-free PDF extraction fallback"
+
+
+def test_full_includes_docling():
+    assert "docling" in _direct_packages(REQ_FULL), \
+        "docling must appear in requirements-full.txt"
 
 
 def test_full_references_core():

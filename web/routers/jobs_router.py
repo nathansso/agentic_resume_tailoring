@@ -74,7 +74,10 @@ def _get_owned_job(job_id: str, user: User) -> tuple[JobDescription, Session]:
 
 # ── List jobs ────────────────────────────────────────────────
 
+# The SPA catch-all route in web/app.py swallows FastAPI's automatic
+# slash-redirect for /api paths, so collection endpoints answer both forms.
 @router.get("/")
+@router.get("", include_in_schema=False)
 def list_jobs(user: User = Depends(get_current_user)):
     with Session(engine) as session:
         jobs = session.exec(
@@ -90,6 +93,7 @@ def list_jobs(user: User = Depends(get_current_user)):
 # ── Create job ───────────────────────────────────────────────
 
 @router.post("/")
+@router.post("", include_in_schema=False)
 def create_job(body: CreateJobBody, user: User = Depends(get_current_user)):
     if not body.title.strip() or not body.company.strip():
         raise HTTPException(status_code=422, detail="Title and company are required")

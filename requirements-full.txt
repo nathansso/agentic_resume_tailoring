@@ -4,3 +4,6 @@
 -r requirements-core.txt
 # Semantic skill matching (downloads ~90 MB model on first use)
 sentence-transformers
+# Layout-aware document parsing (pulls in PyTorch — too heavy for the 512 MB
+# web VM, which falls back to pypdf/python-docx text extraction)
+docling

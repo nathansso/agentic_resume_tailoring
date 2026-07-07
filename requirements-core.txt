@@ -1,8 +1,10 @@
 # Core dependencies — no heavyweight optional extras.
 # Use this for Docker base images or lightweight environments.
-# For full functionality (LinkedIn web scraping + semantic skill matching):
+# For full functionality (LinkedIn web scraping + semantic skill matching +
+# layout-aware docling document parsing):
 #   pip install -r requirements-full.txt
-docling
+# Lightweight PDF text extraction (docling fallback)
+pypdf
 openai
 python-dotenv
 sqlmodel
