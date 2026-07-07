@@ -129,6 +129,11 @@ def get_experiences(user: User = Depends(get_current_user)):
     return services.get_experiences(user.user_id)
 
 
+@router.get("/education")
+def get_education(user: User = Depends(get_current_user)):
+    return services.get_education(user.user_id)
+
+
 @router.get("/projects")
 def get_projects(user: User = Depends(get_current_user)):
     return services.get_projects(user.user_id)

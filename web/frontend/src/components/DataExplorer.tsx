@@ -1,14 +1,15 @@
 import { useState, useEffect, type CSSProperties } from "react";
-import type { SkillRow, ExpRow, ProjectRow, GraphData } from "../types";
+import type { SkillRow, ExpRow, ProjectRow, EducationRow, GraphData } from "../types";
 import { colors, font } from "../theme";
-import { getSkills, getExperiences, getProjects, getGraph, setSkillCore } from "../api/profile";
+import { getSkills, getExperiences, getProjects, getEducation, getGraph, setSkillCore } from "../api/profile";
 
-type Tab = "skills" | "experiences" | "projects" | "graph" | "charts";
+type Tab = "skills" | "experiences" | "education" | "projects" | "graph" | "charts";
 
 export function DataExplorer() {
   const [tab, setTab] = useState<Tab>("skills");
   const [skills, setSkills] = useState<SkillRow[]>([]);
   const [exps, setExps] = useState<ExpRow[]>([]);
+  const [education, setEducation] = useState<EducationRow[]>([]);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [graph, setGraph] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -16,8 +17,8 @@ export function DataExplorer() {
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([getSkills(), getExperiences(), getProjects(), getGraph()])
-      .then(([s, e, p, g]) => { setSkills(s); setExps(e); setProjects(p); setGraph(g); })
+    Promise.all([getSkills(), getExperiences(), getProjects(), getEducation(), getGraph()])
+      .then(([s, e, p, ed, g]) => { setSkills(s); setExps(e); setProjects(p); setEducation(ed); setGraph(g); })
       .catch(err => setError(err instanceof Error ? err.message : "Failed to load data"))
       .finally(() => setLoading(false));
   }, []);
@@ -35,6 +36,7 @@ export function DataExplorer() {
   const tabs: { key: Tab; label: string }[] = [
     { key: "skills", label: `Skills (${skills.length})` },
     { key: "experiences", label: `Experiences (${exps.length})` },
+    { key: "education", label: `Education (${education.length})` },
     { key: "projects", label: `Projects (${projects.length})` },
     { key: "graph", label: "Graph" },
     { key: "charts", label: "Charts" },
@@ -59,6 +61,7 @@ export function DataExplorer() {
         {error && <p style={{ ...s.muted, color: colors.error }}>{error}</p>}
         {!loading && !error && tab === "skills" && <SkillsTab skills={skills} onToggleCore={toggleCore} />}
         {!loading && !error && tab === "experiences" && <ExpsTab exps={exps} />}
+        {!loading && !error && tab === "education" && <EducationTab education={education} />}
         {!loading && !error && tab === "projects" && <ProjectsTab projects={projects} />}
         {!loading && !error && tab === "graph" && <GraphTab graph={graph ?? { top_skills: [], by_category: {}, evidence: {} }} />}
         {!loading && !error && tab === "charts" && <ChartsTab skills={skills} graph={graph} />}
@@ -131,6 +134,42 @@ function ExpsTab({ exps }: { exps: ExpRow[] }) {
           <span style={{ color: colors.textMuted }}>{e.company}</span>
           <span style={{ color: colors.textMuted }}>{e.start}</span>
           <span style={{ color: colors.textMuted }}>{e.end}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EducationTab({ education }: { education: EducationRow[] }) {
+  if (education.length === 0) {
+    return (
+      <p style={sInner.empty}>
+        No education yet — ingest your resume or LinkedIn to add education.
+        Your tailored resumes will omit the education section until then.
+      </p>
+    );
+  }
+  const dates = (e: EducationRow) =>
+    e.start && e.end ? `${e.start} – ${e.end}` : e.end || e.start || "—";
+  return (
+    <div style={sInner.table}>
+      <div style={{ ...sInner.tableHead, gridTemplateColumns: "2fr 2fr 1fr 0.75fr 1.25fr" }}>
+        <span>Institution</span><span>Degree</span><span>Location</span><span>GPA</span><span>Dates</span>
+      </div>
+      {education.map((e, i) => (
+        <div
+          key={i}
+          style={{
+            ...sInner.tableRow,
+            gridTemplateColumns: "2fr 2fr 1fr 0.75fr 1.25fr",
+            background: i % 2 === 0 ? colors.surface : colors.boost,
+          }}
+        >
+          <span>{e.institution}</span>
+          <span style={{ color: colors.textMuted }}>{e.degree}</span>
+          <span style={{ color: colors.textMuted }}>{e.location || "—"}</span>
+          <span style={{ color: colors.textMuted }}>{e.gpa || "—"}</span>
+          <span style={{ color: colors.textMuted }}>{dates(e)}</span>
         </div>
       ))}
     </div>

@@ -82,6 +82,15 @@ export interface ProjectRow {
   desc: string;
 }
 
+export interface EducationRow {
+  institution: string;
+  degree: string;
+  location: string;
+  start: string;   // free-form, verbatim from the resume (e.g. "Sep 2021")
+  end: string;     // e.g. "June 2025", "Expected June 2027", or "2027"
+  gpa: string;
+}
+
 export interface GraphData {
   top_skills: { name: string; connections: number }[];
   by_category: Record<string, number>;

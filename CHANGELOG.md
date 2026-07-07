@@ -5,7 +5,7 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 ---
 
 ## Issue 73 — Data leakage across users
-**Status:** complete | **Tests:** 464 pass (23 new)
+**Status:** complete | **Tests:** 466 pass (25 new)
 
 A user reported their tailored resume showing another user's education (UCSD B.S. Math-Econ / M.S. Data Science). Diagnosis found three distinct isolation defects; all are fixed.
 
@@ -14,7 +14,8 @@ A user reported their tailored resume showing another user's education (UCSD B.S
 - **Knowledge graph scoped per user.** `SkillGraphBuilder` selected *all users'* skills/projects/experiences into one graph, contaminating the skill matcher's indirect-match check, the Data Explorer graph view, and the chat graph tool. It now requires a `user_id` and filters every query (skills joined through `UserSkill`); each build sees only that user's rows.
 - **Request-scoped user binding replaces the global pointer file.** Web routers used to write the authenticated user's ID into the server-global `~/.art/active_profile_id` file that ~25 downstream `get_active_profile()` call sites re-read — concurrent users raced over one slot, cross-contaminating reads *and* ingestion writes. `set_request_user()` (a `ContextVar`) now binds the acting user per request context; bindings are set in async endpoint bodies (not the sync `get_current_user` dependency, which FastAPI runs in a threadpool where ContextVar writes don't propagate back) and flow through `asyncio.to_thread` into agent/service code. The pointer file survives purely as the single-user CLI fallback.
 - **Chat history isolated.** Landing-context chat (`job_id=None`) was one shared conversation across *all* users, and `GET /api/chat/{job_id}/history` never checked job ownership. `ChatMessage` rows are now stamped with `user_id` (nullable column + migration; legacy NULL rows stay hidden from authenticated users), landing history is filtered by owner, and job history 403s for non-owners / 404s for unknown jobs.
-- **Tests (23 new).** `tests/test_education.py` — education rendering in all three formats, omission when absent, cross-user render isolation, parser save/dedup, LinkedIn mapping. `tests/test_user_isolation.py` — graph node/edge scoping, graph-summary scoping, ContextVar-beats-pointer-file regression, landing-history isolation, legacy-row hiding, router ownership checks (403/404).
+- **Education tab in the Data Explorer.** `GET /api/profile/education` + an Education tab (between Experiences and Projects) so users can visually confirm their education ingested correctly — institution, degree, location, GPA, and dates rendered verbatim (dates are stored as free-form strings exactly as the resume wrote them: "June 2025", "Expected June 2027", or bare "2027"). The empty state notes that tailored resumes omit the education section until ingestion.
+- **Tests (25 new).** `tests/test_education.py` — education rendering in all three formats, omission when absent, cross-user render isolation, parser save/dedup, LinkedIn mapping, service shape, endpoint caller-scoping. `tests/test_user_isolation.py` — graph node/edge scoping, graph-summary scoping, ContextVar-beats-pointer-file regression, landing-history isolation, legacy-row hiding, router ownership checks (403/404).
 - **Live API verification.** Full register→history→graph→job→ownership smoke test against a running server on a scratch DB: 13/13 checks pass.
 
 ### Deviations from spec

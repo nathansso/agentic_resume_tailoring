@@ -207,6 +207,52 @@ def test_save_education_skips_blank_institution(isolated_engine, monkeypatch):
     assert rows == []
 
 
+# ── Service + API: education visible in the Data Explorer ────────────────────
+
+def test_get_education_service_shape(isolated_engine):
+    import services as services_module
+    user = _make_user(isolated_engine)
+    _seed_education(isolated_engine, user.user_id, [_ENTRIES[0]])
+
+    rows = services_module.get_education(user.user_id)
+
+    assert rows == [{
+        "institution": "Texas A&M University",
+        "degree": "B.S. Computer Science",
+        "location": "College Station, TX",
+        "start": "",
+        "end": "May 2021",
+        "gpa": "3.8/4.0",
+    }]
+    assert services_module.get_education(None) == []
+
+
+def test_education_endpoint_scoped_to_caller(isolated_engine, monkeypatch):
+    import database.db as db_module
+    monkeypatch.setattr(db_module, "engine", isolated_engine)
+    import services as services_module
+    monkeypatch.setattr(services_module, "engine", isolated_engine)
+
+    from fastapi.testclient import TestClient
+    from web.app import create_app
+    import web.auth as web_auth_module
+
+    alice = _make_user(isolated_engine, email="edu-a@example.com", name="A")
+    bob = _make_user(isolated_engine, email="edu-b@example.com", name="B")
+    _seed_education(isolated_engine, alice.user_id, [_ENTRIES[0]])
+
+    def client_for(user):
+        app = create_app()
+        app.dependency_overrides[web_auth_module.get_current_user] = lambda: user
+        return TestClient(app, raise_server_exceptions=True)
+
+    rows_alice = client_for(alice).get("/api/profile/education").json()
+    rows_bob = client_for(bob).get("/api/profile/education").json()
+
+    assert [r["institution"] for r in rows_alice] == ["Texas A&M University"]
+    assert rows_bob == []
+
+
 # ── Parser: LinkedIn structured mapping ───────────────────────────────────────
 
 _LINKEDIN_RECORD = {

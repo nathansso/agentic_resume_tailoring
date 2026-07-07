@@ -1,4 +1,4 @@
-import type { ProfileData, SkillRow, ExpRow, ProjectRow, GraphData } from "../types";
+import type { ProfileData, SkillRow, ExpRow, ProjectRow, EducationRow, GraphData } from "../types";
 import { json } from "./http";
 
 export async function getProfile(): Promise<ProfileData> {
@@ -33,6 +33,10 @@ export async function getExperiences(): Promise<ExpRow[]> {
 
 export async function getProjects(): Promise<ProjectRow[]> {
   return json(await fetch("/api/profile/projects", { credentials: "include" }));
+}
+
+export async function getEducation(): Promise<EducationRow[]> {
+  return json(await fetch("/api/profile/education", { credentials: "include" }));
 }
 
 export async function getGraph(): Promise<GraphData> {

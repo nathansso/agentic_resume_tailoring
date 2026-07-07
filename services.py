@@ -17,7 +17,7 @@ from sqlmodel import Session, delete, select
 
 from database.db import engine
 from database.models import (
-    ChatMessage, Experience, JobDescription, JobSkill, Project,
+    ChatMessage, Education, Experience, JobDescription, JobSkill, Project,
     Skill, User, UserJobResult, UserSkill,
 )
 
@@ -362,6 +362,29 @@ def get_experiences(user_id: Optional[UUID]) -> list[dict]:
                 "end": e.end_date or "?",
             }
             for e in exps
+        ]
+
+
+def get_education(user_id: Optional[UUID]) -> list[dict]:
+    """This user's education rows for the Data Explorer (issue #73 follow-up)."""
+    if user_id is None:
+        return []
+    with Session(engine) as session:
+        entries = session.exec(
+            select(Education)
+            .where(Education.user_id == user_id)
+            .order_by(Education.created_at)
+        ).all()
+        return [
+            {
+                "institution": e.institution,
+                "degree": e.degree or "—",
+                "location": e.location or "",
+                "start": e.start_date or "",
+                "end": e.end_date or "",
+                "gpa": e.gpa or "",
+            }
+            for e in entries
         ]
 
 
