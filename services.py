@@ -135,7 +135,7 @@ def get_graph_summary(user_id: Optional[UUID]) -> dict:
         return {"top_skills": [], "by_category": {}, "evidence": {}}
     try:
         from knowledge_graph.builder import SkillGraphBuilder
-        G = SkillGraphBuilder().build_graph()
+        G = SkillGraphBuilder(user_id).build_graph()
     except Exception:
         return {"top_skills": [], "by_category": {}, "evidence": {}}
 
@@ -776,27 +776,49 @@ def delete_job(job_uuid: str) -> str:
 _MAX_CHAT_MESSAGES_PER_JOB = 100
 
 
+def _acting_user_id() -> Optional[UUID]:
+    """The current acting user's id (request binding or CLI pointer), or None."""
+    from database.user_utils import get_active_profile
+    user = get_active_profile()
+    return user.user_id if user else None
+
+
 def save_chat_message(job_id: Optional[str], role: str, content: str) -> None:
-    """Persist one message to the ChatMessage table. Never raises."""
+    """Persist one message to the ChatMessage table. Never raises.
+
+    Stamped with the acting user so landing-context messages (job_id=None)
+    stay isolated between users (issue #73).
+    """
     try:
         jid = UUID(job_id) if job_id else None
+        uid = _acting_user_id()
         with Session(engine) as session:
-            session.add(ChatMessage(job_id=jid, role=role, content=content))
+            session.add(ChatMessage(job_id=jid, user_id=uid, role=role, content=content))
             session.commit()
-        _prune_chat_messages(jid)
+        _prune_chat_messages(jid, user_id=uid)
     except Exception as e:
         logger.warning("save_chat_message failed: %s", e)
 
 
-def _prune_chat_messages(jid: Optional[UUID], keep: int = _MAX_CHAT_MESSAGES_PER_JOB) -> None:
-    """Delete oldest messages beyond `keep` for the given job_id. Never raises."""
+def _prune_chat_messages(
+    jid: Optional[UUID],
+    keep: int = _MAX_CHAT_MESSAGES_PER_JOB,
+    user_id: Optional[UUID] = None,
+) -> None:
+    """Delete oldest messages beyond `keep` for the given job_id. Never raises.
+
+    Landing context (jid=None) prunes only the given user's messages.
+    """
     try:
         with Session(engine) as session:
-            ids = session.exec(
+            query = (
                 select(ChatMessage.message_id)
                 .where(ChatMessage.job_id == jid)
                 .order_by(ChatMessage.created_at.desc())
-            ).all()
+            )
+            if jid is None:
+                query = query.where(ChatMessage.user_id == user_id)
+            ids = session.exec(query).all()
             if len(ids) > keep:
                 to_delete = list(ids[keep:])
                 session.exec(delete(ChatMessage).where(ChatMessage.message_id.in_(to_delete)))
@@ -805,18 +827,29 @@ def _prune_chat_messages(jid: Optional[UUID], keep: int = _MAX_CHAT_MESSAGES_PER
         pass
 
 
-def load_chat_history(job_id: Optional[str], limit: int = 20) -> list[dict]:
+def load_chat_history(
+    job_id: Optional[str], limit: int = 20, user_id: Optional[UUID] = None
+) -> list[dict]:
     """Return the last `limit` messages for this job as {role, content} dicts, oldest-first.
-    Returns [] if none found or on error."""
+    Returns [] if none found or on error.
+
+    Landing context (job_id=None) is scoped to `user_id` — or the acting user
+    when not passed — so users never see each other's landing chat (issue #73).
+    Job contexts are scoped by job_id; callers verify job ownership.
+    """
     try:
         jid = UUID(job_id) if job_id else None
         with Session(engine) as session:
-            msgs = session.exec(
+            query = (
                 select(ChatMessage)
                 .where(ChatMessage.job_id == jid)
                 .order_by(ChatMessage.created_at.desc())
                 .limit(limit)
-            ).all()
+            )
+            if jid is None:
+                uid = user_id if user_id is not None else _acting_user_id()
+                query = query.where(ChatMessage.user_id == uid)
+            msgs = session.exec(query).all()
         return [{"role": m.role, "content": m.content, "created_at": m.created_at.isoformat()} for m in reversed(msgs)]
     except Exception as e:
         logger.warning("load_chat_history failed: %s", e)
@@ -1085,9 +1118,10 @@ def ingest_linkedin(profile_url: str, user_id: Optional[UUID] = None) -> str:
         user_id = user.user_id if user else None
     else:
         # Point the parser at this user (parse_and_save uses the active profile).
-        from database.user_utils import ACTIVE_PROFILE_FILE, ART_DIR
-        ART_DIR.mkdir(parents=True, exist_ok=True)
-        ACTIVE_PROFILE_FILE.write_text(str(user_id))
+        # Context-scoped, not the shared pointer file — background LinkedIn
+        # ingests for different users must not race each other (issue #73).
+        from database.user_utils import set_request_user
+        set_request_user(user_id)
 
     _set_linkedin_status(user_id, "importing")
     pre = _snapshot_user_data(user_id) if user_id else (set(), set(), set())

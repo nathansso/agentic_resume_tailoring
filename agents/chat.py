@@ -117,9 +117,13 @@ def query_projects() -> str:
 
 def query_graph_stats() -> str:
     """Get knowledge graph statistics and connections."""
+    from database.user_utils import get_active_profile
+    user = get_active_profile()
+    if not user:
+        return "No active profile. Complete onboarding first."
     try:
         from knowledge_graph.builder import SkillGraphBuilder
-        builder = SkillGraphBuilder()
+        builder = SkillGraphBuilder(user.user_id)
         G = builder.build_graph()
         nodes_by_type: Dict[str, int] = {}
         for _, data in G.nodes(data=True):

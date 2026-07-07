@@ -63,17 +63,15 @@ def _prepare_environment(workdir: Path) -> None:
 
 
 def _patch_profile_pointer(workdir: Path) -> None:
-    """user_utils hardcodes ~/.art; rebind it (and the names ingest_router imported)."""
+    """user_utils hardcodes ~/.art; rebind it. (Routers no longer import the
+    pointer names — web requests bind the acting user per-context, issue #73.)"""
     import database.user_utils as user_utils
-    import web.routers.ingest_router as ingest_router
 
     art_dir = workdir / ".art"
     art_dir.mkdir(parents=True, exist_ok=True)
     pointer = art_dir / "active_profile_id"
     user_utils.ART_DIR = art_dir
     user_utils.ACTIVE_PROFILE_FILE = pointer
-    ingest_router.ART_DIR = art_dir
-    ingest_router.ACTIVE_PROFILE_FILE = pointer
 
 
 # ── deterministic stub LLM (offline mode) ──────────────────────────────────────

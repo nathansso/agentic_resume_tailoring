@@ -9,7 +9,7 @@ from langchain_core.output_parsers import JsonOutputParser
 
 from llm import get_llm
 from database.db import engine
-from database.models import User, Skill, UserSkill, Experience, Project
+from database.models import User, Skill, UserSkill, Education, Experience, Project
 from database.user_utils import get_or_create_default_user
 from agents.skill_postprocessor import postprocess_skills, normalize_skill_name
 
@@ -42,6 +42,10 @@ class ResumeParserAgent:
                 # 1. Extract Experiences
                 experiences = self._extract_experiences(raw_text)
                 self._save_experiences(experiences, source_file)
+
+                # 1b. Extract Education (issue #73 — previously hardcoded in the formatter)
+                education = self._extract_education(raw_text)
+                self._save_education(education, source_file)
 
             # 2. Extract Projects
             projects = self._extract_projects(raw_text)
@@ -94,6 +98,18 @@ class ResumeParserAgent:
             return self._coerce_records(chain.invoke({"text": text}), str_key="title")
         except Exception as e:
             logger.error(f"Experience extraction failed: {e}")
+            return []
+
+    def _extract_education(self, text: str) -> List[Dict]:
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", "You are an expert resume parser. Extract education entries from the text."),
+            ("user", "Text:\n{text}\n\nReturn a JSON list of objects with keys: institution, degree (full degree name including major/minor), location, start_date, end_date (graduation date, e.g. 'June 2025' or 'Expected June 2027'), gpa (string, or null if not stated). Only include entries explicitly present in the text — never invent one.")
+        ])
+        chain = prompt | self.llm | JsonOutputParser()
+        try:
+            return self._coerce_records(chain.invoke({"text": text}), str_key="institution")
+        except Exception as e:
+            logger.error(f"Education extraction failed: {e}")
             return []
 
     def _extract_projects(self, text: str) -> List[Dict]:
@@ -186,6 +202,38 @@ class ResumeParserAgent:
                 session.add(exp)
             session.commit()
 
+    def _save_education(self, data: List[Dict], source: str):
+        with Session(engine) as session:
+            for item in data:
+                institution = str(item.get("institution") or "").strip()
+                degree = str(item.get("degree") or "").strip()
+                if not institution:
+                    continue
+
+                # Dedup by institution + degree for this user
+                existing = session.exec(
+                    select(Education).where(
+                        Education.user_id == self.user.user_id,
+                        Education.institution == institution,
+                        Education.degree == degree,
+                    )
+                ).first()
+                if existing:
+                    logger.debug(f"Skipping duplicate education: {degree} at {institution}")
+                    continue
+
+                gpa = item.get("gpa")
+                session.add(Education(
+                    user_id=self.user.user_id,
+                    institution=institution,
+                    degree=degree,
+                    location=item.get("location"),
+                    start_date=item.get("start_date"),
+                    end_date=item.get("end_date"),
+                    gpa=str(gpa).strip() if gpa else None,
+                ))
+            session.commit()
+
     def _save_projects(self, data: List[Dict], source: str, repo_metrics: Dict[str, Dict] = None):
         # GitHub signals keyed by repo name (issue #46) — matched case-insensitively
         # against extracted project names so complexity scoring can use them later.
@@ -266,6 +314,7 @@ class ResumeParserAgent:
     def _save_linkedin_structured(self, record: Dict[str, Any]) -> None:
         projects = self._coerce_records(record.get("projects"), str_key="title")
         experiences = self._coerce_records(record.get("experience"), str_key="title")
+        education = self._coerce_records(record.get("education"), str_key="title")
 
         with Session(engine) as session:
             existing_projects = list(session.exec(
@@ -333,6 +382,35 @@ class ResumeParserAgent:
                 )
                 session.add(exp)
                 existing_exps.append(exp)
+
+            # Education (issue #73): Bright Data returns title (school), degree,
+            # field, and sometimes start_year/end_year. Merge on institution so a
+            # resume-ingested row is not duplicated by a sparser LinkedIn one.
+            existing_edu = list(session.exec(
+                select(Education).where(Education.user_id == self.user.user_id)
+            ).all())
+            for item in education:
+                institution = str(item.get("title") or item.get("institution") or "").strip()
+                if not institution:
+                    continue
+                degree = ", ".join(
+                    p for p in (
+                        str(item.get("degree") or "").strip(),
+                        str(item.get("field") or "").strip(),
+                    ) if p
+                )
+                if any(self._names_match(e.institution, institution) for e in existing_edu):
+                    logger.debug(f"Skipping LinkedIn education already present: {institution}")
+                    continue
+                edu = Education(
+                    user_id=self.user.user_id,
+                    institution=institution,
+                    degree=degree,
+                    start_date=str(item.get("start_year") or "").strip() or None,
+                    end_date=str(item.get("end_year") or "").strip() or None,
+                )
+                session.add(edu)
+                existing_edu.append(edu)
             session.commit()
 
     def _save_skills(self, data: List[Dict], source: str):

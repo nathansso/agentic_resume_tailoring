@@ -4,6 +4,25 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issue 73 — Data leakage across users
+**Status:** complete | **Tests:** 464 pass (23 new)
+
+A user reported their tailored resume showing another user's education (UCSD B.S. Math-Econ / M.S. Data Science). Diagnosis found three distinct isolation defects; all are fixed.
+
+### What shipped
+- **Per-user education storage (the reported symptom).** The resume formatter had one user's education *hardcoded* in all three export paths (LaTeX/PDF, DOCX, Markdown) — every user's export got it. New `Education` table (institution, degree, location, dates, GPA) keyed by `user_id`; resume ingestion extracts education via the LLM parser (with dedup on re-ingest), LinkedIn ingestion maps Bright Data's structured `education` records deterministically (merging with resume-ingested rows). The formatter renders the acting user's rows and **omits the section entirely when a user has none** — education is never fabricated. Existing users' education stays empty until they re-ingest a resume.
+- **Knowledge graph scoped per user.** `SkillGraphBuilder` selected *all users'* skills/projects/experiences into one graph, contaminating the skill matcher's indirect-match check, the Data Explorer graph view, and the chat graph tool. It now requires a `user_id` and filters every query (skills joined through `UserSkill`); each build sees only that user's rows.
+- **Request-scoped user binding replaces the global pointer file.** Web routers used to write the authenticated user's ID into the server-global `~/.art/active_profile_id` file that ~25 downstream `get_active_profile()` call sites re-read — concurrent users raced over one slot, cross-contaminating reads *and* ingestion writes. `set_request_user()` (a `ContextVar`) now binds the acting user per request context; bindings are set in async endpoint bodies (not the sync `get_current_user` dependency, which FastAPI runs in a threadpool where ContextVar writes don't propagate back) and flow through `asyncio.to_thread` into agent/service code. The pointer file survives purely as the single-user CLI fallback.
+- **Chat history isolated.** Landing-context chat (`job_id=None`) was one shared conversation across *all* users, and `GET /api/chat/{job_id}/history` never checked job ownership. `ChatMessage` rows are now stamped with `user_id` (nullable column + migration; legacy NULL rows stay hidden from authenticated users), landing history is filtered by owner, and job history 403s for non-owners / 404s for unknown jobs.
+- **Tests (23 new).** `tests/test_education.py` — education rendering in all three formats, omission when absent, cross-user render isolation, parser save/dedup, LinkedIn mapping. `tests/test_user_isolation.py` — graph node/edge scoping, graph-summary scoping, ContextVar-beats-pointer-file regression, landing-history isolation, legacy-row hiding, router ownership checks (403/404).
+- **Live API verification.** Full register→history→graph→job→ownership smoke test against a running server on a scratch DB: 13/13 checks pass.
+
+### Deviations from spec
+- The issue hypothesized non-isolated knowledge graphs; that was real, but the reported symptom itself was hardcoded education in the formatter, and a third defect (shared landing chat + unchecked job-history ownership) was found and fixed in the same arc.
+- Physically separate per-user graph stores were considered and rejected: the graph is an ephemeral in-memory projection of already-`user_id`-keyed relational rows, so scoping the builder's queries achieves full isolation without new infrastructure.
+
+---
+
 ## Issue 68 — UI overhaul: OAuth-first GitHub ingest, profile menu, progress indicators
 **Status:** complete | **Tests:** 441 pass (24 new)
 

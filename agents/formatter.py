@@ -15,7 +15,7 @@ from uuid import UUID
 from sqlmodel import Session, select
 
 from database.db import engine
-from database.models import Skill, User, UserSkill
+from database.models import Education, Skill, User, UserSkill
 from agents.skill_postprocessor import normalize_skill_name, should_reject_skill
 
 logger = logging.getLogger(__name__)
@@ -290,6 +290,25 @@ class ResumeFormatterAgent:
     def _resolve_label(self, key: str) -> str:
         return (self._style or {}).get("section_labels", {}).get(key, key.capitalize())
 
+    def _get_education(self) -> List[Education]:
+        """This user's education rows in insertion (resume document) order."""
+        with Session(engine) as session:
+            return list(session.exec(
+                select(Education)
+                .where(Education.user_id == self.user_id)
+                .order_by(Education.created_at)
+            ).all())
+
+    @staticmethod
+    def _education_degree_line(entry: Education) -> str:
+        return f"{entry.degree}, GPA: {entry.gpa}" if entry.gpa else entry.degree
+
+    @staticmethod
+    def _education_date_line(entry: Education) -> str:
+        if entry.start_date and entry.end_date:
+            return f"{entry.start_date} -- {entry.end_date}"
+        return entry.end_date or entry.start_date or ""
+
     def _build_known_labels(self) -> frozenset:
         labels: set = set()
         for v in (self._style or {}).get("section_labels", {}).values():
@@ -463,15 +482,16 @@ class ResumeFormatterAgent:
 
         for key in sections_to_render:
             if key == "education":
+                edu_entries = self._get_education()
+                if not edu_entries:
+                    continue
                 _section_heading(self._resolve_label("education"))
-                _subheading(
-                    "University of California, San Diego", "La Jolla, CA",
-                    "M.S. Data Science, GPA: 4.0/4.0", "Expected June 2027",
-                )
-                _subheading(
-                    "University of California, San Diego", "La Jolla, CA",
-                    "B.S. Mathematics & Economics, Minor in Data Science", "June 2025",
-                )
+                for entry in edu_entries:
+                    _subheading(
+                        entry.institution, entry.location or "",
+                        self._education_degree_line(entry),
+                        self._education_date_line(entry),
+                    )
 
             elif key == "experience":
                 exps = tailored_content.get("experiences", [])
@@ -600,19 +620,27 @@ class ResumeFormatterAgent:
         )
 
     def _build_tex_education(self) -> str:
-        """Jake's education section: two \\resumeSubheading entries, no extras."""
+        """Jake's education section: one \\resumeSubheading per Education row.
+
+        Omitted entirely when the user has no education rows — never fabricated.
+        """
+        entries = self._get_education()
+        if not entries:
+            return ""
         label = _escape_tex(self._resolve_label("education"))
-        return "\n".join([
+        lines = [
             rf"\section{{{label}}}",
             r"  \resumeSubHeadingListStart",
-            r"    \resumeSubheading",
-            r"      {University of California, San Diego}{La Jolla, CA}",
-            r"      {M.S. Data Science, GPA: 4.0/4.0}{Expected June 2027}",
-            r"    \resumeSubheading",
-            r"      {University of California, San Diego}{La Jolla, CA}",
-            r"      {B.S. Mathematics \& Economics, Minor in Data Science}{June 2025}",
-            r"  \resumeSubHeadingListEnd",
-        ])
+        ]
+        for entry in entries:
+            lines += [
+                r"    \resumeSubheading",
+                f"      {{{_escape_tex(entry.institution)}}}{{{_escape_tex(entry.location or '')}}}",
+                f"      {{{_escape_tex(self._education_degree_line(entry))}}}"
+                f"{{{_escape_tex(self._education_date_line(entry))}}}",
+            ]
+        lines.append(r"  \resumeSubHeadingListEnd")
+        return "\n".join(lines)
 
     def _build_tex_experiences(self, experiences: List[Dict]) -> str:
         """Jake's experience section: \\resumeSubheading{Title}{Dates}{Company}{Location}."""
@@ -853,13 +881,17 @@ class ResumeFormatterAgent:
             return "\n".join([user.name, "  ", sep.join(contact)])
 
     def _build_education(self) -> str:
-        label = self._resolve_label("education")
-        return (
-            f"{label}  \n"
-            "**University of California, San Diego** — M.S. Data Science, Expected June 2027  \n"
-            "GPA: 4.0/4.0  \n"
-            "**University of California, San Diego** — B.S. Mathematics & Economics, Minor in Data Science, June 2025"
-        )
+        entries = self._get_education()
+        if not entries:
+            return ""
+        lines = [f"{self._resolve_label('education')}  "]
+        for entry in entries:
+            date = self._education_date_line(entry)
+            line = f"**{entry.institution}** — {self._education_degree_line(entry)}"
+            if date:
+                line += f", {date}"
+            lines.append(line + "  ")
+        return "\n".join(lines)
 
     def _build_projects(self, projects, label="Projects", bullet_prefix="- "):
         if not projects:

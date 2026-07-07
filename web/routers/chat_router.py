@@ -2,14 +2,14 @@ import asyncio
 import json as _json
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlmodel import Session
 
 from database.db import engine
-from database.models import User
-from database.user_utils import ACTIVE_PROFILE_FILE, ART_DIR
+from database.models import JobDescription, User
+from database.user_utils import set_request_user
 from web.auth import get_current_user
 from web.routers.dependencies import check_ai_quota, increment_ai_usage
 import services
@@ -19,12 +19,6 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 class ChatBody(BaseModel):
     message: str
-
-
-def _write_active_profile(user_id: UUID) -> None:
-    """Point get_active_profile() at this web user before calling agent/service functions."""
-    ART_DIR.mkdir(parents=True, exist_ok=True)
-    ACTIVE_PROFILE_FILE.write_text(str(user_id))
 
 
 def _get_or_create_agent(request: Request, user: User):
@@ -37,8 +31,21 @@ def _get_or_create_agent(request: Request, user: User):
 
 @router.get("/{job_id}/history")
 def get_history(job_id: str, user: User = Depends(get_current_user)):
-    jid = None if job_id == "landing" else job_id
-    return services.load_chat_history(jid)
+    if job_id == "landing":
+        return services.load_chat_history(None, user_id=user.user_id)
+    # Job chats are keyed by job_id — verify the job belongs to the caller
+    # before returning its history (issue #73).
+    try:
+        jid = UUID(job_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Job not found")
+    with Session(engine) as session:
+        job = session.get(JobDescription, jid)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.user_id and str(job.user_id) != str(user.user_id):
+        raise HTTPException(status_code=403, detail="Not your job")
+    return services.load_chat_history(job_id)
 
 
 @router.post("/{job_id}/send")
@@ -49,7 +56,11 @@ async def send_message(
     user: User = Depends(get_current_user),
     _quota: None = Depends(check_ai_quota),
 ):
-    _write_active_profile(user.user_id)
+    # Bind the acting user to this request's context (issue #73): the agent and
+    # service code below resolve it via get_active_profile(). Set in the async
+    # endpoint body — not the sync get_current_user dependency, which FastAPI
+    # runs in a threadpool where ContextVar writes don't propagate back.
+    set_request_user(user.user_id)
     agent = _get_or_create_agent(request, user)
     jid = None if job_id == "landing" else job_id
     agent.set_active_job(jid)

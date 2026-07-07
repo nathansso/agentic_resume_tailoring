@@ -1,3 +1,4 @@
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Optional
 from uuid import UUID
@@ -10,9 +11,36 @@ from database.models import User
 ART_DIR = Path.home() / ".art"
 ACTIVE_PROFILE_FILE = ART_DIR / "active_profile_id"
 
+# Request-scoped acting user for the multi-user web server (issue #73).
+# The pointer file below is a single-user CLI concept: on a shared server it is
+# one global slot that concurrent requests race over. Web requests bind the
+# authenticated user here instead (set in web/auth.py::get_current_user);
+# ContextVars propagate through asyncio.to_thread and task spawns, so service
+# and agent code deep in a request keeps resolving the right user.
+_REQUEST_USER_ID: ContextVar[Optional[UUID]] = ContextVar(
+    "art_request_user_id", default=None
+)
+
+
+def set_request_user(user_id: Optional[UUID]) -> None:
+    """Bind the acting user for the current request/task context.
+
+    Pass None to clear the binding (get_active_profile falls back to the
+    CLI pointer file).
+    """
+    _REQUEST_USER_ID.set(user_id)
+
 
 def get_active_profile() -> Optional[User]:
-    """Return the active User, or None if no profile has been set up."""
+    """Return the acting User, or None if no profile has been set up.
+
+    Web requests resolve from the request-scoped binding; the CLI falls back
+    to the ~/.art/active_profile_id pointer file.
+    """
+    request_uid = _REQUEST_USER_ID.get()
+    if request_uid is not None:
+        with Session(engine) as session:
+            return session.get(User, request_uid)
     if not ACTIVE_PROFILE_FILE.exists():
         return None
     try:

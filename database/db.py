@@ -82,6 +82,8 @@ def _migrate_db() -> None:
         "ALTER TABLE jobdescription ADD COLUMN embedding_model TEXT",
         # issue 54: user-pinned core skills (always rendered)
         "ALTER TABLE userskill ADD COLUMN is_core BOOLEAN DEFAULT FALSE",
+        # issue 73: landing-context chat messages are scoped per user
+        "ALTER TABLE chatmessage ADD COLUMN user_id UUID",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

@@ -1,7 +1,6 @@
 import asyncio
 import tempfile
 from pathlib import Path
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -9,7 +8,7 @@ from sqlmodel import Session
 
 from database.db import get_session
 from database.models import User
-from database.user_utils import ACTIVE_PROFILE_FILE, ART_DIR
+from database.user_utils import set_request_user
 from web.auth import get_current_user
 from web.routers.dependencies import check_linkedin_quota, increment_linkedin_usage
 import services
@@ -30,17 +29,12 @@ class LinkedInBody(BaseModel):
     url: str
 
 
-def _write_active_profile(user_id: UUID) -> None:
-    ART_DIR.mkdir(parents=True, exist_ok=True)
-    ACTIVE_PROFILE_FILE.write_text(str(user_id))
-
-
 @router.post("/resume")
 async def ingest_resume(
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
 ):
-    _write_active_profile(user.user_id)
+    set_request_user(user.user_id)  # bind acting user for downstream service code (issue #73)
     suffix = Path(file.filename or "resume").suffix or ".pdf"
     contents = await file.read()
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
@@ -60,7 +54,7 @@ async def ingest_github(
     body: GithubBody,
     user: User = Depends(get_current_user),
 ):
-    _write_active_profile(user.user_id)
+    set_request_user(user.user_id)  # bind acting user for downstream service code (issue #73)
     username = (body.username or "").strip() or (user.github_username or "").strip()
     if not username:
         raise HTTPException(
@@ -77,7 +71,7 @@ async def ingest_github_repo(
     body: GithubRepoBody,
     user: User = Depends(get_current_user),
 ):
-    _write_active_profile(user.user_id)
+    set_request_user(user.user_id)  # bind acting user for downstream service code (issue #73)
     token = user.github_access_token or None
     result = await asyncio.to_thread(services.ingest_github_repo, body.repo_ref.strip(), token=token)
     return {"result": result}
@@ -91,7 +85,7 @@ async def ingest_linkedin(
     session: Session = Depends(get_session),
 ):
     """Manually trigger a Bright Data LinkedIn scrape (blocking, rate-limited)."""
-    _write_active_profile(user.user_id)
+    set_request_user(user.user_id)  # bind acting user for downstream service code (issue #73)
     # Count the attempt up front: a Bright Data call is about to be made, so a
     # retry on a bad URL still consumes quota and can't hammer the paid API.
     increment_linkedin_usage(user.user_id, session)
@@ -107,7 +101,7 @@ async def ingest_linkedin_pdf(
     user: User = Depends(get_current_user),
 ):
     """Fallback: ingest a LinkedIn PDF export."""
-    _write_active_profile(user.user_id)
+    set_request_user(user.user_id)  # bind acting user for downstream service code (issue #73)
     suffix = Path(file.filename or "linkedin").suffix or ".pdf"
     contents = await file.read()
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:

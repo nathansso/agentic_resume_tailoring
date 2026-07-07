@@ -39,13 +39,10 @@ def _make_user(engine, github_username: str | None = None,
 
 @pytest.fixture()
 def make_client(isolated_engine, monkeypatch, tmp_path):
-    """Factory: TestClient with isolated DB, auth bypassed for a given user,
-    and the active-profile file redirected away from the real user dir."""
+    """Factory: TestClient with isolated DB and auth bypassed for a given user.
+    (The router binds the acting user per request context — issue #73 — so no
+    active-profile file redirection is needed.)"""
     monkeypatch.setattr(db_module, "engine", isolated_engine)
-    monkeypatch.setattr(ingest_router_module, "ART_DIR", tmp_path)
-    monkeypatch.setattr(
-        ingest_router_module, "ACTIVE_PROFILE_FILE", tmp_path / "active_profile"
-    )
 
     from web.app import create_app
     import web.auth as web_auth_module

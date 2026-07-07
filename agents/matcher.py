@@ -39,13 +39,15 @@ class SkillMatcherAgent:
     SEMANTIC_THRESHOLD = 0.65  # Cosine similarity threshold for semantic match
 
     def __init__(self):
-        self.graph_builder = SkillGraphBuilder()
+        # Per-user graph builder, created in match() once user_id is known (issue #73)
+        self.graph_builder: SkillGraphBuilder | None = None
 
     def match(self, user_id: UUID, job_id: UUID) -> UserJobResult:
         """
         Runs skill matching and saves a UserJobResult to the DB.
         """
         logger.info(f"Matching user {user_id} against job {job_id}...")
+        self.graph_builder = SkillGraphBuilder(user_id)
 
         with Session(engine) as session:
             # Load user skills
@@ -194,6 +196,8 @@ class SkillMatcherAgent:
         E.g., user knows 'React' → project uses 'TypeScript' → job wants 'TypeScript'.
         Returns the connecting skill name if found, else empty string.
         """
+        if self.graph_builder is None:
+            return ""
         try:
             graph = self.graph_builder.build_graph()
 

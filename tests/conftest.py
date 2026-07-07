@@ -41,6 +41,10 @@ def isolated_engine(tmp_path, monkeypatch):
     monkeypatch.setattr(user_utils_module, "ACTIVE_PROFILE_FILE", profile_file)
     monkeypatch.setattr(user_utils_module, "ART_DIR", tmp_path)
 
+    # Clear any request-user binding left by a previous test in this thread
+    # (issue #73): the ContextVar would otherwise shadow the profile file.
+    user_utils_module.set_request_user(None)
+
     engine._test_profile_file = profile_file
     return engine
 

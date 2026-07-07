@@ -39,6 +39,7 @@ class User(SQLModel, table=True):
     experiences: List["Experience"] = Relationship(back_populates="user")
     projects: List["Project"] = Relationship(back_populates="user")
     job_results: List["UserJobResult"] = Relationship(back_populates="user")
+    education_entries: List["Education"] = Relationship(back_populates="user")
 
 class Skill(SQLModel, table=True):
     skill_id: UUID = Field(default_factory=uuid4, primary_key=True)
@@ -86,6 +87,27 @@ class Experience(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
     user: User = Relationship(back_populates="experiences")
+
+class Education(SQLModel, table=True):
+    """Per-user education entry (issue #73).
+
+    Education was previously hardcoded in the resume formatter, leaking one
+    user's schooling into every export. Rows are populated from resume/LinkedIn
+    ingestion and rendered per-user; a user with no rows gets no education
+    section rather than fabricated data.
+    """
+    education_id: UUID = Field(default_factory=uuid4, primary_key=True)
+    user_id: UUID = Field(foreign_key="user.user_id", index=True)
+    institution: str
+    degree: str  # e.g. "B.S. Mathematics & Economics, Minor in Data Science"
+    location: Optional[str] = None
+    start_date: Optional[str] = None  # Free-form, matching Experience (e.g. "Sep 2021")
+    end_date: Optional[str] = None    # e.g. "June 2025" or "Expected June 2027"
+    gpa: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    user: User = Relationship(back_populates="education_entries")
 
 class Project(SQLModel, table=True):
     project_id: UUID = Field(default_factory=uuid4, primary_key=True)
@@ -173,6 +195,10 @@ class UserJobResult(SQLModel, table=True):
 class ChatMessage(SQLModel, table=True):
     message_id: UUID = Field(default_factory=uuid4, primary_key=True)
     job_id: Optional[UUID] = Field(default=None, foreign_key="jobdescription.job_id")
+    # Landing-context messages (job_id NULL) are only separable by owner; without
+    # this every user shared one landing conversation (issue #73). Nullable for
+    # pre-existing rows, which stay invisible to authenticated users.
+    user_id: Optional[UUID] = Field(default=None, foreign_key="user.user_id", index=True)
     role: str        # "user" | "assistant"
     content: str
     created_at: datetime = Field(default_factory=datetime.utcnow)

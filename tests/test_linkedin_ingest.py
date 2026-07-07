@@ -479,7 +479,6 @@ def test_ingest_linkedin_endpoint(isolated_engine, monkeypatch):
 
     monkeypatch.setattr(ir.services, "ingest_linkedin",
                         lambda url, user_id: "LinkedIn profile ingested.")
-    monkeypatch.setattr(ir, "_write_active_profile", lambda uid: None)
 
     body = ir.LinkedInBody(url="https://www.linkedin.com/in/janedev")
     with Session(isolated_engine) as s:
