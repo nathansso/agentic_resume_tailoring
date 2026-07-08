@@ -4,6 +4,21 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issue 74 — GitHub Single Repo Ingestion
+**Status:** complete | **Tests:** 485 pass (9 new)
+
+Issue reported single-repo GitHub ingestion "doesn't seem to be working." Root cause: production has no `GITHUB_TOKEN` secret, so any user who hasn't personally connected GitHub OAuth hits GitHub's API fully unauthenticated — capped at 60 requests/hour **shared across the entire Fly app**. One single-repo import cost ~38 API calls (verified by instrumenting `requests.get` against a real repo), unbounded by repo size, because of an 8-request blind dependency-file check and a recursive one-call-per-directory-and-per-file import scan. One or two imports exhausted the whole app's quota for up to an hour, for every user — and the failure was silently mislabeled as "Could not fetch {owner}/{repo}. Check the owner/repo name," actively misdirecting the report.
+
+### What shipped
+- **Bounded, single-call file discovery.** `ingestion/github.py::GitHubIngestor` gained `_fetch_tree()`, using GitHub's Git Trees API (`git/trees/HEAD?recursive=1`) to list a repo's whole file tree in one call. `_extract_imports_from_repo` and `_fetch_dependency_files` now consume that tree instead of recursively walking directories (`_scan_directory_for_imports` deleted) — dependency-file checks only fire for filenames confirmed present (down from 8 blind requests every time), and import scanning is capped at `MAX_IMPORT_SCAN_FILES` (15) regardless of repo size. Verified call count for `openai/evals`: 38 → 20, now bounded instead of scaling with repo size.
+- **Rate limits surfaced clearly instead of mislabeled.** New `GitHubRateLimitError`, raised from a single centralized `_get()` checkpoint when GitHub responds 403 with `X-RateLimit-Remaining: 0`. Propagates through `fetch_repo()`/`ingest()` (each already had a broad catch-all that was silently swallowing it into `None`/`[]`) to `services.ingest_github_repo()`/`ingest_github()`, which now return an actionable message ("try again in a few minutes, or connect your GitHub account for a much higher limit") instead of the misleading "check the owner/repo name" text — while preserving both functions' documented never-raise contract (`agents/chat.py::run_ingest_github_repo` and the FastAPI router rely on always getting a plain string back).
+- **Tests (9 new).** `tests/test_ingestion_github.py` — rate-limit detection (true positive on 403+header, no false positive on plain 403/404), `fetch_repo` propagating the rate-limit instead of swallowing it, tree-based scan making exactly one tree call and staying bounded, dependency-file fetch only firing for tree-confirmed files, and the no-tree fallback still checking all known filenames. `tests/test_services.py` — rate-limit message clarity for both the single-repo and account-wide ingest paths.
+
+### Deviations from spec
+- Setting an actual `GITHUB_TOKEN` Fly secret (60/hr → 5000/hr) is the highest-leverage fix but requires generating a PAT and running `fly secrets set` — flagged as a recommended follow-up, not implemented here (infra action, not a code change).
+
+---
+
 ## Issue 75 — Unwanted resume link removal
 **Status:** complete | **Tests:** 476 pass (10 new)
 

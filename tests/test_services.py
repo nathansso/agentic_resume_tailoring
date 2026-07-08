@@ -372,6 +372,35 @@ def test_ingest_github_repo_summary_mentions_single_repo(isolated_engine, monkey
     assert "evals" in result
 
 
+def test_ingest_github_repo_rate_limited_message(isolated_engine, monkeypatch):
+    """A GitHub rate limit surfaces a clear, actionable message — not the
+    misleading 'check the owner/repo name' text (issue #74)."""
+    import ingestion.github as gh_module
+
+    def raise_rate_limit(owner, repo_name, token=""):
+        raise gh_module.GitHubRateLimitError()
+
+    monkeypatch.setattr(gh_module.GitHubIngestor, "fetch_repo", raise_rate_limit)
+
+    result = services_module.ingest_github_repo("openai/evals")
+    assert "rate limit" in result.lower()
+    assert "check the owner/repo name" not in result.lower()
+
+
+def test_ingest_github_rate_limited_message(isolated_engine, monkeypatch):
+    """Same rate-limit clarity for the account-wide ingest path, which shares
+    the same underlying scan helpers as the single-repo path."""
+    import ingestion.github as gh_module
+
+    def raise_rate_limit(self, force=False):
+        raise gh_module.GitHubRateLimitError()
+
+    monkeypatch.setattr(gh_module.GitHubIngestor, "ingest", raise_rate_limit)
+
+    result = services_module.ingest_github("octocat")
+    assert "rate limit" in result.lower()
+
+
 # ── PRD 10 — Persistent chat history ──────────────────────────────────────────
 
 def test_save_and_load_chat_history_for_job(isolated_engine):
