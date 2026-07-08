@@ -5,11 +5,11 @@ export async function listJobs(): Promise<JobListItem[]> {
   return json(await fetch("/api/jobs/", { credentials: "include" }));
 }
 
-export async function createJob(title: string, company: string): Promise<JobListItem> {
+export async function createJob(title: string, company: string, description = ""): Promise<JobListItem> {
   return json(await fetch("/api/jobs/", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title, company }),
+    body: JSON.stringify({ title, company, description }),
     credentials: "include",
   }));
 }
@@ -38,9 +38,11 @@ export async function analyzeJob(jobId: string): Promise<JobDetail> {
   }));
 }
 
-export async function tailorJob(jobId: string): Promise<TailorResult> {
+export async function tailorJob(jobId: string, revisionNotes = ""): Promise<TailorResult> {
   return json(await fetch(`/api/jobs/${jobId}/tailor`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ revision_notes: revisionNotes }),
     credentials: "include",
   }));
 }

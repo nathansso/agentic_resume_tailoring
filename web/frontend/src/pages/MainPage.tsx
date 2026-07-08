@@ -6,7 +6,7 @@ import { ChatPanel } from "../components/ChatPanel";
 import { ProfilePanel } from "../components/ProfilePanel";
 import { DataExplorer } from "../components/DataExplorer";
 import { IngestPanel, type IngestTab } from "../components/IngestPanel";
-import { JobDetailPanel } from "../components/JobDetailPanel";
+import { JobWorkspace } from "../components/JobWorkspace";
 import { WelcomePanel } from "../components/WelcomePanel";
 import { listJobs, createJob, deleteJob, getJob } from "../api/jobs";
 import type { JobListItem, JobDetail } from "../types";
@@ -69,17 +69,22 @@ export function MainPage() {
     getJob(selectedJobId).then(setSelectedJob).catch(() => setSelectedJob(null));
   }, [selectedJobId]);
 
+  // Jobs created this session with a pasted JD — the workspace auto-runs
+  // analyze + tailor for these (issue #70).
+  const autoStartIds = useRef(new Set<string>()).current;
+
   function handleSelectJob(jobId: string) {
     setSelectedJobId(jobId);
-    setActiveView("chat");
+    setActiveView("job");
   }
 
-  async function handleCreateJob(title: string, company: string) {
+  async function handleCreateJob(title: string, company: string, description: string) {
     try {
-      const job = await createJob(title, company);
+      const job = await createJob(title, company, description);
+      if (description.trim()) autoStartIds.add(job.job_id);
       setJobs(prev => [job, ...prev]);
       setSelectedJobId(job.job_id);
-      setActiveView("chat");
+      setActiveView("job");
     } catch {}
   }
 
@@ -113,13 +118,20 @@ export function MainPage() {
         return <ProfilePanel />;
       case "job":
         return selectedJob
-          ? <JobDetailPanel job={selectedJob} onJobUpdate={handleJobUpdate} onViewChange={v => setActiveView(v as ActiveView)} />
-          : <ChatPanel jobId={selectedJobId} onViewChange={v => setActiveView(v as ActiveView)} />;
+          ? <JobWorkspace
+              job={selectedJob}
+              autoStart={autoStartIds.has(selectedJob.job_id)}
+              onJobUpdate={handleJobUpdate}
+              onViewChange={v => setActiveView(v as ActiveView)}
+            />
+          : <p style={{ color: colors.textMuted, padding: "1rem", fontSize: font.size.sm }}>Loading job…</p>;
       default:
         if (!welcomeDismissed && !selectedJobId && jobs.length === 0 && !jobsLoading) {
           return <WelcomePanel onViewChange={v => { setWelcomeDismissed(true); setActiveView(v as ActiveView); }} />;
         }
-        return <ChatPanel jobId={selectedJobId} onViewChange={v => setActiveView(v as ActiveView)} />;
+        // The top-nav Chat tab is always the landing chat; job-scoped chat
+        // lives inside the Job workspace (issue #70).
+        return <ChatPanel jobId={null} onViewChange={v => setActiveView(v as ActiveView)} />;
     }
   }
 
