@@ -905,6 +905,121 @@ def test_tailor_active_job_forwards_revision_notes_to_pipeline(isolated_engine, 
         assert session.get(JobDescription, uuid.UUID(job_id)).retailor_count == 1
 
 
+# ── Issue #71: warn before discarding manual .tex edits on re-tailor ──────────
+
+def _seed_job_with_edited_tex(engine):
+    """Analyzed job whose latest result carries manual .tex edits."""
+    from database.models import JobSkill, Skill
+
+    with Session(engine) as session:
+        job = JobDescription(title="SWE", company="Co", description="JD", status="tailored")
+        session.add(job)
+        session.flush()
+        skill = Skill(name="Python")
+        session.add(skill)
+        session.flush()
+        session.add(JobSkill(job_id=job.job_id, skill_id=skill.skill_id, required=True, weight=1.0))
+        session.commit()
+        job_id = str(job.job_id)
+    return job_id
+
+
+def _add_result(engine, job_id, user_id, edited_tex=None):
+    with Session(engine) as session:
+        result = UserJobResult(
+            user_id=user_id, job_id=uuid.UUID(job_id),
+            tailored_resume_content={"experiences": []}, edited_tex=edited_tex,
+        )
+        session.add(result)
+        session.commit()
+
+
+def test_retailor_warns_before_discarding_manual_edits(isolated_engine, monkeypatch):
+    """With manual .tex edits present, re-tailor asks 1/2 before proceeding."""
+    import graph.pipeline as _pipeline
+
+    user = _seed_user_and_skill(isolated_engine)
+    job_id = _seed_job_with_edited_tex(isolated_engine)
+    _add_result(isolated_engine, job_id, user.user_id, edited_tex="my manual edits")
+
+    ran = {"tailor": False}
+
+    def fake_match(state):
+        state.update(matched_skills={}, missing_skills=[], ats_score=50.0)
+        return state
+
+    def fake_tailor(state):
+        ran["tailor"] = True
+        state["tailored_content"] = {"experiences": [], "projects": [], "skills_emphasized": []}
+        state["result_id"] = ""
+        return state
+
+    monkeypatch.setattr(_pipeline, "match_skills_node", fake_match)
+    monkeypatch.setattr(_pipeline, "tailor_resume_node", fake_tailor)
+    monkeypatch.setattr(_pipeline, "format_resume_node", lambda state: state)
+
+    agent = chat_module.ChatAgent()
+    agent.set_active_job(job_id)
+
+    warning = agent._tailor_active_job("more Python")
+    assert "manual .tex edits" in warning
+    assert "1." in warning and "2." in warning
+    assert ran["tailor"] is False
+
+    # "1" confirms: the pipeline runs
+    proceeded = agent.chat("1")
+    assert ran["tailor"] is True
+    assert "Tailoring complete" in proceeded
+
+
+def test_retailor_cancel_keeps_manual_edits(isolated_engine, monkeypatch):
+    user = _seed_user_and_skill(isolated_engine)
+    job_id = _seed_job_with_edited_tex(isolated_engine)
+    _add_result(isolated_engine, job_id, user.user_id, edited_tex="my manual edits")
+
+    agent = chat_module.ChatAgent()
+    agent.set_active_job(job_id)
+
+    warning = agent._tailor_active_job("")
+    assert "manual .tex edits" in warning
+
+    cancelled = agent.chat("2")
+    assert "Kept your manual edits" in cancelled
+
+    with Session(isolated_engine) as session:
+        results = session.exec(
+            select(UserJobResult).where(UserJobResult.job_id == uuid.UUID(job_id))
+        ).all()
+        assert results and results[0].edited_tex == "my manual edits"
+
+
+def test_retailor_without_manual_edits_skips_warning(isolated_engine, monkeypatch):
+    """No edited .tex → no confirmation detour, tailoring runs directly."""
+    import graph.pipeline as _pipeline
+
+    user = _seed_user_and_skill(isolated_engine)
+    job_id = _seed_job_with_edited_tex(isolated_engine)
+    _add_result(isolated_engine, job_id, user.user_id, edited_tex=None)
+
+    def fake_match(state):
+        state.update(matched_skills={}, missing_skills=[], ats_score=50.0)
+        return state
+
+    def fake_tailor(state):
+        state["tailored_content"] = {"experiences": [], "projects": [], "skills_emphasized": []}
+        state["result_id"] = ""
+        return state
+
+    monkeypatch.setattr(_pipeline, "match_skills_node", fake_match)
+    monkeypatch.setattr(_pipeline, "tailor_resume_node", fake_tailor)
+    monkeypatch.setattr(_pipeline, "format_resume_node", lambda state: state)
+
+    agent = chat_module.ChatAgent()
+    agent.set_active_job(job_id)
+    response = agent._tailor_active_job("")
+    assert "Tailoring complete" in response
+
+
 # ── Add missing skill fast-path (Part B) ─────────────────────────────────────
 
 def test_add_missing_skill_fast_path_bypasses_llm(isolated_engine, monkeypatch):

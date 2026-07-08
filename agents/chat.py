@@ -766,7 +766,7 @@ class ChatAgent:
             logger.error("_analyze_active_job failed: %s", e)
             return f"Analysis failed: {e}"
 
-    def _tailor_active_job(self, args: str) -> str:
+    def _tailor_active_job(self, args: str, _confirmed: bool = False) -> str:
         """Run match → tailor → format pipeline nodes for the active job.
 
         *args* carries freeform revision instructions for iterative
@@ -792,6 +792,27 @@ class ChatAgent:
                     f"Re-tailor limit reached ({limit}/{limit}) for this job. "
                     "You can still edit and export the current tailored resume."
                 )
+
+            # Manual .tex edits are superseded by a re-tailor (issue #71) —
+            # confirm before discarding them.
+            if not _confirmed:
+                with Session(engine) as session:
+                    results = session.exec(
+                        select(UserJobResult).where(UserJobResult.job_id == job.job_id)
+                    ).all()
+                latest = max(results, key=lambda r: r.created_at) if results else None
+                if latest and latest.edited_tex:
+                    self._pending_options = {
+                        "1": lambda: self._tailor_active_job(args, _confirmed=True),
+                        "2": lambda: "Kept your manual edits — no re-tailoring done.",
+                    }
+                    return (
+                        "This job's resume has manual .tex edits, and re-tailoring "
+                        "will discard them.\n\n"
+                        "  1. Re-tailor anyway (discards manual edits)\n"
+                        "  2. Cancel and keep my edits\n\n"
+                        "Reply with 1 or 2."
+                    )
 
             with Session(engine) as session:
                 job_skills_count = len(session.exec(

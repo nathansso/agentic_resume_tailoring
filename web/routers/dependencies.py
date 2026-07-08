@@ -68,6 +68,27 @@ def increment_ai_usage(user_id: UUID, session: Session) -> None:
     _increment(user_id, session, "ai")
 
 
+# ── LaTeX preview-compile quota (issue #71) ────────────────────────────────────
+# pdflatex is CPU-bound, not billed, so the cap is generous — it exists only to
+# stop a runaway client from hammering the 512MB VM.
+COMPILE_DAILY_LIMIT = int(os.getenv("COMPILE_DAILY_LIMIT", "200"))
+
+
+async def check_compile_quota(
+    user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> None:
+    if not _has_quota(session, user.user_id, user.email, "compile", COMPILE_DAILY_LIMIT):
+        raise HTTPException(
+            status_code=429,
+            detail=f"Daily preview-compile limit ({COMPILE_DAILY_LIMIT}) reached. Resets at midnight UTC.",
+        )
+
+
+def increment_compile_usage(user_id: UUID, session: Session) -> None:
+    _increment(user_id, session, "compile")
+
+
 # ── LinkedIn (Bright Data) quota ────────────────────────────────────────────────
 
 def linkedin_quota_remaining(session: Session, user_id: UUID, email: str = "") -> bool:

@@ -10,7 +10,12 @@ from sqlmodel import Session, select
 from database.db import engine
 from database.models import JobDescription, UserJobResult, User
 from web.auth import get_current_user
-from web.routers.dependencies import check_ai_quota, increment_ai_usage
+from web.routers.dependencies import (
+    check_ai_quota,
+    check_compile_quota,
+    increment_ai_usage,
+    increment_compile_usage,
+)
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -27,6 +32,17 @@ class DescriptionBody(BaseModel):
 
 class TailorBody(BaseModel):
     revision_notes: str = ""
+
+
+class TexBody(BaseModel):
+    tex: str
+
+
+# At most two concurrent LaTeX compiles — pdflatex spikes memory and the Fly VM
+# only has 512MB (issue #71 preview endpoint).
+_compile_semaphore = asyncio.Semaphore(2)
+
+_MAX_TEX_BYTES = 200_000
 
 
 def _job_list_item(job: JobDescription, result: UserJobResult | None) -> dict:
@@ -54,6 +70,7 @@ def _job_detail(job: JobDescription, result: UserJobResult | None) -> dict:
     from services import job_tailor_limit
     base["retailor_count"] = job.retailor_count or 0
     base["retailor_limit"] = job_tailor_limit()
+    base["has_manual_edits"] = bool(result.edited_tex) if result else False
     return base
 
 
@@ -263,6 +280,100 @@ async def tailor_job(
         }
 
 
+# ── Resume .tex editing (issue #71) ──────────────────────────
+
+@router.get("/{job_id}/tex")
+async def get_tex(job_id: str, user: User = Depends(get_current_user)):
+    """Current editable .tex: the saved manual edit, or freshly generated source."""
+    job, session = _get_owned_job(job_id, user)
+    with session:
+        latest = _latest_result(session, job.job_id)
+        if not latest or not latest.tailored_resume_content:
+            raise HTTPException(status_code=422, detail="No tailored resume found — run Tailor first.")
+        if latest.edited_tex:
+            return {
+                "tex": latest.edited_tex,
+                "source": "edited",
+                "updated_at": latest.edited_tex_updated_at.isoformat() if latest.edited_tex_updated_at else None,
+            }
+        tailored_content = latest.tailored_resume_content
+
+    def _generate():
+        from agents.formatter import ResumeFormatterAgent
+        agent = ResumeFormatterAgent(user.user_id)
+        return agent.format_tex(
+            tailored_content, section_order=tailored_content.get("_section_order")
+        )
+
+    tex = await asyncio.to_thread(_generate)
+    return {"tex": tex, "source": "generated", "updated_at": None}
+
+
+@router.put("/{job_id}/tex")
+async def save_tex(job_id: str, body: TexBody, user: User = Depends(get_current_user)):
+    """Persist manually edited .tex; exports (tex/pdf) serve it until re-tailor."""
+    tex = body.tex
+    if not tex.strip():
+        raise HTTPException(status_code=422, detail="Empty .tex — use Discard to reset instead.")
+    if len(tex.encode("utf-8")) > _MAX_TEX_BYTES:
+        raise HTTPException(status_code=422, detail="Resume .tex too large (200KB max).")
+    job, session = _get_owned_job(job_id, user)
+    with session:
+        latest = _latest_result(session, job.job_id)
+        if not latest:
+            raise HTTPException(status_code=422, detail="No tailoring result to attach edits to — run Tailor first.")
+        latest.edited_tex = tex
+        latest.edited_tex_updated_at = datetime.utcnow()
+        latest.updated_at = datetime.utcnow()
+        session.add(latest)
+        session.commit()
+        return {"saved": True, "updated_at": latest.edited_tex_updated_at.isoformat()}
+
+
+@router.delete("/{job_id}/tex")
+async def discard_tex(job_id: str, user: User = Depends(get_current_user)):
+    """Drop manual edits so the editor reseeds from the AI-tailored content."""
+    job, session = _get_owned_job(job_id, user)
+    with session:
+        latest = _latest_result(session, job.job_id)
+        if latest and latest.edited_tex:
+            latest.edited_tex = None
+            latest.edited_tex_updated_at = None
+            latest.updated_at = datetime.utcnow()
+            session.add(latest)
+            session.commit()
+        return {"discarded": True}
+
+
+@router.post("/{job_id}/preview")
+async def preview_tex(
+    job_id: str,
+    body: TexBody,
+    user: User = Depends(get_current_user),
+    _quota: None = Depends(check_compile_quota),
+):
+    """Compile posted .tex (the editor's current buffer) to a preview PDF."""
+    if not body.tex.strip():
+        raise HTTPException(status_code=422, detail="Nothing to compile.")
+    if len(body.tex.encode("utf-8")) > _MAX_TEX_BYTES:
+        raise HTTPException(status_code=422, detail="Resume .tex too large (200KB max).")
+    _get_owned_job(job_id, user)[1].close()
+
+    def _compile():
+        from agents.formatter import _compile_tex_to_pdf
+        return _compile_tex_to_pdf(body.tex)
+
+    async with _compile_semaphore:
+        try:
+            pdf = await asyncio.to_thread(_compile)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+
+    with Session(engine) as s:
+        increment_compile_usage(user.user_id, s)
+    return Response(content=pdf, media_type="application/pdf")
+
+
 # ── Export job ───────────────────────────────────────────────
 
 @router.get("/{job_id}/export")
@@ -275,10 +386,19 @@ async def export_job(job_id: str, format: str = "pdf", user: User = Depends(get_
         if not latest or not latest.tailored_resume_content:
             raise HTTPException(status_code=422, detail="No tailored resume found — run Tailor first.")
         tailored_content = latest.tailored_resume_content
+        edited_tex = latest.edited_tex
         job_title = f"{job.title}_{job.company}".replace(" ", "_")
 
     def _render():
-        from agents.formatter import ResumeFormatterAgent
+        from agents.formatter import ResumeFormatterAgent, _compile_tex_to_pdf
+        # Manual .tex edits win for tex/pdf (issue #71). No one-page auto-fit
+        # here — trimming works on the JSON, not raw source; the editor preview
+        # shows any overflow. DOCX has no .tex representation and stays
+        # generated from the tailored JSON.
+        if edited_tex and format == "tex":
+            return edited_tex
+        if edited_tex and format == "pdf":
+            return _compile_tex_to_pdf(edited_tex)
         agent = ResumeFormatterAgent(user.user_id)
         section_order = tailored_content.get("_section_order")
         if format == "pdf":
@@ -287,7 +407,11 @@ async def export_job(job_id: str, format: str = "pdf", user: User = Depends(get_
             return agent.format_tex(tailored_content, job_title=job.title, section_order=section_order)
         return agent.format_docx(tailored_content, job_title=job.title, section_order=section_order)
 
-    content = await asyncio.to_thread(_render)
+    try:
+        content = await asyncio.to_thread(_render)
+    except RuntimeError as exc:
+        # Edited .tex that no longer compiles — surface the log tail.
+        raise HTTPException(status_code=422, detail=f"LaTeX compile failed: {exc}")
 
     if format == "pdf":
         return Response(
