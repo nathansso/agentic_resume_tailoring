@@ -767,10 +767,15 @@ class ChatAgent:
             return f"Analysis failed: {e}"
 
     def _tailor_active_job(self, args: str) -> str:
-        """Run match → tailor → format pipeline nodes for the active job."""
+        """Run match → tailor → format pipeline nodes for the active job.
+
+        *args* carries freeform revision instructions for iterative
+        re-tailoring (issue #70), e.g. "tailor emphasize Python more".
+        """
         try:
             from datetime import datetime
             from database.user_utils import get_active_profile
+            from services import job_tailor_limit, tailor_runs_remaining
             import graph.pipeline as _pipeline
 
             job = self._get_active_job()
@@ -780,6 +785,13 @@ class ChatAgent:
             user = get_active_profile()
             if not user:
                 return "No active profile. Complete onboarding first."
+
+            limit = job_tailor_limit()
+            if tailor_runs_remaining(job) <= 0:
+                return (
+                    f"Re-tailor limit reached ({limit}/{limit}) for this job. "
+                    "You can still edit and export the current tailored resume."
+                )
 
             with Session(engine) as session:
                 job_skills_count = len(session.exec(
@@ -793,7 +805,8 @@ class ChatAgent:
                 "resume_path": "", "job_text": job.description or "",
                 "job_file": "", "user_id": str(user.user_id),
                 "job_id": str(job.job_id), "result_id": "",
-                "resume_text": "", "ats_score": 0.0,
+                "resume_text": "", "revision_notes": args.strip(),
+                "ats_score": 0.0,
                 "matched_skills": {}, "missing_skills": [],
                 "tailored_content": {}, "formatted_resume": "", "status": "",
             }
@@ -802,10 +815,13 @@ class ChatAgent:
             state = _pipeline.tailor_resume_node(state)
             state = _pipeline.format_resume_node(state)
 
+            runs_used = 0
             with Session(engine) as session:
                 job_db = session.get(JobDescription, job.job_id)
                 if job_db:
                     job_db.status = "tailored"
+                    job_db.retailor_count = (job_db.retailor_count or 0) + 1
+                    runs_used = job_db.retailor_count
                     job_db.updated_at = datetime.utcnow()
                     session.add(job_db)
                     session.commit()
@@ -857,6 +873,7 @@ class ChatAgent:
                 "  " + (", ".join(inferred[:8]) or "(none)"), "",
                 "Missing:",
                 "  " + (", ".join(list(missing)[:10]) or "(none)"), "",
+                f"Tailor runs used: {runs_used}/{limit}.",
                 'Type "export" to save the tailored resume to ~/.art/exports/',
             ]
             tailored_content = state.get("tailored_content", {})
@@ -1266,13 +1283,20 @@ class ChatAgent:
         # Job lifecycle shortcuts — exact normalized match takes priority over freeform tailor.
         if normalized == "analyze":
             return self._analyze_active_job("")
-        if normalized in {"tailor", "tailor resume", "run tailoring"}:
+        # _normalize strips punctuation, so "re-tailor" arrives as "re tailor"
+        if normalized in {"tailor", "tailor resume", "run tailoring",
+                          "re tailor", "retailor", "re tailor resume", "retailor resume"}:
             return self._tailor_active_job("")
         if normalized in {"export", "export resume", "save resume"}:
             return self._export_active_job("")
 
-        m = re.match(r"(?i)^tailor\s+(.+)$", raw)
+        m = re.match(r"(?i)^(?:re-?)?tailor\s+(.+)$", raw)
         if m:
+            # With an active job, freeform text after "tailor" is a revision
+            # instruction for that job (issue #70); without one it's the legacy
+            # "tailor <pasted JD>" flow.
+            if self.active_job_id:
+                return self._tailor_active_job(m.group(1).strip())
             return run_tailor(m.group(1).strip())
 
         # "add missing skill X" / "add skill X" / "add X to my profile|skills"

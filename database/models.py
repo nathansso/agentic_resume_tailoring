@@ -148,6 +148,8 @@ class JobDescription(SQLModel, table=True):
     source_url: Optional[str] = None
     status: str = Field(default="created")  # created, analyzed, tailored, exported
     chat_summary: Optional[str] = None
+    # issue 70: lifetime count of tailor runs for this job (capped by JOB_TAILOR_LIMIT)
+    retailor_count: int = Field(default=0)
     # Cached JD embedding centroid (issue #54): JSON-encoded float list of the
     # required-skill phrases, for the scorer's semantic component. Refreshed when
     # the description is re-ingested.

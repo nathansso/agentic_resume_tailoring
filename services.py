@@ -796,6 +796,21 @@ def delete_job(job_uuid: str) -> str:
         return f"Failed to delete job: {e}"
 
 
+# ── Per-job tailor-run budget (issue 70) ─────────────────────
+
+def job_tailor_limit() -> int:
+    """Lifetime cap on tailor runs per job. The first tailor consumes one."""
+    import os
+    try:
+        return max(1, int(os.getenv("JOB_TAILOR_LIMIT", "5")))
+    except ValueError:
+        return 5
+
+
+def tailor_runs_remaining(job: JobDescription) -> int:
+    return max(0, job_tailor_limit() - (job.retailor_count or 0))
+
+
 # ── Chat history (persisted per job) ────────────────────────
 
 _MAX_CHAT_MESSAGES_PER_JOB = 100

@@ -41,6 +41,7 @@ class PipelineState(TypedDict):
     job_id: str
     result_id: str
     resume_text: str           # Raw resume text for tailor
+    revision_notes: str        # User re-tailor instructions (issue #70)
     # Output
     ats_score: float
     matched_skills: Dict
@@ -169,6 +170,7 @@ def tailor_resume_node(state: PipelineState) -> PipelineState:
         job_id=UUID(state["job_id"]),
         result_id=UUID(state["result_id"]),
         resume_text=state.get("resume_text", ""),
+        revision_notes=state.get("revision_notes", ""),
     )
     state["tailored_content"] = tailored
     state["status"] = "Resume tailored"

@@ -74,6 +74,7 @@ class TailorState(TypedDict):
     result_id: str
     resume_text: str          # The user's raw resume markdown
     job_text: str             # Raw job description
+    revision_notes: str       # User instructions for iterative re-tailoring (issue #70)
     matched_skills: Dict      # From SkillMatcherAgent
     missing_skills: List[str]
     priority_keywords: List[str]  # Top missing JD keywords from ATSScoringEngine
@@ -101,9 +102,18 @@ class ResumeTailorAgent:
         self.llm = get_llm(role="tailor", temperature=0.3)
         self.graph = self._build_graph()
 
-    def tailor(self, user_id: UUID, job_id: UUID, result_id: UUID, resume_text: str = "") -> Dict:
+    def tailor(
+        self,
+        user_id: UUID,
+        job_id: UUID,
+        result_id: UUID,
+        resume_text: str = "",
+        revision_notes: str = "",
+    ) -> Dict:
         """
         Run the tailoring pipeline for a given user-job match.
+        *revision_notes* carries user instructions for iterative re-tailoring
+        (issue #70); empty means a plain tailoring run.
         Returns the tailored resume content dict.
         """
         with Session(engine) as session:
@@ -172,6 +182,7 @@ class ResumeTailorAgent:
             "result_id": str(result_id),
             "resume_text": resume_text,
             "job_text": jd_text,
+            "revision_notes": revision_notes.strip(),
             "matched_skills": result.matched_skills if result else {},
             "missing_skills": result.missing_skills if result else [],
             "priority_keywords": priority_keywords,
@@ -218,6 +229,8 @@ class ResumeTailorAgent:
             if result:
                 result.tailored_resume_content = tailored
                 result.tailored_score_breakdown = evaluation.get("ats_breakdown", {})
+                if revision_notes.strip():
+                    result.revision_notes = revision_notes.strip()
                 session.add(result)
                 session.commit()
 
@@ -266,6 +279,14 @@ class ResumeTailorAgent:
                 + f"Please address these gaps."
             )
 
+        revision = ""
+        if state.get("revision_notes"):
+            revision = (
+                "\n\nUSER REVISION REQUEST — the candidate reviewed a previous tailored "
+                "version and asked for these changes; follow them where truthful:\n"
+                f"{state['revision_notes']}"
+            )
+
         matched_str = json.dumps(state["matched_skills"], indent=2)
         missing_str = ", ".join(state["missing_skills"])
         exp_str = json.dumps(state["experiences"], indent=2)
@@ -305,6 +326,7 @@ class ResumeTailorAgent:
              "PRIORITY JD KEYWORDS — incorporate naturally where truthful (do NOT add if not applicable):\n{priority_keywords}\n\n"
              "CANDIDATE EXPERIENCES:\n{experiences}\n\n"
              "CANDIDATE PROJECTS (with style variants, pre-scored by job relevance + project depth):\n{projects}\n\n"
+             "{revision}"
              "{feedback}\n\n"
              "Return JSON with this structure:\n"
              '{{"experiences": [{{"title": "...", "company": "...", "start_date": "...", '
@@ -322,6 +344,7 @@ class ResumeTailorAgent:
                 "priority_keywords": kw_str or "(none)",
                 "experiences": exp_str,
                 "projects": proj_str,
+                "revision": revision,
                 "feedback": feedback,
             })
             # Guarantee projects stay in the pre-ranked (descending-score) order even

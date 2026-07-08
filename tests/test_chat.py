@@ -774,6 +774,137 @@ def test_changes_section_shows_emphasized_skills(isolated_engine, monkeypatch):
     assert "Emphasized:" in response or "Emphasized" in response
 
 
+# ── Issue #70: chat-driven iterative re-tailoring ────────────────────────────
+
+def test_tailor_freeform_with_active_job_is_revision_instruction(isolated_engine, monkeypatch):
+    """With an active job, 'tailor <text>' routes to _tailor_active_job with the
+    text as revision instructions — no LLM, no legacy run_tailor JD flow."""
+    class ShouldNotBeCalledLLM:
+        def invoke(self, *_a, **_kw):
+            raise AssertionError("LLM must not be called for tailor fast-path")
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: ShouldNotBeCalledLLM())
+    monkeypatch.setattr(chat_module, "run_tailor",
+                        lambda job: pytest.fail("run_tailor must not be used with an active job"))
+
+    captured = {}
+
+    def fake_tailor_active(self, args):
+        captured["args"] = args
+        return "Tailoring complete — revised."
+
+    monkeypatch.setattr(chat_module.ChatAgent, "_tailor_active_job", fake_tailor_active)
+
+    _seed_user_and_skill(isolated_engine)
+    with Session(isolated_engine) as session:
+        job = JobDescription(title="SWE", company="Co", description="JD", status="analyzed")
+        session.add(job)
+        session.commit()
+        job_id = str(job.job_id)
+
+    agent = chat_module.ChatAgent()
+    agent.set_active_job(job_id)
+    response = agent.chat("tailor make it punchier")
+
+    assert captured["args"] == "make it punchier"
+    assert "revised" in response.lower()
+
+
+def test_retailor_synonyms_route_fast_path(isolated_engine, monkeypatch):
+    """'re-tailor' / 'retailor' hit the tailor fast path without the LLM."""
+    class ShouldNotBeCalledLLM:
+        def invoke(self, *_a, **_kw):
+            raise AssertionError("LLM must not be called for re-tailor fast-path")
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: ShouldNotBeCalledLLM())
+    monkeypatch.setattr(chat_module.ChatAgent, "_tailor_active_job",
+                        lambda self, args: f"tailored:{args}")
+
+    agent = chat_module.ChatAgent()
+    assert "tailored:" in agent.chat("re-tailor")
+    assert "tailored:" in agent.chat("retailor")
+
+
+def test_tailor_without_active_job_keeps_legacy_flow(isolated_engine, monkeypatch):
+    """Without an active job, 'tailor <text>' still goes to run_tailor."""
+    monkeypatch.setattr(chat_module, "run_tailor", lambda job: f"Tailored for: {job}")
+
+    class ShouldNotBeCalledLLM:
+        def invoke(self, *_a, **_kw):
+            raise AssertionError("LLM must not be called for tailor fast-path")
+
+    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: ShouldNotBeCalledLLM())
+
+    agent = chat_module.ChatAgent()
+    response = agent.chat("tailor Senior Engineer at Acme Corp")
+    assert "Senior Engineer at Acme Corp" in response
+
+
+def test_tailor_cap_exhausted_returns_friendly_message(isolated_engine, monkeypatch):
+    """_tailor_active_job refuses politely once the per-job budget is used up."""
+    monkeypatch.setenv("JOB_TAILOR_LIMIT", "2")
+    _seed_user_and_skill(isolated_engine)
+
+    with Session(isolated_engine) as session:
+        job = JobDescription(title="SWE", company="Co", description="JD",
+                             status="tailored", retailor_count=2)
+        session.add(job)
+        session.commit()
+        job_id = str(job.job_id)
+
+    agent = chat_module.ChatAgent()
+    agent.set_active_job(job_id)
+    response = agent._tailor_active_job("more Python")
+
+    assert "Re-tailor limit reached (2/2)" in response
+
+
+def test_tailor_active_job_forwards_revision_notes_to_pipeline(isolated_engine, monkeypatch):
+    """Revision instructions flow into the pipeline state (issue #70)."""
+    from database.models import JobSkill, Skill
+    import graph.pipeline as _pipeline
+
+    _seed_user_and_skill(isolated_engine)
+    with Session(isolated_engine) as session:
+        job = JobDescription(title="SWE", company="Co", description="JD")
+        session.add(job)
+        session.flush()
+        skill = Skill(name="Python")
+        session.add(skill)
+        session.flush()
+        session.add(JobSkill(job_id=job.job_id, skill_id=skill.skill_id, required=True, weight=1.0))
+        session.commit()
+        job_id = str(job.job_id)
+
+    seen = {}
+
+    def fake_match(state):
+        state["matched_skills"] = {}
+        state["missing_skills"] = []
+        state["ats_score"] = 50.0
+        return state
+
+    def fake_tailor(state):
+        seen["revision_notes"] = state.get("revision_notes")
+        state["tailored_content"] = {"experiences": [], "projects": [], "skills_emphasized": []}
+        state["result_id"] = ""
+        return state
+
+    monkeypatch.setattr(_pipeline, "match_skills_node", fake_match)
+    monkeypatch.setattr(_pipeline, "tailor_resume_node", fake_tailor)
+    monkeypatch.setattr(_pipeline, "format_resume_node", lambda state: state)
+
+    agent = chat_module.ChatAgent()
+    agent.set_active_job(job_id)
+    response = agent._tailor_active_job("emphasize Python more")
+
+    assert seen["revision_notes"] == "emphasize Python more"
+    assert "Tailor runs used: 1/" in response
+
+    with Session(isolated_engine) as session:
+        assert session.get(JobDescription, uuid.UUID(job_id)).retailor_count == 1
+
+
 # ── Add missing skill fast-path (Part B) ─────────────────────────────────────
 
 def test_add_missing_skill_fast_path_bypasses_llm(isolated_engine, monkeypatch):

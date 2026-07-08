@@ -87,6 +87,8 @@ def _migrate_db() -> None:
         # issue 75: personal-site link (header) and project demo link (auto-embed)
         'ALTER TABLE "user" ADD COLUMN portfolio_url TEXT',
         "ALTER TABLE project ADD COLUMN demo_url TEXT",
+        # issue 70: lifetime per-job tailor-run counter
+        "ALTER TABLE jobdescription ADD COLUMN retailor_count INTEGER DEFAULT 0",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
