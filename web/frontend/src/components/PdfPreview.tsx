@@ -145,11 +145,13 @@ export function PdfPreview({ pdfData, compiling, error, paused, onRecompile, ove
     ? "Compiling…"
     : !hasRender
       ? ""
-      : overlay && dragReady
-        ? "Preview up to date — drag sections or bullets to reorder"
-        : overlay && model
-          ? "Reordering unavailable — the %% ART-SECTION markers were edited out"
-          : "Preview up to date";
+      : overlay && model && !dragReady
+        ? "Reordering unavailable — the %% ART-SECTION markers were edited out"
+        : overlay && dragReady && !overlay.enabled
+          ? "Changes pending…"
+          : overlay && dragReady
+            ? "Preview up to date — drag sections or bullets to reorder"
+            : "Preview up to date";
 
   return (
     <div style={s.pane}>
