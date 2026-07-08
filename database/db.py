@@ -89,6 +89,9 @@ def _migrate_db() -> None:
         "ALTER TABLE project ADD COLUMN demo_url TEXT",
         # issue 70: lifetime per-job tailor-run counter
         "ALTER TABLE jobdescription ADD COLUMN retailor_count INTEGER DEFAULT 0",
+        # issue 71: manually edited resume .tex per tailoring result
+        "ALTER TABLE userjobresult ADD COLUMN edited_tex TEXT",
+        "ALTER TABLE userjobresult ADD COLUMN edited_tex_updated_at TIMESTAMP",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

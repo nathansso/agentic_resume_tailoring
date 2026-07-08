@@ -187,6 +187,10 @@ class UserJobResult(SQLModel, table=True):
     tailored_score_breakdown: Dict = Field(default={}, sa_column=Column(JSON)) # Algorithmic score of tailored output (issue #12)
     revision_notes: Optional[str] = None
     export_path: Optional[str] = None
+    # issue 71: user's manually edited .tex; NULL means "no manual edits" and
+    # exports regenerate from tailored_resume_content. Cleared on re-tailor.
+    edited_tex: Optional[str] = None
+    edited_tex_updated_at: Optional[datetime] = None
 
     verification_status: str = "pending" # approved, rejected
     created_at: datetime = Field(default_factory=datetime.utcnow)

@@ -4,6 +4,26 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issues 70 & 71 — Job workspace + manual .tex resume editing
+**Status:** complete | **Tests:** 514 pass (28 new Python) + 10 vitest
+
+Two-issue arc shipped as four stacked PRs (#77–#80). #70 rebuilt the Job tab into a per-job workspace (JD at creation, auto analyze+tailor, job-scoped chat driving capped iterative re-tailoring); #71 added a manual `.tex` editor with compile preview, save/export of the edited source, and section/bullet reordering inside that workspace.
+
+### What shipped
+- **JD at creation + auto-pipeline (#70).** `POST /api/jobs/` accepts an optional `description`; the sidebar create form gained a JD textarea. Jobs created with a JD route straight to the Job tab and auto-run analyze → tailor with staged progress; JD-less jobs get a paste-JD panel wired to the same chain.
+- **Job workspace (#70).** New `JobWorkspace` replaces the JobDetailPanel stepper: job-scoped chat on the left (the top-nav Chat tab is now always the landing chat), resume pane on the right with Resume/Overview tabs, skills chips, score breakdowns, and the retained PDF/LaTeX/DOCX export buttons. The Re-tailor button is removed — the chat drives revision.
+- **Capped, instruction-driven re-tailoring (#70).** With an active job, chat `tailor <text>` (plus `re-tailor`/`retailor`) re-runs tailoring with `<text>` as revision instructions, threaded into the generation prompt and persisted on the previously-dead `UserJobResult.revision_notes` column. New lifetime per-job budget: `JobDescription.retailor_count` + `JOB_TAILOR_LIMIT` env (default 5); the router returns 409 at the cap and the budget shows in the workspace header.
+- **Persisted manual `.tex` (#71).** `UserJobResult.edited_tex` (+ timestamp) with owner-scoped endpoints: `GET /tex` (seeds from `format_tex` when no edits), `PUT /tex`, `DELETE /tex`, and `POST /preview` compiling the posted buffer behind a `Semaphore(2)` + generous compile quota; compile failures return 422 with the LaTeX log tail. Exports serve `edited_tex` for tex/pdf (DOCX stays JSON-generated, noted in the UI).
+- **Editor UI (#71).** `ResumeEditor` in the Resume tab: monospace buffer, Save / manual Compile-preview / Discard, PDF preview in an iframe, error surface. Section and bullet reordering via `%% ART-SECTION` markers emitted by `_build_tex` — pure text-block moves (`lib/texStructure.ts`, vitest-covered) that survive hand-edits and degrade gracefully when markers are removed.
+- **Warn-then-discard.** Re-tailoring clears `edited_tex` at the tailor save block; the chat path asks a 1/2 confirmation first, and UI-initiated retries `window.confirm` when edits exist.
+
+### Deviations from spec
+- Preview is a manual "Compile preview" button (user's pick) rather than literal real-time rendering — pdflatex on the 512MB VM takes seconds per run.
+- One-page auto-fit does not apply to edited-`.tex` exports (trimming operates on the tailored JSON, not raw source); overflow is visible in the preview.
+- vitest added as the first frontend test infrastructure to cover the reorder logic.
+
+---
+
 ## Issue 74 — GitHub Single Repo Ingestion
 **Status:** complete | **Tests:** 485 pass (9 new)
 
