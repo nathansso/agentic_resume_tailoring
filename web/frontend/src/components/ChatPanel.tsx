@@ -14,13 +14,17 @@ interface Props {
   /** Replaces the generic welcome when the chat history is empty (job-scoped
       chats pass state-aware guidance). */
   welcome?: string;
+  /** Assistant "briefing" bubbles pinned above the history (job insights:
+      skills match, tailoring changes, scores). Rendered, not stored, so they
+      track live job state. */
+  contextMessages?: string[];
 }
 
 function dayLabel(iso: string): string {
   return iso.slice(0, 10);
 }
 
-export function ChatPanel({ jobId, onViewChange, onAssistantReply, welcome }: Props) {
+export function ChatPanel({ jobId, onViewChange, onAssistantReply, welcome, contextMessages }: Props) {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [historyEmpty, setHistoryEmpty] = useState(false);
   const [input, setInput] = useState("");
@@ -81,12 +85,19 @@ export function ChatPanel({ jobId, onViewChange, onAssistantReply, welcome }: Pr
     }
   }
 
-  // The welcome is rendered (not stored) so it tracks job-state changes live.
+  // The welcome and insight briefings are rendered (not stored) so they track
+  // job-state changes live.
   const rendered: Array<{ type: "msg"; msg: ChatMsg } | { type: "day"; label: string }> = [];
   if (historyEmpty) {
     rendered.push({
       type: "msg",
       msg: { role: "assistant", content: welcome ?? WELCOME, created_at: new Date().toISOString() },
+    });
+  }
+  for (const content of contextMessages ?? []) {
+    rendered.push({
+      type: "msg",
+      msg: { role: "assistant", content, created_at: new Date().toISOString() },
     });
   }
   let lastDay = "";

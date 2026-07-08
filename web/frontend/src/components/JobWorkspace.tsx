@@ -3,9 +3,9 @@ import type { JobDetail, TailorResult } from "../types";
 import { colors, font } from "../theme";
 import { saveDescription, analyzeJob, tailorJob, getJob, exportUrl } from "../api/jobs";
 import { ChatPanel } from "./ChatPanel";
-import { JobInsights } from "./JobInsights";
 import { ProgressBar } from "./ProgressBar";
 import { ResumeSplit } from "./ResumeSplit";
+import { jobInsightMessages } from "../lib/insightMessages";
 import { jobWelcome } from "../lib/welcome";
 
 interface Props {
@@ -141,14 +141,14 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
         </div>
       </div>
 
-      {/* Three panes: insights + chat | .tex editor | compiled preview */}
+      {/* Three panes: chat (with insight briefings) | .tex editor | preview */}
       <div style={s.columns}>
         <div style={s.chatCol}>
-          <JobInsights job={job} />
           <div style={s.chatWrap}>
             <ChatPanel
               jobId={job.job_id}
               welcome={jobWelcome(job)}
+              contextMessages={jobInsightMessages(job)}
               onViewChange={onViewChange}
               onAssistantReply={refreshJob}
             />
