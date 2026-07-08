@@ -11,14 +11,18 @@ interface Props {
   /** Fires after each assistant reply — lets the Job workspace resync job state
       the chat may have changed (analyze, re-tailor, JD paste). */
   onAssistantReply?: () => void;
+  /** Replaces the generic welcome when the chat history is empty (job-scoped
+      chats pass state-aware guidance). */
+  welcome?: string;
 }
 
 function dayLabel(iso: string): string {
   return iso.slice(0, 10);
 }
 
-export function ChatPanel({ jobId, onViewChange, onAssistantReply }: Props) {
+export function ChatPanel({ jobId, onViewChange, onAssistantReply, welcome }: Props) {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [historyEmpty, setHistoryEmpty] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,17 +31,15 @@ export function ChatPanel({ jobId, onViewChange, onAssistantReply }: Props) {
 
   useEffect(() => {
     setMessages([]);
+    setHistoryEmpty(false);
     setError(null);
     loadHistory(effectiveJobId)
       .then(msgs => {
-        if (msgs.length === 0) {
-          setMessages([{ role: "assistant", content: WELCOME, created_at: new Date().toISOString() }]);
-        } else {
-          setMessages(msgs);
-        }
+        setMessages(msgs);
+        setHistoryEmpty(msgs.length === 0);
       })
       .catch(() => {
-        setMessages([{ role: "assistant", content: WELCOME, created_at: new Date().toISOString() }]);
+        setHistoryEmpty(true);
       });
   }, [effectiveJobId]);
 
@@ -79,8 +81,14 @@ export function ChatPanel({ jobId, onViewChange, onAssistantReply }: Props) {
     }
   }
 
-  // Group messages with day separators
+  // The welcome is rendered (not stored) so it tracks job-state changes live.
   const rendered: Array<{ type: "msg"; msg: ChatMsg } | { type: "day"; label: string }> = [];
+  if (historyEmpty) {
+    rendered.push({
+      type: "msg",
+      msg: { role: "assistant", content: welcome ?? WELCOME, created_at: new Date().toISOString() },
+    });
+  }
   let lastDay = "";
   for (const msg of messages) {
     const day = dayLabel(msg.created_at);

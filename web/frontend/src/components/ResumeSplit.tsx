@@ -9,10 +9,11 @@ interface Props {
   onEditsChanged: () => void;
 }
 
-/** Manual .tex editor with save + compile-preview (issue #71). The buffer seeds
- *  from the AI-tailored source (or the last saved edit) and previews compile the
+/** Overleaf-style split: .tex source on the left, compiled preview on the
+ *  right, both fully visible (issue #71 follow-up). The buffer seeds from the
+ *  AI-tailored source (or the last saved edit) and previews compile the
  *  current buffer, so unsaved changes are previewable. */
-export function ResumeEditor({ jobId, onEditsChanged }: Props) {
+export function ResumeSplit({ jobId, onEditsChanged }: Props) {
   const [tex, setTex] = useState("");
   const [savedTex, setSavedTex] = useState("");
   const [source, setSource] = useState<"edited" | "generated">("generated");
@@ -107,56 +108,69 @@ export function ResumeEditor({ jobId, onEditsChanged }: Props) {
   }
 
   return (
-    <div style={s.editor}>
-      {/* Toolbar */}
-      <div style={s.toolbar}>
-        <button
-          style={{ ...s.btn, ...(dirty ? s.btnPrimary : {}) }}
-          onClick={handleSave}
-          disabled={!dirty || saving}
-        >
-          {saving ? "Saving…" : dirty ? "Save" : "Saved"}
-        </button>
-        <button style={s.btn} onClick={handleCompile} disabled={compiling}>
-          {compiling ? "Compiling…" : "Compile preview"}
-        </button>
-        {source === "edited" && (
-          <button style={{ ...s.btn, color: colors.error, borderColor: colors.error }} onClick={handleDiscard}>
-            Discard edits
+    <div style={s.split}>
+      {/* Left: .tex source */}
+      <div style={s.editorPane}>
+        <div style={s.toolbar}>
+          <button
+            style={{ ...s.btn, ...(dirty ? s.btnPrimary : {}) }}
+            onClick={handleSave}
+            disabled={!dirty || saving}
+          >
+            {saving ? "Saving…" : dirty ? "Save" : "Saved"}
           </button>
+          {source === "edited" && (
+            <button style={{ ...s.btn, color: colors.error, borderColor: colors.error }} onClick={handleDiscard}>
+              Discard edits
+            </button>
+          )}
+          <span style={s.sourceTag}>
+            {source === "edited" ? "manually edited" : "AI-generated"}
+            {dirty ? " · unsaved changes" : ""}
+          </span>
+        </div>
+
+        {actionError && (
+          <pre style={s.compileError}>{actionError}</pre>
         )}
-        <span style={s.sourceTag}>
-          {source === "edited" ? "manually edited" : "AI-generated"}
-          {dirty ? " · unsaved changes" : ""}
-        </span>
+
+        <ReorderPanel tex={tex} onChange={setTex} />
+
+        <textarea
+          style={s.texArea}
+          value={tex}
+          onChange={e => setTex(e.target.value)}
+          spellCheck={false}
+          wrap="off"
+        />
       </div>
 
-      {actionError && (
-        <pre style={s.compileError}>{actionError}</pre>
-      )}
-
-      <ReorderPanel tex={tex} onChange={setTex} />
-
-      <textarea
-        style={s.texArea}
-        value={tex}
-        onChange={e => setTex(e.target.value)}
-        spellCheck={false}
-        wrap="off"
-      />
-
-      {pdfUrl ? (
-        <iframe src={pdfUrl} style={s.preview} title="Resume preview" />
-      ) : (
-        <p style={s.muted}>Click “Compile preview” to render the current source as PDF.</p>
-      )}
+      {/* Right: compiled preview */}
+      <div style={s.previewPane}>
+        <div style={s.toolbar}>
+          <button style={s.btn} onClick={handleCompile} disabled={compiling}>
+            {compiling ? "Compiling…" : "Compile preview"}
+          </button>
+        </div>
+        {pdfUrl ? (
+          <iframe src={pdfUrl} style={s.preview} title="Resume preview" />
+        ) : (
+          <p style={s.muted}>Click "Compile preview" to render the current source as PDF.</p>
+        )}
+      </div>
     </div>
   );
 }
 
 const s: Record<string, CSSProperties> = {
-  editor: { display: "flex", flexDirection: "column", gap: "0.625rem" },
-  toolbar: { display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" },
+  split: { display: "flex", flex: 1, minHeight: 0, gap: "0.75rem" },
+  editorPane: {
+    flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "0.5rem",
+  },
+  previewPane: {
+    flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "0.5rem",
+  },
+  toolbar: { display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", flexShrink: 0 },
   btn: {
     background: "transparent", border: `1px solid ${colors.primary}`,
     color: colors.text, fontSize: font.size.sm, padding: "0.25rem 0.625rem",
@@ -171,17 +185,18 @@ const s: Record<string, CSSProperties> = {
     margin: 0, color: colors.error, fontSize: "0.7rem", whiteSpace: "pre-wrap",
     wordBreak: "break-word", background: colors.surface,
     border: `1px solid ${colors.error}`, padding: "0.5rem 0.625rem",
-    maxHeight: "10rem", overflowY: "auto",
+    maxHeight: "10rem", overflowY: "auto", flexShrink: 0,
   },
   texArea: {
+    flex: 1, minHeight: 0,
     background: colors.background, border: `1px solid ${colors.primary}`,
     color: colors.text, fontSize: font.size.sm, padding: "0.5rem 0.75rem",
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-    outline: "none", borderRadius: 0, resize: "vertical", lineHeight: 1.45,
-    minHeight: "22rem", whiteSpace: "pre", overflowX: "auto",
+    outline: "none", borderRadius: 0, resize: "none", lineHeight: 1.45,
+    whiteSpace: "pre", overflow: "auto",
   },
   preview: {
-    width: "100%", height: "34rem", border: `1px solid ${colors.primary}`,
+    flex: 1, minHeight: 0, width: "100%", border: `1px solid ${colors.primary}`,
     background: "#525659",
   },
 };
