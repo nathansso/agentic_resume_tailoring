@@ -216,6 +216,7 @@ def update_profile(
     phone: str = "",
     email: str = "",
     location: str = "",
+    portfolio_url: str = "",
 ) -> str:
     """Update the active profile's personal info fields."""
     from datetime import datetime
@@ -229,6 +230,7 @@ def update_profile(
             user.linkedin_url = linkedin_url.strip() or None
             user.phone = phone.strip() or None
             user.location = location.strip() or None
+            user.portfolio_url = portfolio_url.strip() or None
             if email.strip() and email.strip() != "user@example.com":
                 user.email = email.strip()
             user.updated_at = datetime.utcnow()
@@ -794,6 +796,21 @@ def delete_job(job_uuid: str) -> str:
         return f"Failed to delete job: {e}"
 
 
+# ── Per-job tailor-run budget (issue 70) ─────────────────────
+
+def job_tailor_limit() -> int:
+    """Lifetime cap on tailor runs per job. The first tailor consumes one."""
+    import os
+    try:
+        return max(1, int(os.getenv("JOB_TAILOR_LIMIT", "5")))
+    except ValueError:
+        return 5
+
+
+def tailor_runs_remaining(job: JobDescription) -> int:
+    return max(0, job_tailor_limit() - (job.retailor_count or 0))
+
+
 # ── Chat history (persisted per job) ────────────────────────
 
 _MAX_CHAT_MESSAGES_PER_JOB = 100
@@ -912,6 +929,27 @@ def load_chat_summary(job_id: Optional[str]) -> Optional[str]:
 # ── Ingestion service functions ─────────────────────────────
 # Each returns a plain-English result string and never raises.
 
+def _backfill_contact_fields(user: User, style: dict) -> None:
+    """Fill in header contact fields from a freshly-ingested resume (issue #75).
+
+    Only sets a field when it's currently empty — never overwrites a value
+    the user already has (manually entered, or from GitHub/LinkedIn connect).
+    """
+    values = (style or {}).get("header", {}).get("contact_values", {})
+    if not values:
+        return
+    if not user.linkedin_url and values.get("linkedin"):
+        user.linkedin_url = values["linkedin"]
+    if not user.github_username and values.get("github"):
+        user.github_username = values["github"]
+    if not user.portfolio_url and values.get("portfolio"):
+        user.portfolio_url = values["portfolio"]
+    if not user.phone and values.get("phone"):
+        user.phone = values["phone"]
+    if not user.location and values.get("location"):
+        user.location = values["location"]
+
+
 def ingest_resume_file(file_path: str, display_name: str | None = None) -> str:
     """Parse a resume file (MD, PDF, DOCX) and save to DB.
 
@@ -950,6 +988,7 @@ def ingest_resume_file(file_path: str, display_name: str | None = None) -> str:
                 if db_user:
                     db_user.resume_markdown = full_text
                     db_user.resume_style = style
+                    _backfill_contact_fields(db_user, style)
                     session.add(db_user)
                     session.commit()
             return _format_ingestion_diff(
@@ -972,6 +1011,14 @@ def _build_repo_metrics(repos: list) -> dict:
     }
 
 
+_GITHUB_RATE_LIMIT_MESSAGE = (
+    "GitHub API rate limit reached. This server ingests without a dedicated "
+    "GitHub token, so unauthenticated requests share a 60/hour limit across all "
+    "users — try again in a few minutes, or connect your GitHub account "
+    "(Profile menu) for a much higher limit."
+)
+
+
 def ingest_github(username: str = "", token: str | None = None) -> str:
     """Fetch GitHub repos for a user and save skills/projects to DB.
 
@@ -985,7 +1032,7 @@ def ingest_github(username: str = "", token: str | None = None) -> str:
     try:
         from database.db import init_db
         from database.user_utils import get_active_profile
-        from ingestion.github import GitHubIngestor
+        from ingestion.github import GitHubIngestor, GitHubRateLimitError
         from agents.parser import ResumeParserAgent
         init_db()
         user = get_active_profile()
@@ -1016,6 +1063,8 @@ def ingest_github(username: str = "", token: str | None = None) -> str:
         if user:
             return _format_ingestion_diff(user.user_id, pre[0], pre[1], pre[2], f"github:{target} ({len(repos)} repos)")
         return f"GitHub ingested: {len(repos)} repos parsed for {target}."
+    except GitHubRateLimitError:
+        return _GITHUB_RATE_LIMIT_MESSAGE
     except Exception as e:
         return f"GitHub ingestion failed: {e}"
 
@@ -1049,7 +1098,7 @@ def ingest_github_repo(repo_ref: str, token: str | None = None) -> str:
         from config import GITHUB_TOKEN
         from database.db import init_db
         from database.user_utils import get_active_profile
-        from ingestion.github import GitHubIngestor
+        from ingestion.github import GitHubIngestor, GitHubRateLimitError
         from agents.parser import ResumeParserAgent
         init_db()
         auth_token = token or GITHUB_TOKEN
@@ -1092,6 +1141,8 @@ def ingest_github_repo(repo_ref: str, token: str | None = None) -> str:
             f"Single repo ingested: {owner}/{repo_name}\n"
             f"Owner: {owner} | Languages: {langs} | README: {has_readme} | Dependency files: {has_deps}"
         )
+    except GitHubRateLimitError:
+        return _GITHUB_RATE_LIMIT_MESSAGE
     except Exception as e:
         return f"Repo ingestion failed: {e}"
 

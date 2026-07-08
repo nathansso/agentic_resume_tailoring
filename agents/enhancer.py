@@ -40,7 +40,8 @@ class ProjectEnhancerAgent:
         styles = ["concise", "detailed", "metrics_heavy", "technical"]
         
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are an expert resume writer. Rewrite the project description in the requested style."),
+            ("system", "You are an expert resume writer. Rewrite the project description in the requested style. "
+             "Preserve any markdown links `[text](url)` or URLs present in the original description verbatim — never strip or invent one."),
             ("user", "Project: {name}\nOriginal Description: {desc}\n\nStyle: {style}\n\nOutput ONLY the rewritten text.")
         ])
         

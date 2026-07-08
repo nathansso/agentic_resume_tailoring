@@ -175,6 +175,16 @@ def test_convert_no_markers_still_escapes():
     assert "**" not in result
     assert result == r"2K+ downloads at 4.5/5 stars"
 
+def test_convert_markdown_link_to_href():
+    result = _convert_inline("Shipped a [live demo](https://example.com/demo) for the app")
+    assert r"\href{https://example.com/demo}{\underline{live demo}}" in result
+    assert "[" not in result and "]" not in result
+
+def test_convert_markdown_link_escapes_special_chars():
+    result = _convert_inline("See [repo](https://example.com/a_b?x=1&y=2)")
+    assert r"\underline{repo}" in result
+    assert r"a\_b" in result
+
 
 # ── .tex document structure ───────────────────────────────────────────────────
 
@@ -221,6 +231,18 @@ def test_tex_header_name_and_contact(isolated_engine, monkeypatch):
     assert "linkedin.com/in/jake" in tex
     assert "github.com/jake" in tex
 
+def test_tex_header_includes_portfolio_url(isolated_engine, monkeypatch):
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    with Session(isolated_engine) as s:
+        db_user = s.get(User, user.user_id)
+        db_user.portfolio_url = "https://jakeryan.dev"
+        s.add(db_user)
+        s.commit()
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(_JAKE_CONTENT)
+    assert r"\href{https://jakeryan.dev}" in tex
+    assert "jakeryan.dev" in tex
+
 def test_tex_experience_uses_resumesubheading(isolated_engine, monkeypatch):
     monkeypatch.setattr(fmt_module, "engine", isolated_engine)
     user = _seed_jake_user(isolated_engine)
@@ -244,6 +266,31 @@ def test_tex_projects_use_resumeprojectheading(isolated_engine, monkeypatch):
     assert r"\resumeProjectHeading" in tex
     assert r"\textbf{Gitlytics} $|$ \emph{Python, Flask, React, PostgreSQL, Docker}" in tex
     assert "{June 2020 -- Present}" in tex
+
+def test_tex_projects_render_repo_and_demo_links(isolated_engine, monkeypatch):
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    content = {
+        **_JAKE_CONTENT,
+        "projects": [
+            {
+                **_JAKE_CONTENT["projects"][0],
+                "repo_url": "https://github.com/jake/gitlytics",
+                "demo_url": "https://gitlytics.example.com",
+            },
+        ],
+    }
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(content)
+    assert r"\href{https://github.com/jake/gitlytics}{\underline{Repo}}" in tex
+    assert r"\href{https://gitlytics.example.com}{\underline{Demo}}" in tex
+
+def test_tex_projects_omit_links_when_absent(isolated_engine, monkeypatch):
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(_JAKE_CONTENT)
+    assert r"\underline{Repo}" not in tex
+    assert r"\underline{Demo}" not in tex
+
 
 def test_tex_skills_section_is_technical_skills(isolated_engine, monkeypatch):
     monkeypatch.setattr(fmt_module, "engine", isolated_engine)
@@ -310,6 +357,20 @@ def test_format_docx_returns_bytes(isolated_engine, monkeypatch):
     result = ResumeFormatterAgent(user.user_id).format_docx(_JAKE_CONTENT)
     assert isinstance(result, bytes)
     assert len(result) > 500
+
+def test_format_docx_includes_project_links(isolated_engine, monkeypatch):
+    from docx import Document
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    content = {
+        **_JAKE_CONTENT,
+        "projects": [
+            {**_JAKE_CONTENT["projects"][0], "repo_url": "https://github.com/jake/gitlytics"},
+        ],
+    }
+    docx_bytes = ResumeFormatterAgent(user.user_id).format_docx(content)
+    full_text = "\n".join(p.text for p in Document(io.BytesIO(docx_bytes)).paragraphs)
+    assert "https://github.com/jake/gitlytics" in full_text
 
 def test_format_docx_is_valid_docx(isolated_engine, monkeypatch):
     """Verify the bytes can be opened as a Word document."""

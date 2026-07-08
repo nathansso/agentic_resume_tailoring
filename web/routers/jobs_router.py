@@ -18,10 +18,15 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 class CreateJobBody(BaseModel):
     title: str
     company: str
+    description: str = ""
 
 
 class DescriptionBody(BaseModel):
     description: str
+
+
+class TailorBody(BaseModel):
+    revision_notes: str = ""
 
 
 def _job_list_item(job: JobDescription, result: UserJobResult | None) -> dict:
@@ -46,6 +51,9 @@ def _job_detail(job: JobDescription, result: UserJobResult | None) -> dict:
     base["missing_skills"] = missing
     base["score_breakdown"] = result.score_breakdown if result else {}
     base["tailored_score_breakdown"] = result.tailored_score_breakdown if result else {}
+    from services import job_tailor_limit
+    base["retailor_count"] = job.retailor_count or 0
+    base["retailor_limit"] = job_tailor_limit()
     return base
 
 
@@ -101,7 +109,7 @@ def create_job(body: CreateJobBody, user: User = Depends(get_current_user)):
         job = JobDescription(
             title=body.title.strip(),
             company=body.company.strip(),
-            description="",
+            description=body.description.strip(),
             status="created",
             user_id=user.user_id,
         )
@@ -189,11 +197,27 @@ async def analyze_job(job_id: str, user: User = Depends(get_current_user)):
 # ── Tailor job ───────────────────────────────────────────────
 
 @router.post("/{job_id}/tailor")
-async def tailor_job(job_id: str, user: User = Depends(get_current_user), _quota: None = Depends(check_ai_quota)):
+async def tailor_job(
+    job_id: str,
+    body: TailorBody | None = None,
+    user: User = Depends(get_current_user),
+    _quota: None = Depends(check_ai_quota),
+):
+    from services import job_tailor_limit
+
+    revision_notes = (body.revision_notes if body else "").strip()
     job, session = _get_owned_job(job_id, user)
     with session:
         if job.status not in ("analyzed", "tailored", "exported"):
             raise HTTPException(status_code=422, detail="Analyze the job description before tailoring.")
+
+        limit = job_tailor_limit()
+        if (job.retailor_count or 0) >= limit:
+            # 409, not 429: the per-job budget is lifetime and never resets
+            raise HTTPException(
+                status_code=409,
+                detail=f"Re-tailor limit reached ({limit}/{limit}) for this job.",
+            )
 
         latest = _latest_result(session, job.job_id)
         if not latest:
@@ -208,11 +232,15 @@ async def tailor_job(job_id: str, user: User = Depends(get_current_user), _quota
         with S(engine) as s:
             u = s.get(User, user.user_id)
             resume_text = (u.resume_markdown or "") if u else ""
-        ResumeTailorAgent().tailor(user.user_id, UUID(job_id), result_id, resume_text)
+        ResumeTailorAgent().tailor(
+            user.user_id, UUID(job_id), result_id, resume_text,
+            revision_notes=revision_notes,
+        )
         with S(engine) as s:
             j = s.get(JobDescription, UUID(job_id))
             if j:
                 j.status = "tailored"
+                j.retailor_count = (j.retailor_count or 0) + 1
                 j.updated_at = datetime.utcnow()
                 s.add(j)
                 s.commit()
@@ -224,11 +252,14 @@ async def tailor_job(job_id: str, user: User = Depends(get_current_user), _quota
         latest2 = _latest_result(s, UUID(job_id))
         matched = list(latest2.matched_skills.keys())[:10] if latest2 and latest2.matched_skills else []
         missing = latest2.missing_skills[:10] if latest2 and latest2.missing_skills else []
+        from services import job_tailor_limit as _limit
         return {
             "ats_score": latest2.ats_score if latest2 else 0.0,
             "matched_skills": matched,
             "missing_skills": missing,
             "status": refreshed.status if refreshed else "tailored",
+            "retailor_count": (refreshed.retailor_count or 0) if refreshed else 0,
+            "retailor_limit": _limit(),
         }
 
 

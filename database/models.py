@@ -17,6 +17,7 @@ class User(SQLModel, table=True):
     password_hash: Optional[str] = Field(default=None)
     supabase_uid: Optional[str] = Field(default=None, unique=True)
     linkedin_url: Optional[str] = None
+    portfolio_url: Optional[str] = None
     # LinkedIn ingestion lifecycle (issue 13: Bright Data)
     linkedin_ingested_url: Optional[str] = None       # last URL successfully scraped
     linkedin_ingest_status: Optional[str] = None       # None | "importing" | "done" | "failed"
@@ -115,6 +116,7 @@ class Project(SQLModel, table=True):
     name: str
     description: Optional[str] = None
     repo_url: Optional[str] = None
+    demo_url: Optional[str] = None
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     metrics: Dict = Field(default={}, sa_column=Column(JSON)) # GitHub signals: stars, languages, readme_length (issue #46)
@@ -146,6 +148,8 @@ class JobDescription(SQLModel, table=True):
     source_url: Optional[str] = None
     status: str = Field(default="created")  # created, analyzed, tailored, exported
     chat_summary: Optional[str] = None
+    # issue 70: lifetime count of tailor runs for this job (capped by JOB_TAILOR_LIMIT)
+    retailor_count: int = Field(default=0)
     # Cached JD embedding centroid (issue #54): JSON-encoded float list of the
     # required-skill phrases, for the scorer's semantic component. Refreshed when
     # the description is re-ingested.

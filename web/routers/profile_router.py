@@ -33,6 +33,7 @@ class UpdateProfileBody(BaseModel):
     phone: str = ""
     email: str = ""
     location: str = ""
+    portfolio_url: str = ""
 
 
 @router.get("/")
@@ -63,6 +64,7 @@ def get_profile(user: User = Depends(get_current_user)):
         "location": user.location or "",
         "github_username": user.github_username or "",
         "linkedin_url": user.linkedin_url or "",
+        "portfolio_url": user.portfolio_url or "",
         "linkedin_ingest_status": user.linkedin_ingest_status,
         "linkedin_ingest_error": user.linkedin_ingest_error,
         "linkedin_ingested_at": user.linkedin_ingested_at.isoformat() if user.linkedin_ingested_at else None,
@@ -88,6 +90,7 @@ def update_profile(
         phone=body.phone,
         email=body.email,
         location=body.location,
+        portfolio_url=body.portfolio_url,
     )
 
     # Auto-trigger LinkedIn ingestion when the URL is newly set or changed.

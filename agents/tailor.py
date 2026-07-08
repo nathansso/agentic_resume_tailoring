@@ -74,6 +74,7 @@ class TailorState(TypedDict):
     result_id: str
     resume_text: str          # The user's raw resume markdown
     job_text: str             # Raw job description
+    revision_notes: str       # User instructions for iterative re-tailoring (issue #70)
     matched_skills: Dict      # From SkillMatcherAgent
     missing_skills: List[str]
     priority_keywords: List[str]  # Top missing JD keywords from ATSScoringEngine
@@ -101,9 +102,18 @@ class ResumeTailorAgent:
         self.llm = get_llm(role="tailor", temperature=0.3)
         self.graph = self._build_graph()
 
-    def tailor(self, user_id: UUID, job_id: UUID, result_id: UUID, resume_text: str = "") -> Dict:
+    def tailor(
+        self,
+        user_id: UUID,
+        job_id: UUID,
+        result_id: UUID,
+        resume_text: str = "",
+        revision_notes: str = "",
+    ) -> Dict:
         """
         Run the tailoring pipeline for a given user-job match.
+        *revision_notes* carries user instructions for iterative re-tailoring
+        (issue #70); empty means a plain tailoring run.
         Returns the tailored resume content dict.
         """
         with Session(engine) as session:
@@ -148,6 +158,8 @@ class ResumeTailorAgent:
                     "blurbs": {b.style: b.content for b in blurbs},
                     "linked_skills": self._count_linked_skills(p.name, p.repo_url, evidence_rows),
                     "metrics": _as_obj(p.metrics, {}),
+                    "repo_url": p.repo_url,
+                    "demo_url": p.demo_url,
                 })
 
             # Priority keywords: top missing JD keywords from latest score_breakdown
@@ -170,6 +182,7 @@ class ResumeTailorAgent:
             "result_id": str(result_id),
             "resume_text": resume_text,
             "job_text": jd_text,
+            "revision_notes": revision_notes.strip(),
             "matched_skills": result.matched_skills if result else {},
             "missing_skills": result.missing_skills if result else [],
             "priority_keywords": priority_keywords,
@@ -216,6 +229,8 @@ class ResumeTailorAgent:
             if result:
                 result.tailored_resume_content = tailored
                 result.tailored_score_breakdown = evaluation.get("ats_breakdown", {})
+                if revision_notes.strip():
+                    result.revision_notes = revision_notes.strip()
                 session.add(result)
                 session.commit()
 
@@ -264,10 +279,24 @@ class ResumeTailorAgent:
                 + f"Please address these gaps."
             )
 
+        revision = ""
+        if state.get("revision_notes"):
+            revision = (
+                "\n\nUSER REVISION REQUEST — the candidate reviewed a previous tailored "
+                "version and asked for these changes; follow them where truthful:\n"
+                f"{state['revision_notes']}"
+            )
+
         matched_str = json.dumps(state["matched_skills"], indent=2)
         missing_str = ", ".join(state["missing_skills"])
         exp_str = json.dumps(state["experiences"], indent=2)
-        proj_str = json.dumps(state["projects"], indent=2)
+        # repo_url/demo_url are re-attached deterministically after generation
+        # (see _merge_project_links) rather than trusted to the LLM round trip.
+        proj_str = json.dumps(
+            [{k: v for k, v in p.items() if k not in ("repo_url", "demo_url")}
+             for p in state["projects"]],
+            indent=2,
+        )
         kw_str = ", ".join(state.get("priority_keywords", []))
 
         prompt = ChatPromptTemplate.from_messages([
@@ -275,6 +304,8 @@ class ResumeTailorAgent:
              "You are an expert resume tailoring assistant. Your job is to rewrite resume content "
              "to best match a specific job description. Rules:\n"
              "- NEVER fabricate experiences, skills, or metrics the candidate doesn't have\n"
+             "- Preserve any `[text](url)` markdown links present in the source bullets verbatim; "
+             "never strip or invent URLs\n"
              "- Emphasize matched skills by reordering bullets and adjusting language\n"
              "- For projects with multiple blurb styles, select the style that best fits the job\n"
              "- Keep projects in the given order; they are pre-ranked by job relevance (most relevant first)\n"
@@ -295,6 +326,7 @@ class ResumeTailorAgent:
              "PRIORITY JD KEYWORDS — incorporate naturally where truthful (do NOT add if not applicable):\n{priority_keywords}\n\n"
              "CANDIDATE EXPERIENCES:\n{experiences}\n\n"
              "CANDIDATE PROJECTS (with style variants, pre-scored by job relevance + project depth):\n{projects}\n\n"
+             "{revision}"
              "{feedback}\n\n"
              "Return JSON with this structure:\n"
              '{{"experiences": [{{"title": "...", "company": "...", "start_date": "...", '
@@ -312,6 +344,7 @@ class ResumeTailorAgent:
                 "priority_keywords": kw_str or "(none)",
                 "experiences": exp_str,
                 "projects": proj_str,
+                "revision": revision,
                 "feedback": feedback,
             })
             # Guarantee projects stay in the pre-ranked (descending-score) order even
@@ -319,6 +352,9 @@ class ResumeTailorAgent:
             if isinstance(tailored, dict) and tailored.get("projects"):
                 tailored["projects"] = self._order_projects_by_selection(
                     tailored["projects"], [p["name"] for p in state["projects"]]
+                )
+                tailored["projects"] = self._merge_project_links(
+                    tailored["projects"], state["projects"]
                 )
             # Same guarantee for experiences: relevance order + bullet budgets
             # hold even when the LLM ignores the prompt rules.
@@ -638,6 +674,21 @@ class ResumeTailorAgent:
             generated,
             key=lambda p: rank.get(p.get("name"), fallback),
         )
+
+    @staticmethod
+    def _merge_project_links(generated: List[Dict], source: List[Dict]) -> List[Dict]:
+        """Re-attach repo_url/demo_url by project name (issue #75).
+
+        The LLM rewrite is unreliable for verbatim field passthrough, so these
+        links are sourced from the DB-backed project list rather than the
+        model's JSON output — never fabricated, never silently dropped.
+        """
+        links = {p["name"]: (p.get("repo_url"), p.get("demo_url")) for p in source}
+        out = []
+        for p in generated:
+            repo_url, demo_url = links.get(p.get("name"), (None, None))
+            out.append({**p, "repo_url": repo_url, "demo_url": demo_url})
+        return out
 
     # Keys consumed by the selection scorer but not meant for the LLM prompt
     _SCORING_INPUT_KEYS = ("linked_skills", "metrics")

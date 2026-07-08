@@ -753,6 +753,36 @@ def test_enforce_bullet_budgets_keeps_renamed_experience():
     assert len(out) == 1 and out[0]["bullets"] == ["b1", "b2", "b3"]
 
 
+def test_merge_project_links_attaches_repo_and_demo_url():
+    """repo_url/demo_url survive into tailored output even if the LLM drops them (issue #75)."""
+    from agents.tailor import ResumeTailorAgent
+
+    source = [
+        {"name": "Gitlytics", "repo_url": "https://github.com/jake/gitlytics", "demo_url": None},
+        {"name": "Simple Paintball", "repo_url": None, "demo_url": "https://paintball.example.com"},
+    ]
+    generated = [  # LLM's JSON output never included repo_url/demo_url at all
+        {"name": "Gitlytics", "bullets": ["rewrote bullet"]},
+        {"name": "Simple Paintball", "bullets": ["another bullet"]},
+    ]
+    out = ResumeTailorAgent._merge_project_links(generated, source)
+
+    assert out[0]["repo_url"] == "https://github.com/jake/gitlytics"
+    assert out[0]["demo_url"] is None
+    assert out[1]["repo_url"] is None
+    assert out[1]["demo_url"] == "https://paintball.example.com"
+
+
+def test_merge_project_links_unrecognized_name_gets_no_links():
+    from agents.tailor import ResumeTailorAgent
+
+    source = [{"name": "Gitlytics", "repo_url": "https://github.com/jake/gitlytics", "demo_url": None}]
+    generated = [{"name": "Gitlytics (renamed)", "bullets": ["b1"]}]
+    out = ResumeTailorAgent._merge_project_links(generated, source)
+    assert out[0]["repo_url"] is None
+    assert out[0]["demo_url"] is None
+
+
 def test_over_repeated_terms_boundary_aware():
     from agents.tailor import MAX_TERM_MENTIONS, ResumeTailorAgent
 

@@ -84,6 +84,11 @@ def _migrate_db() -> None:
         "ALTER TABLE userskill ADD COLUMN is_core BOOLEAN DEFAULT FALSE",
         # issue 73: landing-context chat messages are scoped per user
         "ALTER TABLE chatmessage ADD COLUMN user_id UUID",
+        # issue 75: personal-site link (header) and project demo link (auto-embed)
+        'ALTER TABLE "user" ADD COLUMN portfolio_url TEXT',
+        "ALTER TABLE project ADD COLUMN demo_url TEXT",
+        # issue 70: lifetime per-job tailor-run counter
+        "ALTER TABLE jobdescription ADD COLUMN retailor_count INTEGER DEFAULT 0",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
