@@ -237,13 +237,13 @@ const s: Record<string, CSSProperties> = {
   },
   columns: { display: "flex", flex: 1, minHeight: 0 },
   chatCol: {
-    flex: "0 0 320px", minWidth: 280, borderRight: `1px solid ${colors.primary}`,
+    flex: "0 0 400px", minWidth: 340, borderRight: `1px solid ${colors.primary}`,
     display: "flex", flexDirection: "column", minHeight: 0,
   },
   chatWrap: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" },
   resumeArea: {
-    flex: 1, minWidth: 0, overflow: "hidden", padding: "0.75rem 1rem",
-    display: "flex", flexDirection: "column", gap: "0.75rem",
+    flex: 1, minWidth: 0, overflow: "hidden", padding: "0.5rem",
+    display: "flex", flexDirection: "column", gap: "0.5rem",
   },
   errorBox: { display: "flex", flexDirection: "column", gap: "0.5rem", flexShrink: 0 },
   error: { margin: 0, color: colors.error, fontSize: font.size.sm },

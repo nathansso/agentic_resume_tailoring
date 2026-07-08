@@ -17,7 +17,10 @@ const SAVE_DEBOUNCE_MS = 1800;
  *  the right. Edits auto-save and auto-compile a moment after typing stops
  *  (issues #70/#71 follow-up). The buffer seeds from the AI-tailored source
  *  or the last saved edit. */
+type View = "split" | "source" | "preview";
+
 export function ResumeSplit({ jobId, onEditsChanged }: Props) {
+  const [view, setView] = useState<View>("split");
   const [tex, setTex] = useState("");
   const [savedTex, setSavedTex] = useState("");
   const [source, setSource] = useState<"edited" | "generated">("generated");
@@ -132,35 +135,54 @@ export function ResumeSplit({ jobId, onEditsChanged }: Props) {
         ? "Saved"
         : "";
 
+  const views: { key: View; label: string }[] = [
+    { key: "split", label: "Split" },
+    { key: "source", label: "Source" },
+    { key: "preview", label: "Preview" },
+  ];
+
   return (
-    <div style={s.split}>
-      {/* Left: .tex source */}
-      <div style={s.editorPane}>
-        <div style={s.toolbar}>
-          {source === "edited" && (
-            <button style={{ ...s.btn, color: colors.error, borderColor: colors.error }} onClick={handleDiscard}>
-              Discard edits
+    <div style={s.container}>
+      {/* One shared toolbar: view toggle + edit state */}
+      <div style={s.toolbar}>
+        <div style={s.toggleGroup}>
+          {views.map(v => (
+            <button
+              key={v.key}
+              style={{ ...s.toggleBtn, ...(view === v.key ? s.toggleBtnActive : {}) }}
+              onClick={() => setView(v.key)}
+            >
+              {v.label}
             </button>
-          )}
-          <span style={s.sourceTag}>
-            {source === "edited" ? "manually edited" : "AI-generated"}
-            {saveStatus ? ` · ${saveStatus}` : ""}
-          </span>
+          ))}
         </div>
-
-        {saveError && <pre style={s.saveError}>{saveError}</pre>}
-
-        <textarea
-          style={s.texArea}
-          value={tex}
-          onChange={e => setTex(e.target.value)}
-          spellCheck={false}
-          wrap="off"
-        />
+        {source === "edited" && (
+          <button style={{ ...s.btn, color: colors.error, borderColor: colors.error }} onClick={handleDiscard}>
+            Discard edits
+          </button>
+        )}
+        <span style={s.sourceTag}>
+          {source === "edited" ? "manually edited" : "AI-generated"}
+          {saveStatus ? ` · ${saveStatus}` : ""}
+        </span>
       </div>
 
-      {/* Right: live compiled preview with drag-to-reorder */}
-      <div style={s.previewPane}>
+      {saveError && <pre style={s.saveError}>{saveError}</pre>}
+
+      <div style={s.split}>
+        {/* Left: .tex source (hidden in preview-only view, state retained) */}
+        <div style={{ ...s.editorPane, ...(view === "preview" ? s.hidden : {}) }}>
+          <textarea
+            style={s.texArea}
+            value={tex}
+            onChange={e => setTex(e.target.value)}
+            spellCheck={false}
+            wrap="off"
+          />
+        </div>
+
+        {/* Right: live compiled preview with drag-to-reorder */}
+        <div style={{ ...s.previewPane, ...(view === "source" ? s.hidden : {}) }}>
         <PdfPreview
           pdfData={compile.pdfData}
           compiling={compile.compiling}
@@ -176,20 +198,30 @@ export function ResumeSplit({ jobId, onEditsChanged }: Props) {
             onMoveBullet: (g, from, to) => applyReorder(moveBulletTo(tex, g, from, to)),
           }}
         />
+        </div>
       </div>
     </div>
   );
 }
 
 const s: Record<string, CSSProperties> = {
-  split: { display: "flex", flex: 1, minHeight: 0, gap: "0.75rem" },
+  container: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0, gap: "0.5rem" },
+  split: { display: "flex", flex: 1, minHeight: 0, gap: "0.5rem" },
   editorPane: {
     flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "0.5rem",
   },
   previewPane: {
     flex: 1, minWidth: 0, display: "flex", flexDirection: "column",
   },
+  hidden: { display: "none" },
   toolbar: { display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", flexShrink: 0, minHeight: "1.5rem" },
+  toggleGroup: { display: "flex" },
+  toggleBtn: {
+    background: "transparent", border: `1px solid ${colors.primary}`,
+    color: colors.textMuted, fontSize: font.size.sm, padding: "0.125rem 0.625rem",
+    cursor: "pointer", fontFamily: "inherit", borderRadius: 0, marginLeft: -1,
+  },
+  toggleBtnActive: { color: colors.accent, borderColor: colors.accent, position: "relative", zIndex: 1 },
   btn: {
     background: "transparent", border: `1px solid ${colors.primary}`,
     color: colors.text, fontSize: font.size.sm, padding: "0.25rem 0.625rem",
