@@ -581,7 +581,13 @@ class ResumeFormatterAgent:
             ),
         }
 
-        body_parts = [self._build_tex_header()]
+        # Each block is prefixed with an "%% ART-SECTION: <key>" comment marker
+        # (issue #71) so the web editor can reorder sections/bullets as pure
+        # text-block moves — even after the user hand-edits the source.
+        def _marked(key: str, block: str) -> str:
+            return f"%% ART-SECTION: {key}\n{block}"
+
+        body_parts = [_marked("header", self._build_tex_header())]
         seen: set = set()
         for key in order:
             if key in seen or key not in builders:
@@ -589,12 +595,12 @@ class ResumeFormatterAgent:
             seen.add(key)
             block = builders[key]()
             if block:
-                body_parts.append(block)
+                body_parts.append(_marked(key, block))
         for key, fn in builders.items():
             if key not in seen:
                 block = fn()
                 if block:
-                    body_parts.append(block)
+                    body_parts.append(_marked(key, block))
 
         body = "\n\n".join(body_parts)
         return _JAKE_PREAMBLE + "\n\\begin{document}\n\n" + body + "\n\n\\end{document}\n"

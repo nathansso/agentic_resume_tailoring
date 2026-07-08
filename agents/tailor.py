@@ -231,6 +231,10 @@ class ResumeTailorAgent:
                 result.tailored_score_breakdown = evaluation.get("ats_breakdown", {})
                 if revision_notes.strip():
                     result.revision_notes = revision_notes.strip()
+                # Re-tailoring supersedes any manual .tex edits (issue #71):
+                # the saved source no longer matches the tailored content.
+                result.edited_tex = None
+                result.edited_tex_updated_at = None
                 session.add(result)
                 session.commit()
 
