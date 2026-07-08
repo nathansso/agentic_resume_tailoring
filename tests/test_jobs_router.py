@@ -44,6 +44,8 @@ def jobs_client(isolated_engine, monkeypatch):
     monkeypatch.setattr(db_module, "engine", isolated_engine)
     import web.routers.jobs_router as jobs_router_module
     monkeypatch.setattr(jobs_router_module, "engine", isolated_engine)
+    import agents.formatter as fmt_module
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
 
     from fastapi.testclient import TestClient
     from web.app import create_app
@@ -172,10 +174,175 @@ def test_tailor_other_users_job_403(isolated_engine, jobs_client):
     assert resp.status_code == 403
 
 
+# ── Issue #71: .tex editing endpoints ──────────────────────────────────────────
+
+_TAILORED = {
+    "experiences": [{
+        "title": "Dev", "company": "Acme", "start_date": "2020", "end_date": "Now",
+        "bullets": ["Built the thing", "Shipped the thing"],
+    }],
+    "projects": [],
+    "skills_emphasized": [],
+}
+
+
+def _make_tailored_result(engine, user_id, job_id, edited_tex=None) -> UserJobResult:
+    with Session(engine) as s:
+        result = UserJobResult(
+            user_id=user_id, job_id=job_id,
+            tailored_resume_content=dict(_TAILORED), edited_tex=edited_tex,
+        )
+        s.add(result)
+        s.commit()
+        s.refresh(result)
+        return result
+
+
+def test_get_tex_seeds_from_tailored_content(isolated_engine, jobs_client):
+    alice = _seed_user(isolated_engine, "Alice")
+    job = _make_job(isolated_engine, alice.user_id, status="tailored", description="JD")
+    _make_tailored_result(isolated_engine, alice.user_id, job.job_id)
+
+    resp = jobs_client(alice).get(f"/api/jobs/{job.job_id}/tex")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["source"] == "generated"
+    assert body["updated_at"] is None
+    assert "%% ART-SECTION:" in body["tex"]
+    assert r"\resumeItem{Built the thing}" in body["tex"]
+
+
+def test_get_tex_without_tailoring_422(isolated_engine, jobs_client):
+    alice = _seed_user(isolated_engine, "Alice")
+    job = _make_job(isolated_engine, alice.user_id, status="created")
+    assert jobs_client(alice).get(f"/api/jobs/{job.job_id}/tex").status_code == 422
+
+
+def test_put_then_get_tex_roundtrip(isolated_engine, jobs_client):
+    alice = _seed_user(isolated_engine, "Alice")
+    job = _make_job(isolated_engine, alice.user_id, status="tailored", description="JD")
+    _make_tailored_result(isolated_engine, alice.user_id, job.job_id)
+    client = jobs_client(alice)
+
+    edited = "\\documentclass{article}\\begin{document}My edits\\end{document}"
+    put = client.put(f"/api/jobs/{job.job_id}/tex", json={"tex": edited})
+    assert put.status_code == 200
+    assert put.json()["saved"] is True
+
+    got = client.get(f"/api/jobs/{job.job_id}/tex").json()
+    assert got["source"] == "edited"
+    assert got["tex"] == edited
+    assert got["updated_at"] is not None
+
+    # Job detail reflects the manual-edit state
+    assert client.get(f"/api/jobs/{job.job_id}").json()["has_manual_edits"] is True
+
+
+def test_put_tex_empty_422(isolated_engine, jobs_client):
+    alice = _seed_user(isolated_engine, "Alice")
+    job = _make_job(isolated_engine, alice.user_id, status="tailored", description="JD")
+    _make_tailored_result(isolated_engine, alice.user_id, job.job_id)
+    resp = jobs_client(alice).put(f"/api/jobs/{job.job_id}/tex", json={"tex": "   "})
+    assert resp.status_code == 422
+
+
+def test_delete_tex_discards_manual_edits(isolated_engine, jobs_client):
+    alice = _seed_user(isolated_engine, "Alice")
+    job = _make_job(isolated_engine, alice.user_id, status="tailored", description="JD")
+    _make_tailored_result(isolated_engine, alice.user_id, job.job_id, edited_tex="old edits")
+    client = jobs_client(alice)
+
+    assert client.delete(f"/api/jobs/{job.job_id}/tex").status_code == 200
+    got = client.get(f"/api/jobs/{job.job_id}/tex").json()
+    assert got["source"] == "generated"
+
+
+def test_tex_endpoints_reject_other_user(isolated_engine, jobs_client):
+    alice = _seed_user(isolated_engine, "Alice")
+    bob = _seed_user(isolated_engine, "Bob")
+    job = _make_job(isolated_engine, alice.user_id, status="tailored", description="JD")
+    _make_tailored_result(isolated_engine, alice.user_id, job.job_id)
+    client = jobs_client(bob)
+
+    assert client.get(f"/api/jobs/{job.job_id}/tex").status_code == 403
+    assert client.put(f"/api/jobs/{job.job_id}/tex", json={"tex": "x"}).status_code == 403
+    assert client.post(f"/api/jobs/{job.job_id}/preview", json={"tex": "x"}).status_code == 403
+
+
+def test_preview_returns_pdf(isolated_engine, jobs_client, monkeypatch):
+    import agents.formatter as fmt_module
+    monkeypatch.setattr(fmt_module, "_compile_tex_to_pdf", lambda tex: b"%PDF-fake")
+
+    alice = _seed_user(isolated_engine, "Alice")
+    job = _make_job(isolated_engine, alice.user_id, status="tailored", description="JD")
+
+    resp = jobs_client(alice).post(f"/api/jobs/{job.job_id}/preview", json={"tex": "\\documentclass{article}"})
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/pdf"
+    assert resp.content == b"%PDF-fake"
+
+
+def test_preview_compile_error_returns_422_with_log(isolated_engine, jobs_client, monkeypatch):
+    import agents.formatter as fmt_module
+
+    def _boom(tex):
+        raise RuntimeError("pdflatex failed (exit 1):\n! Undefined control sequence.")
+
+    monkeypatch.setattr(fmt_module, "_compile_tex_to_pdf", _boom)
+
+    alice = _seed_user(isolated_engine, "Alice")
+    job = _make_job(isolated_engine, alice.user_id, status="tailored", description="JD")
+
+    resp = jobs_client(alice).post(f"/api/jobs/{job.job_id}/preview", json={"tex": "\\broken"})
+    assert resp.status_code == 422
+    assert "Undefined control sequence" in resp.json()["detail"]
+
+
+def test_export_tex_prefers_edited(isolated_engine, jobs_client):
+    alice = _seed_user(isolated_engine, "Alice")
+    job = _make_job(isolated_engine, alice.user_id, status="tailored", description="JD")
+    _make_tailored_result(isolated_engine, alice.user_id, job.job_id, edited_tex="MY EDITED TEX")
+
+    resp = jobs_client(alice).get(f"/api/jobs/{job.job_id}/export?format=tex")
+    assert resp.status_code == 200
+    assert resp.text == "MY EDITED TEX"
+
+
+def test_export_pdf_compiles_edited_tex(isolated_engine, jobs_client, monkeypatch):
+    import agents.formatter as fmt_module
+    compiled = {}
+
+    def _fake_compile(tex):
+        compiled["tex"] = tex
+        return b"%PDF-edited"
+
+    monkeypatch.setattr(fmt_module, "_compile_tex_to_pdf", _fake_compile)
+
+    alice = _seed_user(isolated_engine, "Alice")
+    job = _make_job(isolated_engine, alice.user_id, status="tailored", description="JD")
+    _make_tailored_result(isolated_engine, alice.user_id, job.job_id, edited_tex="MY EDITED TEX")
+
+    resp = jobs_client(alice).get(f"/api/jobs/{job.job_id}/export?format=pdf")
+    assert resp.status_code == 200
+    assert resp.content == b"%PDF-edited"
+    assert compiled["tex"] == "MY EDITED TEX"
+
+
+def test_export_tex_without_edits_still_generates(isolated_engine, jobs_client):
+    alice = _seed_user(isolated_engine, "Alice")
+    job = _make_job(isolated_engine, alice.user_id, status="tailored", description="JD")
+    _make_tailored_result(isolated_engine, alice.user_id, job.job_id)
+
+    resp = jobs_client(alice).get(f"/api/jobs/{job.job_id}/export?format=tex")
+    assert resp.status_code == 200
+    assert r"\resumeItem{Built the thing}" in resp.text
+
+
 # ── Revision notes persisted by the real agent ─────────────────────────────────
 
 def test_tailor_agent_persists_revision_notes(isolated_engine, monkeypatch):
-    """ResumeTailorAgent.tailor() writes revision_notes onto the result row."""
+    """ResumeTailorAgent.tailor() writes revision_notes and discards manual
+    .tex edits (issue #71 — re-tailoring supersedes them)."""
     import agents.tailor as tailor_module
     from conftest import _seed_user_and_skill
 
@@ -185,6 +352,11 @@ def test_tailor_agent_persists_revision_notes(isolated_engine, monkeypatch):
     user = _seed_user_and_skill(isolated_engine)
     job = _make_job(isolated_engine, user.user_id, status="analyzed", description="Python JD")
     result = _make_result(isolated_engine, user.user_id, job.job_id)
+    with Session(isolated_engine) as s:
+        stored = s.get(UserJobResult, result.result_id)
+        stored.edited_tex = "manual edits about to be superseded"
+        s.add(stored)
+        s.commit()
 
     agent = tailor_module.ResumeTailorAgent()
 
@@ -203,3 +375,5 @@ def test_tailor_agent_persists_revision_notes(isolated_engine, monkeypatch):
     with Session(isolated_engine) as s:
         stored = s.get(UserJobResult, result.result_id)
         assert stored.revision_notes == "make it punchier"
+        assert stored.edited_tex is None
+        assert stored.edited_tex_updated_at is None

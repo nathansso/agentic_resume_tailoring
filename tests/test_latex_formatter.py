@@ -318,6 +318,31 @@ def test_tex_header_stays_above_sections_with_custom_order(isolated_engine, monk
     assert tex.index("Jake Ryan") < first_section
     assert tex.index("123-456-7890") < first_section
 
+def test_tex_section_markers_present(isolated_engine, monkeypatch):
+    """Every emitted block carries an ART-SECTION marker (issue #71) so the web
+    editor can reorder sections/bullets as text-block moves."""
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(_JAKE_CONTENT)
+    assert "%% ART-SECTION: header" in tex
+    for key in ("experience", "projects", "skills"):
+        assert f"%% ART-SECTION: {key}" in tex, f"Missing marker for {key}"
+    # Marker sits directly above the block it labels
+    assert tex.index("%% ART-SECTION: experience") < tex.index(r"\section{Experience}")
+    assert tex.index(r"\section{Experience}") < tex.index("%% ART-SECTION: projects")
+
+
+def test_tex_section_markers_follow_custom_order(isolated_engine, monkeypatch):
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(
+        _JAKE_CONTENT, section_order=["projects", "experience", "skills", "education"]
+    )
+    assert tex.index("%% ART-SECTION: header") < tex.index("%% ART-SECTION: projects")
+    assert tex.index("%% ART-SECTION: projects") < tex.index("%% ART-SECTION: experience")
+    assert tex.index("%% ART-SECTION: experience") < tex.index("%% ART-SECTION: skills")
+
+
 def test_tex_special_chars_escaped(isolated_engine, monkeypatch):
     monkeypatch.setattr(fmt_module, "engine", isolated_engine)
     content = {
