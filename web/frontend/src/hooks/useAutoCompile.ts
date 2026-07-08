@@ -12,6 +12,10 @@ export interface AutoCompile {
   /** Auto-compile hit the daily quota and is paused; recompileNow retries. */
   paused: boolean;
   recompileNow: () => void;
+  /** Compile a specific buffer immediately, skipping the debounce — for
+      programmatic edits (drag-reorder) where the state update hasn't
+      rendered yet. */
+  compileNow: (tex: string) => void;
 }
 
 /** Debounced live compile of the .tex buffer (Overleaf-style). Pass
@@ -64,5 +68,9 @@ export function useAutoCompile(jobId: string, tex: string, ready: boolean): Auto
     schedRef.current?.flush(texRef.current);
   }, []);
 
-  return { pdfData, compiledTex, compiling, error, paused, recompileNow };
+  const compileNow = useCallback((t: string) => {
+    schedRef.current?.flush(t);
+  }, []);
+
+  return { pdfData, compiledTex, compiling, error, paused, recompileNow, compileNow };
 }

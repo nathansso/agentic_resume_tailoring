@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { colors, font } from "../theme";
 import { getTex, saveTex, discardTex } from "../api/jobs";
 import { useAutoCompile } from "../hooks/useAutoCompile";
+import { moveBulletTo, moveSectionTo } from "../lib/texStructure";
 import { PdfPreview } from "./PdfPreview";
-import { ReorderPanel } from "./ReorderPanel";
 
 interface Props {
   jobId: string;
@@ -93,6 +93,14 @@ export function ResumeSplit({ jobId, onEditsChanged }: Props) {
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
 
+  /** Apply a drag-reorder result: edit the buffer like typing would, then
+   *  compile immediately so the preview (and drag handles) catch up fast. */
+  function applyReorder(next: string | null) {
+    if (!next || next === tex) return;
+    setTex(next);
+    compile.compileNow(next);
+  }
+
   async function handleDiscard() {
     if (!window.confirm("Discard your manual edits and reset to the AI-tailored resume?")) return;
     setSaveError(null);
@@ -142,8 +150,6 @@ export function ResumeSplit({ jobId, onEditsChanged }: Props) {
 
         {saveError && <pre style={s.saveError}>{saveError}</pre>}
 
-        <ReorderPanel tex={tex} onChange={setTex} />
-
         <textarea
           style={s.texArea}
           value={tex}
@@ -153,7 +159,7 @@ export function ResumeSplit({ jobId, onEditsChanged }: Props) {
         />
       </div>
 
-      {/* Right: live compiled preview */}
+      {/* Right: live compiled preview with drag-to-reorder */}
       <div style={s.previewPane}>
         <PdfPreview
           pdfData={compile.pdfData}
@@ -161,6 +167,14 @@ export function ResumeSplit({ jobId, onEditsChanged }: Props) {
           error={compile.error}
           paused={compile.paused}
           onRecompile={compile.recompileNow}
+          overlay={{
+            tex: compile.compiledTex,
+            // Drag only when the preview reflects the live buffer — indices
+            // computed on a stale render must never touch a diverged buffer.
+            enabled: !compile.compiling && compile.compiledTex === tex,
+            onMoveSection: (key, targetIndex) => applyReorder(moveSectionTo(tex, key, targetIndex)),
+            onMoveBullet: (g, from, to) => applyReorder(moveBulletTo(tex, g, from, to)),
+          }}
         />
       </div>
     </div>

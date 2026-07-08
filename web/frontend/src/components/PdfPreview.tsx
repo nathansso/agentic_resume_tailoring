@@ -1,9 +1,20 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import * as pdfjs from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { colors, font } from "../theme";
+import { buildOverlayModel, groupIntoLines, type PdfTextItem } from "../lib/pdfOverlay";
+import { PdfDragOverlay } from "./PdfDragOverlay";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+
+export interface OverlayProps {
+  /** The tex snapshot the displayed PDF was compiled from (model source). */
+  tex: string | null;
+  /** False while the buffer has diverged from the render or a compile runs. */
+  enabled: boolean;
+  onMoveSection: (key: string, targetIndex: number) => void;
+  onMoveBullet: (groupIndex: number, fromIdx: number, toIdx: number) => void;
+}
 
 interface Props {
   pdfData: Uint8Array | null;
@@ -12,20 +23,30 @@ interface Props {
   /** Auto-compile is paused (daily quota); show the manual recovery hint. */
   paused: boolean;
   onRecompile: () => void;
+  /** Drag-to-reorder over page 1 (sections and bullets). */
+  overlay?: OverlayProps;
+}
+
+interface Page1Text {
+  items: PdfTextItem[];
+  width: number;
+  height: number;
 }
 
 const PAGE_GAP = 12;
 
 /** Renders the compiled PDF onto canvases via pdf.js — no iframe, so no
  *  browser PDF-viewer chrome. The last good render stays visible while a new
- *  one compiles or fails (flicker-free swap). */
-export function PdfPreview({ pdfData, compiling, error, paused, onRecompile }: Props) {
+ *  one compiles or fails (flicker-free swap). Page 1 also exposes its text
+ *  geometry so PdfDragOverlay can map drag bands back onto the .tex source. */
+export function PdfPreview({ pdfData, compiling, error, paused, onRecompile, overlay }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pagesRef = useRef<HTMLDivElement>(null);
   const docRef = useRef<pdfjs.PDFDocumentProxy | null>(null);
   const renderGen = useRef(0);
   const [width, setWidth] = useState(0);
   const [hasRender, setHasRender] = useState(false);
+  const [page1, setPage1] = useState<Page1Text | null>(null);
 
   // Track the pane width (debounced) so pages re-render scaled to fit.
   useEffect(() => {
@@ -57,6 +78,7 @@ export function PdfPreview({ pdfData, compiling, error, paused, onRecompile }: P
       }
       const dpr = window.devicePixelRatio || 1;
       const canvases: HTMLCanvasElement[] = [];
+      let page1Text: Page1Text | null = null;
       for (let i = 1; i <= doc.numPages; i++) {
         const page = await doc.getPage(i);
         const cssScale = width / page.getViewport({ scale: 1 }).width;
@@ -73,6 +95,20 @@ export function PdfPreview({ pdfData, compiling, error, paused, onRecompile }: P
         if (!ctx) return;
         await page.render({ canvasContext: ctx, viewport }).promise;
         canvases.push(canvas);
+
+        if (i === 1) {
+          // Text geometry in CSS pixels (top-down) for the drag overlay.
+          const cssViewport = page.getViewport({ scale: cssScale });
+          const tc = await page.getTextContent();
+          const items: PdfTextItem[] = [];
+          for (const it of tc.items) {
+            if (!("str" in it)) continue;
+            const tx = pdfjs.Util.transform(cssViewport.transform, it.transform);
+            const fontHeight = Math.hypot(tx[2], tx[3]);
+            items.push({ str: it.str, x: tx[4], y: tx[5] - fontHeight, height: fontHeight });
+          }
+          page1Text = { items, width: cssViewport.width, height: cssViewport.height };
+        }
       }
       if (gen !== renderGen.current) {
         void doc.destroy();
@@ -82,6 +118,7 @@ export function PdfPreview({ pdfData, compiling, error, paused, onRecompile }: P
       pagesRef.current?.replaceChildren(...canvases);
       void docRef.current?.destroy();
       docRef.current = doc;
+      setPage1(page1Text);
       setHasRender(true);
     })().catch(() => {
       // Render failure: keep the last good canvases.
@@ -98,17 +135,45 @@ export function PdfPreview({ pdfData, compiling, error, paused, onRecompile }: P
     [],
   );
 
+  const model = useMemo(() => {
+    if (!overlay?.tex || !page1) return null;
+    return buildOverlayModel(overlay.tex, groupIntoLines(page1.items), page1.height);
+  }, [overlay?.tex, page1]);
+
+  const dragReady = model !== null && model.sections.length > 0;
+  const statusText = compiling
+    ? "Compiling…"
+    : !hasRender
+      ? ""
+      : overlay && dragReady
+        ? "Preview up to date — drag sections or bullets to reorder"
+        : overlay && model
+          ? "Reordering unavailable — the %% ART-SECTION markers were edited out"
+          : "Preview up to date";
+
   return (
     <div style={s.pane}>
       <div style={s.statusBar}>
-        <span style={s.statusText}>{compiling ? "Compiling…" : hasRender ? "Preview up to date" : ""}</span>
+        <span style={s.statusText}>{statusText}</span>
         {(error || paused) && (
           <button style={s.recompileBtn} onClick={onRecompile}>Recompile</button>
         )}
       </div>
       {error && <pre style={s.compileError}>{error}</pre>}
       <div ref={containerRef} style={s.scroll}>
-        <div ref={pagesRef} />
+        <div style={s.pagesWrap}>
+          <div ref={pagesRef} />
+          {overlay && model && dragReady && page1 && (
+            <PdfDragOverlay
+              model={model}
+              width={page1.width}
+              height={page1.height}
+              enabled={overlay.enabled && !compiling}
+              onMoveSection={overlay.onMoveSection}
+              onMoveBullet={overlay.onMoveBullet}
+            />
+          )}
+        </div>
         {!hasRender && !error && (
           <p style={s.muted}>{compiling ? "Compiling preview…" : "The preview appears here once compiled."}</p>
         )}
@@ -139,5 +204,6 @@ const s: Record<string, CSSProperties> = {
     flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden",
     border: `1px solid ${colors.primary}`, background: "#525659",
   },
+  pagesWrap: { position: "relative" },
   muted: { margin: "0.75rem", color: "#c9d1d9", fontSize: font.size.sm },
 };
