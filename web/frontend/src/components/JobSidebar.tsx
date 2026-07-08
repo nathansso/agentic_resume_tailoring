@@ -6,7 +6,7 @@ interface Props {
   jobs: JobListItem[];
   selectedJobId: string | null;
   onSelect: (jobId: string) => void;
-  onCreate: (title: string, company: string) => void;
+  onCreate: (title: string, company: string, description: string) => void;
   onDelete: (jobId: string) => void;
   loading: boolean;
 }
@@ -26,13 +26,15 @@ export function JobSidebar({ jobs, selectedJobId, onSelect, onCreate, onDelete, 
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
   const [company, setCompany] = useState("");
+  const [description, setDescription] = useState("");
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   function handleCreate() {
     if (!title.trim() || !company.trim()) return;
-    onCreate(title.trim(), company.trim());
+    onCreate(title.trim(), company.trim(), description.trim());
     setTitle("");
     setCompany("");
+    setDescription("");
     setShowForm(false);
   }
 
@@ -60,6 +62,13 @@ export function JobSidebar({ jobs, selectedJobId, onSelect, onCreate, onDelete, 
             value={company}
             onChange={e => setCompany(e.target.value)}
             onKeyDown={e => e.key === "Enter" && handleCreate()}
+          />
+          <textarea
+            style={{ ...s.input, resize: "vertical", lineHeight: 1.4 }}
+            placeholder="Paste job description (analyzes + tailors automatically)"
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            rows={5}
           />
           <button style={s.saveBtn} onClick={handleCreate}>Save</button>
         </div>

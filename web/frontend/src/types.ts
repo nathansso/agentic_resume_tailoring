@@ -45,6 +45,8 @@ export interface JobDetail extends JobListItem {
   missing_skills: string[];
   score_breakdown: ScoreBreakdown;
   tailored_score_breakdown: ScoreBreakdown;
+  retailor_count: number;
+  retailor_limit: number;
 }
 
 export interface TailorResult {
@@ -52,6 +54,8 @@ export interface TailorResult {
   matched_skills: string[];
   missing_skills: string[];
   status: string;
+  retailor_count: number;
+  retailor_limit: number;
 }
 
 export interface ChatMsg {

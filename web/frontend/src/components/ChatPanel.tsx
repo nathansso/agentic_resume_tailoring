@@ -8,13 +8,16 @@ const WELCOME = "Welcome to ART — your agentic resume tailoring assistant.\n\n
 interface Props {
   jobId: string | null;
   onViewChange: (view: string) => void;
+  /** Fires after each assistant reply — lets the Job workspace resync job state
+      the chat may have changed (analyze, re-tailor, JD paste). */
+  onAssistantReply?: () => void;
 }
 
 function dayLabel(iso: string): string {
   return iso.slice(0, 10);
 }
 
-export function ChatPanel({ jobId, onViewChange }: Props) {
+export function ChatPanel({ jobId, onViewChange, onAssistantReply }: Props) {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -61,6 +64,7 @@ export function ChatPanel({ jobId, onViewChange }: Props) {
       const reply = await sendMessage(effectiveJobId, text);
       const botMsg: ChatMsg = { role: "assistant", content: reply, created_at: new Date().toISOString() };
       setMessages(prev => [...prev, botMsg]);
+      onAssistantReply?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chat failed");
     } finally {
