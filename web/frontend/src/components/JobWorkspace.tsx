@@ -4,6 +4,7 @@ import { colors, font } from "../theme";
 import { saveDescription, analyzeJob, tailorJob, getJob, exportUrl } from "../api/jobs";
 import { ChatPanel } from "./ChatPanel";
 import { ProgressBar } from "./ProgressBar";
+import { ResumeEditor } from "./ResumeEditor";
 import { ScoreBreakdownPanel } from "./ScoreBreakdownPanel";
 
 interface Props {
@@ -30,9 +31,15 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
   const [descInput, setDescInput] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<"resume" | "overview">("overview");
 
   const tailored = job.status === "tailored" || job.status === "exported";
   const budgetUsed = job.retailor_count >= job.retailor_limit;
+
+  // Land on the editor once a tailored resume exists (issue #71).
+  useEffect(() => {
+    if (tailored) setTab("resume");
+  }, [tailored]);
 
   async function runChain(startAt: "analyze" | "tailor") {
     setError(null);
@@ -122,7 +129,11 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
               <p style={s.error}>{error}</p>
               <button
                 style={s.actionBtn}
-                onClick={() => runChain(job.status === "created" ? "analyze" : "tailor")}
+                onClick={() => {
+                  if (job.has_manual_edits &&
+                      !window.confirm("Re-tailoring will discard your manual .tex edits. Continue?")) return;
+                  runChain(job.status === "created" ? "analyze" : "tailor");
+                }}
               >
                 Retry
               </button>
@@ -130,6 +141,29 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
           )}
 
           {phase !== "idle" && <ProgressBar label={phaseLabel} />}
+
+          {/* Resume / Overview tabs once tailoring has produced a resume */}
+          {tailored && (
+            <div style={s.tabs}>
+              <button
+                style={{ ...s.tabBtn, ...(tab === "resume" ? s.tabBtnActive : {}) }}
+                onClick={() => setTab("resume")}
+              >
+                Resume
+              </button>
+              <button
+                style={{ ...s.tabBtn, ...(tab === "overview" ? s.tabBtnActive : {}) }}
+                onClick={() => setTab("overview")}
+              >
+                Overview
+              </button>
+            </div>
+          )}
+
+          {tailored && tab === "resume" && (
+            // Remount after each re-tailor so the editor reseeds from the fresh output
+            <ResumeEditor key={`${job.job_id}:${job.retailor_count}`} jobId={job.job_id} onEditsChanged={refreshJob} />
+          )}
 
           {/* No JD yet: paste panel */}
           {phase === "idle" && !job.description && (
@@ -154,7 +188,7 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
           )}
 
           {/* Skills + scores */}
-          {(job.matched_skills.length > 0 || job.missing_skills.length > 0) && (
+          {(!tailored || tab === "overview") && (job.matched_skills.length > 0 || job.missing_skills.length > 0) && (
             <div style={s.skillsRow}>
               {job.matched_skills.length > 0 && (
                 <div style={s.skillGroup}>
@@ -179,10 +213,10 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
             </div>
           )}
 
-          {job.score_breakdown && Object.keys(job.score_breakdown).length > 0 && (
+          {(!tailored || tab === "overview") && job.score_breakdown && Object.keys(job.score_breakdown).length > 0 && (
             <ScoreBreakdownPanel bd={job.score_breakdown} />
           )}
-          {job.tailored_score_breakdown && Object.keys(job.tailored_score_breakdown).length > 0 && (
+          {(!tailored || tab === "overview") && job.tailored_score_breakdown && Object.keys(job.tailored_score_breakdown).length > 0 && (
             <ScoreBreakdownPanel bd={job.tailored_score_breakdown} title="Tailored Score Breakdown" />
           )}
 
@@ -197,7 +231,12 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
                 <a href={exportUrl(job.job_id, "tex")} style={s.downloadBtnAlt} download>
                   Download LaTeX
                 </a>
-                <a href={exportUrl(job.job_id, "docx")} style={s.downloadBtnAlt} download>
+                <a
+                  href={exportUrl(job.job_id, "docx")}
+                  style={s.downloadBtnAlt}
+                  download
+                  title={job.has_manual_edits ? "DOCX is generated from the AI-tailored content and ignores manual .tex edits" : undefined}
+                >
                   Download DOCX
                 </a>
               </div>
@@ -206,6 +245,9 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
                 Downloads unlock once the resume is tailored
                 {job.description ? " — ask the chat to “tailor” or wait for the pipeline to finish." : " — paste a job description above to start."}
               </p>
+            )}
+            {tailored && job.has_manual_edits && (
+              <p style={s.hint}>PDF and LaTeX exports include your manual edits.</p>
             )}
             {tailored && !budgetUsed && (
               <p style={s.hint}>
@@ -250,6 +292,13 @@ const s: Record<string, CSSProperties> = {
     flex: 1, minWidth: 0, overflowY: "auto", padding: "1rem",
     display: "flex", flexDirection: "column", gap: "0.875rem",
   },
+  tabs: { display: "flex", gap: "0.25rem", borderBottom: `1px solid ${colors.primary}` },
+  tabBtn: {
+    background: "transparent", border: "none", color: colors.textMuted,
+    fontSize: font.size.sm, padding: "0.25rem 0.625rem", cursor: "pointer",
+    fontFamily: "inherit", borderRadius: 0,
+  },
+  tabBtnActive: { color: colors.accent, borderBottom: `2px solid ${colors.accent}` },
   errorBox: { display: "flex", flexDirection: "column", gap: "0.5rem" },
   error: { margin: 0, color: colors.error, fontSize: font.size.sm },
   hint: { margin: 0, color: colors.textMuted, fontSize: font.size.sm },

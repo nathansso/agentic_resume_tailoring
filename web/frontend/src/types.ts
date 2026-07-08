@@ -47,6 +47,7 @@ export interface JobDetail extends JobListItem {
   tailored_score_breakdown: ScoreBreakdown;
   retailor_count: number;
   retailor_limit: number;
+  has_manual_edits: boolean;
 }
 
 export interface TailorResult {
