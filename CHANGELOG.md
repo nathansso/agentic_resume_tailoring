@@ -4,6 +4,24 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issues 70 & 71 follow-up — Overleaf-style workspace: live compile, drag-on-PDF reorder, chat-centric insights
+**Status:** complete | **Tests:** 516 Python pass (2 new) + 44 vitest (10 → 44)
+
+Redesign of the job workspace shipped in #81, in three phases. The Resume/Overview tabs are gone: the workspace is now three always-visible panes — insights + chat (narrow) | `.tex` source | compiled preview — with the editor behaving like Overleaf (auto-save + auto-compile) and reordering done by dragging directly on the rendered PDF.
+
+### What shipped
+- **Three-pane layout, no tabs.** `JobWorkspace` renders a fixed-width chat column (new `JobInsights` collapsible card — matched/missing chips, score breakdowns, and tailoring explainability — above the job chat) beside `ResumeSplit` (editor | preview). Export links moved into the workspace header. `/api/jobs/{id}` now surfaces `explainability` from `UserJobResult.matched_skills._explainability`, and underscore-prefixed internal keys are filtered out of `matched_skills` (fixing a latent leak of `_explainability` as a skill chip).
+- **Job-scoped chat welcome.** Empty job chats open with state-aware guidance from `lib/welcome.ts` (paste-JD → tailor → `"tailor emphasize Python more" (N runs left)` → budget exhausted) instead of the generic landing text; the welcome is rendered, not stored, so it tracks job-state changes live.
+- **Live compile + auto-save (Compile/Save buttons removed).** `PdfPreview` renders via `pdfjs-dist` canvases (no iframe → no browser PDF chrome), flicker-free swap, last good render survives failures. `CompileScheduler` (pure, fake-timer-tested) debounces 1.8s trailing-edge, skips unchanged buffers, coalesces in-flight compiles (protecting the 2-slot semaphore), discards stale results, and pauses on 429 until a manual Recompile. Edits auto-save on the same settle with a Saving…/Saved indicator; Discard-edits remains. `COMPILE_DAILY_LIMIT` default 200 → 500.
+- **Drag-and-drop reordering on the compiled PDF (ReorderPanel deleted).** `lib/pdfOverlay.ts` maps page-1 text geometry back onto the tex structure (NFKD/alphanumeric normalization, ordered-cursor heading matching against each block's own `\section{...}`, bullet prefix anchoring absorbing wrapped lines) with graceful degradation down to a disabled overlay. `PdfDragOverlay` is hand-rolled pointer drag over transparent bands — sections via a left-edge handle, bullets within their group, accent drop indicator. Drops apply `moveSectionTo`/`moveBulletTo` (new move-to-index primitives replacing the adjacent-swap ones) to the buffer and flush an immediate recompile; drags are enabled only while the preview matches the live buffer.
+
+### Deviations from spec
+- Consecutive drags wait one compile round-trip (drag re-enables when the new render lands); optimistic band re-sorting is a possible follow-up.
+- DOCX export still regenerates from tailored JSON and ignores manual `.tex` edits (unchanged from #71, tooltip retained).
+- Verified end-to-end with Playwright against a live server + tectonic: welcome, insights, first compile, section drag (order changed in tex and PDF), auto-save (`has_manual_edits` flips), broken-tex error with retained preview, discard-edits restore.
+
+---
+
 ## Issues 70 & 71 — Job workspace + manual .tex resume editing
 **Status:** complete | **Tests:** 514 pass (28 new Python) + 10 vitest
 
