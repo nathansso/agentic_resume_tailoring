@@ -70,8 +70,9 @@ def increment_ai_usage(user_id: UUID, session: Session) -> None:
 
 # ── LaTeX preview-compile quota (issue #71) ────────────────────────────────────
 # pdflatex is CPU-bound, not billed, so the cap is generous — it exists only to
-# stop a runaway client from hammering the 512MB VM.
-COMPILE_DAILY_LIMIT = int(os.getenv("COMPILE_DAILY_LIMIT", "200"))
+# stop a runaway client from hammering the 512MB VM. Sized for the editor's
+# debounced auto-compile (~50-150 compiles per active editing hour).
+COMPILE_DAILY_LIMIT = int(os.getenv("COMPILE_DAILY_LIMIT", "500"))
 
 
 async def check_compile_quota(

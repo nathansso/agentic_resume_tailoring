@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { colors, font } from "../theme";
-import { getTex, saveTex, discardTex, previewPdf } from "../api/jobs";
+import { getTex, saveTex, discardTex } from "../api/jobs";
+import { useAutoCompile } from "../hooks/useAutoCompile";
+import { PdfPreview } from "./PdfPreview";
 import { ReorderPanel } from "./ReorderPanel";
 
 interface Props {
@@ -9,10 +11,12 @@ interface Props {
   onEditsChanged: () => void;
 }
 
-/** Overleaf-style split: .tex source on the left, compiled preview on the
- *  right, both fully visible (issue #71 follow-up). The buffer seeds from the
- *  AI-tailored source (or the last saved edit) and previews compile the
- *  current buffer, so unsaved changes are previewable. */
+const SAVE_DEBOUNCE_MS = 1800;
+
+/** Overleaf-style live editor: .tex source on the left, compiled preview on
+ *  the right. Edits auto-save and auto-compile a moment after typing stops
+ *  (issues #70/#71 follow-up). The buffer seeds from the AI-tailored source
+ *  or the last saved edit. */
 export function ResumeSplit({ jobId, onEditsChanged }: Props) {
   const [tex, setTex] = useState("");
   const [savedTex, setSavedTex] = useState("");
@@ -20,18 +24,15 @@ export function ResumeSplit({ jobId, onEditsChanged }: Props) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [compiling, setCompiling] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-  const pdfUrlRef = useRef<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  // Out-of-order save protection: only the latest save applies its state.
+  const saveGen = useRef(0);
+  const sourceRef = useRef(source);
+  sourceRef.current = source;
 
   const dirty = tex !== savedTex;
-
-  function setPreview(url: string | null) {
-    if (pdfUrlRef.current) URL.revokeObjectURL(pdfUrlRef.current);
-    pdfUrlRef.current = url;
-    setPdfUrl(url);
-  }
+  const ready = !loading && !loadError && tex !== "";
+  const compile = useAutoCompile(jobId, tex, ready);
 
   async function load() {
     setLoading(true);
@@ -50,50 +51,58 @@ export function ResumeSplit({ jobId, onEditsChanged }: Props) {
 
   useEffect(() => {
     load();
-    return () => setPreview(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
-  async function handleSave() {
-    if (!dirty || saving) return;
-    setSaving(true);
-    setActionError(null);
-    try {
-      await saveTex(jobId, tex);
-      setSavedTex(tex);
-      setSource("edited");
-      onEditsChanged();
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Save failed");
-    } finally {
-      setSaving(false);
-    }
-  }
+  // Auto-save on the debounce trailing edge (Overleaf-style persistence).
+  // Skips blank buffers (the server rejects them) — those stay dirty.
+  useEffect(() => {
+    if (!ready || !dirty || !tex.trim()) return;
+    const timer = setTimeout(() => {
+      const gen = ++saveGen.current;
+      setSaving(true);
+      setSaveError(null);
+      saveTex(jobId, tex)
+        .then(() => {
+          if (gen !== saveGen.current) return;
+          setSavedTex(tex);
+          if (sourceRef.current === "generated") {
+            setSource("edited");
+            onEditsChanged(); // has_manual_edits flipped — resync the workspace
+          }
+        })
+        .catch(e => {
+          if (gen !== saveGen.current) return;
+          setSaveError(e instanceof Error ? e.message : "Save failed");
+        })
+        .finally(() => {
+          if (gen === saveGen.current) setSaving(false);
+        });
+    }, SAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tex, ready, dirty]);
 
-  async function handleCompile() {
-    if (compiling) return;
-    setCompiling(true);
-    setActionError(null);
-    try {
-      const blob = await previewPdf(jobId, tex);
-      setPreview(URL.createObjectURL(blob));
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Compile failed");
-    } finally {
-      setCompiling(false);
-    }
-  }
+  // Unsettled keystrokes (not yet auto-saved) would be lost on refresh.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
 
   async function handleDiscard() {
     if (!window.confirm("Discard your manual edits and reset to the AI-tailored resume?")) return;
-    setActionError(null);
+    setSaveError(null);
+    saveGen.current++; // invalidate any in-flight save
     try {
       await discardTex(jobId);
-      setPreview(null);
       onEditsChanged();
       await load();
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Discard failed");
+      setSaveError(e instanceof Error ? e.message : "Discard failed");
     }
   }
 
@@ -107,18 +116,19 @@ export function ResumeSplit({ jobId, onEditsChanged }: Props) {
     );
   }
 
+  const saveStatus = saving
+    ? "Saving…"
+    : dirty
+      ? "unsaved changes"
+      : source === "edited"
+        ? "Saved"
+        : "";
+
   return (
     <div style={s.split}>
       {/* Left: .tex source */}
       <div style={s.editorPane}>
         <div style={s.toolbar}>
-          <button
-            style={{ ...s.btn, ...(dirty ? s.btnPrimary : {}) }}
-            onClick={handleSave}
-            disabled={!dirty || saving}
-          >
-            {saving ? "Saving…" : dirty ? "Save" : "Saved"}
-          </button>
           {source === "edited" && (
             <button style={{ ...s.btn, color: colors.error, borderColor: colors.error }} onClick={handleDiscard}>
               Discard edits
@@ -126,13 +136,11 @@ export function ResumeSplit({ jobId, onEditsChanged }: Props) {
           )}
           <span style={s.sourceTag}>
             {source === "edited" ? "manually edited" : "AI-generated"}
-            {dirty ? " · unsaved changes" : ""}
+            {saveStatus ? ` · ${saveStatus}` : ""}
           </span>
         </div>
 
-        {actionError && (
-          <pre style={s.compileError}>{actionError}</pre>
-        )}
+        {saveError && <pre style={s.saveError}>{saveError}</pre>}
 
         <ReorderPanel tex={tex} onChange={setTex} />
 
@@ -145,18 +153,15 @@ export function ResumeSplit({ jobId, onEditsChanged }: Props) {
         />
       </div>
 
-      {/* Right: compiled preview */}
+      {/* Right: live compiled preview */}
       <div style={s.previewPane}>
-        <div style={s.toolbar}>
-          <button style={s.btn} onClick={handleCompile} disabled={compiling}>
-            {compiling ? "Compiling…" : "Compile preview"}
-          </button>
-        </div>
-        {pdfUrl ? (
-          <iframe src={pdfUrl} style={s.preview} title="Resume preview" />
-        ) : (
-          <p style={s.muted}>Click "Compile preview" to render the current source as PDF.</p>
-        )}
+        <PdfPreview
+          pdfData={compile.pdfData}
+          compiling={compile.compiling}
+          error={compile.error}
+          paused={compile.paused}
+          onRecompile={compile.recompileNow}
+        />
       </div>
     </div>
   );
@@ -168,24 +173,23 @@ const s: Record<string, CSSProperties> = {
     flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "0.5rem",
   },
   previewPane: {
-    flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "0.5rem",
+    flex: 1, minWidth: 0, display: "flex", flexDirection: "column",
   },
-  toolbar: { display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", flexShrink: 0 },
+  toolbar: { display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", flexShrink: 0, minHeight: "1.5rem" },
   btn: {
     background: "transparent", border: `1px solid ${colors.primary}`,
     color: colors.text, fontSize: font.size.sm, padding: "0.25rem 0.625rem",
     cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
   },
-  btnPrimary: { background: colors.accent, color: colors.background, borderColor: colors.accent, fontWeight: 700 },
   sourceTag: { color: colors.textMuted, fontSize: "0.7rem", fontStyle: "italic" },
   muted: { margin: 0, color: colors.textMuted, fontSize: font.size.sm },
   errorBox: { display: "flex", flexDirection: "column", gap: "0.5rem" },
   error: { margin: 0, color: colors.error, fontSize: font.size.sm },
-  compileError: {
+  saveError: {
     margin: 0, color: colors.error, fontSize: "0.7rem", whiteSpace: "pre-wrap",
     wordBreak: "break-word", background: colors.surface,
     border: `1px solid ${colors.error}`, padding: "0.5rem 0.625rem",
-    maxHeight: "10rem", overflowY: "auto", flexShrink: 0,
+    maxHeight: "6rem", overflowY: "auto", flexShrink: 0,
   },
   texArea: {
     flex: 1, minHeight: 0,
@@ -194,9 +198,5 @@ const s: Record<string, CSSProperties> = {
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
     outline: "none", borderRadius: 0, resize: "none", lineHeight: 1.45,
     whiteSpace: "pre", overflow: "auto",
-  },
-  preview: {
-    flex: 1, minHeight: 0, width: "100%", border: `1px solid ${colors.primary}`,
-    background: "#525659",
   },
 };
