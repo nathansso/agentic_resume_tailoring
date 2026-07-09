@@ -29,6 +29,7 @@ from agents.ats_scorer import ATSScoringEngine
 from agents.project_scorer import MAX_PROJECTS, score_project, select_top_k
 from agents.skill_scorer import _env_float, _env_int, rank_and_select_skills
 from agents.skill_postprocessor import normalize_skill_name, should_reject_skill
+from agents.keyword_planner import score_keywords, assign_keywords, evaluate_placement
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,13 @@ _PLACEHOLDER_DATE_TOKENS = {
 # as keyword stuffing; the evaluator flags offenders into retry feedback.
 MAX_TERM_MENTIONS = _env_int("TAILOR_MAX_TERM_MENTIONS", 3)
 
+# Revision faithfulness (issue #72): mean token overlap between a revised bullet
+# and its closest source bullet. Below this, the "revision" drifted far enough
+# from the source to read as a rewrite; the evaluator nudges the retry to stay
+# closer to the original wording. Lenient by design — keyword insertion and
+# tightening legitimately lower overlap.
+FAITHFULNESS_MIN = _env_float("TAILOR_FAITHFULNESS_MIN", 0.2)
+
 
 def _as_obj(value, default):
     """Normalise a JSON column that may round-trip as a JSON string on SQLite."""
@@ -86,7 +94,8 @@ class TailorState(TypedDict):
     revision_notes: str       # User instructions for iterative re-tailoring (issue #70)
     matched_skills: Dict      # From SkillMatcherAgent
     missing_skills: List[str]
-    priority_keywords: List[str]  # Top missing JD keywords from ATSScoringEngine
+    priority_keywords: List[str]  # Top missing JD keywords, signal-ranked (issue #72)
+    keyword_assignments: Dict     # {item_key: [keyword,...]} contextual placement (issue #72)
     baseline_breakdown: Dict  # Pre-tailor score_breakdown for delta comparison (issue #12)
     experiences: List[Dict]
     projects: List[Dict]
@@ -173,7 +182,6 @@ class ResumeTailorAgent:
                     "end_date": p.end_date,
                 })
 
-            # Priority keywords: top missing JD keywords from latest score_breakdown
             jd_text = job.description if job else ""
             # Drop malformed/duplicate experience rows and coerce placeholder
             # dates before ranking, so junk rows never reach the resume (issue #72).
@@ -181,14 +189,32 @@ class ResumeTailorAgent:
             # Relevance-rank experiences and attach per-experience bullet budgets
             # so text volume tracks JD relevance (most relevant = most detail).
             exp_dicts = self._score_and_budget_experiences(exp_dicts, jd_text)
-            priority_keywords: List[str] = []
-            if result and result.score_breakdown:
-                kd = result.score_breakdown.get("keyword_coverage", {})
-                priority_keywords = (kd.get("missing_keywords") or [])[:15]
 
             # Project pre-selection: score projects by JD relevance + depth and
             # dynamically choose the top-k (issue #47), ordered descending by score.
             proj_dicts = self._score_and_select_projects(proj_dicts_all, jd_text)
+
+            # Signal-rank the missing JD keywords and assign each to the specific
+            # experience/project whose own content supports it (issue #72), so the
+            # generator inserts keywords contextually instead of stapling the first
+            # 15 onto arbitrary bullets. Corpus + skill names drive the ranking.
+            missing_keywords: List[str] = []
+            if result and result.score_breakdown:
+                kd = result.score_breakdown.get("keyword_coverage", {})
+                missing_keywords = kd.get("missing_keywords") or []
+            corpus = [d for d in session.exec(select(JobDescription.description)).all() if d]
+            skill_id_rows = session.exec(
+                select(UserSkill.skill_id).where(UserSkill.user_id == user_id)
+            ).all()
+            skill_terms = [
+                s for s in session.exec(
+                    select(Skill.name).where(Skill.skill_id.in_(skill_id_rows))
+                ).all()
+            ] if skill_id_rows else []
+
+            priority_keywords, keyword_assignments = self._plan_keywords(
+                exp_dicts, proj_dicts, jd_text, missing_keywords, skill_terms, corpus
+            )
 
         initial_state: TailorState = {
             "user_id": str(user_id),
@@ -200,6 +226,7 @@ class ResumeTailorAgent:
             "matched_skills": result.matched_skills if result else {},
             "missing_skills": result.missing_skills if result else [],
             "priority_keywords": priority_keywords,
+            "keyword_assignments": keyword_assignments,
             "baseline_breakdown": (result.score_breakdown or {}) if result else {},
             "experiences": exp_dicts,
             "projects": proj_dicts,
@@ -290,15 +317,30 @@ class ResumeTailorAgent:
         if state["evaluation"]:
             ev = state["evaluation"]
             skill_gaps = ev.get("gaps", [])
-            kw_gaps = ev.get("kw_gaps", [])
             over = ev.get("over_repeated", {})
             over_str = ", ".join(f"{t} ({n}x)" for t, n in over.items())
+            # Per-item placement gaps: which assigned keyword is still missing from
+            # the item it belongs on, and which keyword leaked onto the wrong item.
+            place_gaps = ev.get("placement_gaps", {})
+            misplaced = ev.get("placement_misplaced", {})
+            gap_lines = "; ".join(
+                f"{self._label_for_key(key, state)}: add {', '.join(kws)}"
+                for key, kws in place_gaps.items()
+            )
+            misplaced_lines = "; ".join(
+                f"{', '.join(kws)} landed on {self._label_for_key(key, state)} but belongs elsewhere — remove it there"
+                for key, kws in misplaced.items()
+            )
+            drift = ev.get("faithfulness_drift", [])
             feedback = (
                 f"\n\nPREVIOUS ATTEMPT FEEDBACK:\n"
                 f"Skill coverage: {ev.get('coverage_pct', 0)}%. "
-                f"Keyword coverage: {ev.get('kw_coverage', 0)}%.\n"
+                f"Keyword placement precision: {ev.get('kw_coverage', 0)}%.\n"
                 f"Missing skill emphasis: {', '.join(skill_gaps) or 'none'}.\n"
-                f"Missing keywords to incorporate naturally: {', '.join(kw_gaps) or 'none'}.\n"
+                + (f"Weave these assigned keywords into the right item: {gap_lines}.\n" if gap_lines else "")
+                + (f"Misplaced keywords: {misplaced_lines}.\n" if misplaced_lines else "")
+                + (f"These experiences drifted too far from their source bullets — "
+                   f"revise the original wording, don't rewrite: {', '.join(drift)}.\n" if drift else "")
                 + (f"Overused terms — mentioned too often, vary the wording or cut "
                    f"mentions to at most {MAX_TERM_MENTIONS} each: {over_str}.\n" if over_str else "")
                 + f"Please address these gaps."
@@ -326,20 +368,23 @@ class ResumeTailorAgent:
 
         prompt = ChatPromptTemplate.from_messages([
             ("system",
-             "You are an expert resume tailoring assistant. Your job is to rewrite resume content "
-             "to best match a specific job description. Rules:\n"
+             "You are an expert resume tailoring assistant. You REVISE existing resume content to "
+             "match a job description — you do not rewrite it from scratch. Rules:\n"
              "- NEVER fabricate experiences, skills, or metrics the candidate doesn't have\n"
+             "- REVISE, don't rewrite: keep each bullet's underlying facts, numbers, and meaning. "
+             "Reorder, tighten, and adjust wording to surface relevance — but a reader who saw the "
+             "original must recognize the revised bullet as the same accomplishment\n"
              "- Preserve any `[text](url)` markdown links present in the source bullets verbatim; "
              "never strip or invent URLs\n"
-             "- Emphasize matched skills by reordering bullets and adjusting language\n"
+             "- Each experience and project carries a `suggested_keywords` list: these were matched "
+             "to THAT item because its own content supports them. Weave an item's suggested_keywords "
+             "into THAT item's bullets ONLY where truthful. Do NOT move a keyword to a different item, "
+             "and do NOT force in a keyword the item cannot honestly support\n"
              "- For projects with multiple blurb styles, select the style that best fits the job\n"
-             "- Keep projects in the given order; they are pre-ranked by job relevance (most relevant first)\n"
-             "- Rewrite experience bullets to highlight relevant skills where truthful\n"
-             "- Incorporate PRIORITY JD KEYWORDS naturally into bullets where truthfully applicable\n"
-             "- Keep experiences in the given order; they are pre-ranked by job relevance (most relevant first)\n"
-             "- Each experience has a bullet_budget: write AT MOST that many bullets for it. "
-             "Budgets are relevance-based — spend words on what this job cares about, and keep "
-             "only the strongest, most job-relevant bullets for low-budget experiences\n"
+             "- Keep projects and experiences in the given order; they are pre-ranked by job relevance\n"
+             "- Each experience has a bullet_budget: write AT MOST that many bullets for it. Prefer "
+             "revising and keeping strong bullets over dropping them; only drop a bullet to respect "
+             "the budget, and never invent filler to reach it\n"
              f"- Avoid repeating the same skill or keyword: use each term at most {MAX_TERM_MENTIONS} times "
              "across ALL bullets combined. Vary phrasing instead of restating the same technology\n"
              "- Keep the same structure: experiences and projects sections\n"
@@ -348,9 +393,10 @@ class ResumeTailorAgent:
              "JOB DESCRIPTION:\n{job_text}\n\n"
              "MATCHED SKILLS:\n{matched_skills}\n\n"
              "MISSING SKILLS:\n{missing_skills}\n\n"
-             "PRIORITY JD KEYWORDS — incorporate naturally where truthful (do NOT add if not applicable):\n{priority_keywords}\n\n"
-             "CANDIDATE EXPERIENCES:\n{experiences}\n\n"
-             "CANDIDATE PROJECTS (with style variants, pre-scored by job relevance + project depth):\n{projects}\n\n"
+             "PRIORITY JD KEYWORDS (overall signal ranking; placement is governed per-item by each "
+             "item's suggested_keywords below):\n{priority_keywords}\n\n"
+             "CANDIDATE EXPERIENCES (each with source bullets to revise and its suggested_keywords):\n{experiences}\n\n"
+             "CANDIDATE PROJECTS (with style variants and suggested_keywords, pre-scored by relevance + depth):\n{projects}\n\n"
              "{revision}"
              "{feedback}\n\n"
              "Return JSON with this structure:\n"
@@ -416,15 +462,15 @@ class ResumeTailorAgent:
         skill = breakdown["skill_coverage"]
         skill_coverage_pct = skill["score"]
 
-        # Retry threshold stays priority-keyword based: full-JD coverage of a
-        # sections-only output is structurally low and would always trigger retries.
-        tailored_str = ATSScoringEngine.flatten_tailored_text(state["tailored_content"]).lower()
-        priority_keywords = state.get("priority_keywords", [])
-        kw_hits = sum(1 for kw in priority_keywords if kw in tailored_str)
-        kw_coverage = kw_hits / len(priority_keywords) if priority_keywords else 1.0
-        kw_gaps = [kw for kw in priority_keywords if kw not in tailored_str]
-        if not kw_gaps:
-            kw_gaps = breakdown["keyword_coverage"]["missing_keywords"]
+        # Keyword coverage is now PLACEMENT precision (issue #72): a keyword counts
+        # only when it lands in the specific item it was assigned to, so the loop
+        # rewards contextual placement rather than blind attachment anywhere.
+        assignments = state.get("keyword_assignments") or {}
+        placement = evaluate_placement(assignments, self._rendered_by_key(state["tailored_content"]))
+        kw_coverage = placement["precision"]
+
+        # Faithfulness: flag experiences whose revision drifted far from source.
+        drift = self._faithfulness_drift(state["tailored_content"], state.get("experiences") or [])
 
         evaluation = {
             "coverage_pct": round(skill_coverage_pct, 1),
@@ -432,7 +478,9 @@ class ResumeTailorAgent:
             "total": skill["total"],
             "gaps": skill["gaps"],
             "kw_coverage": round(kw_coverage * 100, 1),
-            "kw_gaps": kw_gaps[:10],
+            "placement_gaps": placement["gaps"],
+            "placement_misplaced": placement["misplaced"],
+            "faithfulness_drift": drift,
             "over_repeated": self._over_repeated_terms(state["tailored_content"]),
             "ats_breakdown": breakdown,
         }
@@ -449,7 +497,7 @@ class ResumeTailorAgent:
 
         logger.info(
             f"Coverage: skills {skill_coverage_pct:.1f}% ({skill['covered']}/{skill['total']}), "
-            f"priority keywords {kw_coverage * 100:.1f}% ({kw_hits}/{len(priority_keywords)}), "
+            f"keyword placement {kw_coverage * 100:.1f}% ({placement['placed']}/{placement['total']}), "
             f"algorithmic composite {breakdown['composite']}"
             + (f" (baseline {breakdown['baseline_composite']}, delta {breakdown['delta']:+})"
                if "delta" in breakdown else "")
@@ -634,6 +682,121 @@ class ResumeTailorAgent:
             e for e in kept
             if (e.get("bullets") or (e.get("description") or "").strip())
         ]
+
+    # ── Contextual keyword planning (issue #72) ──────────────────────────────
+
+    @staticmethod
+    def _exp_key(e: Dict) -> str:
+        return f"exp:{(e.get('title') or '').strip().lower()}|{(e.get('company') or '').strip().lower()}"
+
+    @staticmethod
+    def _proj_key(p: Dict) -> str:
+        return f"proj:{(p.get('name') or '').strip().lower()}"
+
+    @classmethod
+    def _label_for_key(cls, key: str, state: "TailorState") -> str:
+        """Human-readable label (title/name) for an item key, for retry feedback."""
+        if key.startswith("exp:"):
+            for e in state.get("experiences") or []:
+                if cls._exp_key(e) == key:
+                    return e.get("title") or key
+        elif key.startswith("proj:"):
+            for p in state.get("projects") or []:
+                if cls._proj_key(p) == key:
+                    return p.get("name") or key
+        return key
+
+    @staticmethod
+    def _exp_source_text(e: Dict) -> str:
+        return " ".join([
+            e.get("title") or "", e.get("company") or "", e.get("description") or "",
+            *(e.get("bullets") or []),
+        ])
+
+    @staticmethod
+    def _proj_source_text(p: Dict) -> str:
+        return " ".join([
+            p.get("name") or "", p.get("description") or "",
+            *((p.get("blurbs") or {}).values()),
+        ])
+
+    @classmethod
+    def _plan_keywords(
+        cls,
+        exp_dicts: List[Dict],
+        proj_dicts: List[Dict],
+        jd_text: str,
+        missing_keywords: List[str],
+        skill_terms: List[str],
+        corpus: List[str],
+    ) -> tuple:
+        """
+        Signal-rank the missing JD keywords and assign each to the one item whose
+        source text supports it (issue #72). Mutates the exp/proj dicts to carry a
+        per-item 'suggested_keywords' list for the generator, and returns
+        (priority_keywords, assignments) for the state.
+        """
+        scored = score_keywords(missing_keywords, jd_text, corpus, skill_terms)
+        items = (
+            [{"key": cls._exp_key(e), "source_text": cls._exp_source_text(e)} for e in exp_dicts]
+            + [{"key": cls._proj_key(p), "source_text": cls._proj_source_text(p)} for p in proj_dicts]
+        )
+        assignments = assign_keywords(scored, items, jd_text)
+        for e in exp_dicts:
+            e["suggested_keywords"] = assignments.get(cls._exp_key(e), [])
+        for p in proj_dicts:
+            p["suggested_keywords"] = assignments.get(cls._proj_key(p), [])
+        return [kw for kw, _ in scored], assignments
+
+    @classmethod
+    def _rendered_by_key(cls, tailored_content: Dict) -> Dict[str, str]:
+        """Map each generated item to its rendered bullet text, keyed like the
+        assignments, so placement can be scored per item (issue #72)."""
+        out: Dict[str, str] = {}
+        for e in tailored_content.get("experiences") or []:
+            out[cls._exp_key(e)] = " ".join(e.get("bullets") or [])
+        for p in tailored_content.get("projects") or []:
+            out[cls._proj_key(p)] = " ".join(p.get("bullets") or [])
+        return out
+
+    @staticmethod
+    def _faithfulness_drift(tailored_content: Dict, source_experiences: List[Dict]) -> List[str]:
+        """
+        Item labels whose revised bullets drifted far from their source bullets
+        (issue #72) — a signal that the model rewrote rather than revised. Uses
+        mean best-Jaccard of each source bullet against the generated bullets;
+        below FAITHFULNESS_MIN the item is flagged. Items with no source bullets
+        (nothing to preserve) are skipped.
+        """
+        def toks(s: str) -> set:
+            return ATSScoringEngine._extract_keywords(s or "")
+
+        src_by_key = {
+            f"{(e.get('title') or '').strip().lower()}|{(e.get('company') or '').strip().lower()}": e
+            for e in source_experiences
+        }
+        drifted: List[str] = []
+        for gen in tailored_content.get("experiences") or []:
+            key = f"{(gen.get('title') or '').strip().lower()}|{(gen.get('company') or '').strip().lower()}"
+            src = src_by_key.get(key)
+            if not src:
+                continue
+            src_bullets = src.get("bullets") or []
+            gen_toks = [toks(b) for b in (gen.get("bullets") or [])]
+            if not src_bullets or not gen_toks:
+                continue
+            overlaps = []
+            for sb in src_bullets:
+                st = toks(sb)
+                if not st:
+                    continue
+                best = max(
+                    (len(st & gt) / len(st | gt) if (st | gt) else 0.0) for gt in gen_toks
+                )
+                overlaps.append(best)
+            if overlaps and sum(overlaps) / len(overlaps) < FAITHFULNESS_MIN:
+                drifted.append(gen.get("title") or key)
+        return drifted
 
     @classmethod
     def _over_repeated_terms(cls, tailored_content: Dict) -> Dict[str, int]:
