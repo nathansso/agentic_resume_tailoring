@@ -4,6 +4,23 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issue 72 — Project & experience tailoring: fewer, better-described, truthful
+**Status:** complete | **Tests:** 561 pass (26 new)
+
+Reported set of tailoring-quality defects on the experience/project sections: too many (and malformed) experiences, malformed dates, dropped bullets leaving blank space, oversimplified/over-many projects, "rewrite" instead of "revise", and blindly-attached ATS keywords. Root causes were verified against real rows in the local DB (a 0-bullet `IDXExchange` near-duplicate of `IDX Exchange`, a `Not specified -- Present` date rendered into shipped resumes). Delivered as three stacked PRs.
+
+### What shipped
+- **Deterministic experience/project guards + selection tuning (PR1).** Tailor-time experience filter drops content-empty stubs, fuzzy-dedupes near-duplicate rows (keeping the richest), and coerces placeholder dates to None; dates and canonical title/company are re-attached from the DB after generation so the LLM can no longer author/malform them; experiences the model silently drops are restored (bounded by how many it omitted, so a rename is not duplicated); the per-experience bullet floor rose 1 → 2. Project selection capped 5 → 3 with a new recency component so a strong active project is not displaced by a weaker-but-relevant stale one. The formatter skips the itemize for zero-bullet entries (was emitting empty `\resumeItemListStart/End`), and the one-page trim ladder inverted: shave bullets only to a floor of 2, then drop the entire weakest project before starving survivors; experiences protected over projects.
+- **Revise-not-rewrite contract + contextual keyword placement (PR2).** New `agents/keyword_planner.py` (pure): `score_keywords` ranks missing JD keywords by JD TF × corpus IDF with a skill-graph boost and boilerplate penalty; `assign_keywords` places each keyword on the single experience/project whose own source text supports it (direct hit, else JD-neighborhood overlap), dropping keywords that fit nowhere rather than stapling them onto the wrong item; `evaluate_placement` scores whether each keyword landed in its assigned item. Each item carries per-item `suggested_keywords` into a rewritten prompt that revises source bullets (keep facts/numbers/meaning) instead of rewriting; the evaluate node scores keyword *placement* (not mere presence) plus a deterministic faithfulness check, both feeding per-item retry feedback.
+- **Ingestion hygiene (PR3).** Placeholder-date coercion and fuzzy dedup moved into the parser save paths (resume + LinkedIn) so new ingests stop creating the junk; `_heal_experiences`/`_heal_projects` merge pre-existing fuzzy-duplicate rows and coerce dates at the end of `parse_and_save`, cleaning up earlier junk without a from-scratch re-import (no-op on clean data).
+
+### Deviations from spec
+- Near-duplicate rows whose company strings differ non-trivially (e.g. `UCSD's Department of Economics` vs `UCSD Department of Economics`) are not merged by the fuzzy matcher; their placeholder dates are still coerced, and the tailor-time filter bounds the impact.
+- Keyword faithfulness is a soft steering signal (lenient threshold), not a hard gate — legitimate keyword insertion and tightening lower source overlap by design.
+- Self-heal dry-run against the live local `art.db` was blocked by pre-existing dev-DB schema drift (missing `project.demo_url` column), unrelated to this change; heal logic is covered by unit tests on the current schema instead.
+
+---
+
 ## Issues 70 & 71 follow-up — Overleaf-style workspace: live compile, drag-on-PDF reorder, chat-centric insights
 **Status:** complete | **Tests:** 519 Python pass (5 new) + 59 vitest (10 → 59)
 
