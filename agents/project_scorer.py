@@ -1,7 +1,9 @@
 """
-Project selection scoring (issue #46).
+Project selection scoring (issue #46, recency added in #72).
 
-Composite score = RELEVANCE_WEIGHT * relevance + COMPLEXITY_WEIGHT * complexity.
+Composite score = RELEVANCE_WEIGHT * relevance
+                + COMPLEXITY_WEIGHT * complexity
+                + RECENCY_WEIGHT * recency.
 
 Relevance (0-100) is the fraction of JD keywords found in the project's text
 (name + description + blurbs) — the same keyword machinery as ATSScoringEngine.
@@ -14,29 +16,44 @@ average of saturating sub-signals (each min(value / cap, 1.0)):
   - github_metrics: stars / language count / README length, omitted from the
     average when the project has no ingested GitHub metrics
 
+Recency (0-100) reads the project's end_date: an active project ("Present")
+scores highest and decays with age. This keeps a strong project the user is
+currently building from being displaced by a weaker-but-more-relevant one
+(issue #72). A project with no parseable date gets a neutral score so it is
+neither rewarded nor punished for missing metadata.
+
 The blend lets an impressive-but-adjacent project outrank a thin
 exact-keyword-match project.
 
 score_project() is a pure function over a project dict — no DB or LLM access.
-Callers (agents/tailor.py) attach 'linked_skills' and 'metrics' to the dict
-before scoring.
+Callers (agents/tailor.py) attach 'linked_skills', 'metrics', and dates to the
+dict before scoring.
 """
+import re
+from datetime import date
 from typing import Dict, List, Optional
 
 from agents.ats_scorer import ATSScoringEngine
 
 # Component weights — must sum to 1.0. Tune selection behavior here.
-RELEVANCE_WEIGHT = 0.65
-COMPLEXITY_WEIGHT = 0.35
+RELEVANCE_WEIGHT = 0.55
+COMPLEXITY_WEIGHT = 0.30
+RECENCY_WEIGHT = 0.15
 
 # Dynamic top-k selection bounds (issue #47). k is chosen by a "drop-off + bounds"
 # rule rather than a hardcoded count: always include MIN_PROJECTS, then keep adding
 # the next project only while its score holds up against both the previous kept
-# project and the top project, clamped at MAX_PROJECTS.
+# project and the top project, clamped at MAX_PROJECTS. Capped at 3 (issue #72):
+# a few well-described projects beat a long list of thin ones.
 MIN_PROJECTS = 2
-MAX_PROJECTS = 5
+MAX_PROJECTS = 3
 DROPOFF_RATIO = 0.60   # keep next project only if its score >= 60% of the previous kept score
 TOP_RATIO = 0.50       # ...and >= 50% of the top score
+
+# Recency scoring (issue #72).
+_RECENCY_ACTIVE_TOKENS = ("present", "current", "ongoing", "now")
+_RECENCY_NEUTRAL = 60.0        # no parseable date → neither reward nor punish
+RECENCY_DECAY_PER_YEAR = 12.0  # points lost per year since the project ended
 
 # Saturation caps: a sub-signal reaches its maximum contribution at the cap.
 LINKED_SKILLS_CAP = 8      # distinct knowledge-graph skills evidencing the project
@@ -112,22 +129,45 @@ def _complexity(proj: Dict) -> Dict:
     }
 
 
+def _recency(proj: Dict) -> Dict:
+    """Score how recent/active a project is from its end_date, scaled to 0-100.
+
+    'Present'/'current'/… → 100; a parseable year decays by
+    RECENCY_DECAY_PER_YEAR per year since; an unparseable/missing date →
+    _RECENCY_NEUTRAL (no penalty for missing metadata).
+    """
+    end = str(proj.get("end_date") or "").strip().lower()
+    if not end:
+        return {"score": _RECENCY_NEUTRAL}
+    if any(tok in end for tok in _RECENCY_ACTIVE_TOKENS):
+        return {"score": 100.0}
+    match = re.search(r"(?:19|20)\d{2}", end)
+    if not match:
+        return {"score": _RECENCY_NEUTRAL}
+    age = max(0, date.today().year - int(match.group()))
+    return {"score": round(max(0.0, 100.0 - age * RECENCY_DECAY_PER_YEAR), 1)}
+
+
 def score_project(proj: Dict, jd_text: str) -> Dict:
     """
     Composite selection score for one project dict.
 
-    Returns {"composite": float, "relevance": {...}, "complexity": {...}},
-    all scores on a 0-100 scale.
+    Returns {"composite": float, "relevance": {...}, "complexity": {...},
+    "recency": {...}}, all scores on a 0-100 scale.
     """
     relevance = _relevance(proj, jd_text)
     complexity = _complexity(proj)
+    recency = _recency(proj)
     composite = (
-        RELEVANCE_WEIGHT * relevance["score"] + COMPLEXITY_WEIGHT * complexity["score"]
+        RELEVANCE_WEIGHT * relevance["score"]
+        + COMPLEXITY_WEIGHT * complexity["score"]
+        + RECENCY_WEIGHT * recency["score"]
     )
     return {
         "composite": round(composite, 1),
         "relevance": relevance,
         "complexity": complexity,
+        "recency": recency,
     }
 
 

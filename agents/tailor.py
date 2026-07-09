@@ -12,7 +12,7 @@ Flow:
 import logging
 import json
 import re
-from typing import Dict, Any, List, TypedDict, Annotated
+from typing import Dict, Any, List, Optional, TypedDict, Annotated
 from uuid import UUID
 from sqlmodel import Session, select
 from langchain_core.prompts import ChatPromptTemplate
@@ -43,8 +43,17 @@ GREAT_KW_COVERAGE = _env_float("TAILOR_GREAT_KW_COVERAGE", 0.80)
 # Per-experience bullet budgets: the most JD-relevant experience gets up to
 # MAX_EXP_BULLETS bullets, the least relevant as few as MIN_EXP_BULLETS, so
 # text volume tracks relevance instead of every experience getting equal space.
+# The floor is 2 (not 1): a single-bullet experience reads as an afterthought,
+# and issue #72 asks that we revise/keep experiences rather than starve them.
 MAX_EXP_BULLETS = _env_int("TAILOR_MAX_EXP_BULLETS", 4)
-MIN_EXP_BULLETS = _env_int("TAILOR_MIN_EXP_BULLETS", 1)
+MIN_EXP_BULLETS = _env_int("TAILOR_MIN_EXP_BULLETS", 2)
+
+# Date strings the extractor emits when a real date is absent. They are stored
+# verbatim and would otherwise render as "Not specified -- Present" (issue #72);
+# tailoring coerces them to None so the formatter omits the date instead.
+_PLACEHOLDER_DATE_TOKENS = {
+    "", "not specified", "unknown", "unspecified", "n/a", "na", "none", "tbd", "-",
+}
 
 # A skill term used more than this many times across the tailored output reads
 # as keyword stuffing; the evaluator flags offenders into retry feedback.
@@ -160,10 +169,15 @@ class ResumeTailorAgent:
                     "metrics": _as_obj(p.metrics, {}),
                     "repo_url": p.repo_url,
                     "demo_url": p.demo_url,
+                    "start_date": p.start_date,
+                    "end_date": p.end_date,
                 })
 
             # Priority keywords: top missing JD keywords from latest score_breakdown
             jd_text = job.description if job else ""
+            # Drop malformed/duplicate experience rows and coerce placeholder
+            # dates before ranking, so junk rows never reach the resume (issue #72).
+            exp_dicts = self._filter_and_dedupe_experiences(exp_dicts)
             # Relevance-rank experiences and attach per-experience bullet budgets
             # so text volume tracks JD relevance (most relevant = most detail).
             exp_dicts = self._score_and_budget_experiences(exp_dicts, jd_text)
@@ -491,27 +505,135 @@ class ResumeTailorAgent:
     @staticmethod
     def _enforce_bullet_budgets(generated: List[Dict], budgeted: List[Dict]) -> List[Dict]:
         """
-        Deterministic guarantee behind the prompt's bullet_budget rule: reorder
-        the LLM's experiences to the pre-ranked relevance order and truncate any
-        that exceed their budget. Experiences the LLM renamed keep their bullets
-        and sort after the recognized ones, in original relative order.
+        Deterministic guarantee behind the prompt's bullet_budget rule (issue #72):
+
+        - Reorder the LLM's experiences to the pre-ranked relevance order and
+          truncate any that exceed their budget.
+        - Re-attach dates and canonical title/company from the source rows rather
+          than trusting the LLM round trip — the model must not author or malform
+          dates (same rationale as project links, issue #75).
+        - Restore experiences the model silently dropped: it may shorten an
+          experience, never delete one. The number restored is bounded by how many
+          the model actually omitted, so a *renamed* experience (count preserved)
+          is treated as a replacement, not a deletion, and is not duplicated.
+
+        Experiences the LLM renamed keep their bullets and sort after the
+        recognized ones, in original relative order.
         """
         def key(e: Dict) -> tuple:
             return ((e.get("title") or "").strip().lower(),
                     (e.get("company") or "").strip().lower())
 
         rank = {key(e): i for i, e in enumerate(budgeted)}
-        budgets = {key(e): e.get("bullet_budget") for e in budgeted}
+        source = {key(e): e for e in budgeted}
         fallback = len(budgeted)
 
-        out = []
+        def _trim(bullets: List, budget) -> List:
+            bullets = bullets or []
+            return bullets[:budget] if budget and len(bullets) > budget else bullets
+
+        out: List[Dict] = []
+        seen: set = set()
         for e in sorted(generated or [], key=lambda e: rank.get(key(e), fallback)):
-            budget = budgets.get(key(e))
-            bullets = e.get("bullets") or []
-            if budget and len(bullets) > budget:
-                e = {**e, "bullets": bullets[:budget]}
+            k = key(e)
+            src = source.get(k)
+            if src is not None:
+                seen.add(k)
+                e = {
+                    **e,
+                    "title": src.get("title", e.get("title")),
+                    "company": src.get("company", e.get("company")),
+                    "start_date": src.get("start_date"),
+                    "end_date": src.get("end_date"),
+                    "bullets": _trim(e.get("bullets"), src.get("bullet_budget")),
+                }
             out.append(e)
+
+        # Restore only as many missing experiences as the model actually dropped
+        # (len(source) - len(generated)); renames preserve the count and restore 0.
+        n_missing = max(0, len(budgeted) - len(generated or []))
+        if n_missing:
+            unseen = [src for k, src in source.items() if k not in seen]
+            for src in unseen[:n_missing]:
+                out.append({
+                    "title": src.get("title"),
+                    "company": src.get("company"),
+                    "start_date": src.get("start_date"),
+                    "end_date": src.get("end_date"),
+                    "bullets": _trim(src.get("bullets"), src.get("bullet_budget")),
+                })
+
+        out.sort(key=lambda e: rank.get(key(e), fallback))
         return out
+
+    # Experience strings that mean "no real date" — coerced to None at tailor
+    # time so the formatter omits the date rather than printing the placeholder.
+    @staticmethod
+    def _clean_exp_date(value) -> Optional[str]:
+        v = str(value or "").strip()
+        return None if v.lower() in _PLACEHOLDER_DATE_TOKENS else v
+
+    @staticmethod
+    def _norm_exp_text(value) -> str:
+        """Lowercase, strip punctuation to spaces, collapse whitespace."""
+        s = re.sub(r"[^a-z0-9 ]+", " ", str(value or "").lower())
+        return re.sub(r"\s+", " ", s).strip()
+
+    @classmethod
+    def _fuzzy_eq(cls, a, b) -> bool:
+        """Equal after normalization, ignoring spacing ('IDXExchange' ==
+        'IDX Exchange'), or containment for sufficiently long strings."""
+        na, nb = cls._norm_exp_text(a), cls._norm_exp_text(b)
+        if not na or not nb:
+            return False
+        if na == nb or na.replace(" ", "") == nb.replace(" ", ""):
+            return True
+        shorter, longer = sorted((na, nb), key=len)
+        return len(shorter) >= 10 and shorter in longer
+
+    @classmethod
+    def _exp_matches(cls, a: Dict, b: Dict) -> bool:
+        return (cls._fuzzy_eq(a.get("title"), b.get("title"))
+                and cls._fuzzy_eq(a.get("company"), b.get("company")))
+
+    @staticmethod
+    def _exp_richness(e: Dict) -> tuple:
+        """Sort key for choosing the best of duplicate rows: more bullets, then
+        real dates, then longer description."""
+        has_dates = bool(e.get("start_date")) + bool(e.get("end_date"))
+        return (len(e.get("bullets") or []), has_dates, len((e.get("description") or "").strip()))
+
+    @classmethod
+    def _filter_and_dedupe_experiences(cls, exp_dicts: List[Dict]) -> List[Dict]:
+        """
+        Clean the experience set before ranking (issue #72):
+          1. Coerce placeholder dates ("Not specified", "unknown", …) to None.
+          2. Fuzzy-dedupe near-identical rows, keeping the richest of each group
+             (e.g. 'IDX Exchange' with 4 bullets over 'IDXExchange' with 0).
+          3. Drop content-empty stubs — rows with no bullets and no description —
+             which render as a bare heading with blank space.
+        """
+        cleaned = [
+            {
+                **e,
+                "start_date": cls._clean_exp_date(e.get("start_date")),
+                "end_date": cls._clean_exp_date(e.get("end_date")),
+            }
+            for e in (exp_dicts or [])
+        ]
+
+        kept: List[Dict] = []
+        for e in cleaned:
+            idx = next((i for i, k in enumerate(kept) if cls._exp_matches(e, k)), None)
+            if idx is None:
+                kept.append(e)
+            elif cls._exp_richness(e) > cls._exp_richness(kept[idx]):
+                kept[idx] = e
+
+        return [
+            e for e in kept
+            if (e.get("bullets") or (e.get("description") or "").strip())
+        ]
 
     @classmethod
     def _over_repeated_terms(cls, tailored_content: Dict) -> Dict[str, int]:
@@ -737,6 +859,7 @@ class ResumeTailorAgent:
                 "selection_breakdown": {
                     "relevance": breakdown["relevance"]["score"],
                     "complexity": breakdown["complexity"]["score"],
+                    "recency": breakdown["recency"]["score"],
                 },
             })
 

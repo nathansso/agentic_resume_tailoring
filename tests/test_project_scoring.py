@@ -13,6 +13,7 @@ import agents.project_scorer as project_scorer
 from agents.project_scorer import (
     RELEVANCE_WEIGHT,
     COMPLEXITY_WEIGHT,
+    RECENCY_WEIGHT,
     LINKED_SKILLS_CAP,
     TEXT_RICHNESS_CAP,
     BLURB_VARIETY_CAP,
@@ -113,14 +114,47 @@ def test_composite_is_weighted_blend():
     expected = (
         RELEVANCE_WEIGHT * result["relevance"]["score"]
         + COMPLEXITY_WEIGHT * result["complexity"]["score"]
+        + RECENCY_WEIGHT * result["recency"]["score"]
     )
     assert abs(result["composite"] - expected) < 0.1
+
+
+# ── score_project: recency (issue #72) ────────────────────────────────────────
+
+def test_recency_active_project_scores_max():
+    active = {**THIN_PROJECT, "end_date": "Present"}
+    assert score_project(active, JD_TEXT)["recency"]["score"] == 100.0
+
+
+def test_recency_decays_with_age():
+    from datetime import date
+    old = {**THIN_PROJECT, "end_date": f"{date.today().year - 4}-06"}
+    recent = {**THIN_PROJECT, "end_date": f"{date.today().year}-06"}
+    assert (
+        score_project(recent, JD_TEXT)["recency"]["score"]
+        > score_project(old, JD_TEXT)["recency"]["score"]
+    )
+
+
+def test_recency_missing_date_is_neutral_not_zero():
+    from agents.project_scorer import _RECENCY_NEUTRAL
+    assert score_project(THIN_PROJECT, JD_TEXT)["recency"]["score"] == _RECENCY_NEUTRAL
+
+
+def test_recency_boosts_current_project_over_stale_relevant_one():
+    """A strong active project should not lose to a weaker but relevant stale one."""
+    active_strong = {**RICH_PROJECT, "end_date": "Present"}
+    stale_relevant = {**THIN_PROJECT, "end_date": "2015-01"}
+    assert (
+        score_project(active_strong, JD_TEXT)["composite"]
+        > score_project(stale_relevant, JD_TEXT)["composite"]
+    )
 
 
 # ── Module constants ──────────────────────────────────────────────────────────
 
 def test_weights_and_caps_are_named_constants():
-    assert abs(RELEVANCE_WEIGHT + COMPLEXITY_WEIGHT - 1.0) < 1e-9
+    assert abs(RELEVANCE_WEIGHT + COMPLEXITY_WEIGHT + RECENCY_WEIGHT - 1.0) < 1e-9
     for cap in (LINKED_SKILLS_CAP, TEXT_RICHNESS_CAP, BLURB_VARIETY_CAP,
                 STARS_CAP, LANGUAGES_CAP, README_LENGTH_CAP):
         assert cap > 0
@@ -136,7 +170,7 @@ def test_select_projects_sorts_by_composite_and_attaches_breakdown():
     scores = [p["selection_score"] for p in selected]
     assert scores == sorted(scores, reverse=True)
     for p in selected:
-        assert set(p["selection_breakdown"]) == {"relevance", "complexity"}
+        assert set(p["selection_breakdown"]) == {"relevance", "complexity", "recency"}
 
 
 def test_select_projects_strips_scoring_inputs_from_llm_payload():
@@ -165,10 +199,10 @@ def test_select_top_k_excludes_low_relevance_tail():
 
 
 def test_select_top_k_fills_up_to_max_on_gentle_slope():
-    # A gentle slope of strong scores fills to MAX_PROJECTS and no further.
+    # A gentle slope of strong scores fills to MAX_PROJECTS (3) and no further.
     selected = select_top_k(_scored(90, 88, 86, 84, 82, 80, 78))
     assert len(selected) == MAX_PROJECTS
-    assert [p["selection_score"] for p in selected] == [90, 88, 86, 84, 82]
+    assert [p["selection_score"] for p in selected] == [90, 88, 86]
 
 
 def test_select_top_k_respects_min_even_on_immediate_dropoff():

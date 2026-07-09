@@ -364,6 +364,65 @@ def test_tex_special_chars_escaped(isolated_engine, monkeypatch):
     assert r"\$1M budget" in tex
 
 
+# ── zero-bullet entries and placeholder dates (issue #72) ─────────────────────
+
+def _one_exp_content(**overrides):
+    exp = {
+        "title": "Analyst", "company": "Acme", "start_date": "2023-01",
+        "end_date": "Present", "location": "", "bullets": ["Did a thing"],
+    }
+    exp.update(overrides)
+    return {"experiences": [exp], "projects": [], "skills_emphasized": []}
+
+
+def _document_body(tex: str) -> str:
+    """The part after \\begin{document} — excludes the preamble's \\newcommand defs."""
+    return tex.split(r"\begin{document}", 1)[1]
+
+
+def test_experience_with_no_bullets_skips_itemize(isolated_engine, monkeypatch):
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    # A description-only experience still renders its heading but no empty itemize.
+    content = _one_exp_content(bullets=[])
+    body = _document_body(ResumeFormatterAgent(user.user_id)._build_tex(content))
+    assert "{Analyst}" in body
+    assert r"\resumeItemListStart" not in body
+    assert r"\resumeItemListEnd" not in body
+
+
+def test_project_with_no_bullets_skips_itemize(isolated_engine, monkeypatch):
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    content = {
+        "experiences": [],
+        "projects": [{"name": "Solo", "bullets": []}],
+        "skills_emphasized": [],
+    }
+    body = _document_body(ResumeFormatterAgent(user.user_id)._build_tex(content))
+    assert r"\textbf{Solo}" in body
+    assert r"\resumeItemListStart" not in body
+
+
+def test_placeholder_start_date_is_omitted(isolated_engine, monkeypatch):
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    content = _one_exp_content(start_date="Not specified", end_date="Present")
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(content)
+    assert "Not specified" not in tex
+    # Only the real end date renders, with no dangling "--" separator.
+    assert "{Analyst}{Present}" in tex
+
+
+def test_placeholder_both_dates_render_blank(isolated_engine, monkeypatch):
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    content = _one_exp_content(start_date="unknown", end_date="N/A")
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(content)
+    assert "unknown" not in tex and "N/A" not in tex
+    assert "{Analyst}{}" in tex
+
+
 # ── format_tex() ──────────────────────────────────────────────────────────────
 
 def test_format_tex_returns_string(isolated_engine, monkeypatch):
@@ -461,7 +520,24 @@ def test_pdflatex_produces_valid_pdf(isolated_engine, monkeypatch):
 
 # ── one-page fit enforcement (issue #34), pure logic — no LaTeX engine ─────────
 
-def test_trim_one_bullet_drops_lowest_project_first():
+def test_trim_one_bullet_trims_project_fat_to_floor_first():
+    # Above the floor: the lowest-ranked project's last bullet goes first.
+    content = {
+        "projects": [
+            {"name": "A", "bullets": ["a1", "a2", "a3"]},
+            {"name": "B", "bullets": ["b1", "b2", "b3"]},
+        ],
+    }
+    trimmed = _trim_one_bullet(content)
+    assert trimmed["projects"][1]["bullets"] == ["b1", "b2"]   # B trimmed toward floor
+    assert trimmed["projects"][0]["bullets"] == ["a1", "a2", "a3"]
+    # Original is untouched (operates on a copy).
+    assert content["projects"][1]["bullets"] == ["b1", "b2", "b3"]
+
+
+def test_trim_one_bullet_drops_whole_project_at_floor():
+    # Both projects already at the floor (2): drop the weakest entire project
+    # rather than starve the survivors (issue #72).
     content = {
         "projects": [
             {"name": "A", "bullets": ["a1", "a2"]},
@@ -469,27 +545,36 @@ def test_trim_one_bullet_drops_lowest_project_first():
         ],
     }
     trimmed = _trim_one_bullet(content)
-    # Lowest-priority project is last (B) — its last bullet goes first.
-    assert trimmed["projects"][1]["bullets"] == ["b1"]
-    assert trimmed["projects"][0]["bullets"] == ["a1", "a2"]
-    # Original is untouched (operates on a copy).
-    assert content["projects"][1]["bullets"] == ["b1", "b2"]
+    assert [p["name"] for p in trimmed["projects"]] == ["A"]
+    assert trimmed["projects"][0]["bullets"] == ["a1", "a2"]  # survivor keeps its bullets
 
 
 def test_trim_one_bullet_never_empties_a_project():
     content = {"projects": [{"name": "A", "bullets": ["only"]}]}
-    # A single-bullet project can't be trimmed; with no other text, returns None.
+    # A single-bullet lone project can't be trimmed; with no other text, None.
     assert _trim_one_bullet(content) is None
 
 
 def test_trim_one_bullet_falls_back_to_experiences():
+    # One lone project already at one bullet, experiences carry the fat.
+    content = {
+        "projects": [{"name": "A", "bullets": ["a1"]}],
+        "experiences": [{"title": "T", "bullets": ["e1", "e2", "e3"]}],
+    }
+    trimmed = _trim_one_bullet(content)
+    assert trimmed["experiences"][0]["bullets"] == ["e1", "e2"]  # exp fat to floor
+    assert trimmed["projects"][0]["bullets"] == ["a1"]
+
+
+def test_trim_one_bullet_protects_experiences_below_floor_last():
+    # Single project pinned at one bullet, experience at the floor: the last
+    # resort shaves the experience below the floor rather than failing.
     content = {
         "projects": [{"name": "A", "bullets": ["a1"]}],
         "experiences": [{"title": "T", "bullets": ["e1", "e2"]}],
     }
     trimmed = _trim_one_bullet(content)
     assert trimmed["experiences"][0]["bullets"] == ["e1"]
-    assert trimmed["projects"][0]["bullets"] == ["a1"]
 
 
 def test_trim_one_bullet_exhausted_returns_none():
@@ -501,12 +586,12 @@ def test_trim_one_bullet_exhausted_returns_none():
 
 
 def test_fit_to_one_page_trims_until_it_fits():
-    # Fake render/page-count: "fits" once total bullets <= 3.
+    # Fake render/page-count: "fits" once total bullets <= 4.
     def total_bullets(c):
         return sum(len(i["bullets"]) for i in c.get("projects", []))
 
     def page_count(rendered):
-        return 1 if rendered <= 3 else 2
+        return 1 if rendered <= 4 else 2
 
     content = {
         "projects": [
@@ -515,16 +600,17 @@ def test_fit_to_one_page_trims_until_it_fits():
         ],
     }
     fitted = _fit_to_one_page(content, total_bullets, page_count)
-    assert total_bullets(fitted) == 3
-    # Trimming came out of the lowest project (B) first.
-    assert len(fitted["projects"][0]["bullets"]) >= len(fitted["projects"][1]["bullets"])
+    assert total_bullets(fitted) <= 4
+    # Fat was trimmed from the lowest project (B) first, keeping both at/above floor.
+    assert all(len(p["bullets"]) >= 2 for p in fitted["projects"])
+    assert len(fitted["projects"]) == 2
 
 
 def test_fit_to_one_page_stops_when_exhausted():
     # Never fits, but the reducer bottoms out — loop must terminate, not hang.
     content = {"projects": [{"name": "A", "bullets": ["a1", "a2"]}]}
     fitted = _fit_to_one_page(content, lambda c: 0, lambda r: 2)
-    assert fitted["projects"][0]["bullets"] == ["a1"]  # trimmed to the floor, then stopped
+    assert fitted["projects"][0]["bullets"] == ["a1"]  # single project shaved to one, then stopped
 
 
 def test_fit_content_to_one_page_trims_overflow(isolated_engine, monkeypatch):

@@ -802,8 +802,93 @@ def test_enforce_bullet_budgets_keeps_renamed_experience():
     generated = [{"title": "Software Engineer (renamed)", "company": "Acme",
                   "bullets": ["b1", "b2", "b3"]}]
     out = ResumeTailorAgent._enforce_bullet_budgets(generated, budgeted)
-    # Unrecognized name: kept, sorted last, bullets untouched (no budget known).
+    # Unrecognized name: kept, bullets untouched (no budget known). The count is
+    # preserved, so the source row is treated as renamed — not restored/duplicated.
     assert len(out) == 1 and out[0]["bullets"] == ["b1", "b2", "b3"]
+
+
+def test_enforce_bullet_budgets_restores_dropped_experience():
+    from agents.tailor import ResumeTailorAgent
+
+    budgeted = [
+        {**_exp("Data Scientist", "IDX", ["orig-a1", "orig-a2"]), "bullet_budget": 2},
+        {**_exp("Research Assistant", "UCSD", ["orig-b1", "orig-b2", "orig-b3"]),
+         "bullet_budget": 2},
+        {**_exp("Analyst", "Cafe", ["orig-c1"]), "bullet_budget": 1},
+    ]
+    # The LLM silently dropped the middle experience.
+    generated = [
+        {"title": "Data Scientist", "company": "IDX", "bullets": ["k1", "k2"]},
+        {"title": "Analyst", "company": "Cafe", "bullets": ["k3"]},
+    ]
+    out = ResumeTailorAgent._enforce_bullet_budgets(generated, budgeted)
+
+    # All three experiences present, restored at the correct rank.
+    assert [e["title"] for e in out] == ["Data Scientist", "Research Assistant", "Analyst"]
+    # The restored one carries its original bullets, trimmed to budget.
+    assert out[1]["bullets"] == ["orig-b1", "orig-b2"]
+
+
+def test_enforce_bullet_budgets_passes_through_source_dates():
+    from agents.tailor import ResumeTailorAgent
+
+    budgeted = [{"title": "Analyst", "company": "Acme", "start_date": "2023-01",
+                 "end_date": "Present", "description": "", "bullets": [],
+                 "bullet_budget": 3}]
+    # The LLM fabricated/garbled the dates; they must be overwritten from source.
+    generated = [{"title": "Analyst", "company": "Acme",
+                  "start_date": "Not specified", "end_date": "2099",
+                  "bullets": ["k1"]}]
+    out = ResumeTailorAgent._enforce_bullet_budgets(generated, budgeted)
+    assert out[0]["start_date"] == "2023-01"
+    assert out[0]["end_date"] == "Present"
+
+
+# ── experience eligibility filter + dedupe (issue #72) ────────────────────────
+
+
+def test_filter_experiences_coerces_placeholder_dates():
+    from agents.tailor import ResumeTailorAgent
+
+    exps = [_exp("Analyst", "Acme", ["b1"])]
+    exps[0]["start_date"] = "Not specified"
+    exps[0]["end_date"] = "Present"
+    out = ResumeTailorAgent._filter_and_dedupe_experiences(exps)
+    assert out[0]["start_date"] is None
+    assert out[0]["end_date"] == "Present"  # real date preserved
+
+
+def test_filter_experiences_drops_content_empty_stub():
+    from agents.tailor import ResumeTailorAgent
+
+    good = _exp("Analyst", "Acme", ["b1"])
+    stub = {"title": "Intern", "company": "Nowhere", "start_date": None,
+            "end_date": None, "description": "", "bullets": []}
+    out = ResumeTailorAgent._filter_and_dedupe_experiences([good, stub])
+    assert [e["title"] for e in out] == ["Analyst"]
+
+
+def test_filter_experiences_dedupes_keeping_richest():
+    from agents.tailor import ResumeTailorAgent
+
+    rich = _exp("Data Science Intern", "IDX Exchange", ["b1", "b2", "b3", "b4"])
+    thin = {"title": "Data Science Intern", "company": "IDXExchange",
+            "start_date": "Not specified", "end_date": "Present",
+            "description": "", "bullets": []}
+    # Order shouldn't matter: the 4-bullet row wins over the 0-bullet near-dup.
+    out = ResumeTailorAgent._filter_and_dedupe_experiences([thin, rich])
+    assert len(out) == 1
+    assert out[0]["company"] == "IDX Exchange"
+    assert len(out[0]["bullets"]) == 4
+
+
+def test_filter_experiences_keeps_distinct_experiences():
+    from agents.tailor import ResumeTailorAgent
+
+    a = _exp("Data Scientist", "IDX", ["b1"])
+    b = _exp("Barista", "Cafe", ["b2"])
+    out = ResumeTailorAgent._filter_and_dedupe_experiences([a, b])
+    assert {e["title"] for e in out} == {"Data Scientist", "Barista"}
 
 
 def test_merge_project_links_attaches_repo_and_demo_url():
