@@ -4,7 +4,7 @@ import { colors, font } from "../theme";
 import { saveDescription, analyzeJob, tailorJob, getJob, exportUrl } from "../api/jobs";
 import { ChatPanel } from "./ChatPanel";
 import { ProgressBar } from "./ProgressBar";
-import { ResumeSplit } from "./ResumeSplit";
+import { ResumeSplit, type ResumeView } from "./ResumeSplit";
 import { jobInsightMessages } from "../lib/insightMessages";
 import { jobWelcome } from "../lib/welcome";
 
@@ -32,9 +32,19 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
   const [descInput, setDescInput] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
+  // Pane layout starts on Preview (compiled resume front and center); the chat
+  // column absorbs the hidden source pane's width until Split is chosen.
+  const [paneView, setPaneView] = useState<ResumeView>("preview");
+
+  useEffect(() => {
+    setPaneView("preview");
+  }, [job.job_id]);
 
   const tailored = job.status === "tailored" || job.status === "exported";
   const budgetUsed = job.retailor_count >= job.retailor_limit;
+  // Single visible resume pane keeps its exact Split-mode size — (100% − 400px)/2
+  // — pinned to the far right; the chat slides to claim the remainder.
+  const chatWide = tailored && paneView !== "split";
 
   async function runChain(startAt: "analyze" | "tailor") {
     setError(null);
@@ -143,7 +153,7 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
 
       {/* Three panes: chat (with insight briefings) | .tex editor | preview */}
       <div style={s.columns}>
-        <div style={s.chatCol}>
+        <div style={{ ...s.chatCol, width: chatWide ? "calc(50% + 200px)" : "400px" }}>
           <div style={s.chatWrap}>
             <ChatPanel
               jobId={job.job_id}
@@ -176,7 +186,13 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
 
           {tailored && (
             // Remount after each re-tailor so the editor reseeds from the fresh output
-            <ResumeSplit key={`${job.job_id}:${job.retailor_count}`} jobId={job.job_id} onEditsChanged={refreshJob} />
+            <ResumeSplit
+              key={`${job.job_id}:${job.retailor_count}`}
+              jobId={job.job_id}
+              view={paneView}
+              onViewChange={setPaneView}
+              onEditsChanged={refreshJob}
+            />
           )}
 
           {/* No JD yet: paste panel */}
@@ -237,8 +253,9 @@ const s: Record<string, CSSProperties> = {
   },
   columns: { display: "flex", flex: 1, minHeight: 0 },
   chatCol: {
-    flex: "0 0 400px", minWidth: 340, borderRight: `1px solid ${colors.primary}`,
+    flex: "0 0 auto", minWidth: 340, borderRight: `1px solid ${colors.primary}`,
     display: "flex", flexDirection: "column", minHeight: 0,
+    transition: "width 0.25s ease",
   },
   chatWrap: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" },
   resumeArea: {

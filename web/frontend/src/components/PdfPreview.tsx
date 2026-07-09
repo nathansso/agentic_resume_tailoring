@@ -14,6 +14,8 @@ export interface OverlayProps {
   enabled: boolean;
   onMoveSection: (key: string, targetIndex: number) => void;
   onMoveBullet: (groupIndex: number, fromIdx: number, toIdx: number) => void;
+  /** Double-click on the preview → jump the source editor to this tex line. */
+  onJumpToLine: (texLine: number) => void;
 }
 
 interface Props {
@@ -173,7 +175,15 @@ export function PdfPreview({ pdfData, compiling, error, paused, onRecompile, ove
               enabled={overlay.enabled && !compiling}
               onMoveSection={overlay.onMoveSection}
               onMoveBullet={overlay.onMoveBullet}
+              onJumpToLine={overlay.onJumpToLine}
             />
+          )}
+          {/* A drop/edit takes a compile round-trip to show — make the wait
+              unmistakable instead of leaving a silently stale render. */}
+          {hasRender && !error && (compiling || (overlay && !overlay.enabled)) && (
+            <div style={s.staleVeil}>
+              <span style={s.staleBadge}>Updating preview…</span>
+            </div>
           )}
         </div>
         {!hasRender && !error && (
@@ -207,5 +217,16 @@ const s: Record<string, CSSProperties> = {
     border: `1px solid ${colors.primary}`, background: "#525659",
   },
   pagesWrap: { position: "relative" },
+  staleVeil: {
+    position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 3,
+    background: "rgba(13,17,23,0.35)", display: "flex",
+    justifyContent: "center", alignItems: "flex-start",
+    pointerEvents: "none",
+  },
+  staleBadge: {
+    marginTop: "3rem", background: colors.surface, color: colors.accent,
+    border: `1px solid ${colors.accent}`, padding: "0.375rem 0.875rem",
+    fontSize: font.size.sm, fontWeight: 700, position: "sticky", top: "3rem",
+  },
   muted: { margin: "0.75rem", color: "#c9d1d9", fontSize: font.size.sm },
 };

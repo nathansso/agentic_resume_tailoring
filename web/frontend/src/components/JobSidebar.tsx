@@ -153,10 +153,10 @@ const s: Record<string, CSSProperties> = {
   railWrap: {
     position: "relative",
     flexShrink: 0,
-    width: "2.5rem",
+    width: "3.75rem",
   },
   rail: {
-    width: "2.5rem",
+    width: "3.75rem",
     height: "100%",
     borderRight: `1px solid ${colors.primary}`,
     background: colors.surface,
@@ -172,7 +172,6 @@ const s: Record<string, CSSProperties> = {
     fontWeight: 700,
     fontSize: "0.7rem",
     letterSpacing: "0.15em",
-    writingMode: "vertical-rl",
   },
   railCount: {
     color: colors.textMuted,

@@ -32,6 +32,10 @@ export interface SectionRegion {
   index: number;
   top: number;
   height: number;
+  /** Bottom of the rendered heading line — the full-width grab band. */
+  headingBottom: number;
+  /** Tex line index of the \section{...} heading (double-click jump target). */
+  texLine: number;
 }
 
 export interface BulletRegion {
@@ -40,6 +44,8 @@ export interface BulletRegion {
   bulletIndex: number;
   top: number;
   height: number;
+  /** Tex line index of the \resumeItem line (double-click jump target). */
+  texLine: number;
 }
 
 export interface OverlayModel {
@@ -97,21 +103,23 @@ export function buildOverlayModel(tex: string, lines: PdfTextLine[], pageHeight:
   // 1. Sections: match each block's own \section{...} text (headings are
   //    user-customizable — never hardcoded) against whole rendered lines,
   //    walking top-down so duplicate words elsewhere cannot confuse order.
-  const found: { key: string; index: number; lineIdx: number }[] = [];
+  const found: { key: string; index: number; lineIdx: number; texLine: number }[] = [];
   let cursor = 0;
   movable.forEach((sec, index) => {
     let headingNorm = "";
+    let headingTexLine = sec.startLine;
     for (let i = sec.startLine; i < sec.endLine; i++) {
       const m = SECTION_HEADING.exec(texLines[i]);
       if (m) {
         headingNorm = normalizeForMatch(m[1]);
+        headingTexLine = i;
         break;
       }
     }
     if (!headingNorm) return;
     for (let li = cursor; li < lines.length; li++) {
       if (normalizeForMatch(lines[li].text) === headingNorm) {
-        found.push({ key: sec.key, index, lineIdx: li });
+        found.push({ key: sec.key, index, lineIdx: li, texLine: headingTexLine });
         cursor = li + 1;
         return;
       }
@@ -122,7 +130,15 @@ export function buildOverlayModel(tex: string, lines: PdfTextLine[], pageHeight:
   const sections: SectionRegion[] = found.map((f, i) => {
     const top = lines[f.lineIdx].top;
     const nextTop = i + 1 < found.length ? lines[found[i + 1].lineIdx].top : pageHeight;
-    return { kind: "section", key: f.key, index: f.index, top, height: Math.max(0, nextTop - top) };
+    return {
+      kind: "section",
+      key: f.key,
+      index: f.index,
+      top,
+      height: Math.max(0, nextTop - top),
+      headingBottom: lines[f.lineIdx].bottom,
+      texLine: f.texLine,
+    };
   });
 
   // 2. Bullets: within the enclosing section band, continue an ordered line
@@ -139,7 +155,7 @@ export function buildOverlayModel(tex: string, lines: PdfTextLine[], pageHeight:
     const band = sections.find(sec => sec.key === group.sectionKey);
     if (!band) return;
     const bandEnd = band.top + band.height;
-    const anchors: { lineIdx: number }[] = [];
+    const anchors: { lineIdx: number; texLine: number }[] = [];
     let li = sectionCursors.get(group.sectionKey) ?? lines.findIndex(l => l.top >= band.top);
     if (li < 0) return;
     for (const bullet of group.bullets) {
@@ -160,7 +176,7 @@ export function buildOverlayModel(tex: string, lines: PdfTextLine[], pageHeight:
         }
       }
       if (hit < 0) return; // one unmatched bullet → drop the whole group
-      anchors.push({ lineIdx: hit });
+      anchors.push({ lineIdx: hit, texLine: bullet.line });
       li = hit + 1;
     }
     sectionCursors.set(group.sectionKey, li);
@@ -170,7 +186,14 @@ export function buildOverlayModel(tex: string, lines: PdfTextLine[], pageHeight:
         i + 1 < anchors.length
           ? lines[anchors[i + 1].lineIdx].top
           : lines[a.lineIdx].bottom + 4;
-      return { kind: "bullet", groupIndex, bulletIndex: i, top, height: Math.max(0, bottom - top) };
+      return {
+        kind: "bullet",
+        groupIndex,
+        bulletIndex: i,
+        top,
+        height: Math.max(0, bottom - top),
+        texLine: a.texLine,
+      };
     });
     bulletGroups.push({ groupIndex, bullets });
   });
@@ -191,4 +214,19 @@ export function targetIndexForPointer(y: number, bands: { top: number; height: n
 /** Splice-style target index for moving `from` to insertion `slot`. */
 export function slotToIndex(slot: number, from: number): number {
   return slot > from ? slot - 1 : slot;
+}
+
+/** Tex line a double-click at `y` should jump to (Overleaf-style source sync):
+ *  the bullet band under the pointer wins, then the enclosing section's
+ *  heading line; null outside any mapped region. */
+export function texLineForPointer(y: number, model: OverlayModel): number | null {
+  for (const g of model.bulletGroups) {
+    for (const b of g.bullets) {
+      if (y >= b.top && y < b.top + b.height) return b.texLine;
+    }
+  }
+  for (const sec of model.sections) {
+    if (y >= sec.top && y < sec.top + sec.height) return sec.texLine;
+  }
+  return null;
 }

@@ -5,8 +5,14 @@ import { useAutoCompile } from "../hooks/useAutoCompile";
 import { moveBulletTo, moveSectionTo } from "../lib/texStructure";
 import { PdfPreview } from "./PdfPreview";
 
+export type ResumeView = "split" | "source" | "preview";
+
 interface Props {
   jobId: string;
+  /** Pane layout — owned by the workspace so the chat column can widen when
+   *  only one resume pane is visible. */
+  view: ResumeView;
+  onViewChange: (view: ResumeView) => void;
   /** Fires after save/discard so the workspace can resync has_manual_edits. */
   onEditsChanged: () => void;
 }
@@ -17,10 +23,7 @@ const SAVE_DEBOUNCE_MS = 1800;
  *  the right. Edits auto-save and auto-compile a moment after typing stops
  *  (issues #70/#71 follow-up). The buffer seeds from the AI-tailored source
  *  or the last saved edit. */
-type View = "split" | "source" | "preview";
-
-export function ResumeSplit({ jobId, onEditsChanged }: Props) {
-  const [view, setView] = useState<View>("split");
+export function ResumeSplit({ jobId, view, onViewChange, onEditsChanged }: Props) {
   const [tex, setTex] = useState("");
   const [savedTex, setSavedTex] = useState("");
   const [source, setSource] = useState<"edited" | "generated">("generated");
@@ -32,6 +35,7 @@ export function ResumeSplit({ jobId, onEditsChanged }: Props) {
   const saveGen = useRef(0);
   const sourceRef = useRef(source);
   sourceRef.current = source;
+  const texAreaRef = useRef<HTMLTextAreaElement>(null);
 
   const dirty = tex !== savedTex;
   const ready = !loading && !loadError && tex !== "";
@@ -104,6 +108,25 @@ export function ResumeSplit({ jobId, onEditsChanged }: Props) {
     compile.compileNow(next);
   }
 
+  /** Double-click on the preview → reveal the source pane (if hidden), scroll
+   *  the matching tex line into view, and select it (Overleaf-style sync). */
+  function jumpToLine(line: number) {
+    if (view === "preview") onViewChange("split");
+    // Defer until after the view switch re-renders (display:none → visible).
+    window.setTimeout(() => {
+      const ta = texAreaRef.current;
+      if (!ta) return;
+      const lines = tex.split("\n");
+      if (line < 0 || line >= lines.length) return;
+      let start = 0;
+      for (let i = 0; i < line; i++) start += lines[i].length + 1;
+      ta.focus();
+      ta.setSelectionRange(start, start + lines[line].length);
+      const lineHeight = parseFloat(getComputedStyle(ta).lineHeight) || 18;
+      ta.scrollTop = Math.max(0, line * lineHeight - ta.clientHeight / 2);
+    }, 0);
+  }
+
   async function handleDiscard() {
     if (!window.confirm("Discard your manual edits and reset to the AI-tailored resume?")) return;
     setSaveError(null);
@@ -135,7 +158,7 @@ export function ResumeSplit({ jobId, onEditsChanged }: Props) {
         ? "Saved"
         : "";
 
-  const views: { key: View; label: string }[] = [
+  const views: { key: ResumeView; label: string }[] = [
     { key: "split", label: "Split" },
     { key: "source", label: "Source" },
     { key: "preview", label: "Preview" },
@@ -150,7 +173,7 @@ export function ResumeSplit({ jobId, onEditsChanged }: Props) {
             <button
               key={v.key}
               style={{ ...s.toggleBtn, ...(view === v.key ? s.toggleBtnActive : {}) }}
-              onClick={() => setView(v.key)}
+              onClick={() => onViewChange(v.key)}
             >
               {v.label}
             </button>
@@ -173,6 +196,7 @@ export function ResumeSplit({ jobId, onEditsChanged }: Props) {
         {/* Left: .tex source (hidden in preview-only view, state retained) */}
         <div style={{ ...s.editorPane, ...(view === "preview" ? s.hidden : {}) }}>
           <textarea
+            ref={texAreaRef}
             style={s.texArea}
             value={tex}
             onChange={e => setTex(e.target.value)}
@@ -196,6 +220,7 @@ export function ResumeSplit({ jobId, onEditsChanged }: Props) {
             enabled: !compile.compiling && compile.compiledTex === tex,
             onMoveSection: (key, targetIndex) => applyReorder(moveSectionTo(tex, key, targetIndex)),
             onMoveBullet: (g, from, to) => applyReorder(moveBulletTo(tex, g, from, to)),
+            onJumpToLine: jumpToLine,
           }}
         />
         </div>

@@ -1,8 +1,9 @@
-import { useRef, useState, type CSSProperties, type PointerEvent } from "react";
+import { useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent } from "react";
 import { colors } from "../theme";
 import {
   slotToIndex,
   targetIndexForPointer,
+  texLineForPointer,
   type BulletRegion,
   type OverlayModel,
   type SectionRegion,
@@ -17,6 +18,8 @@ interface Props {
   enabled: boolean;
   onMoveSection: (key: string, targetIndex: number) => void;
   onMoveBullet: (groupIndex: number, fromIdx: number, toIdx: number) => void;
+  /** Double-click anywhere mapped → jump the source editor to this tex line. */
+  onJumpToLine: (texLine: number) => void;
 }
 
 interface Drag {
@@ -34,10 +37,11 @@ const DRAG_THRESHOLD_PX = 4;
 const SECTION_HANDLE_W = 16;
 
 /** Transparent drag bands over the rendered page: whole sections reorder
- *  against each other (grab the left-edge handle), bullets reorder within
- *  their own group. Hand-rolled pointer drag — the bands are fixed,
+ *  against each other (grab the heading line or the left-edge handle), bullets
+ *  reorder within their own group. Double-click jumps the source editor to the
+ *  matching tex line. Hand-rolled pointer drag — the bands are fixed,
  *  PDF-derived geometry, so a sortable library has nothing to manage. */
-export function PdfDragOverlay({ model, width, height, enabled, onMoveSection, onMoveBullet }: Props) {
+export function PdfDragOverlay({ model, width, height, enabled, onMoveSection, onMoveBullet, onJumpToLine }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [hover, setHover] = useState<string | null>(null);
@@ -90,6 +94,14 @@ export function PdfDragOverlay({ model, width, height, enabled, onMoveSection, o
 
   const dragging = drag?.active ?? false;
 
+  function handleDoubleClick(e: MouseEvent<HTMLDivElement>) {
+    if (!enabled) return;
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const line = texLineForPointer(e.clientY - rect.top, model);
+    if (line !== null) onJumpToLine(line);
+  }
+
   function sectionStyle(sec: SectionRegion, pos: number): CSSProperties {
     const isDragged = dragging && drag!.kind === "section" && drag!.fromPos === pos;
     const isHover = hover === `s${pos}` && enabled && !dragging;
@@ -100,8 +112,26 @@ export function PdfDragOverlay({ model, width, height, enabled, onMoveSection, o
       left: 0,
       width: SECTION_HANDLE_W,
       cursor: enabled ? (isDragged ? "grabbing" : "grab") : "default",
-      background: isDragged || isHover ? "rgba(63,185,80,0.25)" : "rgba(63,185,80,0.07)",
-      borderRight: `2px solid ${isDragged || isHover ? colors.accent : "transparent"}`,
+      background: isDragged || isHover ? "rgba(63,185,80,0.25)" : "rgba(63,185,80,0.12)",
+      borderRight: `2px solid ${isDragged || isHover ? colors.accent : "rgba(63,185,80,0.35)"}`,
+      pointerEvents: enabled ? "auto" : "none",
+      touchAction: "none",
+    };
+  }
+
+  /** Full-width grab band over the section's rendered heading line — the
+   *  affordance users actually reach for (the edge strip alone was missed). */
+  function headingStyle(sec: SectionRegion, pos: number): CSSProperties {
+    const isDragged = dragging && drag!.kind === "section" && drag!.fromPos === pos;
+    const isHover = hover === `s${pos}` && enabled && !dragging;
+    return {
+      position: "absolute",
+      top: sec.top,
+      height: Math.max(0, sec.headingBottom - sec.top) + 4,
+      left: SECTION_HANDLE_W,
+      right: 0,
+      cursor: enabled ? (isDragged ? "grabbing" : "grab") : "default",
+      background: isDragged || isHover ? "rgba(63,185,80,0.2)" : "transparent",
       pointerEvents: enabled ? "auto" : "none",
       touchAction: "none",
     };
@@ -127,7 +157,7 @@ export function PdfDragOverlay({ model, width, height, enabled, onMoveSection, o
   const indicatorBands = dragging ? bandsFor(drag!) : [];
 
   return (
-    <div ref={rootRef} style={{ ...s.root, width, height }}>
+    <div ref={rootRef} style={{ ...s.root, width, height }} onDoubleClick={handleDoubleClick}>
       {model.sections.map((sec, pos) => (
         <div
           key={`s${sec.key}`}
@@ -141,12 +171,25 @@ export function PdfDragOverlay({ model, width, height, enabled, onMoveSection, o
           onPointerLeave={() => setHover(h => (h === `s${pos}` ? null : h))}
         />
       ))}
+      {model.sections.map((sec, pos) => (
+        <div
+          key={`h${sec.key}`}
+          style={headingStyle(sec, pos)}
+          title={enabled ? "Drag to reorder this section (double-click to jump to source)" : undefined}
+          onPointerDown={e => beginDrag(e, "section", pos, -1)}
+          onPointerMove={updateDrag}
+          onPointerUp={endDrag}
+          onPointerCancel={() => setDrag(null)}
+          onPointerEnter={() => setHover(`s${pos}`)}
+          onPointerLeave={() => setHover(h => (h === `s${pos}` ? null : h))}
+        />
+      ))}
       {model.bulletGroups.map(g =>
         g.bullets.map((b, pos) => (
           <div
             key={`b${g.groupIndex}:${pos}`}
             style={bulletStyle(b, pos, g.groupIndex)}
-            title={enabled ? "Drag to reorder this bullet" : undefined}
+            title={enabled ? "Drag to reorder this bullet (double-click to jump to source)" : undefined}
             onPointerDown={e => beginDrag(e, "bullet", pos, g.groupIndex)}
             onPointerMove={updateDrag}
             onPointerUp={endDrag}

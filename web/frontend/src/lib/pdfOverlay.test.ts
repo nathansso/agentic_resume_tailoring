@@ -5,6 +5,7 @@ import {
   normalizeForMatch,
   slotToIndex,
   targetIndexForPointer,
+  texLineForPointer,
   type PdfTextLine,
 } from "./pdfOverlay";
 
@@ -151,6 +152,22 @@ describe("buildOverlayModel", () => {
     expect(m.sections.map(s => s.index)).toEqual([1, 2]);
   });
 
+  it("records heading geometry and tex lines for source-jump sync", () => {
+    const [edu, exp, proj] = model.sections;
+    // \section{...} lines in TEX (0-indexed)
+    expect(edu.texLine).toBe(7);
+    expect(exp.texLine).toBe(11);
+    expect(proj.texLine).toBe(21);
+    // Heading band ends at the rendered heading line's bottom
+    expect(edu.headingBottom).toBe(62);
+    expect(exp.headingBottom).toBe(102);
+
+    const expGroup = model.bulletGroups.find(g => g.groupIndex === 0)!;
+    expect(expGroup.bullets.map(b => b.texLine)).toEqual([15, 16]);
+    const projGroup = model.bulletGroups.find(g => g.groupIndex === 1)!;
+    expect(projGroup.bullets[0].texLine).toBe(25);
+  });
+
   it("returns an empty model when the markers were edited away", () => {
     const noMarkers = TEX.split("%% ART-SECTION:").join("% gone");
     expect(buildOverlayModel(noMarkers, LINES, PAGE_HEIGHT)).toEqual({
@@ -179,5 +196,25 @@ describe("targetIndexForPointer / slotToIndex", () => {
     expect(slotToIndex(3, 0)).toBe(2);  // drag band 0 below everything
     expect(slotToIndex(1, 1)).toBe(1);  // no-op zone
     expect(slotToIndex(2, 1)).toBe(1);  // slot just after itself is also a no-op
+  });
+});
+
+describe("texLineForPointer", () => {
+  const model = buildOverlayModel(TEX, LINES, PAGE_HEIGHT);
+
+  it("prefers the bullet band under the pointer", () => {
+    expect(texLineForPointer(125, model)).toBe(15); // first experience bullet
+    expect(texLineForPointer(140, model)).toBe(15); // its wrapped continuation line
+    expect(texLineForPointer(150, model)).toBe(16); // second bullet
+    expect(texLineForPointer(205, model)).toBe(25); // project bullet
+  });
+
+  it("falls back to the enclosing section heading", () => {
+    expect(texLineForPointer(70, model)).toBe(7);   // education body text
+    expect(texLineForPointer(108, model)).toBe(11); // experience subheading line
+  });
+
+  it("returns null above all mapped regions", () => {
+    expect(texLineForPointer(10, model)).toBeNull();
   });
 });
