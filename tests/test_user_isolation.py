@@ -13,7 +13,7 @@ from sqlmodel import Session
 
 import database.user_utils as user_utils_module
 import services as services_module
-from database.models import Experience, Project, Skill, User, UserSkill
+from database.models import Achievement, Experience, Project, Skill, User, UserSkill
 from knowledge_graph.builder import SkillGraphBuilder
 
 
@@ -94,6 +94,19 @@ def test_graph_summary_scoped_per_user(isolated_engine):
 
     summary_alice = services_module.get_graph_summary(alice.user_id)
     assert any(s["name"] == "Python" for s in summary_alice["top_skills"])
+
+
+def test_achievements_scoped_per_user(isolated_engine):
+    """One user's achievements never surface for another (FK-scoped, issue #73)."""
+    alice = _seed_user(isolated_engine, "Alice")
+    bob = _seed_user(isolated_engine, "Bob")
+    with Session(isolated_engine) as s:
+        s.add(Achievement(user_id=alice.user_id, title="Dean's List", date="2023"))
+        s.commit()
+
+    assert services_module.get_achievements(bob.user_id) == []
+    alice_rows = services_module.get_achievements(alice.user_id)
+    assert [a["title"] for a in alice_rows] == ["Dean's List"]
 
 
 def test_matcher_indirect_match_without_builder_is_safe():

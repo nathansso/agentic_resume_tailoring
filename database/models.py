@@ -41,6 +41,7 @@ class User(SQLModel, table=True):
     projects: List["Project"] = Relationship(back_populates="user")
     job_results: List["UserJobResult"] = Relationship(back_populates="user")
     education_entries: List["Education"] = Relationship(back_populates="user")
+    achievement_entries: List["Achievement"] = Relationship(back_populates="user")
 
 class Skill(SQLModel, table=True):
     skill_id: UUID = Field(default_factory=uuid4, primary_key=True)
@@ -109,6 +110,26 @@ class Education(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
     user: User = Relationship(back_populates="education_entries")
+
+class Achievement(SQLModel, table=True):
+    """Per-user achievement / honor / award entry.
+
+    Populated from resume and LinkedIn (Bright Data `honors_and_awards`)
+    ingestion with the same cross-source fuzzy dedup as experiences, and
+    rendered per-user. Content is copied verbatim into tailored output (never
+    LLM-rewritten or fabricated); the tailoring pipeline only decides where the
+    section is placed. A user with no rows gets no achievements section.
+    """
+    achievement_id: UUID = Field(default_factory=uuid4, primary_key=True)
+    user_id: UUID = Field(foreign_key="user.user_id", index=True)
+    title: str                          # e.g. "Dean's List", "1st Place, HackMIT"
+    description: Optional[str] = None    # optional supporting line
+    issuer: Optional[str] = None         # awarding org / publication
+    date: Optional[str] = None           # free-form, matching Experience (e.g. "2023")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    user: User = Relationship(back_populates="achievement_entries")
 
 class Project(SQLModel, table=True):
     project_id: UUID = Field(default_factory=uuid4, primary_key=True)

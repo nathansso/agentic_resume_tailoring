@@ -9,7 +9,7 @@ from langchain_core.output_parsers import JsonOutputParser
 
 from llm import get_llm
 from database.db import engine
-from database.models import User, Skill, UserSkill, Education, Experience, Project
+from database.models import User, Skill, UserSkill, Education, Experience, Project, Achievement
 from database.user_utils import get_or_create_default_user
 from agents.skill_postprocessor import postprocess_skills, normalize_skill_name
 
@@ -66,6 +66,10 @@ class ResumeParserAgent:
                 education = self._extract_education(raw_text)
                 self._save_education(education, source_file)
 
+                # 1c. Extract Achievements / honors / awards
+                achievements = self._extract_achievements(raw_text)
+                self._save_achievements(achievements, source_file)
+
             # 2. Extract Projects
             projects = self._extract_projects(raw_text)
             repo_metrics = ingestion_data.get("repo_metrics") or {}
@@ -89,6 +93,7 @@ class ResumeParserAgent:
             self._heal_experiences(session, self.user.user_id)
             self._heal_projects(session, self.user.user_id)
             self._heal_education(session, self.user.user_id)
+            self._heal_achievements(session, self.user.user_id)
             session.commit()
 
         logger.info("Parsing complete and saved to DB.")
@@ -140,6 +145,21 @@ class ResumeParserAgent:
             return self._coerce_records(chain.invoke({"text": text}), str_key="institution")
         except Exception as e:
             logger.error(f"Education extraction failed: {e}")
+            return []
+
+    def _extract_achievements(self, text: str) -> List[Dict]:
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", "You are an expert resume parser. Extract achievements, honors, and awards from the text."),
+            ("user", "Text:\n{text}\n\nReturn a JSON list of objects with keys: title (the award/honor name), "
+             "description (any supporting detail, or null), issuer (awarding organization or publication, or null), "
+             "date (year or date awarded, or null). Only include entries explicitly present in the text — never invent one. "
+             "Do not include work experience, education degrees, or projects here.")
+        ])
+        chain = prompt | self.llm | JsonOutputParser()
+        try:
+            return self._coerce_records(chain.invoke({"text": text}), str_key="title")
+        except Exception as e:
+            logger.error(f"Achievement extraction failed: {e}")
             return []
 
     def _extract_projects(self, text: str) -> List[Dict]:
@@ -459,6 +479,95 @@ class ResumeParserAgent:
                 existing.append(row)
             session.commit()
 
+    def _save_achievements(self, data: List[Dict], source: str):
+        with Session(engine) as session:
+            existing = list(session.exec(
+                select(Achievement).where(Achievement.user_id == self.user.user_id)
+            ).all())
+            for item in data:
+                title = str(item.get("title") or "").strip()
+                if not title:
+                    continue
+                issuer = str(item.get("issuer") or "").strip() or None
+
+                # Fuzzy dedup on title (+ issuer as enrichment), so a resume line
+                # and its LinkedIn honors_and_awards entry fold into one row
+                # instead of duplicating. Never drops content — merges blanks.
+                match = next(
+                    (a for a in existing
+                     if self._achievements_match(a.title, a.issuer, title, issuer)),
+                    None,
+                )
+                if match:
+                    if self._merge_achievement(match, item):
+                        session.add(match)
+                    logger.debug(f"Merged achievement into: {match.title}")
+                    continue
+
+                row = Achievement(
+                    user_id=self.user.user_id,
+                    title=title,
+                    description=str(item.get("description") or "").strip() or None,
+                    issuer=issuer,
+                    date=str(item.get("date") or "").strip() or None,
+                )
+                session.add(row)
+                existing.append(row)
+            session.commit()
+
+    @staticmethod
+    def _merge_achievement(row, item: Dict) -> bool:
+        """Fill a row's missing description/issuer/date from another source.
+        Idempotent — re-ingesting the same data changes nothing. Returns whether
+        the row was modified."""
+        changed = False
+        for field in ("description", "issuer", "date"):
+            val = str(item.get(field) or "").strip()
+            if val and not getattr(row, field, None):
+                setattr(row, field, val)
+                changed = True
+        if changed:
+            row.updated_at = datetime.utcnow()
+        return changed
+
+    @classmethod
+    def _heal_achievements(cls, session, user_id) -> int:
+        """Merge fuzzy-duplicate achievement rows for a user, keeping the richest
+        of each title group and backfilling the survivor's blanks. Returns rows
+        removed; idempotent when the data is already clean."""
+        rows = list(session.exec(
+            select(Achievement).where(Achievement.user_id == user_id)
+            .order_by(Achievement.created_at)
+        ).all())
+
+        def richness(a) -> tuple:
+            return (len((a.description or "").strip()),
+                    bool(a.issuer),
+                    bool(a.date))
+
+        kept: List = []
+        removed = 0
+        for a in rows:
+            match = next(
+                (k for k in kept
+                 if cls._achievements_match(k.title, k.issuer, a.title, a.issuer)),
+                None,
+            )
+            if match is None:
+                kept.append(a)
+                continue
+            richer, poorer = (a, match) if richness(a) > richness(match) else (match, a)
+            for field in ("description", "issuer", "date"):
+                if not getattr(richer, field, None) and getattr(poorer, field, None):
+                    setattr(richer, field, getattr(poorer, field))
+            richer.updated_at = datetime.utcnow()
+            session.add(richer)
+            session.delete(poorer)
+            if richer is a:  # a won: replace match in kept
+                kept[kept.index(match)] = a
+            removed += 1
+        return removed
+
     def _save_projects(self, data: List[Dict], source: str, repo_metrics: Dict[str, Dict] = None):
         # GitHub signals keyed by repo name (issue #46) — matched case-insensitively
         # against extracted project names so complexity scoring can use them later.
@@ -603,6 +712,22 @@ class ResumeParserAgent:
             return True
         return cls._names_match(deg_a, deg_b)
 
+    @classmethod
+    def _achievements_match(cls, title_a: Any, issuer_a: Any, title_b: Any, issuer_b: Any) -> bool:
+        """Same achievement when their titles fuzzy-match ('Deans List' ==
+        "Dean's List"), or when one title is a substring of a longer title and
+        the issuers agree — folding a resume line into its LinkedIn honors entry
+        across sources. Issuer alone never matches; a distinct award keeps its
+        own row."""
+        if cls._names_match(title_a, title_b):
+            return True
+        ia, ib = cls._norm_name(issuer_a), cls._norm_name(issuer_b)
+        if ia and ib and ia == ib:
+            ta, tb = cls._norm_name(title_a), cls._norm_name(title_b)
+            if ta and tb and (ta in tb or tb in ta):
+                return True
+        return False
+
     @staticmethod
     def _enrich(row, item: Dict, fields: List[str]) -> bool:
         """Fill missing scalar fields; append genuinely new description text.
@@ -725,6 +850,45 @@ class ResumeParserAgent:
                 )
                 session.add(edu)
                 existing_edu.append(edu)
+
+            # Achievements (honors_and_awards): Bright Data returns title,
+            # publication (the issuer), date, and description. Merge on title so a
+            # resume-ingested achievement is not duplicated by the LinkedIn one.
+            achievements = self._coerce_records(
+                record.get("honors_and_awards"), str_key="title")
+            existing_ach = list(session.exec(
+                select(Achievement).where(Achievement.user_id == self.user.user_id)
+            ).all())
+            for item in achievements:
+                title = str(item.get("title") or "").strip()
+                if not title:
+                    continue
+                issuer = str(
+                    item.get("issuer") or item.get("publication") or "").strip() or None
+                match = next(
+                    (a for a in existing_ach
+                     if self._achievements_match(a.title, a.issuer, title, issuer)),
+                    None,
+                )
+                if match:
+                    merge_item = {
+                        "description": item.get("description"),
+                        "issuer": issuer,
+                        "date": item.get("date"),
+                    }
+                    if self._merge_achievement(match, merge_item):
+                        session.add(match)
+                    logger.debug(f"Merged LinkedIn achievement into: {match.title}")
+                    continue
+                ach = Achievement(
+                    user_id=self.user.user_id,
+                    title=title,
+                    description=str(item.get("description") or "").strip() or None,
+                    issuer=issuer,
+                    date=str(item.get("date") or "").strip() or None,
+                )
+                session.add(ach)
+                existing_ach.append(ach)
             session.commit()
 
     def _save_skills(self, data: List[Dict], source: str):

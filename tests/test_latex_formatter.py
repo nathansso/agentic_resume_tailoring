@@ -748,3 +748,50 @@ def test_format_pdf_short_resume_stays_one_page(isolated_engine, monkeypatch):
     pdf_bytes = ResumeFormatterAgent(user.user_id).format_pdf(_JAKE_CONTENT)
 
     assert _pdf_page_count(pdf_bytes) == 1
+
+
+# ── Achievements section ──────────────────────────────────────────────────────
+
+def test_tex_achievements_render_from_content(isolated_engine, monkeypatch):
+    """Achievements pass through verbatim into a bulleted section with a marker."""
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    content = dict(_JAKE_CONTENT, achievements=[
+        {"title": "Dean's List", "issuer": "Southwestern University", "date": "2020",
+         "description": "Top 5% of class"},
+    ])
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(content)
+    assert r"\section{Achievements}" in tex
+    assert "%% ART-SECTION: achievements" in tex
+    assert r"\textbf{Dean's List}" in tex
+    assert "Southwestern University, 2020" in tex
+    assert "Top 5\\% of class" in tex  # escaped percent
+
+def test_tex_achievements_omitted_when_empty(isolated_engine, monkeypatch):
+    """No achievements → no section, never fabricated (mirrors education)."""
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(_JAKE_CONTENT)
+    assert r"\section{Achievements}" not in tex
+
+def test_tex_achievements_placed_by_section_order(isolated_engine, monkeypatch):
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    content = dict(_JAKE_CONTENT, achievements=[{"title": "Winner, Hackathon"}])
+    tex = ResumeFormatterAgent(user.user_id)._build_tex(
+        content, section_order=["achievements", "experience", "projects", "skills"]
+    )
+    assert tex.index(r"\section{Achievements}") < tex.index(r"\section{Experience}")
+
+
+def test_ranked_section_order_defaults_to_ingested_position():
+    """With no JD signal, a reorderable section lands where the ingested resume
+    had it — achievements after experience here, not at the default list tail."""
+    from agents.tailor import ResumeTailorAgent
+    order = ResumeTailorAgent._ranked_section_order(
+        {"achievements": [{"title": "x"}]}, {}, "",
+        ingested_order=["experience", "achievements", "projects", "skills"],
+    )
+    # Pinned education first; then the ingested order preserved on the tie.
+    assert order[0] == "education"
+    assert order.index("achievements") < order.index("projects")

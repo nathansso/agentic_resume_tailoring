@@ -23,7 +23,7 @@ from llm import get_llm
 from database.db import engine
 from database.models import (
     User, Experience, Project, ProjectBlurb, Skill, UserSkill,
-    JobDescription, JobSkill, UserJobResult,
+    JobDescription, JobSkill, UserJobResult, Achievement,
 )
 from agents.ats_scorer import ATSScoringEngine
 from agents.project_scorer import MAX_PROJECTS, score_project, select_top_k
@@ -81,7 +81,7 @@ def _as_obj(value, default):
 # formatter above all sections and is never part of section_order; education
 # stays pinned at the top of the reorderable body.
 PINNED_SECTIONS = ["education"]
-REORDERABLE_SECTIONS = ["experience", "projects", "skills"]
+REORDERABLE_SECTIONS = ["experience", "projects", "skills", "achievements"]
 
 
 class TailorState(TypedDict):
@@ -258,8 +258,15 @@ class ResumeTailorAgent:
             )
             if ranked_skills:
                 tailored["skills_ranked"] = ranked_skills
+            # Achievements pass through verbatim from the knowledge graph — never
+            # LLM-rewritten or fabricated (keep-all). Injected before ranking so
+            # the section is scored and placed like any other reorderable section.
+            achievements = self._load_achievements(user_id)
+            if achievements:
+                tailored["achievements"] = achievements
             tailored["_section_order"] = self._ranked_section_order(
-                tailored, final_state["matched_skills"], final_state["job_text"]
+                tailored, final_state["matched_skills"], final_state["job_text"],
+                self._ingested_section_order(user_id),
             )
             # One-page guarantee at the source (issue #34 follow-up): trim the
             # stored content so the editor .tex, live preview, and exports all
@@ -919,16 +926,65 @@ class ResumeTailorAgent:
         tailored_content: Dict,
         matched_skills: Dict,
         jd_text: str,
+        ingested_order: Optional[List[str]] = None,
     ) -> List[str]:
-        """Pinned sections first, then reorderable sections by relevance score."""
+        """Pinned sections first, then reorderable sections by relevance score.
+
+        Ties fall back to the user's ingested resume order (so a section with no
+        strong JD signal — e.g. achievements — lands where it sat in the resume
+        we ingested), and to the default list order for anything the ingested
+        resume did not name.
+        """
+        # Default seed order: the ingested resume's reorderable sections in their
+        # original positions, then any reorderable section it didn't mention.
+        seed = [k for k in (ingested_order or []) if k in REORDERABLE_SECTIONS]
+        for k in REORDERABLE_SECTIONS:
+            if k not in seed:
+                seed.append(k)
+        # Achievements is optional: only place it when the user actually has some,
+        # so a user without achievements keeps a clean section order.
+        if not tailored_content.get("achievements"):
+            seed = [k for k in seed if k != "achievements"]
         scores = {
             key: cls._score_section_relevance(key, tailored_content, matched_skills, jd_text)
-            for key in REORDERABLE_SECTIONS
+            for key in seed
         }
-        # Stable sort: ties keep the default section order
-        ranked = sorted(REORDERABLE_SECTIONS, key=lambda k: scores[k], reverse=True)
+        # Stable sort over the seed: ties keep the ingested/default order
+        ranked = sorted(seed, key=lambda k: scores[k], reverse=True)
         logger.debug("Section relevance: %s", scores)
         return PINNED_SECTIONS + ranked
+
+    @staticmethod
+    def _load_achievements(user_id: UUID) -> List[Dict]:
+        """This user's achievements in resume-document order, verbatim from the
+        knowledge graph. Copied into tailored_content unchanged — never rewritten
+        or filtered (keep-all)."""
+        with Session(engine) as session:
+            rows = session.exec(
+                select(Achievement).where(Achievement.user_id == user_id)
+                .order_by(Achievement.created_at)
+            ).all()
+            return [
+                {
+                    "title": a.title,
+                    "description": a.description or "",
+                    "issuer": a.issuer or "",
+                    "date": a.date or "",
+                }
+                for a in rows
+            ]
+
+    @staticmethod
+    def _ingested_section_order(user_id: UUID) -> List[str]:
+        """The section order captured from the user's ingested resume style, used
+        as the tie-break default when JD relevance gives no clear signal."""
+        try:
+            from services import get_resume_style
+            style = get_resume_style(user_id) or {}
+            order = style.get("section_order")
+            return list(order) if isinstance(order, list) else []
+        except Exception:
+            return []
 
     @staticmethod
     def _count_linked_skills(project_name: str, repo_url: str, evidence_rows: List) -> int:

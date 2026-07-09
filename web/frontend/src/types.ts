@@ -107,6 +107,13 @@ export interface EducationRow {
   gpa: string;
 }
 
+export interface AchievementRow {
+  title: string;
+  description: string;
+  issuer: string;
+  date: string;
+}
+
 export interface GraphData {
   top_skills: { name: string; connections: number }[];
   by_category: Record<string, number>;

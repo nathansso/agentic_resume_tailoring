@@ -4,6 +4,24 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issue-level — Achievements ingestion, cross-source dedup, and tailoring-placed rendering
+**Status:** complete | **Tests:** 578 pass (9 new)
+
+Adds an achievements/honors/awards section as a first-class knowledge-graph entity, mirroring the experience ingestion path. Achievements are ingested from resume text and LinkedIn (`honors_and_awards`), fuzzy-deduped across sources, scoped per-user, and rendered into tailored resumes. Per user direction: content is kept verbatim (keep-all — never LLM-rewritten, filtered, or fabricated), and the tailoring pipeline only decides *where* the section is placed, defaulting to the section's position in the ingested resume when the JD gives no strong signal.
+
+### What shipped
+- **Model.** New `Achievement` table (`title`, `description`, `issuer`, `date`) with an indexed per-user FK (the #73 isolation lesson) and a `User.achievement_entries` relationship. New nullable table → self-creates on existing SQLite DBs.
+- **Ingestion + cross-source dedup (`agents/parser.py`).** `_extract_achievements` (resume LLM extraction, skipped for GitHub), `_save_achievements` (dedup + enrich-blanks), `_heal_achievements` (wired into the `parse_and_save` self-heal block), and a shared `_achievements_match` (title fuzzy-match via `_names_match`, issuer as an enricher/tiebreak) used at both save and heal time. `_save_linkedin_structured` maps Bright Data `honors_and_awards` into `Achievement` rows, folding a LinkedIn entry into its resume line instead of duplicating.
+- **Tailoring + placement.** `achievements` added to `REORDERABLE_SECTIONS`; DB achievements are copied verbatim into `tailored_content["achievements"]` before ranking. `_ranked_section_order` now seeds its tie-break from the user's ingested `section_order` (so a low-JD-signal section lands where the resume had it) and only includes achievements when the user has some. `SECTION_KEYWORDS` recognizes achievements/awards/honors headings so ingestion captures the section's label and position. `ATSScoringEngine.flatten_section_text` scores the new section.
+- **Rendering.** `_build_tex_achievements` (bulleted list with `%% ART-SECTION: achievements` marker for drag-reorder parity), plus the docx and markdown branches. Section omitted entirely when the user has no rows — never fabricated (mirrors education).
+- **Surface.** `services.get_achievements` + `GET /api/profile/achievements`; frontend `AchievementRow` type, `getAchievements()`, and an Achievements tab in `DataExplorer`.
+
+### Deviations from spec
+- The JD-relevance filter discussed in planning was intentionally deferred: v1 is keep-all, matching the Education model, so no achievement is ever dropped at tailor time.
+- Achievements pass through `tailored_content` (like experience/projects) rather than being read from the DB by the formatter (like education), because a reorderable, JD-scored section needs scannable text; the content is still copied verbatim, never rewritten.
+
+---
+
 ## Issue-level — Ingestion dedup parity across experiences, projects, and education
 **Status:** complete | **Tests:** 569 pass (8 new)
 
