@@ -377,11 +377,18 @@ def test_export_tex_without_edits_still_generates(isolated_engine, jobs_client):
 def test_tailor_agent_persists_revision_notes(isolated_engine, monkeypatch):
     """ResumeTailorAgent.tailor() writes revision_notes and discards manual
     .tex edits (issue #71 — re-tailoring supersedes them)."""
+    import agents.formatter as fmt_module
     import agents.tailor as tailor_module
     from conftest import _seed_user_and_skill
 
     monkeypatch.setattr(tailor_module, "engine", isolated_engine)
     monkeypatch.setattr(tailor_module, "get_llm", lambda *a, **kw: object())
+    # Skip the one-page fit (a real LaTeX compile) — not under test here.
+    monkeypatch.setattr(
+        fmt_module.ResumeFormatterAgent,
+        "fit_content_to_one_page",
+        lambda self, content, section_order=None: content,
+    )
 
     user = _seed_user_and_skill(isolated_engine)
     job = _make_job(isolated_engine, user.user_id, status="analyzed", description="Python JD")

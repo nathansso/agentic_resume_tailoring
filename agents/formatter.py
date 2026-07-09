@@ -336,6 +336,30 @@ class ResumeFormatterAgent:
         """Return the raw LaTeX source string (Jake's Resume layout)."""
         return self._build_tex(tailored_content, section_order=section_order)
 
+    def fit_content_to_one_page(
+        self,
+        tailored_content: Dict,
+        section_order: Optional[List[str]] = None,
+    ) -> Dict:
+        """
+        Trim `tailored_content` until it renders to a single page, so the stored
+        content (and every output derived from it — .tex source, live preview,
+        exports) agrees on a one-page layout. Returns the content unchanged when
+        it already fits or when no LaTeX engine is available (offline/test
+        environments) — enforcement then falls back to format_pdf's own guard.
+        """
+        def render(content: Dict) -> bytes:
+            return _compile_tex_to_pdf(
+                self._build_tex(content, section_order=section_order)
+            )
+
+        try:
+            if _pdf_page_count(render(tailored_content)) <= 1:
+                return tailored_content
+            return _fit_to_one_page(tailored_content, render, _pdf_page_count)
+        except Exception:
+            return tailored_content
+
     # ── PDF ───────────────────────────────────────────────────────────────────
 
     def format_pdf(

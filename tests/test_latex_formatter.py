@@ -527,6 +527,53 @@ def test_fit_to_one_page_stops_when_exhausted():
     assert fitted["projects"][0]["bullets"] == ["a1"]  # trimmed to the floor, then stopped
 
 
+def test_fit_content_to_one_page_trims_overflow(isolated_engine, monkeypatch):
+    """fit_content_to_one_page trims via the shared reducer using a real tex
+    build but a stubbed compile/page-count (no LaTeX engine needed)."""
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    agent = ResumeFormatterAgent(user.user_id)
+
+    def bullets_total(content):
+        return sum(len(i.get("bullets", [])) for i in content.get("projects", []))
+
+    original_total = bullets_total(_JAKE_CONTENT)
+    compiled = {}
+
+    def fake_compile(tex_str):
+        return tex_str.encode()
+
+    def fake_page_count(pdf_bytes):
+        # "Fits" once at least two bullets have been trimmed.
+        n = pdf_bytes.decode().count(r"\resumeItem{")
+        compiled["last_items"] = n
+        return 1 if n <= compiled["first_items"] - 2 else 2
+
+    monkeypatch.setattr(fmt_module, "_compile_tex_to_pdf", fake_compile)
+    first_tex = agent.format_tex(_JAKE_CONTENT)
+    compiled["first_items"] = first_tex.count(r"\resumeItem{")
+    monkeypatch.setattr(fmt_module, "_pdf_page_count", fake_page_count)
+
+    fitted = agent.fit_content_to_one_page(_JAKE_CONTENT)
+    assert bullets_total(fitted) < original_total
+    # Original content object untouched (trim works on copies).
+    assert bullets_total(_JAKE_CONTENT) == original_total
+
+
+def test_fit_content_to_one_page_no_engine_returns_unchanged(isolated_engine, monkeypatch):
+    """Offline/test environments without a LaTeX engine get the content back
+    unchanged instead of an exception."""
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    agent = ResumeFormatterAgent(user.user_id)
+
+    def raising_compile(tex_str):
+        raise RuntimeError("No LaTeX engine found.")
+
+    monkeypatch.setattr(fmt_module, "_compile_tex_to_pdf", raising_compile)
+    assert agent.fit_content_to_one_page(_JAKE_CONTENT) is _JAKE_CONTENT
+
+
 def test_fit_enforcement_keeps_preamble_byte_identical(isolated_engine, monkeypatch):
     """Trimming text must not alter the preamble/geometry/font (issue #34)."""
     monkeypatch.setattr(fmt_module, "engine", isolated_engine)
