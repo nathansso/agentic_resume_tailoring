@@ -285,6 +285,11 @@ def test_evaluate_node_attaches_algorithmic_breakdown(monkeypatch):
         "matched_skills": {"Python": {}, "FastAPI": {}},
         "missing_skills": [],
         "priority_keywords": ["tensorflow", "postgresql"],
+        # Each keyword assigned to the item whose bullets actually contain it.
+        "keyword_assignments": {
+            "proj:ml pipeline": ["tensorflow"],
+            "exp:senior software engineer|tech corp": ["postgresql"],
+        },
         "baseline_breakdown": {"composite": 40.0},
         "experiences": [], "projects": [],
         "tailored_content": _TAILORED,
@@ -298,9 +303,11 @@ def test_evaluate_node_attaches_algorithmic_breakdown(monkeypatch):
     assert "ats_breakdown" in ev
     assert ev["ats_breakdown"]["baseline_composite"] == 40.0
     assert "delta" in ev["ats_breakdown"]
-    # Legacy evaluation keys preserved for retry feedback
     assert ev["coverage_pct"] == 100.0
-    assert ev["kw_coverage"] == 100.0  # both priority keywords present
+    # kw_coverage is now placement precision: both assigned keywords landed in
+    # their assigned item (issue #72).
+    assert ev["kw_coverage"] == 100.0
+    assert ev["placement_gaps"] == {}
     assert out["done"] is True
 
 

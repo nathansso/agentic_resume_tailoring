@@ -218,34 +218,62 @@ def _pdf_page_count(pdf_bytes: bytes) -> int:
     return len(PdfReader(io.BytesIO(pdf_bytes)).pages)
 
 
+# One-page trim floors (issue #72). We shave a project/experience down to this
+# many bullets before touching anything else, so descriptions stay substantive
+# instead of every entry collapsing to a single line.
+_PROJECT_BULLET_FLOOR = 2
+_EXP_BULLET_FLOOR = 2
+
+
 def _trim_one_bullet(content: Dict) -> Optional[Dict]:
     """
-    Return a copy of `content` with exactly one bullet removed, or None when
+    Return a copy of `content` with exactly one reduction applied, or None when
     nothing more can be trimmed (issue #34). Text-only reduction — never touches
     the preamble, geometry, font, section list, or skills.
 
-    Ladder (so the space cost of richer content comes out of the least valuable
-    text first):
-      1. Drop the last bullet of the lowest-priority project, walking projects
-         bottom-up. Projects are pre-ordered descending by relevance (issue #47),
-         so the last project is the least relevant. Never empty a project below one
-         bullet so it still reads.
-      2. As a last resort (project-light resumes), drop the last bullet of the
-         lowest experience, also keeping at least one bullet.
+    Ladder (issue #72 — favor fewer, well-described items over many starved
+    ones, and protect experiences more than projects):
+      1. Trim the lowest-ranked project's last bullet, but only down to
+         _PROJECT_BULLET_FLOOR. Projects are pre-ordered descending by relevance
+         (issue #47), so the last project is the least relevant.
+      2. Trim the lowest-ranked experience's last bullet, down to _EXP_BULLET_FLOOR.
+      3. Everything is at the floor and it still overflows: drop the entire
+         lowest-ranked project (keeping at least one) rather than starving the
+         survivors below the floor.
+      4. Last resorts for project-light / single-project resumes: shave below the
+         floor — experiences first (projects are the showcase), then the last
+         remaining project — never below one bullet.
     """
     import copy
 
     trimmed = copy.deepcopy(content)
+    projects = trimmed.get("projects") if isinstance(trimmed.get("projects"), list) else []
+    experiences = trimmed.get("experiences") if isinstance(trimmed.get("experiences"), list) else []
 
-    for section in ("projects", "experiences"):
-        items = trimmed.get(section)
-        if not isinstance(items, list):
-            continue
+    def _shave(items, floor):
         for item in reversed(items):
             bullets = item.get("bullets")
-            if isinstance(bullets, list) and len(bullets) > 1:
+            if isinstance(bullets, list) and len(bullets) > floor:
                 bullets.pop()
-                return trimmed
+                return True
+        return False
+
+    # 1–2. Trim fat down to the floor.
+    if _shave(projects, _PROJECT_BULLET_FLOOR):
+        return trimmed
+    if _shave(experiences, _EXP_BULLET_FLOOR):
+        return trimmed
+
+    # 3. Drop the weakest whole project before starving the rest.
+    if len(projects) > 1:
+        projects.pop()
+        return trimmed
+
+    # 4. Below-floor last resorts, protecting projects over experiences.
+    if _shave(experiences, 1):
+        return trimmed
+    if _shave(projects, 1):
+        return trimmed
 
     return None
 
@@ -268,6 +296,20 @@ def _fit_to_one_page(content: Dict, render_fn, page_count_fn, max_iters: int = 3
             return current
         current = reduced
     return current
+
+
+# Date strings that mean "no real date" — rendered as an empty date rather than
+# printing the literal placeholder (issue #72). Mirrors tailor._PLACEHOLDER_DATE_TOKENS
+# so exports render cleanly even for content built directly from the DB.
+_PLACEHOLDER_DATE_TOKENS = {
+    "", "not specified", "unknown", "unspecified", "n/a", "na", "none", "tbd", "-",
+}
+
+
+def _clean_date(value) -> str:
+    """Blank out placeholder date strings; pass real dates through unchanged."""
+    v = str(value or "").strip()
+    return "" if v.lower() in _PLACEHOLDER_DATE_TOKENS else v
 
 
 def sanitize_text(text: str) -> str:
@@ -707,22 +749,30 @@ class ResumeFormatterAgent:
         for exp in experiences:
             title    = _escape_tex(exp.get("title", ""))
             company  = _escape_tex(exp.get("company", ""))
-            start    = _escape_tex(exp.get("start_date", ""))
-            end      = _escape_tex(exp.get("end_date", ""))
+            start    = _escape_tex(_clean_date(exp.get("start_date")))
+            end      = _escape_tex(_clean_date(exp.get("end_date")))
             location = _escape_tex(exp.get("location", ""))
-            dates    = f"{start} -- {end}" if start else end
+            if start and end:
+                dates = f"{start} -- {end}"
+            else:
+                dates = end or start
 
             lines += [
                 r"    \resumeSubheading",
                 f"      {{{title}}}{{{dates}}}",
                 f"      {{{company}}}{{{location}}}",
-                r"      \resumeItemListStart",
             ]
-            for bullet in exp.get("bullets", []):
-                lines.append(
-                    r"        \resumeItem{" + _convert_inline(bullet.strip()) + "}"
-                )
-            lines += [r"      \resumeItemListEnd", ""]
+            # Skip the itemize entirely when there are no bullets — an empty
+            # \resumeItemListStart/End renders as blank space / a LaTeX error (issue #72).
+            bullets = [b for b in (exp.get("bullets") or []) if b and b.strip()]
+            if bullets:
+                lines.append(r"      \resumeItemListStart")
+                for bullet in bullets:
+                    lines.append(
+                        r"        \resumeItem{" + _convert_inline(bullet.strip()) + "}"
+                    )
+                lines.append(r"      \resumeItemListEnd")
+            lines.append("")
 
         lines.append(r"  \resumeSubHeadingListEnd")
         return "\n".join(lines)
@@ -741,7 +791,7 @@ class ResumeFormatterAgent:
         for proj in projects:
             name  = _escape_tex(proj.get("name", "Untitled"))
             techs = _escape_tex(proj.get("tech_stack", proj.get("technologies", "")))
-            dates = _escape_tex(proj.get("date_range", proj.get("dates", "")))
+            dates = _escape_tex(_clean_date(proj.get("date_range", proj.get("dates", ""))))
 
             heading = (
                 rf"\textbf{{{name}}} $|$ \emph{{{techs}}}" if techs
@@ -759,13 +809,16 @@ class ResumeFormatterAgent:
             lines += [
                 r"      \resumeProjectHeading",
                 f"          {{{heading}}}{{{dates}}}",
-                r"          \resumeItemListStart",
             ]
-            for bullet in proj.get("bullets", []):
-                lines.append(
-                    r"            \resumeItem{" + _convert_inline(bullet.strip()) + "}"
-                )
-            lines.append(r"          \resumeItemListEnd")
+            # Skip the itemize entirely when there are no bullets (issue #72).
+            bullets = [b for b in (proj.get("bullets") or []) if b and b.strip()]
+            if bullets:
+                lines.append(r"          \resumeItemListStart")
+                for bullet in bullets:
+                    lines.append(
+                        r"            \resumeItem{" + _convert_inline(bullet.strip()) + "}"
+                    )
+                lines.append(r"          \resumeItemListEnd")
 
         lines.append(r"    \resumeSubHeadingListEnd")
         return "\n".join(lines)
