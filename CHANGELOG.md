@@ -4,6 +4,23 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issue-level — Ingestion dedup parity across experiences, projects, and education
+**Status:** complete | **Tests:** 569 pass (8 new)
+
+Follow-up to #72/#73 fixing duplicate/malformed ingested rows that survived earlier hygiene work: an undergrad education entry ingested twice, a junk `Unknown Position @ IDXExchange / ?` experience alongside the real `Data Science Intern @ IDX Exchange`, and duplicate projects across GitHub/resume/LinkedIn. Root cause was uneven dedup: the placeholder-title merge rule lived only in the LinkedIn experience save path (not in `_save_experiences` or `_heal_experiences`), projects deduped on name only (ignoring a shared repo URL), and education used brittle exact `institution+degree` matching with no self-healer.
+
+### What shipped
+- **Shared matchers, used at both save time and heal time** so the two can no longer drift apart: `_experiences_match` (company fuzzy-match AND (title match OR either title a placeholder)), `_projects_match` (shared `repo_url` OR fuzzy name), and `_education_match` (institution fuzzy-match AND same degree *level*). Placeholder detection (`_is_placeholder_name`) and degree-level extraction (`_degree_level` → bachelor/master/phd/associate) are centralized.
+- **Experiences.** `_save_experiences`, the LinkedIn save path, and `_heal_experiences` all route through `_experiences_match`; the real title is promoted over a placeholder on merge, and `_exp_row_richness` ranks a real title first so the good row always survives. `?` added to `_PLACEHOLDER_DATE_TOKENS`.
+- **Projects.** All three paths (resume/GitHub, LinkedIn, `_heal_projects`) match on `repo_url` first, merging a GitHub-ingested repo with its resume line even when names diverge past the fuzzy threshold.
+- **Education.** `_save_education` rewritten to fuzzy-dedup-and-enrich; new `_heal_education` wired into the self-heal block. Degree-level matching merges `BS, CS` with `B.S. Computer Science` while keeping an `M.S.` distinct from a `B.S.` at the same school (the double-undergrad fix). The LinkedIn education path no longer drops a second degree at a known institution.
+
+### Deviations from spec
+- Institution abbreviations that are not spacing/containment variants (e.g. `UC San Diego` vs `University of California, San Diego`) are still not auto-merged — that acronym case is left to manual edit/delete rather than a speculative heuristic.
+- Two genuinely different degrees at the same institution sharing a level (e.g. two distinct master's programs) would merge; treated as an acceptable trade-off against the M.S./B.S. collapse it prevents.
+
+---
+
 ## Issue 72 — Project & experience tailoring: fewer, better-described, truthful
 **Status:** complete | **Tests:** 561 pass (26 new)
 

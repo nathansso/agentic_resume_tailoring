@@ -207,6 +207,85 @@ def test_save_education_skips_blank_institution(isolated_engine, monkeypatch):
     assert rows == []
 
 
+def test_save_education_keeps_distinct_degree_levels(isolated_engine, monkeypatch):
+    """The M.S. and B.S. at one school are distinct rows, never collapsed."""
+    user = _make_user(isolated_engine)
+    agent = _make_parser(isolated_engine, monkeypatch, user)
+    agent._save_education(
+        [{"institution": "University of California, San Diego", "degree": "M.S. Data Science"},
+         {"institution": "University of California, San Diego",
+          "degree": "B.S. Mathematics & Economics, Minor in Data Science"}],
+        "resume",
+    )
+    with Session(isolated_engine) as s:
+        rows = s.exec(select(Education).where(Education.user_id == user.user_id)).all()
+    assert len(rows) == 2
+
+
+def test_save_education_merges_same_level_duplicate(isolated_engine, monkeypatch):
+    """A re-emitted undergrad row with a trimmed degree string (same level) is
+    merged, not duplicated — the double-undergrad bug."""
+    user = _make_user(isolated_engine)
+    agent = _make_parser(isolated_engine, monkeypatch, user)
+    agent._save_education(
+        [{"institution": "University of California, San Diego",
+          "degree": "B.S. Mathematics & Economics, Minor in Data Science",
+          "end_date": "June 2025"}],
+        "resume",
+    )
+    # Second ingest: same undergrad, degree captured more tersely, missing date.
+    agent._save_education(
+        [{"institution": "University of California, San Diego",
+          "degree": "B.S. Mathematics & Economics"}],
+        "resume",
+    )
+    with Session(isolated_engine) as s:
+        rows = s.exec(select(Education).where(Education.user_id == user.user_id)).all()
+    assert len(rows) == 1
+    assert rows[0].end_date == "June 2025"  # richer row's data preserved
+
+
+def test_heal_education_merges_existing_double_undergrad(isolated_engine, monkeypatch):
+    """Self-heal collapses two persisted same-level rows while keeping the M.S.
+    distinct — cleans up dirty DBs on next ingest without a hard reset."""
+    user = _make_user(isolated_engine)
+    _seed_education(
+        isolated_engine, user.user_id,
+        [{"institution": "University of California, San Diego", "degree": "M.S. Data Science",
+          "gpa": "4.0/4.0"},
+         {"institution": "University of California, San Diego",
+          "degree": "B.S. Mathematics & Economics, Minor in Data Science",
+          "end_date": "June 2025"},
+         {"institution": "University of California, San Diego",
+          "degree": "B.S. Mathematics & Economics"}],
+    )
+    with Session(isolated_engine) as s:
+        removed = parser_module.ResumeParserAgent._heal_education(s, user.user_id)
+        s.commit()
+    assert removed == 1
+    with Session(isolated_engine) as s:
+        rows = s.exec(select(Education).where(Education.user_id == user.user_id)).all()
+    degrees = sorted(r.degree for r in rows)
+    assert len(rows) == 2  # M.S. + one merged B.S.
+    assert any(d.startswith("M.S.") for d in degrees)
+    assert any(d.startswith("B.S.") for d in degrees)
+
+
+def test_heal_education_idempotent_on_clean_data(isolated_engine, monkeypatch):
+    user = _make_user(isolated_engine)
+    _seed_education(
+        isolated_engine, user.user_id,
+        [{"institution": "UCSD", "degree": "M.S. Data Science"},
+         {"institution": "UCSD", "degree": "B.S. Mathematics"}],
+    )
+    with Session(isolated_engine) as s:
+        assert parser_module.ResumeParserAgent._heal_education(s, user.user_id) == 0
+        s.commit()
+    with Session(isolated_engine) as s:
+        rows = s.exec(select(Education).where(Education.user_id == user.user_id)).all()
+    assert len(rows) == 2
+
+
 # ── Service + API: education visible in the Data Explorer ────────────────────
 
 def test_get_education_service_shape(isolated_engine):

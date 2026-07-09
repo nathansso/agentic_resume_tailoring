@@ -205,3 +205,75 @@ def test_heal_keeps_distinct_rows(isolated_engine, monkeypatch):
         s.commit()
     with Session(isolated_engine) as s:
         assert len(s.exec(select(Experience).where(Experience.user_id == user.user_id)).all()) == 2
+
+
+def test_clean_date_coerces_question_mark():
+    # The malformed 'Unknown Position' row carried a literal '?' start date.
+    assert _clean_date("?") is None
+
+
+def test_heal_experiences_merges_placeholder_title_duplicate(isolated_engine, monkeypatch):
+    """The real bug: a junk 'Unknown Position @ IDXExchange / ?' row shares only
+    the company with the real 'Data Science Intern @ IDX Exchange' row. It must
+    fold into the real one, keeping the real title and dropping the '?' date."""
+    user = _seed_user_and_skill(isolated_engine)
+    with Session(isolated_engine) as s:
+        s.add(Experience(user_id=user.user_id, title="Data Science Intern",
+                         company="IDX Exchange", start_date="2026-01",
+                         end_date="Present", bullets=["b1", "b2"]))
+        s.add(Experience(user_id=user.user_id, title="Unknown Position",
+                         company="IDXExchange", start_date="?",
+                         end_date="Present", bullets=[]))
+        s.commit()
+
+    with Session(isolated_engine) as s:
+        removed = ResumeParserAgent._heal_experiences(s, user.user_id)
+        s.commit()
+    assert removed == 1
+    with Session(isolated_engine) as s:
+        rows = s.exec(select(Experience).where(Experience.user_id == user.user_id)).all()
+        assert len(rows) == 1
+        assert rows[0].title == "Data Science Intern"  # real title survived
+        assert rows[0].start_date == "2026-01"
+
+
+def test_save_experiences_placeholder_title_merges_on_company(isolated_engine, monkeypatch):
+    """A later placeholder-title record enriches the real row at save time."""
+    user = _seed_user_and_skill(isolated_engine)
+    agent = _agent(isolated_engine, monkeypatch, user)
+    agent._save_experiences(
+        [{"title": "Data Science Intern", "company": "IDX Exchange",
+          "start_date": "2026-01", "end_date": "Present", "bullets": ["b1"]}],
+        "resume",
+    )
+    agent._save_experiences(
+        [{"title": "Unknown Position", "company": "IDXExchange",
+          "start_date": "?", "end_date": "Present", "bullets": []}],
+        "resume",
+    )
+    with Session(isolated_engine) as s:
+        rows = s.exec(select(Experience).where(Experience.user_id == user.user_id)).all()
+        assert len(rows) == 1
+        assert rows[0].title == "Data Science Intern"
+
+
+def test_heal_projects_merges_on_repo_url_across_sources(isolated_engine, monkeypatch):
+    """A GitHub-ingested repo and its resume line have divergent names but the
+    same repo_url; they must merge on the URL even though names don't fuzzy-match."""
+    user = _seed_user_and_skill(isolated_engine)
+    with Session(isolated_engine) as s:
+        s.add(Project(user_id=user.user_id, name="recipe-review-analysis",
+                      description="", repo_url="https://github.com/me/recipe-review-analysis"))
+        s.add(Project(user_id=user.user_id, name="Sentiment-Driven Recipe Recommender",
+                      description="A rich resume writeup.",
+                      repo_url="https://github.com/me/recipe-review-analysis/"))
+        s.commit()
+
+    with Session(isolated_engine) as s:
+        removed = ResumeParserAgent._heal_projects(s, user.user_id)
+        s.commit()
+    assert removed == 1
+    with Session(isolated_engine) as s:
+        rows = s.exec(select(Project).where(Project.user_id == user.user_id)).all()
+        assert len(rows) == 1
+        assert rows[0].description == "A rich resume writeup."
