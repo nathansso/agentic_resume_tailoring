@@ -174,6 +174,27 @@ def test_structured_projects_saved_verbatim(isolated_engine, monkeypatch):
     assert projs[0].start_date == "Nov 2024"
 
 
+def test_structured_achievements_saved_and_merge_with_resume(isolated_engine, monkeypatch):
+    """LinkedIn honors_and_awards become Achievement rows, folding into a
+    resume-ingested achievement instead of duplicating it (cross-source dedup)."""
+    from database.models import Achievement
+    from sqlmodel import select
+    user = _make_user(isolated_engine, "ach1@example.com")
+    agent = _make_parser(isolated_engine, monkeypatch, user)
+
+    # Resume already had a bare "Deans List" (no issuer/date).
+    with Session(isolated_engine) as s:
+        s.add(Achievement(user_id=user.user_id, title="Deans List"))
+        s.commit()
+
+    agent._save_linkedin_structured(_RECORD)  # honors_and_awards: Dean's List, 2023
+
+    with Session(isolated_engine) as s:
+        rows = s.exec(select(Achievement).where(Achievement.user_id == user.user_id)).all()
+    assert len(rows) == 1  # merged, not duplicated
+    assert rows[0].date == "2023"  # blank backfilled from LinkedIn
+
+
 def test_structured_project_merges_with_similar_existing(isolated_engine, monkeypatch):
     """A resume-ingested project with a shorter variant of the name is enriched,
     not duplicated."""

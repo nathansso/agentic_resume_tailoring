@@ -9,7 +9,7 @@ from langchain_core.output_parsers import JsonOutputParser
 
 from llm import get_llm
 from database.db import engine
-from database.models import User, Skill, UserSkill, Education, Experience, Project
+from database.models import User, Skill, UserSkill, Education, Experience, Project, Achievement
 from database.user_utils import get_or_create_default_user
 from agents.skill_postprocessor import postprocess_skills, normalize_skill_name
 
@@ -19,8 +19,13 @@ logger = logging.getLogger(__name__)
 # at save time so the knowledge graph never stores "Not specified" as a date
 # (issue #72). Mirrors the tailor/formatter placeholder sets.
 _PLACEHOLDER_DATE_TOKENS = {
-    "", "not specified", "unknown", "unspecified", "n/a", "na", "none", "tbd", "-",
+    "", "not specified", "unknown", "unspecified", "n/a", "na", "none", "tbd", "-", "?",
 }
+
+# Sentinel title/company/name values the extractor emits when a real value is
+# absent. Treated as wildcards during dedup so a placeholder-titled row folds
+# into the real one instead of surviving as a duplicate (issue #72 follow-up).
+_PLACEHOLDER_NAMES = {"", "unknown", "unknown position", "n/a", "na", "none", "?"}
 
 
 def _clean_date(value):
@@ -61,6 +66,10 @@ class ResumeParserAgent:
                 education = self._extract_education(raw_text)
                 self._save_education(education, source_file)
 
+                # 1c. Extract Achievements / honors / awards
+                achievements = self._extract_achievements(raw_text)
+                self._save_achievements(achievements, source_file)
+
             # 2. Extract Projects
             projects = self._extract_projects(raw_text)
             repo_metrics = ingestion_data.get("repo_metrics") or {}
@@ -76,12 +85,15 @@ class ResumeParserAgent:
         skills = postprocess_skills(skills)
         self._save_skills(skills, source_file)
 
-        # Self-heal (issue #72): merge pre-existing fuzzy-duplicate experience/
-        # project rows and coerce placeholder dates, so any junk from earlier
-        # ingests is cleaned up without the user having to re-ingest from scratch.
+        # Self-heal (issue #72): merge pre-existing fuzzy-duplicate experience,
+        # project, and education rows and coerce placeholder dates, so any junk
+        # from earlier ingests is cleaned up on the next ingest without the user
+        # having to re-ingest from scratch.
         with Session(engine) as session:
             self._heal_experiences(session, self.user.user_id)
             self._heal_projects(session, self.user.user_id)
+            self._heal_education(session, self.user.user_id)
+            self._heal_achievements(session, self.user.user_id)
             session.commit()
 
         logger.info("Parsing complete and saved to DB.")
@@ -133,6 +145,21 @@ class ResumeParserAgent:
             return self._coerce_records(chain.invoke({"text": text}), str_key="institution")
         except Exception as e:
             logger.error(f"Education extraction failed: {e}")
+            return []
+
+    def _extract_achievements(self, text: str) -> List[Dict]:
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", "You are an expert resume parser. Extract achievements, honors, and awards from the text."),
+            ("user", "Text:\n{text}\n\nReturn a JSON list of objects with keys: title (the award/honor name), "
+             "description (any supporting detail, or null), issuer (awarding organization or publication, or null), "
+             "date (year or date awarded, or null). Only include entries explicitly present in the text — never invent one. "
+             "Do not include work experience, education degrees, or projects here.")
+        ])
+        chain = prompt | self.llm | JsonOutputParser()
+        try:
+            return self._coerce_records(chain.invoke({"text": text}), str_key="title")
+        except Exception as e:
+            logger.error(f"Achievement extraction failed: {e}")
             return []
 
     def _extract_projects(self, text: str) -> List[Dict]:
@@ -212,15 +239,20 @@ class ResumeParserAgent:
                 desc = item.get("description")
 
                 # Fuzzy dedup (issue #72): 'IDXExchange' merges with 'IDX Exchange'
-                # instead of creating a second, sparser row. Enrich the existing
-                # row with anything it is missing rather than dropping the new data.
+                # instead of creating a second, sparser row. A placeholder title
+                # on either side still merges on company alone, so an 'Unknown
+                # Position' row folds into the real one. Enrich the existing row
+                # with anything it is missing rather than dropping the new data.
                 match = next(
                     (e for e in existing_exps
-                     if self._names_match(e.title, title)
-                     and self._names_match(e.company, company)),
+                     if self._experiences_match(e.title, e.company, title, company)),
                     None,
                 )
                 if match:
+                    if self._is_placeholder_name(match.title) and not self._is_placeholder_name(title):
+                        match.title = title
+                        match.updated_at = datetime.utcnow()
+                        session.add(match)
                     if self._merge_experience(match, start, end, desc, bullets):
                         session.add(match)
                     logger.debug(f"Merged experience into: {match.title} @ {match.company}")
@@ -259,10 +291,14 @@ class ResumeParserAgent:
 
     # ── Self-heal for existing rows (issue #72) ──────────────────────────────
 
-    @staticmethod
-    def _exp_row_richness(e) -> tuple:
-        """Prefer the row with more bullets, then real dates, then description."""
-        return (len(e.bullets or []),
+    @classmethod
+    def _exp_row_richness(cls, e) -> tuple:
+        """Prefer a row with a real (non-placeholder) title, then more bullets,
+        then real dates, then description. The title term ranks first so the
+        real 'Data Science Intern' row always survives an 'Unknown Position'
+        duplicate regardless of the other fields."""
+        return (0 if cls._is_placeholder_name(e.title) else 1,
+                len(e.bullets or []),
                 bool(e.start_date) + bool(e.end_date),
                 len((e.description or "").strip()))
 
@@ -285,8 +321,7 @@ class ResumeParserAgent:
                 session.add(e)
             match = next(
                 (k for k in kept
-                 if cls._names_match(k.title, e.title)
-                 and cls._names_match(k.company, e.company)),
+                 if cls._experiences_match(k.title, k.company, e.title, e.company)),
                 None,
             )
             if match is None:
@@ -330,7 +365,11 @@ class ResumeParserAgent:
                 p.start_date, p.end_date = cs, ce
                 p.updated_at = datetime.utcnow()
                 session.add(p)
-            match = next((k for k in kept if cls._names_match(k.name, p.name)), None)
+            match = next(
+                (k for k in kept
+                 if cls._projects_match(k.name, k.repo_url, p.name, p.repo_url)),
+                None,
+            )
             if match is None:
                 kept.append(p)
                 continue
@@ -349,28 +388,85 @@ class ResumeParserAgent:
             removed += 1
         return removed
 
+    @classmethod
+    def _heal_education(cls, session, user_id) -> int:
+        """Merge fuzzy-duplicate education rows for a user, keeping the richest
+        of each institution+degree group and backfilling the survivor's blanks.
+        Distinct degrees at one school stay separate. Returns rows removed;
+        idempotent when the data is already clean."""
+        rows = list(session.exec(
+            select(Education).where(Education.user_id == user_id)
+            .order_by(Education.created_at)
+        ).all())
+
+        def richness(e) -> tuple:
+            return (bool(e.gpa),
+                    bool(e.start_date) + bool(e.end_date),
+                    bool(e.location),
+                    len((e.degree or "").strip()))
+
+        kept: List = []
+        removed = 0
+        for e in rows:
+            match = next(
+                (k for k in kept
+                 if cls._education_match(k.institution, k.degree, e.institution, e.degree)),
+                None,
+            )
+            if match is None:
+                kept.append(e)
+                continue
+            richer, poorer = (e, match) if richness(e) > richness(match) else (match, e)
+            for field in ("degree", "location", "start_date", "end_date", "gpa"):
+                if not getattr(richer, field, None) and getattr(poorer, field, None):
+                    setattr(richer, field, getattr(poorer, field))
+            richer.updated_at = datetime.utcnow()
+            session.add(richer)
+            session.delete(poorer)
+            if richer is e:  # e won: replace match in kept
+                kept[kept.index(match)] = e
+            removed += 1
+        return removed
+
     def _save_education(self, data: List[Dict], source: str):
         with Session(engine) as session:
+            existing = list(session.exec(
+                select(Education).where(Education.user_id == self.user.user_id)
+            ).all())
             for item in data:
                 institution = str(item.get("institution") or "").strip()
                 degree = str(item.get("degree") or "").strip()
                 if not institution:
                     continue
 
-                # Dedup by institution + degree for this user
-                existing = session.exec(
-                    select(Education).where(
-                        Education.user_id == self.user.user_id,
-                        Education.institution == institution,
-                        Education.degree == degree,
-                    )
-                ).first()
-                if existing:
-                    logger.debug(f"Skipping duplicate education: {degree} at {institution}")
+                # Fuzzy dedup on institution + degree, so re-ingested rows with
+                # trivially different strings merge instead of duplicating, while
+                # distinct degrees at one school stay separate (issue #73 follow-up).
+                match = next(
+                    (e for e in existing
+                     if self._education_match(e.institution, e.degree, institution, degree)),
+                    None,
+                )
+                if match:
+                    logger.debug(f"Merging duplicate education: {degree} at {institution}")
+                    changed = False
+                    if not match.degree and degree:
+                        match.degree = degree; changed = True
+                    gpa = item.get("gpa")
+                    for field, val in (("location", item.get("location")),
+                                       ("start_date", item.get("start_date")),
+                                       ("end_date", item.get("end_date")),
+                                       ("gpa", str(gpa).strip() if gpa else None)):
+                        v = str(val or "").strip()
+                        if v and not getattr(match, field, None):
+                            setattr(match, field, v); changed = True
+                    if changed:
+                        match.updated_at = datetime.utcnow()
+                        session.add(match)
                     continue
 
                 gpa = item.get("gpa")
-                session.add(Education(
+                row = Education(
                     user_id=self.user.user_id,
                     institution=institution,
                     degree=degree,
@@ -378,8 +474,99 @@ class ResumeParserAgent:
                     start_date=item.get("start_date"),
                     end_date=item.get("end_date"),
                     gpa=str(gpa).strip() if gpa else None,
-                ))
+                )
+                session.add(row)
+                existing.append(row)
             session.commit()
+
+    def _save_achievements(self, data: List[Dict], source: str):
+        with Session(engine) as session:
+            existing = list(session.exec(
+                select(Achievement).where(Achievement.user_id == self.user.user_id)
+            ).all())
+            for item in data:
+                title = str(item.get("title") or "").strip()
+                if not title:
+                    continue
+                issuer = str(item.get("issuer") or "").strip() or None
+
+                # Fuzzy dedup on title (+ issuer as enrichment), so a resume line
+                # and its LinkedIn honors_and_awards entry fold into one row
+                # instead of duplicating. Never drops content — merges blanks.
+                match = next(
+                    (a for a in existing
+                     if self._achievements_match(a.title, a.issuer, title, issuer)),
+                    None,
+                )
+                if match:
+                    if self._merge_achievement(match, item):
+                        session.add(match)
+                    logger.debug(f"Merged achievement into: {match.title}")
+                    continue
+
+                row = Achievement(
+                    user_id=self.user.user_id,
+                    title=title,
+                    description=str(item.get("description") or "").strip() or None,
+                    issuer=issuer,
+                    date=str(item.get("date") or "").strip() or None,
+                )
+                session.add(row)
+                existing.append(row)
+            session.commit()
+
+    @staticmethod
+    def _merge_achievement(row, item: Dict) -> bool:
+        """Fill a row's missing description/issuer/date from another source.
+        Idempotent — re-ingesting the same data changes nothing. Returns whether
+        the row was modified."""
+        changed = False
+        for field in ("description", "issuer", "date"):
+            val = str(item.get(field) or "").strip()
+            if val and not getattr(row, field, None):
+                setattr(row, field, val)
+                changed = True
+        if changed:
+            row.updated_at = datetime.utcnow()
+        return changed
+
+    @classmethod
+    def _heal_achievements(cls, session, user_id) -> int:
+        """Merge fuzzy-duplicate achievement rows for a user, keeping the richest
+        of each title group and backfilling the survivor's blanks. Returns rows
+        removed; idempotent when the data is already clean."""
+        rows = list(session.exec(
+            select(Achievement).where(Achievement.user_id == user_id)
+            .order_by(Achievement.created_at)
+        ).all())
+
+        def richness(a) -> tuple:
+            return (len((a.description or "").strip()),
+                    bool(a.issuer),
+                    bool(a.date))
+
+        kept: List = []
+        removed = 0
+        for a in rows:
+            match = next(
+                (k for k in kept
+                 if cls._achievements_match(k.title, k.issuer, a.title, a.issuer)),
+                None,
+            )
+            if match is None:
+                kept.append(a)
+                continue
+            richer, poorer = (a, match) if richness(a) > richness(match) else (match, a)
+            for field in ("description", "issuer", "date"):
+                if not getattr(richer, field, None) and getattr(poorer, field, None):
+                    setattr(richer, field, getattr(poorer, field))
+            richer.updated_at = datetime.utcnow()
+            session.add(richer)
+            session.delete(poorer)
+            if richer is a:  # a won: replace match in kept
+                kept[kept.index(match)] = a
+            removed += 1
+        return removed
 
     def _save_projects(self, data: List[Dict], source: str, repo_metrics: Dict[str, Dict] = None):
         # GitHub signals keyed by repo name (issue #46) — matched case-insensitively
@@ -394,9 +581,12 @@ class ResumeParserAgent:
                 metrics = metrics_by_name.get(name.lower(), {})
 
                 # Fuzzy dedup (issue #72): '…Prediction(Stacked…)' merges with
-                # '…Prediction (Stacked…)' instead of duplicating.
+                # '…Prediction (Stacked…)' instead of duplicating. A shared repo
+                # URL merges a GitHub-ingested repo with its resume line even
+                # when the names diverge.
                 match = next(
-                    (p for p in existing_projects if self._names_match(p.name, name)),
+                    (p for p in existing_projects
+                     if self._projects_match(p.name, p.repo_url, name, item.get("repo_url"))),
                     None,
                 )
                 if match:
@@ -453,6 +643,91 @@ class ResumeParserAgent:
         shorter, longer = sorted((na, nb), key=len)
         return len(shorter) >= 10 and shorter in longer
 
+    @classmethod
+    def _is_placeholder_name(cls, value: Any) -> bool:
+        """True when a title/company/name is a sentinel like 'Unknown Position'
+        or '?' that should act as a wildcard during dedup rather than a real,
+        distinguishing value."""
+        return cls._norm_name(value) in _PLACEHOLDER_NAMES
+
+    @classmethod
+    def _experiences_match(cls, t1: Any, c1: Any, t2: Any, c2: Any) -> bool:
+        """Two experiences are the same job when their companies fuzzy-match and
+        either their titles fuzzy-match or one side's title is a placeholder.
+        Lets a sparse 'Unknown Position @ IDXExchange' row fold into the real
+        'Data Science Intern @ IDX Exchange' one, across any pair of sources."""
+        if not cls._names_match(c1, c2):
+            return False
+        return (cls._names_match(t1, t2)
+                or cls._is_placeholder_name(t1)
+                or cls._is_placeholder_name(t2))
+
+    @classmethod
+    def _projects_match(cls, a_name: Any, a_repo: Any, b_name: Any, b_repo: Any) -> bool:
+        """Same project when they share a repo URL — the strongest cross-source
+        signal, matching a GitHub-ingested repo to its resume line even when the
+        names diverge — or, failing that, when their names fuzzy-match."""
+        ra = str(a_repo or "").strip().lower().rstrip("/")
+        rb = str(b_repo or "").strip().lower().rstrip("/")
+        if ra and rb and ra == rb:
+            return True
+        return cls._names_match(a_name, b_name)
+
+    # Degree-level tokens, checked most-advanced first. Matching on level rather
+    # than raw string lets an abbreviated 'BS, CS' merge with a spelled-out
+    # 'B.S. Computer Science' while keeping an 'M.S.' distinct from a 'B.S.' at
+    # the same school. Patterns run against the normalized (space-joined) degree,
+    # so 'b\s*s' covers both 'bs' and 'b s'.
+    _DEGREE_LEVEL_PATTERNS = [
+        ("phd", re.compile(r"\b(ph\s*d|phd|doctor\w*|dphil)\b")),
+        ("master", re.compile(r"\b(m\s*b\s*a|mba|master\w*|m\s*s|m\s*sc|m\s*a|m\s*eng)\b")),
+        ("bachelor", re.compile(r"\b(bachelor\w*|b\s*s|b\s*sc|b\s*a|b\s*eng)\b")),
+        ("associate", re.compile(r"\b(associate\w*|a\s*a\s*s)\b")),
+    ]
+
+    @classmethod
+    def _degree_level(cls, degree: Any) -> str:
+        """Coarse degree level ('bachelor'/'master'/'phd'/'associate') extracted
+        from a free-form degree string, or '' when none is recognized."""
+        norm = cls._norm_name(degree)
+        for level, pattern in cls._DEGREE_LEVEL_PATTERNS:
+            if pattern.search(norm):
+                return level
+        return ""
+
+    @classmethod
+    def _education_match(cls, inst_a: Any, deg_a: Any, inst_b: Any, deg_b: Any) -> bool:
+        """Same education entry when institutions fuzzy-match ('UC San Diego' ==
+        'University of California, San Diego') and the degrees are the same
+        level, or either degree is blank/unrecognized and the strings fuzzy-match.
+        Distinct degree levels at one school stay separate so an M.S. and a B.S.
+        are never collapsed into one row."""
+        if not cls._names_match(inst_a, inst_b):
+            return False
+        la, lb = cls._degree_level(deg_a), cls._degree_level(deg_b)
+        if la and lb:
+            return la == lb
+        da, db = cls._norm_name(deg_a), cls._norm_name(deg_b)
+        if not da or not db:
+            return True
+        return cls._names_match(deg_a, deg_b)
+
+    @classmethod
+    def _achievements_match(cls, title_a: Any, issuer_a: Any, title_b: Any, issuer_b: Any) -> bool:
+        """Same achievement when their titles fuzzy-match ('Deans List' ==
+        "Dean's List"), or when one title is a substring of a longer title and
+        the issuers agree — folding a resume line into its LinkedIn honors entry
+        across sources. Issuer alone never matches; a distinct award keeps its
+        own row."""
+        if cls._names_match(title_a, title_b):
+            return True
+        ia, ib = cls._norm_name(issuer_a), cls._norm_name(issuer_b)
+        if ia and ib and ia == ib:
+            ta, tb = cls._norm_name(title_a), cls._norm_name(title_b)
+            if ta and tb and (ta in tb or tb in ta):
+                return True
+        return False
+
     @staticmethod
     def _enrich(row, item: Dict, fields: List[str]) -> bool:
         """Fill missing scalar fields; append genuinely new description text.
@@ -487,7 +762,8 @@ class ResumeParserAgent:
                 item["start_date"] = _clean_date(item.get("start_date"))
                 item["end_date"] = _clean_date(item.get("end_date"))
                 match = next(
-                    (p for p in existing_projects if self._names_match(p.name, name)),
+                    (p for p in existing_projects
+                     if self._projects_match(p.name, p.repo_url, name, item.get("repo_url"))),
                     None,
                 )
                 if match:
@@ -508,7 +784,6 @@ class ResumeParserAgent:
             existing_exps = list(session.exec(
                 select(Experience).where(Experience.user_id == self.user.user_id)
             ).all())
-            placeholders = {"", "unknown", "unknown position"}
             for item in experiences:
                 title = str(item.get("title") or "").strip()
                 company = str(item.get("company") or "").strip()
@@ -521,14 +796,11 @@ class ResumeParserAgent:
                 # LinkedIn entry enriches the resume-ingested row.
                 match = next(
                     (e for e in existing_exps
-                     if company and self._names_match(e.company, company)
-                     and (self._names_match(e.title, title)
-                          or self._norm_name(title) in placeholders
-                          or self._norm_name(e.title) in placeholders)),
+                     if self._experiences_match(e.title, e.company, title, company)),
                     None,
                 )
                 if match:
-                    if self._norm_name(match.title) in placeholders and title:
+                    if self._is_placeholder_name(match.title) and title and not self._is_placeholder_name(title):
                         match.title = title
                         match.updated_at = datetime.utcnow()
                         session.add(match)
@@ -563,8 +835,11 @@ class ResumeParserAgent:
                         str(item.get("field") or "").strip(),
                     ) if p
                 )
-                if any(self._names_match(e.institution, institution) for e in existing_edu):
-                    logger.debug(f"Skipping LinkedIn education already present: {institution}")
+                # Match on institution + degree so a second degree at the same
+                # school (M.S. after B.S.) is not dropped as a duplicate.
+                if any(self._education_match(e.institution, e.degree, institution, degree)
+                       for e in existing_edu):
+                    logger.debug(f"Skipping LinkedIn education already present: {degree} at {institution}")
                     continue
                 edu = Education(
                     user_id=self.user.user_id,
@@ -575,6 +850,45 @@ class ResumeParserAgent:
                 )
                 session.add(edu)
                 existing_edu.append(edu)
+
+            # Achievements (honors_and_awards): Bright Data returns title,
+            # publication (the issuer), date, and description. Merge on title so a
+            # resume-ingested achievement is not duplicated by the LinkedIn one.
+            achievements = self._coerce_records(
+                record.get("honors_and_awards"), str_key="title")
+            existing_ach = list(session.exec(
+                select(Achievement).where(Achievement.user_id == self.user.user_id)
+            ).all())
+            for item in achievements:
+                title = str(item.get("title") or "").strip()
+                if not title:
+                    continue
+                issuer = str(
+                    item.get("issuer") or item.get("publication") or "").strip() or None
+                match = next(
+                    (a for a in existing_ach
+                     if self._achievements_match(a.title, a.issuer, title, issuer)),
+                    None,
+                )
+                if match:
+                    merge_item = {
+                        "description": item.get("description"),
+                        "issuer": issuer,
+                        "date": item.get("date"),
+                    }
+                    if self._merge_achievement(match, merge_item):
+                        session.add(match)
+                    logger.debug(f"Merged LinkedIn achievement into: {match.title}")
+                    continue
+                ach = Achievement(
+                    user_id=self.user.user_id,
+                    title=title,
+                    description=str(item.get("description") or "").strip() or None,
+                    issuer=issuer,
+                    date=str(item.get("date") or "").strip() or None,
+                )
+                session.add(ach)
+                existing_ach.append(ach)
             session.commit()
 
     def _save_skills(self, data: List[Dict], source: str):

@@ -17,7 +17,14 @@ SECTION_KEYWORDS = {
     "employment": "experience",
     "skills": "skills",
     "technical skills": "skills",
-    "certifications": "certifications"
+    "certifications": "certifications",
+    "achievements": "achievements",
+    "achievements and awards": "achievements",
+    "awards": "achievements",
+    "awards and honors": "achievements",
+    "honors": "achievements",
+    "honors and awards": "achievements",
+    "honors & awards": "achievements",
 }
 
 # Header contact-line parsing (issue #75): pull actual values, not just field

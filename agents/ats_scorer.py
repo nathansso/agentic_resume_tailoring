@@ -178,6 +178,12 @@ class ATSScoringEngine:
             for proj in tailored_content.get("projects") or []:
                 parts.append(proj.get("name", ""))
                 parts.extend(proj.get("bullets") or [])
+        elif section_key == "achievements":
+            for ach in tailored_content.get("achievements") or []:
+                parts.append(ach.get("title", ""))
+                for field in ("issuer", "description"):
+                    if ach.get(field):
+                        parts.append(ach[field])
         elif section_key == "skills":
             # Prefer the JD-ranked/capped skill list (issue #54) so the scored
             # text matches what the formatter actually renders; fall back to the

@@ -17,8 +17,8 @@ from sqlmodel import Session, delete, select
 
 from database.db import engine
 from database.models import (
-    ChatMessage, Education, Experience, JobDescription, JobSkill, Project,
-    Skill, User, UserJobResult, UserSkill,
+    Achievement, ChatMessage, Education, Experience, JobDescription, JobSkill,
+    Project, Skill, User, UserJobResult, UserSkill,
 )
 
 logger = logging.getLogger(__name__)
@@ -387,6 +387,27 @@ def get_education(user_id: Optional[UUID]) -> list[dict]:
                 "gpa": e.gpa or "",
             }
             for e in entries
+        ]
+
+
+def get_achievements(user_id: Optional[UUID]) -> list[dict]:
+    """This user's achievements for the Data Explorer, in resume-document order."""
+    if user_id is None:
+        return []
+    with Session(engine) as session:
+        entries = session.exec(
+            select(Achievement)
+            .where(Achievement.user_id == user_id)
+            .order_by(Achievement.created_at)
+        ).all()
+        return [
+            {
+                "title": a.title,
+                "description": a.description or "",
+                "issuer": a.issuer or "",
+                "date": a.date or "",
+            }
+            for a in entries
         ]
 
 

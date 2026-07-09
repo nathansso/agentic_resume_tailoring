@@ -1,9 +1,9 @@
 import { useState, useEffect, type CSSProperties } from "react";
-import type { SkillRow, ExpRow, ProjectRow, EducationRow, GraphData } from "../types";
+import type { SkillRow, ExpRow, ProjectRow, EducationRow, AchievementRow, GraphData } from "../types";
 import { colors, font } from "../theme";
-import { getSkills, getExperiences, getProjects, getEducation, getGraph, setSkillCore } from "../api/profile";
+import { getSkills, getExperiences, getProjects, getEducation, getAchievements, getGraph, setSkillCore } from "../api/profile";
 
-type Tab = "skills" | "experiences" | "education" | "projects" | "graph" | "charts";
+type Tab = "skills" | "experiences" | "education" | "projects" | "achievements" | "graph" | "charts";
 
 export function DataExplorer() {
   const [tab, setTab] = useState<Tab>("skills");
@@ -11,14 +11,15 @@ export function DataExplorer() {
   const [exps, setExps] = useState<ExpRow[]>([]);
   const [education, setEducation] = useState<EducationRow[]>([]);
   const [projects, setProjects] = useState<ProjectRow[]>([]);
+  const [achievements, setAchievements] = useState<AchievementRow[]>([]);
   const [graph, setGraph] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([getSkills(), getExperiences(), getProjects(), getEducation(), getGraph()])
-      .then(([s, e, p, ed, g]) => { setSkills(s); setExps(e); setProjects(p); setEducation(ed); setGraph(g); })
+    Promise.all([getSkills(), getExperiences(), getProjects(), getEducation(), getAchievements(), getGraph()])
+      .then(([s, e, p, ed, a, g]) => { setSkills(s); setExps(e); setProjects(p); setEducation(ed); setAchievements(a); setGraph(g); })
       .catch(err => setError(err instanceof Error ? err.message : "Failed to load data"))
       .finally(() => setLoading(false));
   }, []);
@@ -38,6 +39,7 @@ export function DataExplorer() {
     { key: "experiences", label: `Experiences (${exps.length})` },
     { key: "education", label: `Education (${education.length})` },
     { key: "projects", label: `Projects (${projects.length})` },
+    { key: "achievements", label: `Achievements (${achievements.length})` },
     { key: "graph", label: "Graph" },
     { key: "charts", label: "Charts" },
   ];
@@ -63,6 +65,7 @@ export function DataExplorer() {
         {!loading && !error && tab === "experiences" && <ExpsTab exps={exps} />}
         {!loading && !error && tab === "education" && <EducationTab education={education} />}
         {!loading && !error && tab === "projects" && <ProjectsTab projects={projects} />}
+        {!loading && !error && tab === "achievements" && <AchievementsTab achievements={achievements} />}
         {!loading && !error && tab === "graph" && <GraphTab graph={graph ?? { top_skills: [], by_category: {}, evidence: {} }} />}
         {!loading && !error && tab === "charts" && <ChartsTab skills={skills} graph={graph} />}
       </div>
@@ -170,6 +173,42 @@ function EducationTab({ education }: { education: EducationRow[] }) {
           <span style={{ color: colors.textMuted }}>{e.location || "—"}</span>
           <span style={{ color: colors.textMuted }}>{e.gpa || "—"}</span>
           <span style={{ color: colors.textMuted }}>{dates(e)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AchievementsTab({ achievements }: { achievements: AchievementRow[] }) {
+  if (achievements.length === 0) {
+    return (
+      <p style={sInner.empty}>
+        No achievements yet — ingest your resume or LinkedIn to add achievements.
+        Your tailored resumes will omit the achievements section until then.
+      </p>
+    );
+  }
+  const meta = (a: AchievementRow) =>
+    [a.issuer, a.date].filter(Boolean).join(", ");
+  return (
+    <div style={sInner.table}>
+      <div style={{ ...sInner.tableHead, gridTemplateColumns: "2fr 3fr" }}>
+        <span>Achievement</span><span>Details</span>
+      </div>
+      {achievements.map((a, i) => (
+        <div
+          key={i}
+          style={{
+            ...sInner.tableRow,
+            gridTemplateColumns: "2fr 3fr",
+            background: i % 2 === 0 ? colors.surface : colors.boost,
+          }}
+        >
+          <span>
+            {a.title}
+            {meta(a) && <span style={{ color: colors.textMuted }}> ({meta(a)})</span>}
+          </span>
+          <span style={{ color: colors.textMuted }}>{a.description || "—"}</span>
         </div>
       ))}
     </div>

@@ -20,7 +20,7 @@ from agents.skill_postprocessor import normalize_skill_name, should_reject_skill
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_SECTION_ORDER = ["education", "experience", "projects", "skills"]
+_DEFAULT_SECTION_ORDER = ["education", "experience", "projects", "skills", "achievements"]
 
 # ── Jake's Resume preamble (exact match to https://github.com/jakegut/resume) ──
 
@@ -352,6 +352,13 @@ class ResumeFormatterAgent:
             ).all())
 
     @staticmethod
+    def _achievement_meta(a: Dict) -> str:
+        """Parenthetical '(issuer, date)' for an achievement, or '' when both are
+        absent."""
+        return ", ".join(x for x in (
+            (a.get("issuer") or "").strip(), (a.get("date") or "").strip()) if x)
+
+    @staticmethod
     def _education_degree_line(entry: Education) -> str:
         return f"{entry.degree}, GPA: {entry.gpa}" if entry.gpa else entry.degree
 
@@ -620,6 +627,20 @@ class ResumeFormatterAgent:
                     r_text = p.add_run(", ".join(skills) + "    ")
                     r_text.font.size = Pt(10)
 
+            elif key == "achievements":
+                achs = [a for a in tailored_content.get("achievements", [])
+                        if (a.get("title") or "").strip()]
+                if not achs:
+                    continue
+                _section_heading(self._resolve_label("achievements"))
+                for a in achs:
+                    meta = self._achievement_meta(a)
+                    line = a["title"].strip() + (f" ({meta})" if meta else "")
+                    desc = (a.get("description") or "").strip()
+                    if desc:
+                        line += f": {desc}"
+                    _bullet(line)
+
         buf = io.BytesIO()
         doc.save(buf)
         return buf.getvalue()
@@ -644,6 +665,9 @@ class ResumeFormatterAgent:
             ),
             "skills": lambda: self._build_tex_skills(
                 tailored_content.get("skills_ranked")
+            ),
+            "achievements": lambda: self._build_tex_achievements(
+                tailored_content.get("achievements", [])
             ),
         }
 
@@ -732,6 +756,32 @@ class ResumeFormatterAgent:
                 f"{{{_escape_tex(self._education_date_line(entry))}}}",
             ]
         lines.append(r"  \resumeSubHeadingListEnd")
+        return "\n".join(lines)
+
+    def _build_tex_achievements(self, achievements: List[Dict]) -> str:
+        """Achievements/honors section: a flat bulleted list rendered verbatim
+        from the knowledge graph (never fabricated). Omitted when empty."""
+        items = [a for a in (achievements or []) if (a.get("title") or "").strip()]
+        if not items:
+            return ""
+        label = _escape_tex(self._resolve_label("achievements"))
+        lines = [
+            rf"\section{{{label}}}",
+            r"  \resumeSubHeadingListStart",
+            r"    \resumeItemListStart",
+        ]
+        for a in items:
+            title = _convert_inline(a["title"].strip())
+            meta = self._achievement_meta(a)
+            entry = rf"\textbf{{{title}}}" + (f" ({_escape_tex(meta)})" if meta else "")
+            desc = (a.get("description") or "").strip()
+            if desc:
+                entry += ": " + _convert_inline(desc)
+            lines.append(r"      \resumeItem{" + entry + "}")
+        lines += [
+            r"    \resumeItemListEnd",
+            r"  \resumeSubHeadingListEnd",
+        ]
         return "\n".join(lines)
 
     def _build_tex_experiences(self, experiences: List[Dict]) -> str:
@@ -952,6 +1002,11 @@ class ResumeFormatterAgent:
                 label=self._resolve_label("skills"),
                 ranked=tailored_content.get("skills_ranked"),
             ),
+            "achievements": lambda: self._build_achievements(
+                tailored_content.get("achievements", []),
+                label=self._resolve_label("achievements"),
+                bullet_prefix=bullet,
+            ),
         }
 
         sections = [self._build_header()]
@@ -1002,6 +1057,20 @@ class ResumeFormatterAgent:
             if date:
                 line += f", {date}"
             lines.append(line + "  ")
+        return "\n".join(lines)
+
+    def _build_achievements(self, achievements, label="Achievements", bullet_prefix="- "):
+        items = [a for a in (achievements or []) if (a.get("title") or "").strip()]
+        if not items:
+            return ""
+        lines = [label]
+        for a in items:
+            meta = self._achievement_meta(a)
+            line = f"{bullet_prefix}**{a['title'].strip()}**" + (f" ({meta})" if meta else "")
+            desc = (a.get("description") or "").strip()
+            if desc:
+                line += f": {self._format_bullet(desc)}"
+            lines.append(line)
         return "\n".join(lines)
 
     def _build_projects(self, projects, label="Projects", bullet_prefix="- "):
