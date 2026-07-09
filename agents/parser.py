@@ -15,6 +15,20 @@ from agents.skill_postprocessor import postprocess_skills, normalize_skill_name
 
 logger = logging.getLogger(__name__)
 
+# Date strings the extractor emits when a real date is absent — coerced to None
+# at save time so the knowledge graph never stores "Not specified" as a date
+# (issue #72). Mirrors the tailor/formatter placeholder sets.
+_PLACEHOLDER_DATE_TOKENS = {
+    "", "not specified", "unknown", "unspecified", "n/a", "na", "none", "tbd", "-",
+}
+
+
+def _clean_date(value):
+    """Coerce a placeholder date string to None; pass real dates through."""
+    v = str(value or "").strip()
+    return None if v.lower() in _PLACEHOLDER_DATE_TOKENS else v
+
+
 class ResumeParserAgent:
     def __init__(self):
         self.llm = get_llm(role="extract", temperature=0.0)
@@ -61,6 +75,14 @@ class ResumeParserAgent:
         # Post-process: filter noise, normalize names, deduplicate
         skills = postprocess_skills(skills)
         self._save_skills(skills, source_file)
+
+        # Self-heal (issue #72): merge pre-existing fuzzy-duplicate experience/
+        # project rows and coerce placeholder dates, so any junk from earlier
+        # ingests is cleaned up without the user having to re-ingest from scratch.
+        with Session(engine) as session:
+            self._heal_experiences(session, self.user.user_id)
+            self._heal_projects(session, self.user.user_id)
+            session.commit()
 
         logger.info("Parsing complete and saved to DB.")
 
@@ -178,33 +200,154 @@ class ResumeParserAgent:
 
     def _save_experiences(self, data: List[Dict], source: str):
         with Session(engine) as session:
+            existing_exps = list(session.exec(
+                select(Experience).where(Experience.user_id == self.user.user_id)
+            ).all())
             for item in data:
-                title = item.get("title", "Unknown")
-                company = item.get("company", "Unknown")
+                title = str(item.get("title") or "").strip() or "Unknown"
+                company = str(item.get("company") or "").strip() or "Unknown"
+                start = _clean_date(item.get("start_date"))
+                end = _clean_date(item.get("end_date"))
+                bullets = item.get("bullets") or []
+                desc = item.get("description")
 
-                # Dedup by title + company for this user
-                existing = session.exec(
-                    select(Experience).where(
-                        Experience.user_id == self.user.user_id,
-                        Experience.title == title,
-                        Experience.company == company,
-                    )
-                ).first()
-                if existing:
-                    logger.debug(f"Skipping duplicate experience: {title} at {company}")
+                # Fuzzy dedup (issue #72): 'IDXExchange' merges with 'IDX Exchange'
+                # instead of creating a second, sparser row. Enrich the existing
+                # row with anything it is missing rather than dropping the new data.
+                match = next(
+                    (e for e in existing_exps
+                     if self._names_match(e.title, title)
+                     and self._names_match(e.company, company)),
+                    None,
+                )
+                if match:
+                    if self._merge_experience(match, start, end, desc, bullets):
+                        session.add(match)
+                    logger.debug(f"Merged experience into: {match.title} @ {match.company}")
                     continue
 
                 exp = Experience(
                     user_id=self.user.user_id,
                     title=title,
                     company=company,
-                    start_date=item.get("start_date"),
-                    end_date=item.get("end_date"),
-                    description=item.get("description"),
-                    bullets=item.get("bullets", [])
+                    start_date=start,
+                    end_date=end,
+                    description=desc,
+                    bullets=bullets,
                 )
                 session.add(exp)
+                existing_exps.append(exp)
             session.commit()
+
+    @staticmethod
+    def _merge_experience(row, start, end, description, bullets) -> bool:
+        """Fill a row's missing date/description/bullets from another source.
+        Idempotent — re-ingesting the same data changes nothing. Returns whether
+        the row was modified."""
+        changed = False
+        if start and not row.start_date:
+            row.start_date = start; changed = True
+        if end and not row.end_date:
+            row.end_date = end; changed = True
+        if description and not (row.description or "").strip():
+            row.description = description; changed = True
+        if bullets and not (row.bullets or []):
+            row.bullets = bullets; changed = True
+        if changed:
+            row.updated_at = datetime.utcnow()
+        return changed
+
+    # ── Self-heal for existing rows (issue #72) ──────────────────────────────
+
+    @staticmethod
+    def _exp_row_richness(e) -> tuple:
+        """Prefer the row with more bullets, then real dates, then description."""
+        return (len(e.bullets or []),
+                bool(e.start_date) + bool(e.end_date),
+                len((e.description or "").strip()))
+
+    @classmethod
+    def _heal_experiences(cls, session, user_id) -> int:
+        """Coerce placeholder dates and merge fuzzy-duplicate experience rows for
+        a user, keeping the richest of each group and deleting the rest. Returns
+        the number of rows removed. Idempotent when the data is already clean."""
+        rows = list(session.exec(
+            select(Experience).where(Experience.user_id == user_id)
+            .order_by(Experience.created_at)
+        ).all())
+        kept: List = []
+        removed = 0
+        for e in rows:
+            cs, ce = _clean_date(e.start_date), _clean_date(e.end_date)
+            if cs != e.start_date or ce != e.end_date:
+                e.start_date, e.end_date = cs, ce
+                e.updated_at = datetime.utcnow()
+                session.add(e)
+            match = next(
+                (k for k in kept
+                 if cls._names_match(k.title, e.title)
+                 and cls._names_match(k.company, e.company)),
+                None,
+            )
+            if match is None:
+                kept.append(e)
+                continue
+            # Merge into the richer row; delete the poorer.
+            if cls._exp_row_richness(e) > cls._exp_row_richness(match):
+                cls._merge_experience(e, match.start_date, match.end_date,
+                                      match.description, match.bullets)
+                session.add(e)
+                session.delete(match)
+                kept[kept.index(match)] = e
+            else:
+                cls._merge_experience(match, e.start_date, e.end_date,
+                                      e.description, e.bullets)
+                session.add(match)
+                session.delete(e)
+            removed += 1
+        return removed
+
+    @classmethod
+    def _heal_projects(cls, session, user_id) -> int:
+        """Coerce placeholder dates and merge fuzzy-duplicate project rows for a
+        user, keeping the richer of each pair. Returns rows removed."""
+        rows = list(session.exec(
+            select(Project).where(Project.user_id == user_id)
+            .order_by(Project.created_at)
+        ).all())
+
+        def richness(p) -> tuple:
+            return (len((p.description or "").strip()),
+                    1 if (p.metrics or {}) else 0,
+                    bool(p.repo_url) + bool(p.demo_url),
+                    bool(p.start_date) + bool(p.end_date))
+
+        kept: List = []
+        removed = 0
+        for p in rows:
+            cs, ce = _clean_date(p.start_date), _clean_date(p.end_date)
+            if cs != p.start_date or ce != p.end_date:
+                p.start_date, p.end_date = cs, ce
+                p.updated_at = datetime.utcnow()
+                session.add(p)
+            match = next((k for k in kept if cls._names_match(k.name, p.name)), None)
+            if match is None:
+                kept.append(p)
+                continue
+            richer, poorer = (p, match) if richness(p) > richness(match) else (match, p)
+            # Backfill the survivor's blanks from the row being removed.
+            for field in ("description", "repo_url", "demo_url", "start_date", "end_date"):
+                if not getattr(richer, field, None) and getattr(poorer, field, None):
+                    setattr(richer, field, getattr(poorer, field))
+            if not (richer.metrics or {}) and (poorer.metrics or {}):
+                richer.metrics = poorer.metrics
+            richer.updated_at = datetime.utcnow()
+            session.add(richer)
+            session.delete(poorer)
+            if richer is p:  # p won: replace match in kept
+                kept[kept.index(match)] = p
+            removed += 1
+        return removed
 
     def _save_education(self, data: List[Dict], source: str):
         with Session(engine) as session:
@@ -243,23 +386,34 @@ class ResumeParserAgent:
         # against extracted project names so complexity scoring can use them later.
         metrics_by_name = {k.lower(): v for k, v in (repo_metrics or {}).items()}
         with Session(engine) as session:
+            existing_projects = list(session.exec(
+                select(Project).where(Project.user_id == self.user.user_id)
+            ).all())
             for item in data:
-                name = item.get("name", "Unknown")
+                name = str(item.get("name") or "").strip() or "Unknown"
                 metrics = metrics_by_name.get(name.lower(), {})
 
-                # Dedup by project name for this user
-                existing = session.exec(
-                    select(Project).where(
-                        Project.user_id == self.user.user_id,
-                        Project.name == name,
-                    )
-                ).first()
-                if existing:
+                # Fuzzy dedup (issue #72): '…Prediction(Stacked…)' merges with
+                # '…Prediction (Stacked…)' instead of duplicating.
+                match = next(
+                    (p for p in existing_projects if self._names_match(p.name, name)),
+                    None,
+                )
+                if match:
+                    changed = False
                     if metrics:
-                        # Re-ingest: refresh GitHub signals on the existing row
-                        existing.metrics = metrics
-                        session.add(existing)
-                    logger.debug(f"Skipping duplicate project: {name}")
+                        match.metrics = metrics; changed = True  # refresh GitHub signals
+                    for field in ("description", "repo_url", "demo_url"):
+                        val = str(item.get(field) or "").strip()
+                        if val and not getattr(match, field, None):
+                            setattr(match, field, val); changed = True
+                    for field in ("start_date", "end_date"):
+                        val = _clean_date(item.get(field))
+                        if val and not getattr(match, field, None):
+                            setattr(match, field, val); changed = True
+                    if changed:
+                        session.add(match)
+                    logger.debug(f"Merged project into: {match.name}")
                     continue
 
                 proj = Project(
@@ -268,11 +422,12 @@ class ResumeParserAgent:
                     description=item.get("description"),
                     repo_url=item.get("repo_url"),
                     demo_url=item.get("demo_url"),
-                    start_date=item.get("start_date"),
-                    end_date=item.get("end_date"),
+                    start_date=_clean_date(item.get("start_date")),
+                    end_date=_clean_date(item.get("end_date")),
                     metrics=metrics,
                 )
                 session.add(proj)
+                existing_projects.append(proj)
             session.commit()
 
     # ── Deterministic LinkedIn mapping (issue #68 follow-up) ─────────────────
@@ -329,6 +484,8 @@ class ResumeParserAgent:
                 name = str(item.get("title") or item.get("name") or "").strip()
                 if not name:
                     continue
+                item["start_date"] = _clean_date(item.get("start_date"))
+                item["end_date"] = _clean_date(item.get("end_date"))
                 match = next(
                     (p for p in existing_projects if self._names_match(p.name, name)),
                     None,
@@ -357,6 +514,8 @@ class ResumeParserAgent:
                 company = str(item.get("company") or "").strip()
                 if not title and not company:
                     continue
+                item["start_date"] = _clean_date(item.get("start_date"))
+                item["end_date"] = _clean_date(item.get("end_date"))
                 # Same company + same title merges; a missing/placeholder title
                 # on either side still merges on company alone, so a sparse
                 # LinkedIn entry enriches the resume-ingested row.
