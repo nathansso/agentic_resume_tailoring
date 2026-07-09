@@ -34,6 +34,9 @@ export interface SectionRegion {
   height: number;
   /** Bottom of the rendered heading line — the full-width grab band. */
   headingBottom: number;
+  /** Bottom of the last rendered text line in the band — the band minus its
+   *  trailing whitespace (the last section's band runs to the page bottom). */
+  contentBottom: number;
   /** Tex line index of the \section{...} heading (double-click jump target). */
   texLine: number;
 }
@@ -130,6 +133,12 @@ export function buildOverlayModel(tex: string, lines: PdfTextLine[], pageHeight:
   const sections: SectionRegion[] = found.map((f, i) => {
     const top = lines[f.lineIdx].top;
     const nextTop = i + 1 < found.length ? lines[found[i + 1].lineIdx].top : pageHeight;
+    // Trailing whitespace ends at the last text line inside the band (+2px
+    // for the heading rule); reorderPatch repacks bands by content height.
+    let contentBottom = lines[f.lineIdx].bottom;
+    for (let li = f.lineIdx; li < lines.length && lines[li].top < nextTop; li++) {
+      contentBottom = Math.max(contentBottom, lines[li].bottom);
+    }
     return {
       kind: "section",
       key: f.key,
@@ -137,6 +146,7 @@ export function buildOverlayModel(tex: string, lines: PdfTextLine[], pageHeight:
       top,
       height: Math.max(0, nextTop - top),
       headingBottom: lines[f.lineIdx].bottom,
+      contentBottom: Math.min(contentBottom + 2, nextTop),
       texLine: f.texLine,
     };
   });
@@ -214,6 +224,51 @@ export function targetIndexForPointer(y: number, bands: { top: number; height: n
 /** Splice-style target index for moving `from` to insertion `slot`. */
 export function slotToIndex(slot: number, from: number): number {
   return slot > from ? slot - 1 : slot;
+}
+
+export interface ReorderSlice {
+  /** Top of the pixels to copy, CSS px (pre-reorder position). */
+  srcTop: number;
+  height: number;
+  /** Where those pixels land after the reorder, CSS px. */
+  destTop: number;
+}
+
+export interface ReorderPatch {
+  /** Vertical span the reorder disturbs — cleared to white before drawing. */
+  regionTop: number;
+  regionBottom: number;
+  /** Every band in its new position, top-down (unmoved bands included). */
+  slices: ReorderSlice[];
+}
+
+/** Where each band's pixels land after moving band `from` to position `to` —
+ *  lets the preview re-composite the already-rendered canvas instantly instead
+ *  of waiting a full compile round-trip for a pure reorder. Bands tile the
+ *  region by construction; each is repacked at its content height while the
+ *  original slot's trailing gap stays with the slot (LaTeX inter-section
+ *  spacing is positional, e.g. the page-bottom whitespace after the last
+ *  section must stay at the bottom, not travel with the moved band). */
+export function reorderPatch(
+  bands: { top: number; height: number; contentBottom?: number }[],
+  from: number,
+  to: number,
+): ReorderPatch | null {
+  if (from === to || from < 0 || to < 0 || from >= bands.length || to >= bands.length) return null;
+  const regionTop = bands[0].top;
+  const last = bands[bands.length - 1];
+  const regionBottom = last.top + last.height;
+  const contentH = bands.map(b => Math.max(0, (b.contentBottom ?? b.top + b.height) - b.top));
+  const slotGap = bands.map((b, i) => b.height - contentH[i]);
+  const order = bands.map((_, i) => i);
+  order.splice(to, 0, order.splice(from, 1)[0]);
+  let cursor = regionTop;
+  const slices: ReorderSlice[] = order.map((src, slot) => {
+    const slice = { srcTop: bands[src].top, height: contentH[src], destTop: cursor };
+    cursor += contentH[src] + slotGap[slot];
+    return slice;
+  });
+  return { regionTop, regionBottom, slices };
 }
 
 /** Tex line a double-click at `y` should jump to (Overleaf-style source sync):

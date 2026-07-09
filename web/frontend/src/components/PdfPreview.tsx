@@ -2,7 +2,13 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import * as pdfjs from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { colors, font } from "../theme";
-import { buildOverlayModel, groupIntoLines, type PdfTextItem } from "../lib/pdfOverlay";
+import {
+  buildOverlayModel,
+  groupIntoLines,
+  reorderPatch,
+  type PdfTextItem,
+  type ReorderPatch,
+} from "../lib/pdfOverlay";
 import { PdfDragOverlay } from "./PdfDragOverlay";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -49,6 +55,9 @@ export function PdfPreview({ pdfData, compiling, error, paused, onRecompile, ove
   const [width, setWidth] = useState(0);
   const [hasRender, setHasRender] = useState(false);
   const [page1, setPage1] = useState<Page1Text | null>(null);
+  // True after a drop's slices were re-composited onto the canvas — the
+  // preview already shows the new order, so the wait veil skips its dim.
+  const [patched, setPatched] = useState(false);
 
   // Track the pane width (debounced) so pages re-render scaled to fit.
   useEffect(() => {
@@ -121,6 +130,7 @@ export function PdfPreview({ pdfData, compiling, error, paused, onRecompile, ove
       void docRef.current?.destroy();
       docRef.current = doc;
       setPage1(page1Text);
+      setPatched(false);
       setHasRender(true);
     })().catch(() => {
       // Render failure: keep the last good canvases.
@@ -141,6 +151,55 @@ export function PdfPreview({ pdfData, compiling, error, paused, onRecompile, ove
     if (!overlay?.tex || !page1) return null;
     return buildOverlayModel(overlay.tex, groupIntoLines(page1.items), page1.height);
   }, [overlay?.tex, page1]);
+
+  /** Re-composite the page-1 canvas per the patch so a drop shows its new
+   *  order instantly — the real compile replaces the canvas seconds later.
+   *  Snapshot the disturbed region, blank it, redraw each slice at its
+   *  destination (coords are CSS px; the canvas backing store is scaled). */
+  function applyPatch(patch: ReorderPatch) {
+    const canvas = pagesRef.current?.querySelector("canvas");
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx || !page1) return;
+    const k = canvas.width / page1.width;
+    const regionY = Math.floor(patch.regionTop * k);
+    const regionH = Math.min(Math.ceil((patch.regionBottom - patch.regionTop) * k), canvas.height - regionY);
+    if (regionH <= 0) return;
+    const snap = document.createElement("canvas");
+    snap.width = canvas.width;
+    snap.height = regionH;
+    const snapCtx = snap.getContext("2d");
+    if (!snapCtx) return;
+    snapCtx.drawImage(canvas, 0, regionY, canvas.width, regionH, 0, 0, canvas.width, regionH);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, regionY, canvas.width, regionH);
+    for (const sl of patch.slices) {
+      const h = Math.round(sl.height * k);
+      if (h <= 0) continue;
+      ctx.drawImage(
+        snap,
+        0, Math.floor((sl.srcTop - patch.regionTop) * k), canvas.width, h,
+        0, Math.floor(sl.destTop * k), canvas.width, h,
+      );
+    }
+    setPatched(true);
+  }
+
+  function moveSectionWithPreview(key: string, targetIndex: number) {
+    if (model) {
+      const from = model.sections.findIndex(sec => sec.key === key);
+      const to = model.sections.findIndex(sec => sec.index === targetIndex);
+      const patch = from >= 0 && to >= 0 ? reorderPatch(model.sections, from, to) : null;
+      if (patch) applyPatch(patch);
+    }
+    overlay?.onMoveSection(key, targetIndex);
+  }
+
+  function moveBulletWithPreview(groupIndex: number, fromIdx: number, toIdx: number) {
+    const bullets = model?.bulletGroups.find(g => g.groupIndex === groupIndex)?.bullets;
+    const patch = bullets ? reorderPatch(bullets, fromIdx, toIdx) : null;
+    if (patch) applyPatch(patch);
+    overlay?.onMoveBullet(groupIndex, fromIdx, toIdx);
+  }
 
   const dragReady = model !== null && model.sections.length > 0;
   const statusText = compiling
@@ -173,15 +232,17 @@ export function PdfPreview({ pdfData, compiling, error, paused, onRecompile, ove
               width={page1.width}
               height={page1.height}
               enabled={overlay.enabled && !compiling}
-              onMoveSection={overlay.onMoveSection}
-              onMoveBullet={overlay.onMoveBullet}
+              onMoveSection={moveSectionWithPreview}
+              onMoveBullet={moveBulletWithPreview}
               onJumpToLine={overlay.onJumpToLine}
             />
           )}
-          {/* A drop/edit takes a compile round-trip to show — make the wait
-              unmistakable instead of leaving a silently stale render. */}
+          {/* An edit takes a compile round-trip to show — make the wait
+              unmistakable instead of leaving a silently stale render. After a
+              drop the canvas was already re-composited optimistically, so
+              only the badge shows (no dim over an already-correct preview). */}
           {hasRender && !error && (compiling || (overlay && !overlay.enabled)) && (
-            <div style={s.staleVeil}>
+            <div style={{ ...s.staleVeil, ...(patched ? s.staleVeilClear : {}) }}>
               <span style={s.staleBadge}>Updating preview…</span>
             </div>
           )}
@@ -223,6 +284,7 @@ const s: Record<string, CSSProperties> = {
     justifyContent: "center", alignItems: "flex-start",
     pointerEvents: "none",
   },
+  staleVeilClear: { background: "transparent" },
   staleBadge: {
     marginTop: "3rem", background: colors.surface, color: colors.accent,
     border: `1px solid ${colors.accent}`, padding: "0.375rem 0.875rem",

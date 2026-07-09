@@ -3,6 +3,7 @@ import {
   buildOverlayModel,
   groupIntoLines,
   normalizeForMatch,
+  reorderPatch,
   slotToIndex,
   targetIndexForPointer,
   texLineForPointer,
@@ -168,6 +169,13 @@ describe("buildOverlayModel", () => {
     expect(projGroup.bullets[0].texLine).toBe(25);
   });
 
+  it("records each band's content bottom (last text line + rule padding)", () => {
+    const [edu, exp, proj] = model.sections;
+    expect(edu.contentBottom).toBe(78); // "UC San Diego" bottom 76 + 2
+    expect(exp.contentBottom).toBe(160); // "Shipped thing B" bottom 158 + 2
+    expect(proj.contentBottom).toBe(212); // last bullet bottom 210 + 2 — not page bottom
+  });
+
   it("returns an empty model when the markers were edited away", () => {
     const noMarkers = TEX.split("%% ART-SECTION:").join("% gone");
     expect(buildOverlayModel(noMarkers, LINES, PAGE_HEIGHT)).toEqual({
@@ -196,6 +204,53 @@ describe("targetIndexForPointer / slotToIndex", () => {
     expect(slotToIndex(3, 0)).toBe(2);  // drag band 0 below everything
     expect(slotToIndex(1, 1)).toBe(1);  // no-op zone
     expect(slotToIndex(2, 1)).toBe(1);  // slot just after itself is also a no-op
+  });
+});
+
+describe("reorderPatch", () => {
+  // Three section-like bands tiling [100, 792): content height + trailing
+  // whitespace; the last band's big gap is the page-bottom whitespace.
+  const sections = [
+    { top: 100, height: 200, contentBottom: 280 }, // content 180, gap 20
+    { top: 300, height: 150, contentBottom: 430 }, // content 130, gap 20
+    { top: 450, height: 342, contentBottom: 600 }, // content 150, gap 192
+  ];
+
+  it("repacks content-height slices, leaving slot gaps in place", () => {
+    // Move the last section to the top: its 192px page-bottom gap must stay
+    // at the bottom instead of opening a hole mid-page.
+    const patch = reorderPatch(sections, 2, 0)!;
+    expect(patch.regionTop).toBe(100);
+    expect(patch.regionBottom).toBe(792);
+    expect(patch.slices).toEqual([
+      { srcTop: 450, height: 150, destTop: 100 }, // moved band, packed at top
+      { srcTop: 100, height: 180, destTop: 270 }, // 100 + 150 + slot-0 gap 20
+      { srcTop: 300, height: 130, destTop: 470 }, // 270 + 180 + slot-1 gap 20
+    ]);
+    // Last slice + its content + the last slot's gap lands exactly at region end.
+    expect(470 + 130 + 192).toBe(patch.regionBottom);
+  });
+
+  it("tiles plain bands (no contentBottom) by their full heights", () => {
+    const bullets = [
+      { top: 10, height: 20 },
+      { top: 30, height: 20 },
+      { top: 50, height: 16 }, // last band is text-tight
+    ];
+    const patch = reorderPatch(bullets, 0, 2)!;
+    expect(patch.regionTop).toBe(10);
+    expect(patch.regionBottom).toBe(66);
+    expect(patch.slices).toEqual([
+      { srcTop: 30, height: 20, destTop: 10 },
+      { srcTop: 50, height: 16, destTop: 30 },
+      { srcTop: 10, height: 20, destTop: 46 },
+    ]);
+  });
+
+  it("returns null for no-op or out-of-range moves", () => {
+    expect(reorderPatch(sections, 1, 1)).toBeNull();
+    expect(reorderPatch(sections, -1, 0)).toBeNull();
+    expect(reorderPatch(sections, 0, 3)).toBeNull();
   });
 });
 
