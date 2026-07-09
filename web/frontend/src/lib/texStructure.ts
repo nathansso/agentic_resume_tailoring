@@ -57,24 +57,37 @@ export function parseSections(tex: string): TexSection[] {
   }));
 }
 
-/** Swap the section `key` with its neighbor in `dir`. Returns the new buffer,
- *  or null when the move is impossible (edge, header, or markers missing). */
-export function moveSection(tex: string, key: string, dir: -1 | 1): string | null {
-  const sections = parseSections(tex);
-  const a = sections.findIndex(sec => sec.key === key);
-  if (a < 0 || sections[a].key === "header") return null;
-  const b = a + dir;
-  if (b < 0 || b >= sections.length || sections[b].key === "header") return null;
+/** Movable (non-header) sections in document order. */
+export function movableSections(tex: string): TexSection[] {
+  return parseSections(tex).filter(sec => sec.key !== "header");
+}
+
+/** Move section `key` so it becomes the `targetIndex`-th movable section
+ *  (document order, header excluded — it stays pinned). Returns the new
+ *  buffer, the same buffer for a no-op move, or null when the move is
+ *  impossible (unknown key, index out of bounds, or a hand-edited buffer
+ *  whose section blocks no longer tile a contiguous region). */
+export function moveSectionTo(tex: string, key: string, targetIndex: number): string | null {
+  const movable = movableSections(tex);
+  const from = movable.findIndex(sec => sec.key === key);
+  if (from < 0 || targetIndex < 0 || targetIndex >= movable.length) return null;
+  if (targetIndex === from) return tex;
+
+  // The reorder splices whole blocks inside [first.start, last.end); that is
+  // only safe when the movable blocks tile it exactly (no header in between).
+  for (let i = 1; i < movable.length; i++) {
+    if (movable[i].startLine !== movable[i - 1].endLine) return null;
+  }
+
+  const order = [...movable];
+  const [moved] = order.splice(from, 1);
+  order.splice(targetIndex, 0, moved);
 
   const lines = tex.split("\n");
-  const first = dir === 1 ? sections[a] : sections[b];
-  const second = dir === 1 ? sections[b] : sections[a];
   const rebuilt = [
-    ...lines.slice(0, first.startLine),
-    ...lines.slice(second.startLine, second.endLine),
-    ...lines.slice(first.endLine, second.startLine),
-    ...lines.slice(first.startLine, first.endLine),
-    ...lines.slice(second.endLine),
+    ...lines.slice(0, movable[0].startLine),
+    ...order.flatMap(sec => lines.slice(sec.startLine, sec.endLine)),
+    ...lines.slice(movable[movable.length - 1].endLine),
   ];
   return rebuilt.join("\n");
 }
@@ -126,22 +139,26 @@ export function parseBulletGroups(tex: string): BulletGroup[] {
   return groups;
 }
 
-/** Swap the \resumeItem at `line` with the adjacent bullet in `dir`, staying
- *  inside the same \resumeItemListStart/End container. Null when impossible. */
-export function moveBullet(tex: string, line: number, dir: -1 | 1): string | null {
+/** Reorder within the `groupIndex`-th bullet group from parseBulletGroups:
+ *  the bullet at `fromIdx` moves to `toIdx` (both group-relative). Bullets are
+ *  single `\resumeItem{...}` lines by construction, so the reorder writes the
+ *  lines back into the same absolute slots — it cannot cross list or section
+ *  boundaries. Null on any index mismatch. */
+export function moveBulletTo(tex: string, groupIndex: number, fromIdx: number, toIdx: number): string | null {
+  const groups = parseBulletGroups(tex);
+  const group = groups[groupIndex];
+  if (!group) return null;
+  const n = group.bullets.length;
+  if (fromIdx < 0 || fromIdx >= n || toIdx < 0 || toIdx >= n) return null;
+  if (fromIdx === toIdx) return tex;
+
   const lines = tex.split("\n");
-  if (line < 0 || line >= lines.length || !ITEM.test(lines[line])) return null;
-
-  let j = line + dir;
-  while (j >= 0 && j < lines.length) {
-    const ln = lines[j];
-    if (ITEM.test(ln)) break;
-    // Stop at container/section boundaries — never move a bullet between lists
-    if (LIST_START.test(ln) || LIST_END.test(ln) || MARKER.test(ln) || DOC_END.test(ln)) return null;
-    j += dir;
-  }
-  if (j < 0 || j >= lines.length || !ITEM.test(lines[j])) return null;
-
-  [lines[line], lines[j]] = [lines[j], lines[line]];
+  const slots = group.bullets.map(b => b.line);
+  const contents = slots.map(l => lines[l]);
+  const [moved] = contents.splice(fromIdx, 1);
+  contents.splice(toIdx, 0, moved);
+  slots.forEach((slot, i) => {
+    lines[slot] = contents[i];
+  });
   return lines.join("\n");
 }

@@ -4,6 +4,27 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issues 70 & 71 follow-up — Overleaf-style workspace: live compile, drag-on-PDF reorder, chat-centric insights
+**Status:** complete | **Tests:** 519 Python pass (5 new) + 59 vitest (10 → 59)
+
+Redesign of the job workspace shipped in #81, in three phases. The Resume/Overview tabs are gone: the workspace is now three always-visible panes — insights + chat (narrow) | `.tex` source | compiled preview — with the editor behaving like Overleaf (auto-save + auto-compile) and reordering done by dragging directly on the rendered PDF.
+
+### What shipped
+- **Three-pane layout, no tabs.** `JobWorkspace` renders a fixed-width chat column beside `ResumeSplit` (editor | preview, with a Split/Source/Preview view toggle). The jobs sidebar collapses to a slim rail that expands on hover (pinned open while the create form is in use). Job insights — skills match, what the last tailoring run changed, and the score breakdown — render as assistant briefing bubbles pinned at the top of the job chat (`lib/insightMessages.ts`, derived live from job state) instead of a separate dashboard card. Export links moved into the workspace header. `/api/jobs/{id}` now surfaces `explainability` from `UserJobResult.matched_skills._explainability`, and underscore-prefixed internal keys are filtered out of `matched_skills` (fixing a latent leak of `_explainability` as a skill chip).
+- **Job-scoped chat welcome.** Empty job chats open with state-aware guidance from `lib/welcome.ts` (paste-JD → tailor → `"tailor emphasize Python more" (N runs left)` → budget exhausted) instead of the generic landing text; the welcome is rendered, not stored, so it tracks job-state changes live.
+- **Live compile + auto-save (Compile/Save buttons removed).** `PdfPreview` renders via `pdfjs-dist` canvases (no iframe → no browser PDF chrome), flicker-free swap, last good render survives failures. `CompileScheduler` (pure, fake-timer-tested) debounces 1.8s trailing-edge, skips unchanged buffers, coalesces in-flight compiles (protecting the 2-slot semaphore), discards stale results, and pauses on 429 until a manual Recompile. Edits auto-save on the same settle with a Saving…/Saved indicator; Discard-edits remains. `COMPILE_DAILY_LIMIT` default 200 → 500.
+- **Drag-and-drop reordering on the compiled PDF (ReorderPanel deleted).** `lib/pdfOverlay.ts` maps page-1 text geometry back onto the tex structure (NFKD/alphanumeric normalization, ordered-cursor heading matching against each block's own `\section{...}`, bullet prefix anchoring absorbing wrapped lines) with graceful degradation down to a disabled overlay. `PdfDragOverlay` is hand-rolled pointer drag over transparent bands — sections via a left-edge handle, bullets within their group, accent drop indicator. Drops apply `moveSectionTo`/`moveBulletTo` (new move-to-index primitives replacing the adjacent-swap ones) to the buffer and flush an immediate recompile; drags are enabled only while the preview matches the live buffer.
+
+- **Round-2 fixes from user exploration.** Sections are now draggable by their rendered heading line (full-width grab band; the near-invisible edge strip alone was missed — it stays, made more visible). A dimmed "Updating preview…" veil covers the stale render during the post-drop/post-edit compile round-trip, replacing the too-subtle status text that made drops look like no-ops. Double-clicking a bullet or section on the PDF jumps the source editor to the matching tex line (Overleaf-style sync; auto-switches Preview → Split). The workspace opens on **Preview** — the chat column absorbs the hidden source pane's width and the single visible pane keeps its exact Split-mode size pinned far right (Source-only likewise); switching views slides the chat (0.25s width transition). The JOBS rail label reads horizontally on a slightly wider (3.75rem) rail. One-page enforcement moved to the source: `fit_content_to_one_page` runs at tailor time (`ResumeTailorAgent.tailor`), so the stored content — and therefore the editor `.tex`, live preview, and all exports — fits one page, not just the `format_pdf` path (no-op without a LaTeX engine).
+- **Optimistic drag reorder.** A drop now updates the preview instantly instead of waiting the multi-second compile round-trip: a reorder is a pure permutation of horizontal page slices, so `reorderPatch` (pdfOverlay) computes where each band's pixels land — bands repack at content height while each slot's trailing gap stays positional (the page-bottom whitespace never travels with a moved section) — and `PdfPreview` re-composites the page-1 canvas from a snapshot before kicking off the confirming compile. The wait veil skips its dim after an optimistic drop (badge only, over an already-correct preview); typing edits still dim.
+
+### Deviations from spec
+- Consecutive drags still wait one compile round-trip (drag re-enables when the confirming render lands); the preview itself updates instantly via the optimistic canvas patch.
+- DOCX export still regenerates from tailored JSON and ignores manual `.tex` edits (unchanged from #71, tooltip retained).
+- Verified end-to-end with Playwright against a live server + tectonic: welcome, insights, first compile, section drag (order changed in tex and PDF), auto-save (`has_manual_edits` flips), broken-tex error with retained preview, discard-edits restore.
+
+---
+
 ## Issues 70 & 71 — Job workspace + manual .tex resume editing
 **Status:** complete | **Tests:** 514 pass (28 new Python) + 10 vitest
 

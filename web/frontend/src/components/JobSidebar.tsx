@@ -23,6 +23,7 @@ function statusLabel(status: string): string {
 }
 
 export function JobSidebar({ jobs, selectedJobId, onSelect, onCreate, onDelete, loading }: Props) {
+  const [expanded, setExpanded] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
   const [company, setCompany] = useState("");
@@ -38,8 +39,32 @@ export function JobSidebar({ jobs, selectedJobId, onSelect, onCreate, onDelete, 
     setShowForm(false);
   }
 
+  // Collapsed rail that expands on hover (overlaying the content so panes
+  // don't reflow). Stays pinned open while the create form is in use.
   return (
-    <div style={s.sidebar}>
+    <div
+      style={s.railWrap}
+      onMouseEnter={() => setExpanded(true)}
+      onMouseLeave={() => {
+        if (!showForm) setExpanded(false);
+      }}
+    >
+      <div style={s.rail}>
+        <span style={s.railLabel}>JOBS</span>
+        {jobs.length > 0 && <span style={s.railCount}>{jobs.length}</span>}
+      </div>
+
+      {expanded && (
+        <div style={s.panel}>
+          {sidebarContent()}
+        </div>
+      )}
+    </div>
+  );
+
+  function sidebarContent() {
+    return (
+      <>
       <div style={s.header}>
         <span style={s.title}>Jobs</span>
         <button style={s.newBtn} onClick={() => setShowForm(v => !v)}>
@@ -119,19 +144,54 @@ export function JobSidebar({ jobs, selectedJobId, onSelect, onCreate, onDelete, 
           );
         })}
       </div>
-    </div>
-  );
+      </>
+    );
+  }
 }
 
 const s: Record<string, CSSProperties> = {
-  sidebar: {
+  railWrap: {
+    position: "relative",
+    flexShrink: 0,
+    width: "3.75rem",
+  },
+  rail: {
+    width: "3.75rem",
+    height: "100%",
+    borderRight: `1px solid ${colors.primary}`,
+    background: colors.surface,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: "0.5rem",
+    paddingTop: "0.75rem",
+    cursor: "pointer",
+  },
+  railLabel: {
+    color: colors.accent,
+    fontWeight: 700,
+    fontSize: "0.7rem",
+    letterSpacing: "0.15em",
+  },
+  railCount: {
+    color: colors.textMuted,
+    fontSize: "0.7rem",
+    border: `1px solid ${colors.primary}`,
+    padding: "0 0.25rem",
+  },
+  panel: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    bottom: 0,
     width: "calc(32ch + 1.5rem)",
     borderRight: `1px solid ${colors.primary}`,
     background: colors.surface,
     display: "flex",
     flexDirection: "column",
-    flexShrink: 0,
     overflow: "hidden",
+    zIndex: 20,
+    boxShadow: "4px 0 12px rgba(0,0,0,0.4)",
   },
   header: {
     display: "flex",

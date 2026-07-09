@@ -76,15 +76,25 @@ export async function discardTex(jobId: string): Promise<void> {
   await json(await fetch(`/api/jobs/${jobId}/tex`, { method: "DELETE", credentials: "include" }));
 }
 
-export async function previewPdf(jobId: string, tex: string): Promise<Blob> {
+/** Error from the preview-compile endpoint, carrying the HTTP status so the
+ *  auto-compile scheduler can treat 429 (quota) as fatal. */
+export class PreviewError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "PreviewError";
+  }
+}
+
+export async function previewPdf(jobId: string, tex: string, signal?: AbortSignal): Promise<Uint8Array> {
   const res = await fetch(`/api/jobs/${jobId}/preview`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ tex }),
     credentials: "include",
+    signal,
   });
   if (!res.ok) {
-    throw new Error(await errorMessage(res, `Compile failed (${res.status})`));
+    throw new PreviewError(await errorMessage(res, `Compile failed (${res.status})`), res.status);
   }
-  return res.blob();
+  return new Uint8Array(await res.arrayBuffer());
 }

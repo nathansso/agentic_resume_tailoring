@@ -346,6 +346,17 @@ def test_ranked_section_order_differs_by_job():
     assert order_research != order_infra
 
 
+def _skip_one_page_fit(monkeypatch):
+    """Real tailor() runs the one-page fit (a LaTeX compile) before saving —
+    stub it out so unit tests stay fast and engine-free."""
+    import agents.formatter as fmt_module
+    monkeypatch.setattr(
+        fmt_module.ResumeFormatterAgent,
+        "fit_content_to_one_page",
+        lambda self, content, section_order=None: content,
+    )
+
+
 def test_tailor_persists_section_order(isolated_engine, monkeypatch):
     """ResumeTailorAgent.tailor() stores _section_order in tailored_resume_content."""
     import agents.tailor as tailor_module
@@ -353,6 +364,7 @@ def test_tailor_persists_section_order(isolated_engine, monkeypatch):
 
     monkeypatch.setattr(tailor_module, "engine", isolated_engine)
     monkeypatch.setattr(tailor_module, "get_llm", lambda *a, **kw: object())
+    _skip_one_page_fit(monkeypatch)
 
     user = _seed_user_and_skill(isolated_engine)
     job = _make_job(isolated_engine, title="MLE", company="Lab",
@@ -382,6 +394,46 @@ def test_tailor_persists_section_order(isolated_engine, monkeypatch):
     assert set(order) == {"education", "experience", "projects", "skills"}
     # Research JD → projects ahead of experience
     assert order.index("projects") < order.index("experience")
+
+
+def test_tailor_fits_content_to_one_page(isolated_engine, monkeypatch):
+    """tailor() runs the one-page fit on the shipped content before saving, so
+    the editor .tex / preview / exports all derive from fitted content."""
+    import agents.formatter as fmt_module
+    import agents.tailor as tailor_module
+    from conftest import _seed_user_and_skill
+
+    monkeypatch.setattr(tailor_module, "engine", isolated_engine)
+    monkeypatch.setattr(tailor_module, "get_llm", lambda *a, **kw: object())
+
+    def fake_fit(self, content, section_order=None):
+        return {**content, "_fitted": True}
+
+    monkeypatch.setattr(fmt_module.ResumeFormatterAgent, "fit_content_to_one_page", fake_fit)
+
+    user = _seed_user_and_skill(isolated_engine)
+    job = _make_job(isolated_engine, title="MLE", company="Lab",
+                    status="analyzed", description=_RESEARCH_JD)
+    with Session(isolated_engine) as session:
+        result = UserJobResult(user_id=user.user_id, job_id=job.job_id)
+        session.add(result)
+        session.commit()
+        result_id = result.result_id
+
+    agent = tailor_module.ResumeTailorAgent()
+
+    class FakeGraph:
+        def invoke(self, state):
+            return {**state, "tailored_content": dict(_REORDER_CONTENT),
+                    "evaluation": {}, "attempt": 1, "done": True}
+
+    agent.graph = FakeGraph()
+    shipped = agent.tailor(user.user_id, job.job_id, result_id)
+
+    assert shipped["_fitted"] is True
+    with Session(isolated_engine) as session:
+        stored = session.get(UserJobResult, result_id)
+        assert stored.tailored_resume_content["_fitted"] is True
 
 
 def test_export_passes_section_order(isolated_engine, monkeypatch, tmp_path):
@@ -528,6 +580,7 @@ def test_tailor_ships_best_attempt_not_last(isolated_engine, monkeypatch):
 
     monkeypatch.setattr(tailor_module, "engine", isolated_engine)
     monkeypatch.setattr(tailor_module, "get_llm", lambda *a, **kw: object())
+    _skip_one_page_fit(monkeypatch)
 
     user = _seed_user_and_skill(isolated_engine)
     job = _make_job(isolated_engine, title="MLE", company="Lab",

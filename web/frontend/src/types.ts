@@ -39,6 +39,16 @@ export interface ScoreBreakdown {
   };
 }
 
+/** Tailoring explainability written by the chat re-tailor flow
+    (UserJobResult.matched_skills["_explainability"]). */
+export interface Explainability {
+  matched: string[];
+  emphasized: string[];
+  inferred: string[];
+  missing: string[];
+  ats_score: number;
+}
+
 export interface JobDetail extends JobListItem {
   description: string;
   matched_skills: string[];
@@ -48,6 +58,7 @@ export interface JobDetail extends JobListItem {
   retailor_count: number;
   retailor_limit: number;
   has_manual_edits: boolean;
+  explainability: Explainability | null;
 }
 
 export interface TailorResult {

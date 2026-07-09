@@ -11,14 +11,22 @@ interface Props {
   /** Fires after each assistant reply — lets the Job workspace resync job state
       the chat may have changed (analyze, re-tailor, JD paste). */
   onAssistantReply?: () => void;
+  /** Replaces the generic welcome when the chat history is empty (job-scoped
+      chats pass state-aware guidance). */
+  welcome?: string;
+  /** Assistant "briefing" bubbles pinned above the history (job insights:
+      skills match, tailoring changes, scores). Rendered, not stored, so they
+      track live job state. */
+  contextMessages?: string[];
 }
 
 function dayLabel(iso: string): string {
   return iso.slice(0, 10);
 }
 
-export function ChatPanel({ jobId, onViewChange, onAssistantReply }: Props) {
+export function ChatPanel({ jobId, onViewChange, onAssistantReply, welcome, contextMessages }: Props) {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [historyEmpty, setHistoryEmpty] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,17 +35,15 @@ export function ChatPanel({ jobId, onViewChange, onAssistantReply }: Props) {
 
   useEffect(() => {
     setMessages([]);
+    setHistoryEmpty(false);
     setError(null);
     loadHistory(effectiveJobId)
       .then(msgs => {
-        if (msgs.length === 0) {
-          setMessages([{ role: "assistant", content: WELCOME, created_at: new Date().toISOString() }]);
-        } else {
-          setMessages(msgs);
-        }
+        setMessages(msgs);
+        setHistoryEmpty(msgs.length === 0);
       })
       .catch(() => {
-        setMessages([{ role: "assistant", content: WELCOME, created_at: new Date().toISOString() }]);
+        setHistoryEmpty(true);
       });
   }, [effectiveJobId]);
 
@@ -79,8 +85,21 @@ export function ChatPanel({ jobId, onViewChange, onAssistantReply }: Props) {
     }
   }
 
-  // Group messages with day separators
+  // The welcome and insight briefings are rendered (not stored) so they track
+  // job-state changes live.
   const rendered: Array<{ type: "msg"; msg: ChatMsg } | { type: "day"; label: string }> = [];
+  if (historyEmpty) {
+    rendered.push({
+      type: "msg",
+      msg: { role: "assistant", content: welcome ?? WELCOME, created_at: new Date().toISOString() },
+    });
+  }
+  for (const content of contextMessages ?? []) {
+    rendered.push({
+      type: "msg",
+      msg: { role: "assistant", content, created_at: new Date().toISOString() },
+    });
+  }
   let lastDay = "";
   for (const msg of messages) {
     const day = dayLabel(msg.created_at);

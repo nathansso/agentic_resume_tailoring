@@ -59,12 +59,14 @@ def _job_detail(job: JobDescription, result: UserJobResult | None) -> dict:
     base = _job_list_item(job, result)
     base["description"] = job.description or ""
     if result:
-        matched = list(result.matched_skills.keys())[:10] if result.matched_skills else []
+        # Underscore keys are internal metadata (e.g. _explainability), not skills.
+        matched = [k for k in (result.matched_skills or {}) if not k.startswith("_")][:10]
         missing = result.missing_skills[:10] if result.missing_skills else []
     else:
         matched, missing = [], []
     base["matched_skills"] = matched
     base["missing_skills"] = missing
+    base["explainability"] = (result.matched_skills or {}).get("_explainability") if result else None
     base["score_breakdown"] = result.score_breakdown if result else {}
     base["tailored_score_breakdown"] = result.tailored_score_breakdown if result else {}
     from services import job_tailor_limit
@@ -267,7 +269,7 @@ async def tailor_job(
         increment_ai_usage(user.user_id, s)
         refreshed = s.get(JobDescription, UUID(job_id))
         latest2 = _latest_result(s, UUID(job_id))
-        matched = list(latest2.matched_skills.keys())[:10] if latest2 and latest2.matched_skills else []
+        matched = [k for k in (latest2.matched_skills or {}) if not k.startswith("_")][:10] if latest2 else []
         missing = latest2.missing_skills[:10] if latest2 and latest2.missing_skills else []
         from services import job_tailor_limit as _limit
         return {

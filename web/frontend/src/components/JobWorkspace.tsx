@@ -4,8 +4,9 @@ import { colors, font } from "../theme";
 import { saveDescription, analyzeJob, tailorJob, getJob, exportUrl } from "../api/jobs";
 import { ChatPanel } from "./ChatPanel";
 import { ProgressBar } from "./ProgressBar";
-import { ResumeEditor } from "./ResumeEditor";
-import { ScoreBreakdownPanel } from "./ScoreBreakdownPanel";
+import { ResumeSplit, type ResumeView } from "./ResumeSplit";
+import { jobInsightMessages } from "../lib/insightMessages";
+import { jobWelcome } from "../lib/welcome";
 
 interface Props {
   job: JobDetail;
@@ -31,15 +32,19 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
   const [descInput, setDescInput] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"resume" | "overview">("overview");
+  // Pane layout starts on Preview (compiled resume front and center); the chat
+  // column absorbs the hidden source pane's width until Split is chosen.
+  const [paneView, setPaneView] = useState<ResumeView>("preview");
+
+  useEffect(() => {
+    setPaneView("preview");
+  }, [job.job_id]);
 
   const tailored = job.status === "tailored" || job.status === "exported";
   const budgetUsed = job.retailor_count >= job.retailor_limit;
-
-  // Land on the editor once a tailored resume exists (issue #71).
-  useEffect(() => {
-    if (tailored) setTab("resume");
-  }, [tailored]);
+  // Single visible resume pane keeps its exact Split-mode size — (100% − 400px)/2
+  // — pinned to the far right; the chat slides to claim the remainder.
+  const chatWide = tailored && paneView !== "split";
 
   async function runChain(startAt: "analyze" | "tailor") {
     setError(null);
@@ -114,16 +119,53 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
           <span style={{ ...s.budget, color: budgetUsed ? colors.error : colors.textMuted }}>
             Tailor runs: {job.retailor_count}/{job.retailor_limit}
           </span>
+          {tailored && (
+            <span style={s.exportLinks}>
+              <span style={s.exportLabel}>Export:</span>
+              <a
+                href={exportUrl(job.job_id, "pdf")}
+                style={s.exportLink}
+                download
+                title={job.has_manual_edits ? "Includes your manual .tex edits" : undefined}
+              >
+                PDF
+              </a>
+              <a
+                href={exportUrl(job.job_id, "tex")}
+                style={s.exportLink}
+                download
+                title={job.has_manual_edits ? "Includes your manual .tex edits" : undefined}
+              >
+                LaTeX
+              </a>
+              <a
+                href={exportUrl(job.job_id, "docx")}
+                style={s.exportLink}
+                download
+                title={job.has_manual_edits ? "DOCX is generated from the AI-tailored content and ignores manual .tex edits" : undefined}
+              >
+                DOCX
+              </a>
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Two columns: job chat | resume pane */}
+      {/* Three panes: chat (with insight briefings) | .tex editor | preview */}
       <div style={s.columns}>
-        <div style={s.chatCol}>
-          <ChatPanel jobId={job.job_id} onViewChange={onViewChange} onAssistantReply={refreshJob} />
+        <div style={{ ...s.chatCol, width: chatWide ? "calc(50% + 200px)" : "400px" }}>
+          <div style={s.chatWrap}>
+            <ChatPanel
+              jobId={job.job_id}
+              welcome={jobWelcome(job)}
+              contextMessages={jobInsightMessages(job)}
+              onViewChange={onViewChange}
+              onAssistantReply={refreshJob}
+            />
+          </div>
         </div>
 
-        <div style={s.resumeCol}>
+        <div style={s.resumeArea}>
           {error && (
             <div style={s.errorBox}>
               <p style={s.error}>{error}</p>
@@ -142,27 +184,15 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
 
           {phase !== "idle" && <ProgressBar label={phaseLabel} />}
 
-          {/* Resume / Overview tabs once tailoring has produced a resume */}
           {tailored && (
-            <div style={s.tabs}>
-              <button
-                style={{ ...s.tabBtn, ...(tab === "resume" ? s.tabBtnActive : {}) }}
-                onClick={() => setTab("resume")}
-              >
-                Resume
-              </button>
-              <button
-                style={{ ...s.tabBtn, ...(tab === "overview" ? s.tabBtnActive : {}) }}
-                onClick={() => setTab("overview")}
-              >
-                Overview
-              </button>
-            </div>
-          )}
-
-          {tailored && tab === "resume" && (
             // Remount after each re-tailor so the editor reseeds from the fresh output
-            <ResumeEditor key={`${job.job_id}:${job.retailor_count}`} jobId={job.job_id} onEditsChanged={refreshJob} />
+            <ResumeSplit
+              key={`${job.job_id}:${job.retailor_count}`}
+              jobId={job.job_id}
+              view={paneView}
+              onViewChange={setPaneView}
+              onEditsChanged={refreshJob}
+            />
           )}
 
           {/* No JD yet: paste panel */}
@@ -187,79 +217,10 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
             </>
           )}
 
-          {/* Skills + scores */}
-          {(!tailored || tab === "overview") && (job.matched_skills.length > 0 || job.missing_skills.length > 0) && (
-            <div style={s.skillsRow}>
-              {job.matched_skills.length > 0 && (
-                <div style={s.skillGroup}>
-                  <span style={s.skillGroupLabel}>Matched:</span>
-                  <div style={s.chips}>
-                    {job.matched_skills.map(sk => (
-                      <span key={sk} style={{ ...s.chip, color: colors.accent, borderColor: colors.accent }}>{sk}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {job.missing_skills.length > 0 && (
-                <div style={s.skillGroup}>
-                  <span style={s.skillGroupLabel}>Missing:</span>
-                  <div style={s.chips}>
-                    {job.missing_skills.map(sk => (
-                      <span key={sk} style={{ ...s.chip, color: colors.error, borderColor: colors.error }}>{sk}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+          {/* JD present but nothing tailored yet and no pipeline running */}
+          {phase === "idle" && !tailored && job.description && !error && (
+            <p style={s.hint}>No tailored resume yet — ask the chat to “tailor”.</p>
           )}
-
-          {(!tailored || tab === "overview") && job.score_breakdown && Object.keys(job.score_breakdown).length > 0 && (
-            <ScoreBreakdownPanel bd={job.score_breakdown} />
-          )}
-          {(!tailored || tab === "overview") && job.tailored_score_breakdown && Object.keys(job.tailored_score_breakdown).length > 0 && (
-            <ScoreBreakdownPanel bd={job.tailored_score_breakdown} title="Tailored Score Breakdown" />
-          )}
-
-          {/* Downloads */}
-          <div style={s.exportSection}>
-            <span style={s.sectionLabel}>Export</span>
-            {tailored ? (
-              <div style={s.downloadRow}>
-                <a href={exportUrl(job.job_id, "pdf")} style={s.downloadBtn} download>
-                  Download PDF
-                </a>
-                <a href={exportUrl(job.job_id, "tex")} style={s.downloadBtnAlt} download>
-                  Download LaTeX
-                </a>
-                <a
-                  href={exportUrl(job.job_id, "docx")}
-                  style={s.downloadBtnAlt}
-                  download
-                  title={job.has_manual_edits ? "DOCX is generated from the AI-tailored content and ignores manual .tex edits" : undefined}
-                >
-                  Download DOCX
-                </a>
-              </div>
-            ) : (
-              <p style={s.hint}>
-                Downloads unlock once the resume is tailored
-                {job.description ? " — ask the chat to “tailor” or wait for the pipeline to finish." : " — paste a job description above to start."}
-              </p>
-            )}
-            {tailored && job.has_manual_edits && (
-              <p style={s.hint}>PDF and LaTeX exports include your manual edits.</p>
-            )}
-            {tailored && !budgetUsed && (
-              <p style={s.hint}>
-                Want changes? Tell the chat, e.g. “tailor emphasize Python more” ({job.retailor_limit - job.retailor_count} run{job.retailor_limit - job.retailor_count === 1 ? "" : "s"} left).
-              </p>
-            )}
-            {budgetUsed && (
-              <p style={{ ...s.hint, color: colors.error }}>
-                Re-tailor budget used ({job.retailor_count}/{job.retailor_limit}).
-              </p>
-            )}
-          </div>
         </div>
       </div>
     </div>
@@ -283,23 +244,25 @@ const s: Record<string, CSSProperties> = {
   statusBadge: { fontSize: font.size.sm, fontWeight: 600 },
   atsBadge: { fontSize: font.size.base, fontWeight: 700 },
   budget: { fontSize: font.size.sm },
+  exportLinks: { display: "flex", alignItems: "baseline", gap: "0.5rem" },
+  exportLabel: { color: colors.textMuted, fontSize: font.size.sm },
+  exportLink: {
+    color: colors.accent, fontSize: font.size.sm, fontWeight: 700,
+    textDecoration: "none", border: `1px solid ${colors.accent}`,
+    padding: "0.125rem 0.5rem",
+  },
   columns: { display: "flex", flex: 1, minHeight: 0 },
   chatCol: {
-    flex: 1, minWidth: 0, borderRight: `1px solid ${colors.primary}`,
-    display: "flex", flexDirection: "column",
+    flex: "0 0 auto", minWidth: 340, borderRight: `1px solid ${colors.primary}`,
+    display: "flex", flexDirection: "column", minHeight: 0,
+    transition: "width 0.25s ease",
   },
-  resumeCol: {
-    flex: 1, minWidth: 0, overflowY: "auto", padding: "1rem",
-    display: "flex", flexDirection: "column", gap: "0.875rem",
+  chatWrap: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" },
+  resumeArea: {
+    flex: 1, minWidth: 0, overflow: "hidden", padding: "0.5rem",
+    display: "flex", flexDirection: "column", gap: "0.5rem",
   },
-  tabs: { display: "flex", gap: "0.25rem", borderBottom: `1px solid ${colors.primary}` },
-  tabBtn: {
-    background: "transparent", border: "none", color: colors.textMuted,
-    fontSize: font.size.sm, padding: "0.25rem 0.625rem", cursor: "pointer",
-    fontFamily: "inherit", borderRadius: 0,
-  },
-  tabBtnActive: { color: colors.accent, borderBottom: `2px solid ${colors.accent}` },
-  errorBox: { display: "flex", flexDirection: "column", gap: "0.5rem" },
+  errorBox: { display: "flex", flexDirection: "column", gap: "0.5rem", flexShrink: 0 },
   error: { margin: 0, color: colors.error, fontSize: font.size.sm },
   hint: { margin: 0, color: colors.textMuted, fontSize: font.size.sm },
   textarea: {
@@ -311,26 +274,5 @@ const s: Record<string, CSSProperties> = {
     background: "transparent", border: `1px solid ${colors.primary}`,
     color: colors.text, fontSize: font.size.sm, padding: "0.375rem 0.75rem",
     cursor: "pointer", fontFamily: "inherit", borderRadius: 0, alignSelf: "flex-start",
-  },
-  skillsRow: { display: "flex", flexDirection: "column", gap: "0.5rem" },
-  skillGroup: { display: "flex", alignItems: "flex-start", gap: "0.5rem" },
-  skillGroupLabel: { color: colors.textMuted, fontSize: font.size.sm, flexShrink: 0, paddingTop: "0.125rem" },
-  chips: { display: "flex", flexWrap: "wrap", gap: "0.375rem" },
-  chip: { fontSize: "0.7rem", border: "1px solid", padding: "0.1rem 0.375rem" },
-  exportSection: {
-    display: "flex", flexDirection: "column", gap: "0.5rem",
-    borderTop: `1px solid ${colors.primary}`, paddingTop: "0.875rem", marginTop: "auto",
-  },
-  sectionLabel: { color: colors.textMuted, fontSize: font.size.sm, fontWeight: 700, letterSpacing: "0.05em" },
-  downloadRow: { display: "flex", gap: "0.75rem", flexWrap: "wrap" },
-  downloadBtn: {
-    background: colors.accent, color: colors.background, fontWeight: 700,
-    fontSize: font.size.sm, padding: "0.375rem 0.75rem", textDecoration: "none",
-    fontFamily: "inherit", display: "inline-block",
-  },
-  downloadBtnAlt: {
-    background: "transparent", color: colors.accent, border: `1px solid ${colors.accent}`,
-    fontWeight: 700, fontSize: font.size.sm, padding: "0.375rem 0.75rem",
-    textDecoration: "none", fontFamily: "inherit", display: "inline-block",
   },
 };

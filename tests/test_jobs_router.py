@@ -99,6 +99,40 @@ def test_job_detail_includes_retailor_budget(isolated_engine, jobs_client, monke
     assert body["retailor_limit"] == 3
 
 
+# ── Explainability surfaced, internal keys filtered ────────────────────────────
+
+def test_job_detail_surfaces_explainability_and_filters_underscore_keys(
+    isolated_engine, jobs_client,
+):
+    alice = _seed_user(isolated_engine, "Alice")
+    job = _make_job(isolated_engine, alice.user_id, status="tailored", description="JD")
+    explainability = {
+        "matched": ["python"], "emphasized": ["pandas (≈numpy)"],
+        "inferred": ["docker"], "missing": ["kubernetes"], "ats_score": 72.5,
+    }
+    with Session(isolated_engine) as s:
+        result = UserJobResult(
+            user_id=alice.user_id, job_id=job.job_id,
+            matched_skills={"python": {"match_type": "direct"}, "_explainability": explainability},
+            missing_skills=["kubernetes"],
+        )
+        s.add(result)
+        s.commit()
+
+    body = jobs_client(alice).get(f"/api/jobs/{job.job_id}").json()
+    assert body["explainability"] == explainability
+    assert body["matched_skills"] == ["python"]
+    assert not any(k.startswith("_") for k in body["matched_skills"])
+
+
+def test_job_detail_explainability_null_when_absent(isolated_engine, jobs_client):
+    alice = _seed_user(isolated_engine, "Alice")
+    job = _make_job(isolated_engine, alice.user_id)
+    _make_result(isolated_engine, alice.user_id, job.job_id)
+    body = jobs_client(alice).get(f"/api/jobs/{job.job_id}").json()
+    assert body["explainability"] is None
+
+
 # ── Tailor: cap, revision notes, increment ─────────────────────────────────────
 
 class _FakeTailorAgent:
@@ -343,11 +377,18 @@ def test_export_tex_without_edits_still_generates(isolated_engine, jobs_client):
 def test_tailor_agent_persists_revision_notes(isolated_engine, monkeypatch):
     """ResumeTailorAgent.tailor() writes revision_notes and discards manual
     .tex edits (issue #71 — re-tailoring supersedes them)."""
+    import agents.formatter as fmt_module
     import agents.tailor as tailor_module
     from conftest import _seed_user_and_skill
 
     monkeypatch.setattr(tailor_module, "engine", isolated_engine)
     monkeypatch.setattr(tailor_module, "get_llm", lambda *a, **kw: object())
+    # Skip the one-page fit (a real LaTeX compile) — not under test here.
+    monkeypatch.setattr(
+        fmt_module.ResumeFormatterAgent,
+        "fit_content_to_one_page",
+        lambda self, content, section_order=None: content,
+    )
 
     user = _seed_user_and_skill(isolated_engine)
     job = _make_job(isolated_engine, user.user_id, status="analyzed", description="Python JD")

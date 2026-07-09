@@ -1,0 +1,275 @@
+import { describe, expect, it } from "vitest";
+import {
+  buildOverlayModel,
+  groupIntoLines,
+  normalizeForMatch,
+  reorderPatch,
+  slotToIndex,
+  targetIndexForPointer,
+  texLineForPointer,
+  type PdfTextLine,
+} from "./pdfOverlay";
+
+const TEX = String.raw`\documentclass{article}
+\begin{document}
+
+%% ART-SECTION: header
+\textbf{\Huge \scshape Jake Ryan}
+
+%% ART-SECTION: education
+\section{Education}
+UC San Diego
+
+%% ART-SECTION: experience
+\section{Experience}
+\resumeSubHeadingListStart
+\resumeSubheading{Dev}{2020 -- Now}{Acme}{TX}
+\resumeItemListStart
+\resumeItem{Built \textbf{thing A} with Python education pipelines}
+\resumeItem{Shipped thing B}
+\resumeItemListEnd
+\resumeSubHeadingListEnd
+
+%% ART-SECTION: projects
+\section{Projects}
+\resumeSubHeadingListStart
+\resumeProjectHeading{\textbf{Gitlytics} $|$ \emph{Python}}{2021}
+\resumeItemListStart
+\resumeItem{Improved accuracy by 20\%}
+\resumeItemListEnd
+\resumeSubHeadingListEnd
+
+\end{document}
+`;
+
+/** Hand-built page-1 lines simulating pdf.js output for TEX: smallcaps
+ *  headings extract uppercased, the first experience bullet wraps onto a
+ *  second line (which even contains the word "education"), and the project
+ *  bullet renders its escaped percent. */
+const LINES: PdfTextLine[] = [
+  { text: "Jake Ryan", top: 20, bottom: 34 },
+  { text: "EDUCATION", top: 50, bottom: 62 },
+  { text: "UC San Diego", top: 66, bottom: 76 },
+  { text: "EXPERIENCE", top: 90, bottom: 102 },
+  { text: "Dev 2020 – Now", top: 106, bottom: 116 },
+  { text: "• Built thing A with Python", top: 120, bottom: 130 },
+  { text: "education pipelines", top: 134, bottom: 144 },
+  { text: "• Shipped thing B", top: 148, bottom: 158 },
+  { text: "PROJECTS", top: 170, bottom: 182 },
+  { text: "Gitlytics | Python", top: 186, bottom: 196 },
+  { text: "• Improved accuracy by 20%", top: 200, bottom: 210 },
+];
+
+const PAGE_HEIGHT = 400;
+
+describe("normalizeForMatch", () => {
+  it("strips LaTeX commands, braces, and case", () => {
+    expect(normalizeForMatch(String.raw`Built \textbf{thing A} with Python`)).toBe(
+      "builtthingawithpython",
+    );
+  });
+
+  it("unescapes literals and drops inline math", () => {
+    expect(normalizeForMatch(String.raw`\textbf{Gitlytics} $|$ \emph{Python}`)).toBe(
+      "gitlyticspython",
+    );
+    expect(normalizeForMatch(String.raw`Improved accuracy by 20\%`)).toBe(
+      normalizeForMatch("• Improved accuracy by 20%"),
+    );
+  });
+
+  it("folds ligatures via NFKD", () => {
+    expect(normalizeForMatch("ﬁne-tuned")).toBe("finetuned");
+  });
+});
+
+describe("groupIntoLines", () => {
+  it("clusters items into y-lines and joins left-to-right", () => {
+    const lines = groupIntoLines([
+      { str: "with Python", x: 120, y: 100.5, height: 10 },
+      { str: "•", x: 10, y: 100, height: 10 },
+      { str: "Built thing A", x: 20, y: 101, height: 10 },
+      { str: "Shipped", x: 10, y: 120, height: 10 },
+    ]);
+    expect(lines.map(l => l.text)).toEqual(["• Built thing A with Python", "Shipped"]);
+    expect(lines[0].top).toBe(100);
+    expect(lines[0].bottom).toBe(111);
+  });
+
+  it("drops whitespace-only items", () => {
+    expect(groupIntoLines([{ str: "  ", x: 0, y: 0, height: 10 }])).toEqual([]);
+  });
+});
+
+describe("buildOverlayModel", () => {
+  const model = buildOverlayModel(TEX, LINES, PAGE_HEIGHT);
+
+  it("finds all movable sections in order with correct bands", () => {
+    expect(model.sections.map(s => s.key)).toEqual(["education", "experience", "projects"]);
+    expect(model.sections.map(s => s.index)).toEqual([0, 1, 2]);
+    const [edu, exp, proj] = model.sections;
+    expect(edu.top).toBe(50);
+    expect(edu.height).toBe(40); // extends to Experience heading
+    expect(exp.top).toBe(90);
+    expect(exp.height).toBe(80);
+    expect(proj.top).toBe(170);
+    expect(proj.height).toBe(PAGE_HEIGHT - 170); // last section runs to page bottom
+  });
+
+  it("anchors bullets and absorbs wrapped continuation lines", () => {
+    const exp = model.bulletGroups.find(g => g.groupIndex === 0)!;
+    expect(exp.bullets).toHaveLength(2);
+    const [b0, b1] = exp.bullets;
+    expect(b0.top).toBe(120);
+    expect(b0.height).toBe(28); // covers the "education pipelines" wrap line
+    expect(b1.top).toBe(148);
+  });
+
+  it("does not confuse a section heading with the same word inside a bullet", () => {
+    // "education pipelines" (a bullet continuation) appears after the
+    // Education heading — the ordered cursor + whole-line equality means the
+    // education band still anchors at the real heading (top 50).
+    expect(model.sections[0].top).toBe(50);
+  });
+
+  it("matches bullets containing escaped/math characters", () => {
+    const proj = model.bulletGroups.find(g => g.groupIndex === 1)!;
+    expect(proj.bullets).toHaveLength(1);
+    expect(proj.bullets[0].top).toBe(200);
+  });
+
+  it("drops a whole group when one bullet cannot be matched, keeping others", () => {
+    const lines = LINES.filter(l => l.text !== "• Shipped thing B");
+    const m = buildOverlayModel(TEX, lines, PAGE_HEIGHT);
+    expect(m.bulletGroups.map(g => g.groupIndex)).toEqual([1]); // experience group dropped
+    expect(m.sections).toHaveLength(3); // sections unaffected
+  });
+
+  it("omits a section handle when its heading is not on the page", () => {
+    const lines = LINES.filter(l => l.text !== "EDUCATION");
+    const m = buildOverlayModel(TEX, lines, PAGE_HEIGHT);
+    expect(m.sections.map(s => s.key)).toEqual(["experience", "projects"]);
+    // Indices stay document-order among ALL movable sections
+    expect(m.sections.map(s => s.index)).toEqual([1, 2]);
+  });
+
+  it("records heading geometry and tex lines for source-jump sync", () => {
+    const [edu, exp, proj] = model.sections;
+    // \section{...} lines in TEX (0-indexed)
+    expect(edu.texLine).toBe(7);
+    expect(exp.texLine).toBe(11);
+    expect(proj.texLine).toBe(21);
+    // Heading band ends at the rendered heading line's bottom
+    expect(edu.headingBottom).toBe(62);
+    expect(exp.headingBottom).toBe(102);
+
+    const expGroup = model.bulletGroups.find(g => g.groupIndex === 0)!;
+    expect(expGroup.bullets.map(b => b.texLine)).toEqual([15, 16]);
+    const projGroup = model.bulletGroups.find(g => g.groupIndex === 1)!;
+    expect(projGroup.bullets[0].texLine).toBe(25);
+  });
+
+  it("records each band's content bottom (last text line + rule padding)", () => {
+    const [edu, exp, proj] = model.sections;
+    expect(edu.contentBottom).toBe(78); // "UC San Diego" bottom 76 + 2
+    expect(exp.contentBottom).toBe(160); // "Shipped thing B" bottom 158 + 2
+    expect(proj.contentBottom).toBe(212); // last bullet bottom 210 + 2 — not page bottom
+  });
+
+  it("returns an empty model when the markers were edited away", () => {
+    const noMarkers = TEX.split("%% ART-SECTION:").join("% gone");
+    expect(buildOverlayModel(noMarkers, LINES, PAGE_HEIGHT)).toEqual({
+      sections: [],
+      bulletGroups: [],
+    });
+  });
+});
+
+describe("targetIndexForPointer / slotToIndex", () => {
+  const bands = [
+    { top: 0, height: 100 },   // midpoint 50
+    { top: 100, height: 100 }, // midpoint 150
+    { top: 200, height: 100 }, // midpoint 250
+  ];
+
+  it("maps pointer positions to insertion slots by band midpoints", () => {
+    expect(targetIndexForPointer(10, bands)).toBe(0);
+    expect(targetIndexForPointer(60, bands)).toBe(1);
+    expect(targetIndexForPointer(160, bands)).toBe(2);
+    expect(targetIndexForPointer(260, bands)).toBe(3);
+  });
+
+  it("converts slots to splice-style move targets", () => {
+    expect(slotToIndex(0, 2)).toBe(0);  // drag band 2 above everything
+    expect(slotToIndex(3, 0)).toBe(2);  // drag band 0 below everything
+    expect(slotToIndex(1, 1)).toBe(1);  // no-op zone
+    expect(slotToIndex(2, 1)).toBe(1);  // slot just after itself is also a no-op
+  });
+});
+
+describe("reorderPatch", () => {
+  // Three section-like bands tiling [100, 792): content height + trailing
+  // whitespace; the last band's big gap is the page-bottom whitespace.
+  const sections = [
+    { top: 100, height: 200, contentBottom: 280 }, // content 180, gap 20
+    { top: 300, height: 150, contentBottom: 430 }, // content 130, gap 20
+    { top: 450, height: 342, contentBottom: 600 }, // content 150, gap 192
+  ];
+
+  it("repacks content-height slices, leaving slot gaps in place", () => {
+    // Move the last section to the top: its 192px page-bottom gap must stay
+    // at the bottom instead of opening a hole mid-page.
+    const patch = reorderPatch(sections, 2, 0)!;
+    expect(patch.regionTop).toBe(100);
+    expect(patch.regionBottom).toBe(792);
+    expect(patch.slices).toEqual([
+      { srcTop: 450, height: 150, destTop: 100 }, // moved band, packed at top
+      { srcTop: 100, height: 180, destTop: 270 }, // 100 + 150 + slot-0 gap 20
+      { srcTop: 300, height: 130, destTop: 470 }, // 270 + 180 + slot-1 gap 20
+    ]);
+    // Last slice + its content + the last slot's gap lands exactly at region end.
+    expect(470 + 130 + 192).toBe(patch.regionBottom);
+  });
+
+  it("tiles plain bands (no contentBottom) by their full heights", () => {
+    const bullets = [
+      { top: 10, height: 20 },
+      { top: 30, height: 20 },
+      { top: 50, height: 16 }, // last band is text-tight
+    ];
+    const patch = reorderPatch(bullets, 0, 2)!;
+    expect(patch.regionTop).toBe(10);
+    expect(patch.regionBottom).toBe(66);
+    expect(patch.slices).toEqual([
+      { srcTop: 30, height: 20, destTop: 10 },
+      { srcTop: 50, height: 16, destTop: 30 },
+      { srcTop: 10, height: 20, destTop: 46 },
+    ]);
+  });
+
+  it("returns null for no-op or out-of-range moves", () => {
+    expect(reorderPatch(sections, 1, 1)).toBeNull();
+    expect(reorderPatch(sections, -1, 0)).toBeNull();
+    expect(reorderPatch(sections, 0, 3)).toBeNull();
+  });
+});
+
+describe("texLineForPointer", () => {
+  const model = buildOverlayModel(TEX, LINES, PAGE_HEIGHT);
+
+  it("prefers the bullet band under the pointer", () => {
+    expect(texLineForPointer(125, model)).toBe(15); // first experience bullet
+    expect(texLineForPointer(140, model)).toBe(15); // its wrapped continuation line
+    expect(texLineForPointer(150, model)).toBe(16); // second bullet
+    expect(texLineForPointer(205, model)).toBe(25); // project bullet
+  });
+
+  it("falls back to the enclosing section heading", () => {
+    expect(texLineForPointer(70, model)).toBe(7);   // education body text
+    expect(texLineForPointer(108, model)).toBe(11); // experience subheading line
+  });
+
+  it("returns null above all mapped regions", () => {
+    expect(texLineForPointer(10, model)).toBeNull();
+  });
+});

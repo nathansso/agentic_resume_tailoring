@@ -1,5 +1,8 @@
 # Stage 1: build React frontend
-FROM node:20-slim AS frontend
+# Node 24 bundles npm 11, matching the dev machine — npm 10 and 11 write
+# platform-conditional optional deps into package-lock.json differently, and
+# the version skew repeatedly broke `npm ci` here (EUSAGE).
+FROM node:24-slim AS frontend
 WORKDIR /app/web/frontend
 COPY web/frontend/package*.json ./
 RUN npm ci

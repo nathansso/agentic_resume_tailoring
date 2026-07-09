@@ -37,6 +37,7 @@ Thumbs.db
 .github_cache.json
 
 # Frontend
+node_modules/
 web/frontend/node_modules/
 web/static/
 

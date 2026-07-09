@@ -220,6 +220,13 @@ class ResumeTailorAgent:
             tailored["_section_order"] = self._ranked_section_order(
                 tailored, final_state["matched_skills"], final_state["job_text"]
             )
+            # One-page guarantee at the source (issue #34 follow-up): trim the
+            # stored content so the editor .tex, live preview, and exports all
+            # fit a single page — not just the PDF export path.
+            from agents.formatter import ResumeFormatterAgent
+            tailored = ResumeFormatterAgent(user_id).fit_content_to_one_page(
+                tailored, section_order=tailored.get("_section_order")
+            )
 
         # Save to DB
         with Session(engine) as session:
