@@ -4,6 +4,23 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issue 95 — Institution canonicalization (ROR) + degree-distinct education dedup
+**Status:** complete | **Tests:** 592 pass (14 new)
+
+Fixes the two dedup gaps the previous entry explicitly deferred: the same UCSD bachelor's ingested as `University of California, San Diego` (resume) and `UC San Diego` (LinkedIn) survived as two rows, because fuzzy string matching can't bridge the acronym `UC` → `University of California`. Institution names are now resolved to a stable canonical key via ROR (the Research Organization Registry) affiliation matcher and deduped on that key, while degree matching is tightened so two genuinely different degrees at one school stay separate.
+
+### What shipped
+- **Canonical resolver (`institution.py`).** `canonicalize_institution(name)` returns a ROR id for a confident affiliation match (so all of `UC San Diego` / `UCSD` / `University of California, San Diego` share one key) and the normalized name otherwise. The lookup is paid **once per distinct name**: memoized in-process and persisted in the new `InstitutionCanonical` cache table, so re-ingests and the O(n²) self-heal comparisons never re-hit the network. Transient network failures fall back to the normalized name **without** caching so a later ingest retries; `ROR_LOOKUP_ENABLED=0` forces the offline normalized-matching path.
+- **Institution matching (`agents/parser.py`).** New `_institutions_match` (canonical-key equality, else the prior fuzzy `_names_match`) now backs both `_education_match` and `_experiences_match`. Academic employers (e.g. the Financial Assistant role at UCSD) dedup across name forms; non-academic companies ROR can't resolve fall back to the unchanged fuzzy behavior — no regression.
+- **Degree distinctness.** Same-level degrees now merge only when they name the same field: `_degrees_compatible` accepts fuzzy/containment matches and acronyms (`CS` == `Computer Science`) but keeps distinct majors (B.S. Math vs B.S. Physics) and distinct same-level degrees (MBA vs M.S.) apart. A blank/unknown degree on either side still folds into the fuller one and backfills its blanks (the literal #95 LinkedIn row). Existing B.S./M.S.-by-level separation is preserved.
+- **Model.** New `InstitutionCanonical` table (`raw_norm` PK → `canonical_key`, `display_name`); a new nullable table, so it self-creates on existing SQLite/Postgres DBs with no migration.
+
+### Deviations from spec
+- ROR canonicalization is applied to experience employers too (not just education) via the shared matcher, since it's the same one-line change and dedups academic employers; regular companies are unaffected.
+- The issue also reported a *missing* LinkedIn experience (Financial Assistant). This change fixes the name-variant **duplication** class, but a genuinely absent role most likely reflects a Bright Data record shape (roles nested under a company's `positions`) rather than a dedup bug — left as a follow-up pending inspection of the raw scrape, since it can't be reproduced without it.
+
+---
+
 ## Issue-level — Achievements ingestion, cross-source dedup, and tailoring-placed rendering
 **Status:** complete | **Tests:** 578 pass (9 new)
 
