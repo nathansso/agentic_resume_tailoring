@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, type CSSProperties, type KeyboardEvent } f
 import type { ChatMsg } from "../types";
 import { colors, font } from "../theme";
 import { loadHistory, sendMessage } from "../api/chat";
-import { messageGap } from "../lib/paneResize";
+import { chatHPadding, messageGap } from "../lib/paneResize";
 
 const WELCOME = "Welcome to ART — your agentic resume tailoring assistant.\n\nI can help you:\n  • Ingest your resume, GitHub, or LinkedIn data\n  • View your skills, experiences, and projects\n  • Analyze job descriptions and find skill gaps\n  • Tailor your resume for specific roles\n\nTry: \"show my skills\" or type /ingest to get started.";
 
@@ -127,7 +127,15 @@ export function ChatPanel({ jobId, onViewChange, onAssistantReply, welcome, cont
 
   return (
     <div style={s.panel} ref={panelRef}>
-      <div style={{ ...s.scroll, gap: `${messageGap(panelWidth)}px` }}>
+      <div
+        style={{
+          ...s.scroll,
+          gap: `${messageGap(panelWidth)}px`,
+          // Reclaim side padding before the bubble is forced to wrap tighter (#90).
+          paddingLeft: `${chatHPadding(panelWidth)}px`,
+          paddingRight: `${chatHPadding(panelWidth)}px`,
+        }}
+      >
         {rendered.map((item, i) => {
           if (item.type === "day") {
             return <div key={`day-${i}`} style={s.daySep}>{item.label}</div>;

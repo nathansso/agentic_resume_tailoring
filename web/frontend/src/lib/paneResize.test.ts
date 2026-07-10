@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  chatHPadding,
   chatWidthFromPointer,
   clamp,
   clampEditorFraction,
@@ -8,14 +9,19 @@ import {
   messageGap,
   minResumeWidth,
   readStoredNumber,
+  CHAT_BUBBLE_MIN,
+  CHAT_PAD_MAX,
+  CHAT_PAD_MIN,
   MIN_CHAT_WIDTH,
   MIN_EDITOR_WIDTH,
+  MIN_PREVIEW_WIDTH,
+  MIN_PREVIEW_ONLY_WIDTH,
   MIN_EDITOR_FRACTION,
   MAX_EDITOR_FRACTION,
   MSG_GAP_MIN,
   MSG_GAP_MAX,
-  PAGE_ASPECT,
   RESUME_FLOOR,
+  SPLIT_CHROME,
 } from "./paneResize";
 
 describe("clamp", () => {
@@ -35,7 +41,9 @@ describe("chatWidthFromPointer", () => {
   const containerWidth = 1200; // container spans x=100..1300
 
   it("tracks the pointer within the usable band", () => {
-    expect(chatWidthFromPointer(600, containerLeft, containerWidth, MIN_CHAT_WIDTH, 320)).toBe(500);
+    // pointer 800px past the container's left edge: above the 760 chat floor and
+    // below the resume-side cap (containerWidth − 320 = 880).
+    expect(chatWidthFromPointer(900, containerLeft, containerWidth, MIN_CHAT_WIDTH, 320)).toBe(800);
   });
 
   it("clamps to the minimum chat width", () => {
@@ -54,64 +62,124 @@ describe("chatWidthFromPointer", () => {
 });
 
 describe("minResumeWidth", () => {
-  it("reserves an aspect-scaled width so preview keeps full height", () => {
-    // preview-only view: just the page's full-height width
-    expect(minResumeWidth("preview", 800)).toBeCloseTo(PAGE_ASPECT * 800);
+  it("uses the Preview-only floor in preview view (~1/3 screen, the product)", () => {
+    // The resume is the product, so Preview-only reserves a big floor.
+    expect(minResumeWidth("preview")).toBe(MIN_PREVIEW_ONLY_WIDTH);
+    expect(MIN_PREVIEW_ONLY_WIDTH).toBeGreaterThanOrEqual(900);
+    expect(MIN_PREVIEW_ONLY_WIDTH).toBeGreaterThan(RESUME_FLOOR);
   });
 
-  it("adds the editor's minimum width in split view", () => {
-    expect(minResumeWidth("split", 800)).toBeGreaterThan(minResumeWidth("preview", 800) + MIN_EDITOR_WIDTH - 1);
+  it("seats both panes plus chrome in split view", () => {
+    expect(minResumeWidth("split")).toBeGreaterThan(
+      MIN_EDITOR_WIDTH + MIN_PREVIEW_WIDTH - 1,
+    );
   });
 
   it("only needs editor room in source view (down to the floor)", () => {
     // editor min (280) is below the absolute floor, so the floor wins
-    expect(minResumeWidth("source", 800)).toBe(RESUME_FLOOR);
+    expect(minResumeWidth("source")).toBe(RESUME_FLOOR);
     expect(MIN_EDITOR_WIDTH).toBeLessThan(RESUME_FLOOR);
-  });
-
-  it("never drops below the absolute floor", () => {
-    expect(minResumeWidth("preview", 10)).toBe(RESUME_FLOOR);
   });
 });
 
 describe("editorFractionBounds", () => {
   it("raises the lower bound to keep the editor readable in a narrow split", () => {
     // 700px split → editor min fraction is 280/700 = 0.4, above the 0.2 floor
-    const { min } = editorFractionBounds(700, 0);
+    const { min } = editorFractionBounds(700);
     expect(min).toBeCloseTo(MIN_EDITOR_WIDTH / 700);
   });
 
-  it("lowers the upper bound so the preview keeps full height", () => {
-    // tall + not-very-wide split: the page needs ~PAGE_ASPECT*900 = 695px,
-    // so the editor can't grow past what leaves the preview that width
-    const { max } = editorFractionBounds(1400, 900);
-    expect(max).toBeGreaterThan(MIN_EDITOR_FRACTION);
-    expect(max).toBeLessThan(0.5);
+  it("lowers the upper bound so the preview keeps its minimum width", () => {
+    // 2000px split → preview needs 900+24, so max leaves that much for the preview
+    const { max } = editorFractionBounds(2000);
+    expect(max).toBeCloseTo((2000 - MIN_PREVIEW_WIDTH - 24) / 2000);
+    expect(max).toBeLessThan(MAX_EDITOR_FRACTION);
   });
 
-  it("keeps the default band in a wide, short split", () => {
-    // 350px tall page only needs ~270px, so the editor can reach its full max
-    const { min, max } = editorFractionBounds(1600, 350);
+  it("opens a real draggable band in a wide-enough split (the old aspect rule froze it)", () => {
+    // Regression for #90: the band is a real interval, not a single value. Needs
+    // a wide split now that the preview floor is ~1/3 of a large screen.
+    const { min, max } = editorFractionBounds(2000);
+    expect(max - min).toBeGreaterThan(0.2);
+  });
+
+  it("relaxes the editor min to the floor in a wide split (preview floor bounds the max)", () => {
+    // With the big preview floor the editor max is preview-bound, not the 0.8
+    // ceiling, until the split is very wide; the min relaxes to the 0.2 floor.
+    const { min, max } = editorFractionBounds(2000);
     expect(min).toBe(MIN_EDITOR_FRACTION);
-    expect(max).toBe(MAX_EDITOR_FRACTION);
+    expect(max).toBeCloseTo((2000 - MIN_PREVIEW_WIDTH - 24) / 2000);
   });
 });
 
 describe("clampEditorFraction / editorFractionFromPointer", () => {
   it("re-fits a stored preference into the valid band when the pane shrinks", () => {
-    // a comfortable 0.5 split gets pulled down when the pane is tall/narrow
-    expect(clampEditorFraction(0.5, 1000, 1000)).toBeLessThan(0.5);
+    // an editor-heavy 0.7 split gets pulled back so the preview keeps its floor
+    const max = editorFractionBounds(2000).max;
+    expect(clampEditorFraction(0.7, 2000)).toBeCloseTo(max);
+    expect(max).toBeLessThan(0.7);
   });
 
   it("leaves a valid preference untouched in a roomy split", () => {
-    expect(clampEditorFraction(0.5, 1600, 350)).toBeCloseTo(0.5);
+    // 0.5 is inside the band only once the split is wide enough for a 900 preview
+    expect(clampEditorFraction(0.5, 2600)).toBeCloseTo(0.5);
+  });
+
+  it("falls back to the full band before the split is measured (width 0)", () => {
+    // Regression for #90: an unmeasured split must NOT collapse the applied
+    // fraction to MIN_EDITOR_FRACTION — that pins the editor and freezes the
+    // divider until (or unless) a resize is observed.
+    expect(clampEditorFraction(0.5, 0)).toBeCloseTo(0.5);
+    const { min, max } = editorFractionBounds(0);
+    expect(min).toBe(MIN_EDITOR_FRACTION);
+    expect(max).toBe(MAX_EDITOR_FRACTION);
   });
 
   it("maps pointer position to a fraction and clamps it", () => {
-    // roomy split: pointer at x=1000 over [200..1800] → 0.5
-    expect(editorFractionFromPointer(1000, 200, 1600, 350)).toBeCloseTo(0.5);
-    // dragging far right is capped by the editor-max / preview-height rules
-    expect(editorFractionFromPointer(9999, 200, 1600, 350)).toBe(MAX_EDITOR_FRACTION);
+    // roomy split (2600px over [200..2800]): pointer at x=1500 → 0.5
+    expect(editorFractionFromPointer(1500, 200, 2600)).toBeCloseTo(0.5);
+    // dragging far right is capped so the preview keeps its 900px floor
+    expect(editorFractionFromPointer(99999, 200, 2600)).toBeCloseTo(
+      editorFractionBounds(2600).max,
+    );
+  });
+});
+
+describe("source fills the gap on entering split (#90 follow-up)", () => {
+  it("expanding the editor to its max pins the preview at its floor", () => {
+    // Clicking Split sets the editor intent to MAX_EDITOR_FRACTION; the clamp
+    // hands the preview exactly its floor (+chrome) and the editor takes the
+    // rest, so the source visibly fills the width the chat just freed up.
+    for (const splitWidth of [1600, 2000, 2600]) {
+      const frac = clampEditorFraction(MAX_EDITOR_FRACTION, splitWidth);
+      const previewSide = (1 - frac) * splitWidth;
+      expect(previewSide).toBeCloseTo(MIN_PREVIEW_WIDTH + SPLIT_CHROME, 0);
+    }
+  });
+});
+
+describe("MIN_CHAT_WIDTH", () => {
+  it("is the doubled chat floor (#90 follow-up)", () => {
+    expect(MIN_CHAT_WIDTH).toBe(760);
+  });
+});
+
+describe("chatHPadding", () => {
+  it("uses full padding at/above the default column width", () => {
+    expect(chatHPadding(400)).toBe(CHAT_PAD_MAX);
+    expect(chatHPadding(900)).toBe(CHAT_PAD_MAX);
+  });
+
+  it("reclaims padding down to the minimum at a narrow column", () => {
+    expect(chatHPadding(360)).toBe(CHAT_PAD_MIN);
+  });
+
+  it("keeps the bubble at its initial width across the shrink range", () => {
+    // content width = column − 2×padding stays ≈ CHAT_BUBBLE_MIN while shrinking
+    // (±1px: integer padding can't perfectly halve an odd-width column).
+    for (const w of [380, 385, 392, 400]) {
+      expect(Math.abs(w - 2 * chatHPadding(w) - CHAT_BUBBLE_MIN)).toBeLessThanOrEqual(1);
+    }
   });
 });
 

@@ -11,6 +11,7 @@ import {
   minResumeWidth,
   readStoredNumber,
   MIN_CHAT_WIDTH,
+  MIN_PREVIEW_ONLY_WIDTH,
 } from "../lib/paneResize";
 import { jobInsightMessages } from "../lib/insightMessages";
 import { jobWelcome } from "../lib/welcome";
@@ -61,8 +62,20 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
     if (!el) return;
     const rect = el.getBoundingClientRect();
     setDragging(true);
-    const minResume = minResumeWidth(paneView, rect.height);
+    const minResume = minResumeWidth(paneView);
     setChatWidth(chatWidthFromPointer(clientX, rect.left, rect.width, MIN_CHAT_WIDTH, minResume));
+  }
+
+  // Clicking "Split" condenses the chat to its floor so the freed width flows
+  // into the resume area and the source pane can slide out to fill it (the
+  // editor auto-expands in ResumeSplit). Persisted like a manual drag, so it
+  // sticks; the chat divider's double-click still resets to automatic sizing.
+  function handlePaneView(next: ResumeView) {
+    if (next === "split" && paneView !== "split") {
+      setChatWidth(MIN_CHAT_WIDTH);
+      localStorage.setItem(CHAT_WIDTH_KEY, String(MIN_CHAT_WIDTH));
+    }
+    setPaneView(next);
   }
 
   // Keep a manually-set chat width valid as the window resizes or the pane
@@ -75,7 +88,7 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
       setChatWidth(w => {
         if (w == null) return w;
         const rect = el.getBoundingClientRect();
-        const minResume = minResumeWidth(paneView, rect.height);
+        const minResume = minResumeWidth(paneView);
         return chatWidthFromPointer(rect.left + w, rect.left, rect.width, MIN_CHAT_WIDTH, minResume);
       });
     reclamp();
@@ -213,7 +226,16 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
         <div
           style={{
             ...s.chatCol,
-            width: chatWidth != null ? `${chatWidth}px` : chatWide ? "calc(50% + 200px)" : "400px",
+            // Undragged width. When a single resume pane is showing (chatWide),
+            // the chat claims the extra room — but never so much that the preview
+            // drops below its legibility floor, so cap it at columns − floor. Once
+            // the user drags, chatWidth takes over (already floor-clamped).
+            width:
+              chatWidth != null
+                ? `${chatWidth}px`
+                : chatWide
+                  ? `min(calc(50% + 200px), calc(100% - ${MIN_PREVIEW_ONLY_WIDTH}px))`
+                  : "400px",
             transition: dragging ? "none" : s.chatCol.transition,
           }}
         >
@@ -260,7 +282,7 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
               key={`${job.job_id}:${job.retailor_count}`}
               jobId={job.job_id}
               view={paneView}
-              onViewChange={setPaneView}
+              onViewChange={handlePaneView}
               onEditsChanged={refreshJob}
             />
           )}

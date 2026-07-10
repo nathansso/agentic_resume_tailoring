@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { colors, font } from "../theme";
 import { getTex, saveTex, discardTex } from "../api/jobs";
 import { useAutoCompile } from "../hooks/useAutoCompile";
 import { moveBulletTo, moveSectionTo } from "../lib/texStructure";
-import { clampEditorFraction, editorFractionFromPointer, readStoredNumber } from "../lib/paneResize";
+import { clampEditorFraction, editorFractionFromPointer, readStoredNumber, MAX_EDITOR_FRACTION } from "../lib/paneResize";
 import { PdfPreview } from "./PdfPreview";
 import { ResizeDivider } from "./ResizeDivider";
 
@@ -43,29 +43,33 @@ export function ResumeSplit({ jobId, view, onViewChange, onEditsChanged }: Props
   // Editor pane's share of the split (0..1); preview fills the rest (#90).
   // `editorFrac` is the user's intent; `effectiveFrac` (below) is that intent
   // re-fitted to the live pane size so the preview always keeps full height.
-  const splitRef = useRef<HTMLDivElement>(null);
+  const splitRef = useRef<HTMLDivElement | null>(null);
+  const splitRoRef = useRef<ResizeObserver | null>(null);
   const [editorFrac, setEditorFrac] = useState<number>(
     () => readStoredNumber(localStorage.getItem(EDITOR_FRACTION_KEY)) ?? 0.5,
   );
-  const [splitSize, setSplitSize] = useState({ w: 0, h: 0 });
+  const [splitWidth, setSplitWidth] = useState(0);
 
-  // Track the split's size so the editor fraction can be re-fitted whenever the
-  // pane is resized (by either divider) — a shrinking split pulls the editor
-  // back rather than letting the preview lose height.
-  useEffect(() => {
-    const el = splitRef.current;
+  // Attach a ResizeObserver via a *callback ref* rather than a mount effect:
+  // the split div is only rendered once the tex has loaded (before that the
+  // component early-returns a "Loading…" placeholder), so an empty-deps mount
+  // effect would run while the node is still absent and never re-bind. The
+  // callback ref fires exactly when the node mounts/unmounts, so `splitWidth`
+  // is always measured — without it the fraction stays pinned at the minimum
+  // and the editor↔preview divider can't move (#90).
+  const attachSplit = useCallback((el: HTMLDivElement | null) => {
+    splitRoRef.current?.disconnect();
+    splitRef.current = el;
     if (!el) return;
-    const measure = (w: number, h: number) => setSplitSize({ w, h });
     const ro = new ResizeObserver(entries => {
-      const r = entries[entries.length - 1].contentRect;
-      measure(r.width, r.height);
+      setSplitWidth(entries[entries.length - 1].contentRect.width);
     });
     ro.observe(el);
-    measure(el.clientWidth, el.clientHeight);
-    return () => ro.disconnect();
+    splitRoRef.current = ro;
+    setSplitWidth(el.clientWidth);
   }, []);
 
-  const effectiveFrac = clampEditorFraction(editorFrac, splitSize.w, splitSize.h);
+  const effectiveFrac = clampEditorFraction(editorFrac, splitWidth);
 
   const dirty = tex !== savedTex;
   const ready = !loading && !loadError && tex !== "";
@@ -90,6 +94,16 @@ export function ResumeSplit({ jobId, view, onViewChange, onEditsChanged }: Props
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
+
+  // Clicking into Split expands the editor to fill the width the chat frees up
+  // as it condenses (JobWorkspace snaps the chat to its floor). Setting the
+  // intent to the max fraction lets clampEditorFraction pin the preview at its
+  // own floor and hand the rest to the source — "source slides out to fill the
+  // gap." Fires only on entering Split, so the divider stays freely draggable
+  // afterward (a drag sets a smaller fraction that sticks until the next entry).
+  useEffect(() => {
+    if (view === "split") setEditorFrac(MAX_EDITOR_FRACTION);
+  }, [view]);
 
   // Auto-save on the debounce trailing edge (Overleaf-style persistence).
   // Skips blank buffers (the server rejects them) — those stay dirty.
@@ -161,7 +175,7 @@ export function ResumeSplit({ jobId, view, onViewChange, onEditsChanged }: Props
     const el = splitRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    setEditorFrac(editorFractionFromPointer(clientX, rect.left, rect.width, rect.height));
+    setEditorFrac(editorFractionFromPointer(clientX, rect.left, rect.width));
   }
 
   function persistEditorFrac() {
@@ -241,7 +255,7 @@ export function ResumeSplit({ jobId, view, onViewChange, onEditsChanged }: Props
 
       {saveError && <pre style={s.saveError}>{saveError}</pre>}
 
-      <div style={s.split} ref={splitRef}>
+      <div style={s.split} ref={attachSplit}>
         {/* Left: .tex source (hidden in preview-only view, state retained).
             In split view its width is user-draggable; in source view it fills. */}
         <div

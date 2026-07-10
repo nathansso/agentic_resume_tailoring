@@ -1,21 +1,44 @@
 /** Pure geometry for the draggable pane dividers on the Jobs tab (issue #90).
- *  Kept side-effect-free so the clamping rules are unit-testable without a DOM. */
+ *  Kept side-effect-free so the clamping rules are unit-testable without a DOM.
+ *
+ *  The compiled preview scales to fit *both* axes (see PdfPreview — it renders at
+ *  min(width-fit, height-fit)), so the whole page stays visible at any pane
+ *  width; it simply shrinks. That means the panes only need plain pixel floors —
+ *  no page-aspect width reservation. The earlier aspect×height reservation
+ *  collapsed the editor-fraction band in a tall split and froze the divider. */
 
-/** Chat column never narrows past this — below it the message bubbles start to
- *  compress and prose wraps awkwardly. */
-export const MIN_CHAT_WIDTH = 380;
+/** Chat column never narrows past this — below it the response bubble would have
+ *  to render narrower than its initial size (see {@link CHAT_BUBBLE_MIN}). */
+export const CHAT_PAD_MAX = 16; // px side padding at/above the default column
+export const CHAT_PAD_MIN = 6; // px side padding at the minimum column width
+/** The AI response bubble's content-box width at the default column. The chat
+ *  reclaims side padding before ever shrinking the bubble below this (#90). */
+export const CHAT_BUBBLE_MIN = 368;
+/** The chat column can't be dragged narrower than this. Doubled from the
+ *  original 380 per the #90 follow-up — the chat kept condensing too far. */
+export const MIN_CHAT_WIDTH = 2 * (CHAT_BUBBLE_MIN + 2 * CHAT_PAD_MIN); // 760
 /** The .tex source/editor pane stays at least this wide so lines stay legible. */
 export const MIN_EDITOR_WIDTH = 280;
-/** Absolute floor for the resume area regardless of page geometry. */
+/** The compiled-preview pane floor *inside split view*, where the editor also
+ *  needs room. The resume is the product, so even sharing the pane with the
+ *  editor the preview stays large (~1/3 of a wide screen) rather than a sliver.
+ *  This tightens the editor-fraction band: on a split narrower than
+ *  MIN_EDITOR_WIDTH + this + SPLIT_CHROME the band collapses (divider pins) —
+ *  graceful, no overflow — so split view wants a wide workspace (#90). */
+export const MIN_PREVIEW_WIDTH = 900;
+/** The resume floor in the *Preview-only* view. Much larger than the split-view
+ *  preview floor: the compiled resume *is* the product, so it should stay big
+ *  and readable — pretty much always visible at a comfortable size rather than
+ *  merely legible. With no editor sharing the pane, the whole width is the page.
+ *  Error-safe: on a window too small to seat this plus the chat floor,
+ *  `chatWidthFromPointer` keeps the chat at its floor and the resume just takes
+ *  whatever remains (no overflow/freeze), so it degrades gracefully (#90). */
+export const MIN_PREVIEW_ONLY_WIDTH = 900;
+/** Absolute floor for the resume area regardless of view. */
 export const RESUME_FLOOR = 320;
-/** Editor pane fraction bounds in split view (before the width/height rules
- *  below tighten them further). */
+/** Editor pane fraction bounds in split view (before the width rules tighten). */
 export const MIN_EDITOR_FRACTION = 0.2;
 export const MAX_EDITOR_FRACTION = 0.8;
-/** US-Letter page aspect (width / height). The compiled resume is one letter
- *  page, so a pane narrower than aspect × height would force the preview to
- *  shrink its height to fit — which we forbid (#90). */
-export const PAGE_ASPECT = 8.5 / 11;
 /** Divider + inter-pane gaps that eat into the split's usable width. */
 export const SPLIT_CHROME = 24;
 
@@ -33,8 +56,7 @@ export function clamp(value: number, lo: number, hi: number): number {
 
 /** New chat-column width (px) for a pointer at `clientX`, given the columns
  *  container's left edge and width. Clamped so both sides stay usable —
- *  `minResume` should come from {@link minResumeWidth} so the resume preview
- *  never has to reduce its height. */
+ *  `minResume` should come from {@link minResumeWidth}. */
 export function chatWidthFromPointer(
   clientX: number,
   containerLeft: number,
@@ -46,46 +68,45 @@ export function chatWidthFromPointer(
   return clamp(raw, minChat, Math.max(minChat, containerWidth - minResume));
 }
 
-/** Minimum width the resume area needs so the preview can render at full height.
- *  In split view it must also seat the editor at its minimum width. */
-export function minResumeWidth(
-  view: "split" | "source" | "preview",
-  previewHeight: number,
-): number {
-  const minPreview = PAGE_ASPECT * Math.max(0, previewHeight);
+/** Side padding (px) for the chat scroll area at a given column width. As the
+ *  column narrows from the default toward {@link MIN_CHAT_WIDTH}, padding is
+ *  reclaimed (16 → 6) so the response bubble keeps its initial content width and
+ *  text never wraps tighter than it did on first render (#90). */
+export function chatHPadding(width: number): number {
+  return clamp(Math.round((width - CHAT_BUBBLE_MIN) / 2), CHAT_PAD_MIN, CHAT_PAD_MAX);
+}
+
+/** Minimum width the resume area needs. In split view it must seat both the
+ *  editor and the preview at their pixel floors plus the divider chrome. */
+export function minResumeWidth(view: "split" | "source" | "preview"): number {
   let need: number;
   if (view === "source") need = MIN_EDITOR_WIDTH;
-  else if (view === "split") need = minPreview + MIN_EDITOR_WIDTH + SPLIT_CHROME;
-  else need = minPreview;
+  else if (view === "split") need = MIN_EDITOR_WIDTH + MIN_PREVIEW_WIDTH + SPLIT_CHROME;
+  else need = MIN_PREVIEW_ONLY_WIDTH;
   return Math.max(RESUME_FLOOR, need);
 }
 
-/** Valid editor-fraction band for the current split size: the lower bound keeps
- *  the editor ≥ {@link MIN_EDITOR_WIDTH}; the upper bound keeps the preview wide
- *  enough to render at full height (aspect × height). */
-export function editorFractionBounds(
-  splitWidth: number,
-  splitHeight: number,
-): { min: number; max: number } {
-  if (splitWidth <= 0) return { min: MIN_EDITOR_FRACTION, max: MIN_EDITOR_FRACTION };
+/** Valid editor-fraction band for the current split width: the lower bound keeps
+ *  the editor ≥ {@link MIN_EDITOR_WIDTH}; the upper bound keeps the preview
+ *  ≥ {@link MIN_PREVIEW_WIDTH}. */
+export function editorFractionBounds(splitWidth: number): { min: number; max: number } {
+  // Before the split is measured, allow the *full* band rather than collapsing
+  // to the minimum — otherwise a missing/late measurement pins the applied
+  // fraction at MIN_EDITOR_FRACTION and freezes the divider (the #90 bug).
+  if (splitWidth <= 0) return { min: MIN_EDITOR_FRACTION, max: MAX_EDITOR_FRACTION };
   const min = Math.min(
     MAX_EDITOR_FRACTION,
     Math.max(MIN_EDITOR_FRACTION, MIN_EDITOR_WIDTH / splitWidth),
   );
-  const minPreview = PAGE_ASPECT * Math.max(0, splitHeight);
-  const maxByPreview = (splitWidth - minPreview - SPLIT_CHROME) / splitWidth;
+  const maxByPreview = (splitWidth - MIN_PREVIEW_WIDTH - SPLIT_CHROME) / splitWidth;
   const max = Math.max(min, Math.min(MAX_EDITOR_FRACTION, maxByPreview));
   return { min, max };
 }
 
 /** Clamp a desired editor fraction into the currently-valid band. Used both to
  *  bound a drag and to re-fit the stored preference when the pane is resized. */
-export function clampEditorFraction(
-  fraction: number,
-  splitWidth: number,
-  splitHeight: number,
-): number {
-  const { min, max } = editorFractionBounds(splitWidth, splitHeight);
+export function clampEditorFraction(fraction: number, splitWidth: number): number {
+  const { min, max } = editorFractionBounds(splitWidth);
   return clamp(fraction, min, max);
 }
 
@@ -94,11 +115,10 @@ export function editorFractionFromPointer(
   clientX: number,
   splitLeft: number,
   splitWidth: number,
-  splitHeight: number,
 ): number {
   if (splitWidth <= 0) return MIN_EDITOR_FRACTION;
   const raw = (clientX - splitLeft) / splitWidth;
-  return clampEditorFraction(raw, splitWidth, splitHeight);
+  return clampEditorFraction(raw, splitWidth);
 }
 
 /** Vertical gap (px) between chat messages for a given column width — wider as
