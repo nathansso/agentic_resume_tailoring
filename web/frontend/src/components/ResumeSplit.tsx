@@ -3,7 +3,11 @@ import { colors, font } from "../theme";
 import { getTex, saveTex, discardTex } from "../api/jobs";
 import { useAutoCompile } from "../hooks/useAutoCompile";
 import { moveBulletTo, moveSectionTo } from "../lib/texStructure";
+import { clampEditorFraction, editorFractionFromPointer, readStoredNumber } from "../lib/paneResize";
 import { PdfPreview } from "./PdfPreview";
+import { ResizeDivider } from "./ResizeDivider";
+
+const EDITOR_FRACTION_KEY = "art:jobs:editorFraction";
 
 export type ResumeView = "split" | "source" | "preview";
 
@@ -36,6 +40,32 @@ export function ResumeSplit({ jobId, view, onViewChange, onEditsChanged }: Props
   const sourceRef = useRef(source);
   sourceRef.current = source;
   const texAreaRef = useRef<HTMLTextAreaElement>(null);
+  // Editor pane's share of the split (0..1); preview fills the rest (#90).
+  // `editorFrac` is the user's intent; `effectiveFrac` (below) is that intent
+  // re-fitted to the live pane size so the preview always keeps full height.
+  const splitRef = useRef<HTMLDivElement>(null);
+  const [editorFrac, setEditorFrac] = useState<number>(
+    () => readStoredNumber(localStorage.getItem(EDITOR_FRACTION_KEY)) ?? 0.5,
+  );
+  const [splitSize, setSplitSize] = useState({ w: 0, h: 0 });
+
+  // Track the split's size so the editor fraction can be re-fitted whenever the
+  // pane is resized (by either divider) — a shrinking split pulls the editor
+  // back rather than letting the preview lose height.
+  useEffect(() => {
+    const el = splitRef.current;
+    if (!el) return;
+    const measure = (w: number, h: number) => setSplitSize({ w, h });
+    const ro = new ResizeObserver(entries => {
+      const r = entries[entries.length - 1].contentRect;
+      measure(r.width, r.height);
+    });
+    ro.observe(el);
+    measure(el.clientWidth, el.clientHeight);
+    return () => ro.disconnect();
+  }, []);
+
+  const effectiveFrac = clampEditorFraction(editorFrac, splitSize.w, splitSize.h);
 
   const dirty = tex !== savedTex;
   const ready = !loading && !loadError && tex !== "";
@@ -127,6 +157,25 @@ export function ResumeSplit({ jobId, view, onViewChange, onEditsChanged }: Props
     }, 0);
   }
 
+  function handleSplitDrag(clientX: number) {
+    const el = splitRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setEditorFrac(editorFractionFromPointer(clientX, rect.left, rect.width, rect.height));
+  }
+
+  function persistEditorFrac() {
+    setEditorFrac(f => {
+      localStorage.setItem(EDITOR_FRACTION_KEY, String(f));
+      return f;
+    });
+  }
+
+  function resetEditorFrac() {
+    localStorage.removeItem(EDITOR_FRACTION_KEY);
+    setEditorFrac(0.5);
+  }
+
   async function handleDiscard() {
     if (!window.confirm("Discard your manual edits and reset to the AI-tailored resume?")) return;
     setSaveError(null);
@@ -192,9 +241,18 @@ export function ResumeSplit({ jobId, view, onViewChange, onEditsChanged }: Props
 
       {saveError && <pre style={s.saveError}>{saveError}</pre>}
 
-      <div style={s.split}>
-        {/* Left: .tex source (hidden in preview-only view, state retained) */}
-        <div style={{ ...s.editorPane, ...(view === "preview" ? s.hidden : {}) }}>
+      <div style={s.split} ref={splitRef}>
+        {/* Left: .tex source (hidden in preview-only view, state retained).
+            In split view its width is user-draggable; in source view it fills. */}
+        <div
+          style={
+            view === "preview"
+              ? s.hidden
+              : view === "split"
+                ? { ...s.editorPane, flex: `0 0 ${effectiveFrac * 100}%` }
+                : s.editorPane
+          }
+        >
           <textarea
             ref={texAreaRef}
             style={s.texArea}
@@ -204,6 +262,15 @@ export function ResumeSplit({ jobId, view, onViewChange, onEditsChanged }: Props
             wrap="off"
           />
         </div>
+
+        {view === "split" && (
+          <ResizeDivider
+            ariaLabel="Resize editor and preview panes"
+            onDrag={handleSplitDrag}
+            onDragEnd={persistEditorFrac}
+            onReset={resetEditorFrac}
+          />
+        )}
 
         {/* Right: live compiled preview with drag-to-reorder */}
         <div style={{ ...s.previewPane, ...(view === "source" ? s.hidden : {}) }}>

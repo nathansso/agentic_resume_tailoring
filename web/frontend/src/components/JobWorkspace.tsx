@@ -1,12 +1,21 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { JobDetail, TailorResult } from "../types";
 import { colors, font } from "../theme";
 import { saveDescription, analyzeJob, tailorJob, getJob, exportUrl } from "../api/jobs";
 import { ChatPanel } from "./ChatPanel";
 import { ProgressBar } from "./ProgressBar";
 import { ResumeSplit, type ResumeView } from "./ResumeSplit";
+import { ResizeDivider } from "./ResizeDivider";
+import {
+  chatWidthFromPointer,
+  minResumeWidth,
+  readStoredNumber,
+  MIN_CHAT_WIDTH,
+} from "../lib/paneResize";
 import { jobInsightMessages } from "../lib/insightMessages";
 import { jobWelcome } from "../lib/welcome";
+
+const CHAT_WIDTH_KEY = "art:jobs:chatWidth";
 
 interface Props {
   job: JobDetail;
@@ -35,10 +44,58 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
   // Pane layout starts on Preview (compiled resume front and center); the chat
   // column absorbs the hidden source pane's width until Split is chosen.
   const [paneView, setPaneView] = useState<ResumeView>("preview");
+  // Manual chat-column width (px). `null` keeps the automatic sizing below;
+  // once the user drags the divider it becomes a persisted fixed width (#90).
+  const columnsRef = useRef<HTMLDivElement>(null);
+  const [chatWidth, setChatWidth] = useState<number | null>(() =>
+    readStoredNumber(localStorage.getItem(CHAT_WIDTH_KEY)),
+  );
+  const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     setPaneView("preview");
   }, [job.job_id]);
+
+  function handleChatDrag(clientX: number) {
+    const el = columnsRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setDragging(true);
+    const minResume = minResumeWidth(paneView, rect.height);
+    setChatWidth(chatWidthFromPointer(clientX, rect.left, rect.width, MIN_CHAT_WIDTH, minResume));
+  }
+
+  // Keep a manually-set chat width valid as the window resizes or the pane
+  // layout changes — e.g. switching to Split needs more resume room, so an
+  // over-wide chat is pulled back in rather than squashing the preview (#90).
+  useEffect(() => {
+    const el = columnsRef.current;
+    if (!el) return;
+    const reclamp = () =>
+      setChatWidth(w => {
+        if (w == null) return w;
+        const rect = el.getBoundingClientRect();
+        const minResume = minResumeWidth(paneView, rect.height);
+        return chatWidthFromPointer(rect.left + w, rect.left, rect.width, MIN_CHAT_WIDTH, minResume);
+      });
+    reclamp();
+    const ro = new ResizeObserver(reclamp);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [paneView]);
+
+  function persistChatWidth() {
+    setDragging(false);
+    setChatWidth(w => {
+      if (w != null) localStorage.setItem(CHAT_WIDTH_KEY, String(Math.round(w)));
+      return w;
+    });
+  }
+
+  function resetChatWidth() {
+    localStorage.removeItem(CHAT_WIDTH_KEY);
+    setChatWidth(null);
+  }
 
   const tailored = job.status === "tailored" || job.status === "exported";
   const budgetUsed = job.retailor_count >= job.retailor_limit;
@@ -152,8 +209,14 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
       </div>
 
       {/* Three panes: chat (with insight briefings) | .tex editor | preview */}
-      <div style={s.columns}>
-        <div style={{ ...s.chatCol, width: chatWide ? "calc(50% + 200px)" : "400px" }}>
+      <div style={s.columns} ref={columnsRef}>
+        <div
+          style={{
+            ...s.chatCol,
+            width: chatWidth != null ? `${chatWidth}px` : chatWide ? "calc(50% + 200px)" : "400px",
+            transition: dragging ? "none" : s.chatCol.transition,
+          }}
+        >
           <div style={s.chatWrap}>
             <ChatPanel
               jobId={job.job_id}
@@ -164,6 +227,13 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
             />
           </div>
         </div>
+
+        <ResizeDivider
+          ariaLabel="Resize chat and resume panes"
+          onDrag={handleChatDrag}
+          onDragEnd={persistChatWidth}
+          onReset={resetChatWidth}
+        />
 
         <div style={s.resumeArea}>
           {error && (
@@ -253,7 +323,7 @@ const s: Record<string, CSSProperties> = {
   },
   columns: { display: "flex", flex: 1, minHeight: 0 },
   chatCol: {
-    flex: "0 0 auto", minWidth: 340, borderRight: `1px solid ${colors.primary}`,
+    flex: "0 0 auto", minWidth: MIN_CHAT_WIDTH,
     display: "flex", flexDirection: "column", minHeight: 0,
     transition: "width 0.25s ease",
   },

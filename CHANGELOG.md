@@ -4,6 +4,30 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issue 90 — Draggable pane resizing on the Jobs tab
+**Status:** complete | **Tests:** 81 frontend pass (22 new); Python suite unchanged
+
+The Jobs workspace panes were fixed-width: the chat column auto-sized (400px, or `calc(50% + 200px)` when a single resume pane was shown) and the split-view editor/preview were locked at 50/50. Users can now drag the boundaries to size the panes themselves — the chat ↔ resume divider in every pane layout (preview, source, and split), and the editor ↔ preview divider within split view. The minimums are geometry-aware so a drag can never squash a pane past the point it stays usable, and the preview always renders its full page height. Both preferences persist across reloads (localStorage) and reset to the automatic default on double-click.
+
+### What shipped
+- **`lib/paneResize.ts`.** Pure, DOM-free geometry, unit-tested in `lib/paneResize.test.ts` (22 cases):
+  - `chatWidthFromPointer` — chat clamps to ≥380px (below which message bubbles compress) and leaves `minResumeWidth(view, height)` for the resume side.
+  - `minResumeWidth` — the resume area must be at least `PAGE_ASPECT × height` wide (plus the editor's minimum in split view) so the letter-page preview never has to shrink its height to fit.
+  - `editorFractionBounds` / `clampEditorFraction` / `editorFractionFromPointer` — the editor's split share is bounded below by a 280px readable minimum and above by the preview's full-height width, both derived from the live split size.
+  - `messageGap` — interpolates the chat's inter-message spacing from 8px (wide, ≥620px) to 15px (narrow, ≤360px).
+- **`ResizeDivider.tsx`.** Reusable vertical grab handle that owns the document-level mousedown→mousemove→mouseup drag lifecycle (col-resize cursor, text-selection suppressed during drag, accent-lit on hover/active), with double-click-to-reset. Panes only supply the geometry via `onDrag(clientX)`.
+- **`JobWorkspace.tsx`.** Chat-column width becomes user-draggable; `chatWidth` is `null` until the user drags (preserving the existing automatic sizing), then a persisted fixed px. A `ResizeObserver` re-clamps a stored width when the window resizes or the layout switches to Split (which needs more resume room). Width transition is disabled mid-drag; the redundant `chatCol` right border is dropped in favor of the divider.
+- **`ResumeSplit.tsx`.** Editor pane's split share (`editorFrac`, default 0.5, persisted) is draggable via a divider rendered only in split view. The split is size-observed and the *applied* fraction is re-fitted to the live pane, so widening the chat retracts the editor instead of shrinking the preview; the user's stored preference is restored when there's room again.
+- **`PdfPreview.tsx`.** The preview now fits each page to the pane on **both** axes (`min(fit-width, fit-height)`, tracking container height as well as width) so a page stays fully visible without scrolling at any pane size; height-constrained pages are centered, and the trailing page's bottom margin is dropped so a one-page resume shows no scroll sliver.
+- **`ChatPanel.tsx`.** Self-measures its width and applies the `messageGap` spacing between bubbles.
+
+### Deviations from spec
+- Preferences persist globally (per-browser) rather than per-job — a consistent workspace layout is the more intuitive default, and per-job persistence would surprise users who set a layout once.
+- Only horizontal (width) resizing is implemented, matching the issue text ("resize the width"); pane heights are unchanged.
+- The "preview keeps full height" guarantee assumes the one-page US-Letter resume this app produces; a genuinely multi-page PDF still scrolls between pages (each page individually fits the viewport height).
+
+---
+
 ## Issue 95 — Institution canonicalization (ROR) + degree-distinct education dedup
 **Status:** complete | **Tests:** 592 pass (14 new)
 
