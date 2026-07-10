@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(gh project *), Bash(gh api *), Bash(gh issue *)
+allowed-tools: Bash(gh project *), Bash(gh api *), Bash(gh issue *), Bash(git *)
 ---
 
 Mark an issue as **Done** on the ART Development Plan project board, close the GitHub issue, and unblock any issues that were waiting on it. `$ARGUMENTS` is the issue number.
@@ -53,10 +53,29 @@ For each potentially unblocked issue, also check whether any of its *other* bloc
 
 For each confirmed-unblocked issue, run the GraphQL mutation with option `e18bf179` (Ready).
 
-**Step 6 — Display summary**
+**Step 6 — Tear down the issue's worktree (if one exists)**
+
+Issues started with `/work` have a sibling worktree named `art-issue-<number>`.
+Check for it:
+```
+git worktree list
+```
+If a worktree whose path ends in `art-issue-$ARGUMENTS` is present, the work is
+merged, so remove it and delete its local branch:
+```
+git worktree remove ../art-issue-$ARGUMENTS
+git branch -D issue-$ARGUMENTS-<slug>
+```
+If `git worktree remove` reports the tree is dirty (e.g. its private `.artdata/`
+SQLite DB), confirm with the user before re-running with `--force`. If no
+matching worktree exists, skip this step silently — the issue was worked without
+one.
+
+**Step 7 — Display summary**
 
 ```
 Done: #<number> — <title>
+Worktree: removed (or "none")
 
 Newly unblocked:
   #<n> — <title>  → Ready
