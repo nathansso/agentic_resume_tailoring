@@ -12,6 +12,7 @@ from database.db import engine
 from database.models import User, Skill, UserSkill, Education, Experience, Project, Achievement
 from database.user_utils import get_or_create_default_user
 from agents.skill_postprocessor import postprocess_skills, normalize_skill_name
+from institution import canonicalize_institution
 
 logger = logging.getLogger(__name__)
 
@@ -651,12 +652,24 @@ class ResumeParserAgent:
         return cls._norm_name(value) in _PLACEHOLDER_NAMES
 
     @classmethod
+    def _institutions_match(cls, a: Any, b: Any) -> bool:
+        """Same institution/employer when their canonical keys agree — a ROR id
+        when the name resolves, so 'UC San Diego' and 'University of California,
+        San Diego' match (issue #95) — or, when ROR can't resolve them (most
+        companies), when the raw names fuzzy-match as before."""
+        ka, kb = canonicalize_institution(a), canonicalize_institution(b)
+        if ka and kb and ka == kb:
+            return True
+        return cls._names_match(a, b)
+
+    @classmethod
     def _experiences_match(cls, t1: Any, c1: Any, t2: Any, c2: Any) -> bool:
-        """Two experiences are the same job when their companies fuzzy-match and
-        either their titles fuzzy-match or one side's title is a placeholder.
-        Lets a sparse 'Unknown Position @ IDXExchange' row fold into the real
-        'Data Science Intern @ IDX Exchange' one, across any pair of sources."""
-        if not cls._names_match(c1, c2):
+        """Two experiences are the same job when their companies match (canonical
+        key, else fuzzy) and either their titles fuzzy-match or one side's title
+        is a placeholder. Lets a sparse 'Unknown Position @ IDXExchange' row fold
+        into the real 'Data Science Intern @ IDX Exchange' one, across any pair
+        of sources."""
+        if not cls._institutions_match(c1, c2):
             return False
         return (cls._names_match(t1, t2)
                 or cls._is_placeholder_name(t1)
@@ -685,6 +698,11 @@ class ResumeParserAgent:
         ("associate", re.compile(r"\b(associate\w*|a\s*a\s*s)\b")),
     ]
 
+    # Connective words that aren't part of a field of study, stripped before
+    # comparing the field portions of two same-level degrees (issue #95).
+    _DEGREE_STOPWORDS = re.compile(
+        r"\b(in|of|the|and|minor|major|concentration|with|honors|degree)\b")
+
     @classmethod
     def _degree_level(cls, degree: Any) -> str:
         """Coarse degree level ('bachelor'/'master'/'phd'/'associate') extracted
@@ -696,21 +714,54 @@ class ResumeParserAgent:
         return ""
 
     @classmethod
-    def _education_match(cls, inst_a: Any, deg_a: Any, inst_b: Any, deg_b: Any) -> bool:
-        """Same education entry when institutions fuzzy-match ('UC San Diego' ==
-        'University of California, San Diego') and the degrees are the same
-        level, or either degree is blank/unrecognized and the strings fuzzy-match.
-        Distinct degree levels at one school stay separate so an M.S. and a B.S.
-        are never collapsed into one row."""
-        if not cls._names_match(inst_a, inst_b):
+    def _degree_field_tokens(cls, degree: Any) -> List[str]:
+        """The field-of-study tokens of a degree, with level markers ('B.S.',
+        'M.S.') and connective words removed: 'B.S. Mathematics & Economics,
+        Minor in Data Science' -> ['mathematics','economics','data','science']."""
+        norm = cls._norm_name(degree)
+        for _level, pattern in cls._DEGREE_LEVEL_PATTERNS:
+            norm = pattern.sub(" ", norm)
+        norm = cls._DEGREE_STOPWORDS.sub(" ", norm)
+        return [t for t in norm.split() if t]
+
+    @classmethod
+    def _degrees_compatible(cls, deg_a: Any, deg_b: Any) -> bool:
+        """Whether two same-level degrees name the same field. True when the
+        degree/field strings fuzzy-match, or one field is an acronym of the other
+        ('CS' vs 'Computer Science'). False when they name distinct fields, or one
+        has no identifiable field so agreement can't be confirmed (so an MBA and
+        an M.S. Data Science at one school stay separate). (issue #95)"""
+        if cls._names_match(deg_a, deg_b):
+            return True
+        fa, fb = cls._degree_field_tokens(deg_a), cls._degree_field_tokens(deg_b)
+        if not fa or not fb:
             return False
-        la, lb = cls._degree_level(deg_a), cls._degree_level(deg_b)
-        if la and lb:
-            return la == lb
+        if cls._names_match(" ".join(fa), " ".join(fb)):
+            return True
+        # Acronym: a single-token field vs the initials of a multi-token field.
+        for short, long_toks in ((fa, fb), (fb, fa)):
+            if len(short) == 1 and len(long_toks) > 1:
+                if short[0] == "".join(t[0] for t in long_toks):
+                    return True
+        return False
+
+    @classmethod
+    def _education_match(cls, inst_a: Any, deg_a: Any, inst_b: Any, deg_b: Any) -> bool:
+        """Same education entry when institutions canonicalize to the same key
+        ('UC San Diego' == 'University of California, San Diego' via ROR) and the
+        degrees are compatible. A blank/unknown degree on either side folds into
+        the fuller one; two distinct degrees at one school stay separate — an M.S.
+        and a B.S. by level, and two same-level majors (B.S. Math vs B.S. Physics)
+        by field. (issue #95)"""
+        if not cls._institutions_match(inst_a, inst_b):
+            return False
         da, db = cls._norm_name(deg_a), cls._norm_name(deg_b)
         if not da or not db:
-            return True
-        return cls._names_match(deg_a, deg_b)
+            return True  # a blank degree can't distinguish — merge and backfill
+        la, lb = cls._degree_level(deg_a), cls._degree_level(deg_b)
+        if la and lb and la != lb:
+            return False  # different levels (B.S. vs M.S.) are distinct entries
+        return cls._degrees_compatible(deg_a, deg_b)
 
     @classmethod
     def _achievements_match(cls, title_a: Any, issuer_a: Any, title_b: Any, issuer_b: Any) -> bool:

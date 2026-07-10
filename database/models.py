@@ -233,6 +233,24 @@ class ChatMessage(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class InstitutionCanonical(SQLModel, table=True):
+    """Cache: normalized institution name -> canonical dedup key (issue #95).
+
+    Institution names arrive in many forms across resume and LinkedIn ('UC San
+    Diego' vs 'University of California, San Diego'). Fuzzy string matching
+    can't bridge an acronym like 'UC' to 'University of California', so those
+    rows never deduplicated. Each distinct normalized form is resolved once via
+    ROR's affiliation matcher and cached here, so dedup can collapse the variants
+    onto a single canonical key (a ROR id) and the network lookup is paid only on
+    first sighting. Names ROR cannot confidently match cache to their own
+    normalized form.
+    """
+    raw_norm: str = Field(primary_key=True)   # normalized lookup key
+    canonical_key: str                         # ROR id, or the normalized string
+    display_name: Optional[str] = None         # ROR display name when resolved
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class AIUsage(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: UUID = Field(foreign_key="user.user_id", index=True)

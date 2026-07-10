@@ -24,6 +24,19 @@ import services as services_module
 from database.models import User, Skill, UserSkill
 
 
+@pytest.fixture(autouse=True)
+def _isolate_institution_cache(monkeypatch):
+    """Keep ROR (issue #95) out of the suite: disable network lookups by default
+    and clear the in-process canonicalization memo between tests, so institution
+    dedup falls back to normalized-string matching unless a test opts in."""
+    import institution as institution_module
+
+    institution_module._MEMO.clear()
+    monkeypatch.setenv("ROR_LOOKUP_ENABLED", "0")
+    yield
+    institution_module._MEMO.clear()
+
+
 @pytest.fixture()
 def isolated_engine(tmp_path, monkeypatch):
     """SQLite engine backed by a temp file, with all module-level engine refs patched."""
