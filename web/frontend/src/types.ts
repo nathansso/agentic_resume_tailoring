@@ -86,19 +86,29 @@ export interface SkillRow {
 }
 
 export interface ExpRow {
+  id: string;
   title: string;
   company: string;
   start: string;
   end: string;
+  description: string;
+  bullets: string[];
 }
 
 export interface ProjectRow {
+  id: string;
   name: string;
   url: string;
   desc: string;
+  description: string;
+  repo_url: string;
+  demo_url: string;
+  start: string;
+  end: string;
 }
 
 export interface EducationRow {
+  id: string;
   institution: string;
   degree: string;
   location: string;

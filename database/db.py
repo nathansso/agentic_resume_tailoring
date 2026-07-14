@@ -94,6 +94,10 @@ def _migrate_db() -> None:
         "ALTER TABLE userjobresult ADD COLUMN edited_tex_updated_at TIMESTAMP",
         # issue 69: persisted raw LinkedIn scrape JSON for replay
         'ALTER TABLE "user" ADD COLUMN linkedin_raw_record TEXT',
+        # issue 92: manual-edit protection for knowledge-graph rows
+        "ALTER TABLE experience ADD COLUMN manually_edited BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE education ADD COLUMN manually_edited BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE project ADD COLUMN manually_edited BOOLEAN DEFAULT FALSE",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

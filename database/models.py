@@ -89,6 +89,9 @@ class Experience(SQLModel, table=True):
     end_date: Optional[str] = None
     description: Optional[str] = None # Raw description
     bullets: List[str] = Field(default=[], sa_column=Column(JSON)) # Parsed bullets
+    # User manually edited this row via the Data Explorer (issue #92). Protects
+    # the row's fields from being reverted/enriched by a later re-ingest.
+    manually_edited: bool = Field(default=False)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -110,6 +113,8 @@ class Education(SQLModel, table=True):
     start_date: Optional[str] = None  # Free-form, matching Experience (e.g. "Sep 2021")
     end_date: Optional[str] = None    # e.g. "June 2025" or "Expected June 2027"
     gpa: Optional[str] = None
+    # User manually edited this row via the Data Explorer (issue #92).
+    manually_edited: bool = Field(default=False)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -145,6 +150,8 @@ class Project(SQLModel, table=True):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     metrics: Dict = Field(default={}, sa_column=Column(JSON)) # GitHub signals: stars, languages, readme_length (issue #46)
+    # User manually edited this row via the Data Explorer (issue #92).
+    manually_edited: bool = Field(default=False)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -252,6 +259,26 @@ class InstitutionCanonical(SQLModel, table=True):
     raw_norm: str = Field(primary_key=True)   # normalized lookup key
     canonical_key: str                         # ROR id, or the normalized string
     display_name: Optional[str] = None         # ROR display name when resolved
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class DeletedEntry(SQLModel, table=True):
+    """Tombstone for a user-deleted knowledge-graph row (issue #92).
+
+    Ingestion save paths are additive/merge-only, so a re-ingest would
+    otherwise resurrect a row the user deliberately deleted. When a user deletes
+    an Experience/Education/Project via the Data Explorer, the row is removed and
+    a tombstone recorded here. Each save path checks tombstones before creating a
+    new row and skips a match, so the deletion sticks across re-ingests. The two
+    key fields hold the same values the fuzzy-dedup match functions compare, so a
+    tombstone matches the same variants the deduper would (spacing, containment,
+    ROR-canonical institutions, shared repo URL).
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: UUID = Field(foreign_key="user.user_id", index=True)
+    entity_type: str  # "experience" | "education" | "project"
+    key_a: str        # experience: title | education: institution | project: name
+    key_b: Optional[str] = None  # experience: company | education: degree | project: repo_url
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
