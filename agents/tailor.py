@@ -30,6 +30,7 @@ from agents.project_scorer import MAX_PROJECTS, score_project, select_top_k
 from agents.skill_scorer import _env_float, _env_int, rank_and_select_skills
 from agents.skill_postprocessor import normalize_skill_name, should_reject_skill
 from agents.keyword_planner import score_keywords, assign_keywords, evaluate_placement
+from agents.tailor_planner import TailorPlanner, decision_log_entry
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,7 @@ class TailorState(TypedDict):
     missing_skills: List[str]
     priority_keywords: List[str]  # Top missing JD keywords, signal-ranked (issue #72)
     keyword_assignments: Dict     # {item_key: [keyword,...]} contextual placement (issue #72)
+    plan: Dict                # Typed per-item action plan from TailorPlanner (issues #91/#51)
     baseline_breakdown: Dict  # Pre-tailor score_breakdown for delta comparison (issue #12)
     experiences: List[Dict]
     projects: List[Dict]
@@ -118,6 +120,10 @@ class ResumeTailorAgent:
 
     def __init__(self):
         self.llm = get_llm(role="tailor", temperature=0.3)
+        # The planner shares the tailor role but plans deterministically. Built
+        # from this module's get_llm so tests patching it stay offline — any
+        # LLM failure degrades to the planner's deterministic default plan.
+        self.planner = TailorPlanner(llm=get_llm(role="tailor", temperature=0.0))
         self.graph = self._build_graph()
 
     def tailor(
@@ -192,7 +198,9 @@ class ResumeTailorAgent:
 
             # Project pre-selection: score projects by JD relevance + depth and
             # dynamically choose the top-k (issue #47), ordered descending by score.
-            proj_dicts = self._score_and_select_projects(proj_dicts_all, jd_text)
+            # The unselected remainder is kept as the replacement pool the
+            # planner may swap in via op=replace (issue #91).
+            proj_dicts, proj_pool = self._score_and_split_projects(proj_dicts_all, jd_text)
 
             # Signal-rank the missing JD keywords and assign each to the specific
             # experience/project whose own content supports it (issue #72), so the
@@ -216,6 +224,28 @@ class ResumeTailorAgent:
                 exp_dicts, proj_dicts, jd_text, missing_keywords, skill_terms, corpus
             )
 
+            # Prior tailored content is the source of truth for re-tailoring
+            # (issue #91): the planner plans a delta against it instead of
+            # regenerating from scratch.
+            prior_content = _as_obj(result.tailored_resume_content, {}) if result else {}
+            if not isinstance(prior_content, dict) or "error" in prior_content:
+                prior_content = {}
+
+        # Typed per-item edit plan (issues #91/#51): what to keep, revise,
+        # replace, or delete — and why. Validated against the real item keys,
+        # then applied structurally to the generator inputs below.
+        plan = self.planner.plan(
+            items=self._planner_items(exp_dicts, proj_dicts),
+            pool=self._planner_pool(proj_pool),
+            jd_text=jd_text,
+            missing_skills=list((result.missing_skills if result else None) or []),
+            revision_notes=revision_notes.strip(),
+            prior_content=prior_content or None,
+        )
+        exp_dicts, proj_dicts, keyword_assignments = self._apply_plan_to_inputs(
+            plan, exp_dicts, proj_dicts, proj_pool, keyword_assignments, prior_content
+        )
+
         initial_state: TailorState = {
             "user_id": str(user_id),
             "job_id": str(job_id),
@@ -227,6 +257,7 @@ class ResumeTailorAgent:
             "missing_skills": result.missing_skills if result else [],
             "priority_keywords": priority_keywords,
             "keyword_assignments": keyword_assignments,
+            "plan": plan,
             "baseline_breakdown": (result.score_breakdown or {}) if result else {},
             "experiences": exp_dicts,
             "projects": proj_dicts,
@@ -290,6 +321,24 @@ class ResumeTailorAgent:
                 # the saved source no longer matches the tailored content.
                 result.edited_tex = None
                 result.edited_tex_updated_at = None
+                # Append this run's (context, actions, reward) tuple — the
+                # offline dataset for score-driven tuning (issues #91/#51).
+                context_features = {
+                    "n_experiences": len(exp_dicts),
+                    "n_projects": len(proj_dicts),
+                    "n_replacement_pool": len(proj_pool),
+                    "n_missing_skills": len(_as_obj(result.missing_skills, []) or []),
+                    "n_priority_keywords": len(priority_keywords),
+                    "baseline_composite": (initial_state["baseline_breakdown"] or {}).get("composite"),
+                    "is_revision": bool(revision_notes.strip()) or bool(prior_content),
+                    "attempts": final_state["attempt"],
+                }
+                log = _as_obj(result.tailoring_decisions, [])
+                # Copy before append: mutating the tracked list in place would
+                # not register as a change on the JSON column.
+                log = list(log) if isinstance(log, list) else []
+                log.append(decision_log_entry(plan, context_features, evaluation, revision_notes))
+                result.tailoring_decisions = log
                 session.add(result)
                 session.commit()
 
@@ -387,6 +436,12 @@ class ResumeTailorAgent:
              "to THAT item because its own content supports them. Weave an item's suggested_keywords "
              "into THAT item's bullets ONLY where truthful. Do NOT move a keyword to a different item, "
              "and do NOT force in a keyword the item cannot honestly support\n"
+             "- Items may carry planner fields plan_op / plan_strategy / plan_keywords / plan_rationale. "
+             "Follow them exactly. plan_op=keep: reproduce that item's source bullets verbatim. "
+             "plan_op=revise strategies — keyword_weave: weave plan_keywords in where truthful; "
+             "quantify: lead with the metrics/numbers already present in the source; "
+             "tighten: compress wording and cut filler while keeping every fact; "
+             "reframe: reorder/reword bullets to lead with what this job values\n"
              "- For projects with multiple blurb styles, select the style that best fits the job\n"
              "- Keep projects and experiences in the given order; they are pre-ranked by job relevance\n"
              "- Each experience has a bullet_budget: write AT MOST that many bullets for it. Prefer "
@@ -440,6 +495,11 @@ class ResumeTailorAgent:
                 tailored["experiences"] = self._enforce_bullet_budgets(
                     tailored["experiences"], state["experiences"]
                 )
+            # Deterministic guarantee behind the planner's ops (issues #91/#51):
+            # deleted/replaced items stay out even if the LLM re-adds them, and
+            # plan_op=keep items get their source bullets restored verbatim.
+            if isinstance(tailored, dict):
+                tailored = self._enforce_plan(tailored, state)
             state["tailored_content"] = tailored
         except Exception as e:
             logger.error(f"Generation failed: {e}")
@@ -1046,20 +1106,23 @@ class ResumeTailorAgent:
     _SCORING_INPUT_KEYS = ("linked_skills", "metrics")
 
     @classmethod
-    def _score_and_select_projects(
+    def _score_and_split_projects(
         cls,
         proj_dicts: List[Dict],
         jd_text: str,
-    ) -> List[Dict]:
+    ) -> tuple:
         """
         Rank projects by composite selection score (ATS relevance + complexity,
         issue #46) and dynamically select the top-k via the drop-off + bounds rule
         (issue #47). Adds a 'selection_score' and per-component 'selection_breakdown'
-        hint to each selected project so the LLM knows which are most relevant, and
-        returns them ordered descending by score.
+        hint to each selected project so the LLM knows which are most relevant.
+
+        Returns (selected, pool): both ordered descending by score. The pool is
+        the scored remainder — the candidates the planner may swap in via
+        op=replace (issue #91).
         """
         if not proj_dicts:
-            return []
+            return [], []
 
         def strip(p: Dict) -> Dict:
             return {k: v for k, v in p.items() if k not in cls._SCORING_INPUT_KEYS}
@@ -1067,7 +1130,10 @@ class ResumeTailorAgent:
         jd_keywords = ATSScoringEngine._extract_keywords(jd_text)
         if not jd_keywords:
             # No JD signal to score against — fall back to the first MAX_PROJECTS.
-            return [strip(p) for p in proj_dicts[:MAX_PROJECTS]]
+            return (
+                [strip(p) for p in proj_dicts[:MAX_PROJECTS]],
+                [strip(p) for p in proj_dicts[MAX_PROJECTS:]],
+            )
 
         scored = []
         for p in proj_dicts:
@@ -1089,4 +1155,196 @@ class ResumeTailorAgent:
             len(selected), len(scored),
             [(p["name"], p["selection_score"], p["selection_breakdown"]) for p in selected],
         )
-        return selected
+        # select_top_k keeps a prefix of the sorted list; the rest is the pool.
+        return selected, scored[len(selected):]
+
+    @classmethod
+    def _score_and_select_projects(
+        cls,
+        proj_dicts: List[Dict],
+        jd_text: str,
+    ) -> List[Dict]:
+        """Back-compat wrapper: the selected projects only."""
+        return cls._score_and_split_projects(proj_dicts, jd_text)[0]
+
+    # ── Typed action plan (issues #91 / #51 Phase 2) ─────────────────────────
+
+    @classmethod
+    def _planner_items(cls, exp_dicts: List[Dict], proj_dicts: List[Dict]) -> List[Dict]:
+        """The generator inputs in the planner's item shape, keyed like the
+        keyword assignments so plans and placement scoring share keys."""
+        return [
+            {
+                "key": cls._exp_key(e),
+                "section": "experience",
+                "label": e.get("title"),
+                "source_text": cls._exp_source_text(e),
+                "suggested_keywords": e.get("suggested_keywords") or [],
+                "relevance": e.get("relevance_score"),
+            }
+            for e in exp_dicts
+        ] + [
+            {
+                "key": cls._proj_key(p),
+                "section": "project",
+                "label": p.get("name"),
+                "source_text": cls._proj_source_text(p),
+                "suggested_keywords": p.get("suggested_keywords") or [],
+                "relevance": p.get("selection_score"),
+            }
+            for p in proj_dicts
+        ]
+
+    @classmethod
+    def _planner_pool(cls, proj_pool: List[Dict]) -> List[Dict]:
+        """Unselected projects in the planner's item shape — the op=replace
+        candidates."""
+        return [
+            {
+                "key": cls._proj_key(p),
+                "section": "project",
+                "label": p.get("name"),
+                "source_text": cls._proj_source_text(p),
+                "relevance": p.get("selection_score"),
+            }
+            for p in proj_pool
+        ]
+
+    @staticmethod
+    def _annotate_with_action(item: Dict, action: Optional[Dict]) -> Dict:
+        """Copy plan fields onto the generator-facing item dict. The generator
+        prompt reads plan_op / plan_strategy / plan_keywords per item."""
+        if not action:
+            return item
+        out = {**item, "plan_op": action.get("op"),
+               "plan_rationale": action.get("rationale") or ""}
+        if action.get("op") == "revise":
+            out["plan_strategy"] = action.get("strategy")
+            out["plan_keywords"] = action.get("keywords") or []
+        return out
+
+    @classmethod
+    def _apply_plan_to_inputs(
+        cls,
+        plan: Dict,
+        exp_dicts: List[Dict],
+        proj_dicts: List[Dict],
+        proj_pool: List[Dict],
+        keyword_assignments: Dict,
+        prior_content: Dict,
+    ) -> tuple:
+        """
+        Apply the validated plan structurally to the generator inputs
+        (issue #91): deletes remove the item, replaces swap the pool candidate
+        in at the same position, keep/revise annotate the item with its plan
+        fields. Keyword assignments for removed items are dropped so the
+        placement evaluator doesn't demand keywords on items that no longer
+        exist. Returns (exp_dicts, proj_dicts, keyword_assignments).
+        """
+        actions_by_key = {
+            a.get("item_key"): a for a in (plan.get("actions") or [])
+        }
+        pool_by_key = {cls._proj_key(p): p for p in proj_pool}
+        prior_bullets_by_key = {
+            cls._proj_key(p): p.get("bullets")
+            for p in (prior_content or {}).get("projects") or []
+        }
+
+        removed: set = set()
+
+        new_exps: List[Dict] = []
+        for e in exp_dicts:
+            action = actions_by_key.get(cls._exp_key(e))
+            if action and action.get("op") == "delete":
+                removed.add(cls._exp_key(e))
+                continue
+            new_exps.append(cls._annotate_with_action(e, action))
+
+        new_projs: List[Dict] = []
+        for p in proj_dicts:
+            key = cls._proj_key(p)
+            action = actions_by_key.get(key)
+            op = action.get("op") if action else None
+            if op == "delete":
+                removed.add(key)
+                continue
+            if op == "replace":
+                repl = pool_by_key.get(action.get("replacement_key"))
+                if repl is not None:
+                    removed.add(key)
+                    new_projs.append({
+                        **repl,
+                        "plan_op": "revise",
+                        "plan_strategy": "reframe",
+                        "plan_keywords": [],
+                        "plan_rationale": action.get("rationale") or "",
+                    })
+                    continue
+                # Validation guarantees the key exists; if not, fall through
+                # and keep the original rather than losing a project.
+                action = None
+            annotated = cls._annotate_with_action(p, action)
+            # A kept project on a re-tailor carries its prior tailored bullets
+            # so enforcement can restore them verbatim (issue #91).
+            if action and action.get("op") == "keep" and prior_bullets_by_key.get(key):
+                annotated["prior_bullets"] = prior_bullets_by_key[key]
+            new_projs.append(annotated)
+
+        assignments = {
+            k: v for k, v in (keyword_assignments or {}).items() if k not in removed
+        }
+        return new_exps, new_projs, assignments
+
+    @classmethod
+    def _enforce_plan(cls, tailored: Dict, state: "TailorState") -> Dict:
+        """
+        Deterministic guarantee behind the plan (issues #91/#51): the LLM must
+        not undo a planner decision.
+
+        - Experiences/projects the plan deleted or replaced are dropped from
+          the output even if the model regenerated them.
+        - plan_op=keep experiences get their source bullets restored verbatim
+          (trimmed to budget); keep projects restore prior tailored bullets
+          when a re-tailor supplied them.
+        """
+        plan = state.get("plan") or {}
+        actions = plan.get("actions") or []
+        if not actions:
+            return tailored
+
+        gone = {
+            a.get("item_key") for a in actions
+            if a.get("op") in ("delete", "replace")
+        }
+        # Survivor keys: items that remain in the generator inputs. A replace
+        # removes the original key but its replacement is a survivor.
+        exp_by_key = {cls._exp_key(e): e for e in state.get("experiences") or []}
+        proj_by_key = {cls._proj_key(p): p for p in state.get("projects") or []}
+
+        if tailored.get("experiences"):
+            out = []
+            for gen in tailored["experiences"]:
+                key = cls._exp_key(gen)
+                if key in gone and key not in exp_by_key:
+                    continue
+                src = exp_by_key.get(key)
+                if src is not None and src.get("plan_op") == "keep":
+                    budget = src.get("bullet_budget")
+                    bullets = list(src.get("bullets") or [])
+                    gen = {**gen, "bullets": bullets[:budget] if budget else bullets}
+                out.append(gen)
+            tailored["experiences"] = out
+
+        if tailored.get("projects"):
+            out = []
+            for gen in tailored["projects"]:
+                key = cls._proj_key(gen)
+                if key in gone and key not in proj_by_key:
+                    continue
+                src = proj_by_key.get(key)
+                if src is not None and src.get("plan_op") == "keep" and src.get("prior_bullets"):
+                    gen = {**gen, "bullets": list(src["prior_bullets"])}
+                out.append(gen)
+            tailored["projects"] = out
+
+        return tailored

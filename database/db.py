@@ -92,6 +92,8 @@ def _migrate_db() -> None:
         # issue 71: manually edited resume .tex per tailoring result
         "ALTER TABLE userjobresult ADD COLUMN edited_tex TEXT",
         "ALTER TABLE userjobresult ADD COLUMN edited_tex_updated_at TIMESTAMP",
+        # issues 91/51: per-run tailoring decision log (planner actions + reward)
+        "ALTER TABLE userjobresult ADD COLUMN tailoring_decisions TEXT DEFAULT '[]'",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
