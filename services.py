@@ -350,6 +350,30 @@ def set_skill_core(user_id: UUID, skill_name: str, is_core: bool) -> str:
         return f"Failed to update skill: {e}"
 
 
+# Sentinel title/company values an extractor emits when a real value is absent.
+_EXP_PLACEHOLDERS = {"", "unknown", "unknown position", "n/a", "na", "none", "?"}
+
+
+def _is_placeholder(value) -> bool:
+    return str(value or "").strip().lower() in _EXP_PLACEHOLDERS
+
+
+def _exp_missing(e: Experience) -> list[str]:
+    """Which parts of an experience are missing, for the Data Explorer's
+    'incomplete' badge (issue #85). Lets the user see a malformed row and
+    complete it (edit) or drop it (delete) rather than it silently shipping."""
+    missing: list[str] = []
+    if _is_placeholder(e.title):
+        missing.append("title")
+    if _is_placeholder(e.company):
+        missing.append("company")
+    if not (e.start_date or e.end_date):
+        missing.append("dates")
+    if not (e.bullets or (e.description or "").strip()):
+        missing.append("details")
+    return missing
+
+
 def get_experiences(user_id: Optional[UUID]) -> list[dict]:
     if user_id is None:
         return []
@@ -358,18 +382,7 @@ def get_experiences(user_id: Optional[UUID]) -> list[dict]:
             select(Experience).where(Experience.user_id == user_id)
             .order_by(Experience.created_at)
         ).all()
-        return [
-            {
-                "id": str(e.experience_id),
-                "title": e.title,
-                "company": e.company,
-                "start": e.start_date or "?",
-                "end": e.end_date or "?",
-                "description": e.description or "",
-                "bullets": e.bullets or [],
-            }
-            for e in exps
-        ]
+        return [_exp_row_dict(e) for e in exps]
 
 
 def get_education(user_id: Optional[UUID]) -> list[dict]:
@@ -448,10 +461,12 @@ def get_projects(user_id: Optional[UUID]) -> list[dict]:
 
 
 def _exp_row_dict(e: Experience) -> dict:
+    missing = _exp_missing(e)
     return {
         "id": str(e.experience_id), "title": e.title, "company": e.company,
         "start": e.start_date or "?", "end": e.end_date or "?",
         "description": e.description or "", "bullets": e.bullets or [],
+        "incomplete": bool(missing), "missing": missing,
     }
 
 

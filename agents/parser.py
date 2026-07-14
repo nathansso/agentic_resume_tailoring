@@ -269,6 +269,11 @@ class ResumeParserAgent:
                     logger.debug(f"Skipping tombstoned experience: {title} @ {company}")
                     continue
 
+                # Don't auto-add an essentially empty stub (issue #85).
+                if not self._experience_is_includable(title, company, start, end, desc, bullets):
+                    logger.debug(f"Skipping content-empty experience: {title} @ {company}")
+                    continue
+
                 exp = Experience(
                     user_id=self.user.user_id,
                     title=title,
@@ -892,6 +897,24 @@ class ResumeParserAgent:
                 flat.append(rec)
         return flat
 
+    @classmethod
+    def _experience_is_includable(cls, title, company, start, end, description, bullets) -> bool:
+        """Whether an experience is substantive enough to auto-add (issue #85).
+
+        Include it when it has any real content (a date, a description, or a
+        bullet) or a complete identity (both a real title and a real company).
+        This blocks the 'essentially empty' stub — e.g. an 'Unknown Position @
+        SomeCo' company grouping with no dates or detail — from being silently
+        added to the knowledge graph, while keeping a legitimately minimal
+        'Data Scientist @ Acme' row the user can flesh out later via the Data
+        Explorer.
+        """
+        has_content = (bool(bullets) or bool(str(description or "").strip())
+                       or bool(start) or bool(end))
+        identity_complete = (not cls._is_placeholder_name(title)
+                             and not cls._is_placeholder_name(company))
+        return has_content or identity_complete
+
     @staticmethod
     def _linkedin_bullets(item: Dict) -> List[str]:
         """Bullets for a LinkedIn experience role (issue #96).
@@ -996,6 +1019,14 @@ class ResumeParserAgent:
                     continue
                 if self._experience_tombstoned(exp_tombs, title, company):
                     logger.debug(f"Skipping tombstoned LinkedIn experience: {title} @ {company}")
+                    continue
+                # Don't auto-add an essentially empty stub (issue #85) — e.g. a
+                # company grouping with no role title, dates, or detail.
+                if not self._experience_is_includable(
+                    title, company, item.get("start_date"), item.get("end_date"),
+                    item.get("description"), bullets,
+                ):
+                    logger.debug(f"Skipping content-empty LinkedIn experience: {title} @ {company}")
                     continue
                 exp = Experience(
                     user_id=self.user.user_id,

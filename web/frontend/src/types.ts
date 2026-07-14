@@ -93,6 +93,8 @@ export interface ExpRow {
   end: string;
   description: string;
   bullets: string[];
+  incomplete: boolean;   // missing info — surfaced for review (issue #85)
+  missing: string[];     // which parts are missing (title/company/dates/details)
 }
 
 export interface ProjectRow {

@@ -164,7 +164,17 @@ function ExpsTab({ exps, setExps }: { exps: ExpRow[]; setExps: (rows: ExpRow[]) 
           <ExpEditForm key={e.id} row={e} onSaved={onSaved} onCancel={() => setEditingId(null)} />
         ) : (
           <div key={e.id} style={{ ...sInner.tableRow, gridTemplateColumns: EXP_COLS, background: i % 2 === 0 ? colors.surface : colors.boost }}>
-            <span>{e.title}</span>
+            <span style={sInner.expTitleCell}>
+              {e.title}
+              {e.incomplete && (
+                <span
+                  style={sInner.incompleteBadge}
+                  title={`Missing ${e.missing.join(", ")} — edit to complete, or delete. Won't appear in tailored resumes until it has details.`}
+                >
+                  ⚠ {e.missing.join(", ")}
+                </span>
+              )}
+            </span>
             <span style={{ color: colors.textMuted }}>{e.company}</span>
             <span style={{ color: colors.textMuted }}>{e.start}</span>
             <span style={{ color: colors.textMuted }}>{e.end}</span>
@@ -701,6 +711,11 @@ const sInner: Record<string, CSSProperties> = {
   graphCat: { color: colors.text, flex: 1 },
   graphSkill: { color: colors.accent, flex: 1 },
   graphCount: { color: colors.textMuted },
+  expTitleCell: { display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" },
+  incompleteBadge: {
+    color: "#d29922", fontSize: "0.65rem", border: "1px solid #d29922",
+    padding: "0 0.3rem", borderRadius: 0, whiteSpace: "nowrap",
+  },
   rowActions: { display: "flex", gap: "0.375rem", justifyContent: "flex-end" },
   actionBtn: {
     background: "transparent", border: `1px solid ${colors.primary}`, color: colors.textMuted,
