@@ -197,6 +197,45 @@ def test_education_edit_delete_and_tombstone(isolated_engine, monkeypatch):
     assert rows == []  # tombstone blocked resurrection
 
 
+def test_experience_edit_delete_http_roundtrip(isolated_engine, monkeypatch):
+    """End-to-end through the real app: PATCH updates, GET reflects it, DELETE
+    removes it, and a cross-user PATCH is 404 — exercising auth, routing, and
+    the JSON serialization of the new fields."""
+    import database.db as db_module
+    monkeypatch.setattr(db_module, "engine", isolated_engine)
+    monkeypatch.setattr(services, "engine", isolated_engine)
+
+    from fastapi.testclient import TestClient
+    from web.app import create_app
+    import web.auth as web_auth_module
+
+    alice = _make_user(isolated_engine, "http-a@example.com")
+    bob = _make_user(isolated_engine, "http-b@example.com")
+    eid = _add_experience(isolated_engine, alice.user_id, title="Analyst", company="Acme")
+
+    def client_for(user):
+        app = create_app()
+        app.dependency_overrides[web_auth_module.get_current_user] = lambda: user
+        return TestClient(app, raise_server_exceptions=True)
+
+    ca = client_for(alice)
+    r = ca.patch(f"/api/profile/experiences/{eid}",
+                 json={"description": "Owned dashboards.", "start_date": "2021"})
+    assert r.status_code == 200
+    assert r.json()["description"] == "Owned dashboards."
+    assert r.json()["incomplete"] is False  # dates + details now present
+
+    got = ca.get("/api/profile/experiences").json()
+    assert got[0]["description"] == "Owned dashboards."
+
+    # Bob cannot touch Alice's row.
+    assert client_for(bob).patch(f"/api/profile/experiences/{eid}",
+                                 json={"title": "hacked"}).status_code == 404
+
+    assert ca.delete(f"/api/profile/experiences/{eid}").status_code == 200
+    assert ca.get("/api/profile/experiences").json() == []
+
+
 def test_project_edit_delete_and_tombstone(isolated_engine, monkeypatch):
     user = _make_user(isolated_engine, "pr1@example.com")
     with Session(isolated_engine) as s:
