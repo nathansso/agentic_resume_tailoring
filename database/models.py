@@ -23,6 +23,10 @@ class User(SQLModel, table=True):
     linkedin_ingest_status: Optional[str] = None       # None | "importing" | "done" | "failed"
     linkedin_ingest_error: Optional[str] = None        # last failure message, if any
     linkedin_ingested_at: Optional[datetime] = None
+    # Raw Bright Data scrape record (JSON-encoded) from the last successful
+    # LinkedIn import (issue #69). Persisted so mapping improvements can be
+    # replayed against the stored scrape instead of paying for a new one.
+    linkedin_raw_record: Optional[str] = None
     github_username: Optional[str] = None
     github_access_token: Optional[str] = None
     phone: Optional[str] = None

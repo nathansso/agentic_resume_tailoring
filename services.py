@@ -5,6 +5,7 @@ Ingestion functions return plain-English result strings and never raise.
 """
 import contextlib
 import io
+import json
 import logging
 import sys
 from pathlib import Path
@@ -1195,6 +1196,81 @@ def _set_linkedin_status(
         logger.error("Failed to update LinkedIn ingest status: %s", e)
 
 
+def _persist_linkedin_raw(user_id: Optional[UUID], record: Optional[dict]) -> None:
+    """Store the raw Bright Data scrape record (JSON) on the user row (issue #69).
+
+    Best-effort and user-scoped: a persistence failure must never fail the
+    ingest itself. A falsy/non-dict record is ignored so a bad scrape doesn't
+    wipe a previously stored good one.
+    """
+    if user_id is None or not isinstance(record, dict) or not record:
+        return
+    try:
+        payload = json.dumps(record, ensure_ascii=False)
+    except (TypeError, ValueError) as exc:
+        logger.warning("Could not serialize LinkedIn raw record: %s", exc)
+        return
+    try:
+        with Session(engine) as session:
+            db_user = session.get(User, user_id)
+            if not db_user:
+                return
+            db_user.linkedin_raw_record = payload
+            session.add(db_user)
+            session.commit()
+    except Exception as exc:
+        logger.error("Failed to persist LinkedIn raw record: %s", exc)
+
+
+def replay_linkedin(user_id: Optional[UUID] = None) -> str:
+    """Re-run LinkedIn structured mapping against the stored raw scrape (issue #69).
+
+    Lets mapping improvements be applied to an existing profile without a new,
+    paid Bright Data scrape. Reads the raw record persisted on the user row,
+    reconstructs the parser's ingestion payload, and re-runs parse_and_save.
+    Never raises — returns a plain-English result.
+    """
+    from database.db import init_db
+    from database.user_utils import get_active_profile, set_request_user
+    from ingestion.linkedin import LinkedInIngestor
+    from agents.parser import ResumeParserAgent
+
+    init_db()
+    if user_id is None:
+        user = get_active_profile()
+        user_id = user.user_id if user else None
+    else:
+        set_request_user(user_id)
+    if user_id is None:
+        return "No active profile to replay LinkedIn data for."
+
+    with Session(engine) as session:
+        db_user = session.get(User, user_id)
+        raw = db_user.linkedin_raw_record if db_user else None
+        url = (db_user.linkedin_ingested_url if db_user else None) or ""
+    if not raw:
+        return "No stored LinkedIn scrape to replay. Run a LinkedIn import first."
+    try:
+        record = json.loads(raw)
+    except (TypeError, ValueError):
+        return "Stored LinkedIn scrape is corrupt and cannot be replayed."
+
+    pre = _snapshot_user_data(user_id)
+    data = {
+        "source_type": "linkedin",
+        "source_file": f"linkedin:{url}",
+        "full_text": LinkedInIngestor()._brightdata_to_text(record, url),
+        "linkedin_record": record,
+    }
+    try:
+        with _suppress_output():
+            ResumeParserAgent().parse_and_save(data)
+    except Exception as exc:
+        logger.error("LinkedIn replay failed: %s", exc)
+        return f"LinkedIn replay failed: {exc}"
+    return _format_ingestion_diff(user_id, pre[0], pre[1], pre[2], "LinkedIn (replay)")
+
+
 def ingest_linkedin(profile_url: str, user_id: Optional[UUID] = None) -> str:
     """
     Scrape a LinkedIn profile via Bright Data and save it to the DB.
@@ -1223,6 +1299,9 @@ def ingest_linkedin(profile_url: str, user_id: Optional[UUID] = None) -> str:
     try:
         with _suppress_output():
             data = LinkedInIngestor().ingest_brightdata(profile_url)
+            # Persist the raw scrape before mapping so future mapping
+            # improvements can be replayed without a new paid scrape (issue #69).
+            _persist_linkedin_raw(user_id, data.get("linkedin_record"))
             ResumeParserAgent().parse_and_save(data)
     except LinkedInIngestionError as e:
         _set_linkedin_status(user_id, "failed", error=str(e))

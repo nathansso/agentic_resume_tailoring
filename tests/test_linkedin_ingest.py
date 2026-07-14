@@ -9,10 +9,11 @@ Covers:
   6. POST /api/ingest/linkedin endpoint returns the service result
 """
 import asyncio
+import json
 
 import pytest
 import requests
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 import ingestion.linkedin as linkedin_module
 from ingestion.linkedin import LinkedInIngestor, LinkedInIngestionError
@@ -361,6 +362,85 @@ def test_service_ingest_linkedin_marks_failed(isolated_engine, monkeypatch):
         u = s.get(User, uid)
         assert u.linkedin_ingest_status == "failed"
         assert u.linkedin_ingest_error == "nope"
+
+
+# ── raw scrape persistence + replay (issue #69) ─────────────────────────────────
+
+def test_ingest_linkedin_persists_raw_record(isolated_engine, monkeypatch):
+    """A successful scrape stores its raw Bright Data record on the user row so
+    it can be replayed later without a new (paid) scrape."""
+    import services
+
+    with Session(isolated_engine) as s:
+        user = User(name="U", email="raw1@example.com")
+        s.add(user); s.commit(); s.refresh(user)
+        uid = user.user_id
+
+    record = {"name": "Jane", "experience": [{"title": "X", "company": "Y"}]}
+    monkeypatch.setattr(
+        LinkedInIngestor, "ingest_brightdata",
+        lambda self, url: {"source_type": "linkedin",
+                           "source_file": f"linkedin:{url}", "full_text": "x",
+                           "linkedin_record": record},
+    )
+    monkeypatch.setattr(
+        "agents.parser.ResumeParserAgent.parse_and_save", lambda self, data: None
+    )
+
+    services.ingest_linkedin("https://www.linkedin.com/in/janedev", uid)
+
+    with Session(isolated_engine) as s:
+        u = s.get(User, uid)
+        assert u.linkedin_raw_record
+        assert json.loads(u.linkedin_raw_record)["name"] == "Jane"
+
+
+def test_replay_linkedin_uses_stored_record_without_scrape(isolated_engine, monkeypatch):
+    """Replay re-runs the structured mapping against the stored raw record and
+    never triggers a new Bright Data scrape."""
+    import services
+    import agents.parser as parser_module
+    from database.models import Experience
+
+    monkeypatch.setattr(parser_module, "engine", isolated_engine)
+    monkeypatch.setattr(parser_module, "get_llm", lambda **kw: None)
+    monkeypatch.setattr(
+        parser_module.ResumeParserAgent, "_extract_skills", lambda self, text: []
+    )
+
+    record = {"experience": [
+        {"title": "ML Engineer", "company": "Acme",
+         "start_date": "2020", "description": "Built models."},
+    ]}
+    with Session(isolated_engine) as s:
+        user = User(name="U", email="replay1@example.com",
+                    linkedin_ingested_url="https://www.linkedin.com/in/janedev",
+                    linkedin_raw_record=json.dumps(record))
+        s.add(user); s.commit(); s.refresh(user)
+        uid = user.user_id
+
+    def _no_scrape(self, url):
+        raise AssertionError("replay must not call Bright Data")
+    monkeypatch.setattr(LinkedInIngestor, "ingest_brightdata", _no_scrape)
+
+    services.replay_linkedin(uid)
+
+    with Session(isolated_engine) as s:
+        exps = s.exec(select(Experience).where(Experience.user_id == uid)).all()
+    assert len(exps) == 1
+    assert exps[0].title == "ML Engineer" and exps[0].company == "Acme"
+
+
+def test_replay_linkedin_no_stored_record(isolated_engine, monkeypatch):
+    import services
+
+    with Session(isolated_engine) as s:
+        user = User(name="U", email="replay2@example.com")
+        s.add(user); s.commit(); s.refresh(user)
+        uid = user.user_id
+
+    result = services.replay_linkedin(uid)
+    assert "No stored LinkedIn scrape" in result
 
 
 # ── profile update auto-trigger ─────────────────────────────────────────────────
