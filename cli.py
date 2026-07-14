@@ -6,6 +6,7 @@ Usage:
     python cli.py ingest-github [username]   Fetch GitHub repos and extract skills/projects
     python cli.py ingest-linkedin <url>      Scrape LinkedIn profile via Bright Data API
     python cli.py ingest-linkedin-pdf <pdf>  Parse LinkedIn PDF export (fallback)
+    python cli.py replay-linkedin            Re-map the stored LinkedIn scrape (no new scrape)
     python cli.py tailor <job_file_or_text>   Analyze job + match + tailor resume
     python cli.py status                      Show your profile summary
 """
@@ -139,6 +140,18 @@ def cmd_ingest_linkedin(args):
     result = ingest_linkedin(profile_url)
     print(result)
     if result.startswith("LinkedIn import failed"):
+        sys.exit(1)
+
+
+def cmd_replay_linkedin(args):
+    """Re-run LinkedIn mapping against the stored raw scrape (no new scrape)."""
+    from database.db import init_db
+    init_db()
+
+    from services import replay_linkedin
+    result = replay_linkedin()
+    print(result)
+    if result.startswith("LinkedIn replay failed"):
         sys.exit(1)
 
 
@@ -497,6 +510,12 @@ def main():
     p_linkedin_pdf = subparsers.add_parser("ingest-linkedin-pdf", help="Parse a LinkedIn PDF export (fallback)")
     p_linkedin_pdf.add_argument("file", help="Path to LinkedIn PDF export")
 
+    # replay-linkedin (re-map stored scrape, no new API call)
+    subparsers.add_parser(
+        "replay-linkedin",
+        help="Re-run LinkedIn mapping against the stored raw scrape (no new scrape)",
+    )
+
     # tailor
     p_tailor = subparsers.add_parser("tailor", help="Analyze a job and tailor your resume")
     p_tailor.add_argument("job", help="Path to job description file, or paste the text directly")
@@ -541,6 +560,8 @@ def main():
         cmd_ingest_linkedin(args)
     elif args.command == "ingest-linkedin-pdf":
         cmd_ingest_linkedin_pdf(args)
+    elif args.command == "replay-linkedin":
+        cmd_replay_linkedin(args)
     elif args.command == "tailor":
         cmd_tailor(args)
     elif args.command == "pin-skill":

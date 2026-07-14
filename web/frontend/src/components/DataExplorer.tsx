@@ -1,7 +1,10 @@
 import { useState, useEffect, type CSSProperties } from "react";
 import type { SkillRow, ExpRow, ProjectRow, EducationRow, AchievementRow, GraphData } from "../types";
 import { colors, font } from "../theme";
-import { getSkills, getExperiences, getProjects, getEducation, getAchievements, getGraph, setSkillCore } from "../api/profile";
+import {
+  getSkills, getExperiences, getProjects, getEducation, getAchievements, getGraph, setSkillCore,
+  updateExperience, deleteExperience, updateEducation, deleteEducation, updateProject, deleteProject,
+} from "../api/profile";
 
 type Tab = "skills" | "experiences" | "education" | "projects" | "achievements" | "graph" | "charts";
 
@@ -62,9 +65,9 @@ export function DataExplorer() {
         {loading && <p style={s.muted}>Loading…</p>}
         {error && <p style={{ ...s.muted, color: colors.error }}>{error}</p>}
         {!loading && !error && tab === "skills" && <SkillsTab skills={skills} onToggleCore={toggleCore} />}
-        {!loading && !error && tab === "experiences" && <ExpsTab exps={exps} />}
-        {!loading && !error && tab === "education" && <EducationTab education={education} />}
-        {!loading && !error && tab === "projects" && <ProjectsTab projects={projects} />}
+        {!loading && !error && tab === "experiences" && <ExpsTab exps={exps} setExps={setExps} />}
+        {!loading && !error && tab === "education" && <EducationTab education={education} setEducation={setEducation} />}
+        {!loading && !error && tab === "projects" && <ProjectsTab projects={projects} setProjects={setProjects} />}
         {!loading && !error && tab === "achievements" && <AchievementsTab achievements={achievements} />}
         {!loading && !error && tab === "graph" && <GraphTab graph={graph ?? { top_skills: [], by_category: {}, evidence: {} }} />}
         {!loading && !error && tab === "charts" && <ChartsTab skills={skills} graph={graph} />}
@@ -124,26 +127,150 @@ function SkillsTab({
   );
 }
 
-function ExpsTab({ exps }: { exps: ExpRow[] }) {
+const EXP_COLS = "2fr 1.5fr 1fr 1fr 7.5rem";
+
+function ExpsTab({ exps, setExps }: { exps: ExpRow[]; setExps: (rows: ExpRow[]) => void }) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
   if (exps.length === 0) return <p style={sInner.empty}>No experiences yet — ingest your resume to get started.</p>;
+
+  const onDelete = async (row: ExpRow) => {
+    if (!window.confirm(`Delete "${row.title} @ ${row.company}"? It won't return on a re-import.`)) return;
+    const prev = exps;
+    setExps(exps.filter(e => e.id !== row.id));
+    setError(null);
+    try {
+      await deleteExperience(row.id);
+    } catch (err) {
+      setExps(prev);
+      setError(err instanceof Error ? err.message : "Delete failed");
+    }
+  };
+
+  const onSaved = (updated: ExpRow) => {
+    setExps(exps.map(e => (e.id === updated.id ? updated : e)));
+    setEditingId(null);
+  };
+
   return (
     <div style={sInner.table}>
-      <div style={sInner.tableHead}>
-        <span>Title</span><span>Company</span><span>Start</span><span>End</span>
+      {error && <p style={{ ...sInner.empty, color: colors.error, marginBottom: "0.5rem" }}>{error}</p>}
+      <div style={{ ...sInner.tableHead, gridTemplateColumns: EXP_COLS }}>
+        <span>Title</span><span>Company</span><span>Start</span><span>End</span><span />
       </div>
-      {exps.map((e, i) => (
-        <div key={i} style={{ ...sInner.tableRow, background: i % 2 === 0 ? colors.surface : colors.boost }}>
-          <span>{e.title}</span>
-          <span style={{ color: colors.textMuted }}>{e.company}</span>
-          <span style={{ color: colors.textMuted }}>{e.start}</span>
-          <span style={{ color: colors.textMuted }}>{e.end}</span>
-        </div>
-      ))}
+      {exps.map((e, i) =>
+        editingId === e.id ? (
+          <ExpEditForm key={e.id} row={e} onSaved={onSaved} onCancel={() => setEditingId(null)} />
+        ) : (
+          <div key={e.id} style={{ ...sInner.tableRow, gridTemplateColumns: EXP_COLS, background: i % 2 === 0 ? colors.surface : colors.boost }}>
+            <span style={sInner.expTitleCell}>
+              {e.title}
+              {e.incomplete && (
+                <span
+                  style={sInner.incompleteBadge}
+                  title={`Missing ${e.missing.join(", ")} — edit to complete, or delete. Won't appear in tailored resumes until it has details.`}
+                >
+                  ⚠ {e.missing.join(", ")}
+                </span>
+              )}
+            </span>
+            <span style={{ color: colors.textMuted }}>{e.company}</span>
+            <span style={{ color: colors.textMuted }}>{e.start}</span>
+            <span style={{ color: colors.textMuted }}>{e.end}</span>
+            <RowActions onEdit={() => setEditingId(e.id)} onDelete={() => onDelete(e)} />
+          </div>
+        )
+      )}
     </div>
   );
 }
 
-function EducationTab({ education }: { education: EducationRow[] }) {
+function ExpEditForm({ row, onSaved, onCancel }: { row: ExpRow; onSaved: (r: ExpRow) => void; onCancel: () => void }) {
+  const [title, setTitle] = useState(row.title);
+  const [company, setCompany] = useState(row.company);
+  const [start, setStart] = useState(row.start === "?" ? "" : row.start);
+  const [end, setEnd] = useState(row.end === "?" ? "" : row.end);
+  const [description, setDescription] = useState(row.description);
+  const [bulletsText, setBulletsText] = useState((row.bullets || []).join("\n"));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updateExperience(row.id, {
+        title, company,
+        start_date: start.trim() || null,
+        end_date: end.trim() || null,
+        description: description.trim() || null,
+        bullets: bulletsText.split("\n").map(b => b.trim()).filter(Boolean),
+      });
+      onSaved(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={sForm.root}>
+      <div style={sForm.grid2}>
+        <Field label="Title"><input style={sForm.input} value={title} onChange={e => setTitle(e.target.value)} /></Field>
+        <Field label="Company"><input style={sForm.input} value={company} onChange={e => setCompany(e.target.value)} /></Field>
+        <Field label="Start"><input style={sForm.input} value={start} onChange={e => setStart(e.target.value)} placeholder="e.g. Jun 2023" /></Field>
+        <Field label="End"><input style={sForm.input} value={end} onChange={e => setEnd(e.target.value)} placeholder="e.g. Present" /></Field>
+      </div>
+      <Field label="Description"><textarea style={sForm.textarea} value={description} onChange={e => setDescription(e.target.value)} /></Field>
+      <Field label="Bullets (one per line)"><textarea style={sForm.textarea} value={bulletsText} onChange={e => setBulletsText(e.target.value)} /></Field>
+      <FormFooter saving={saving} error={error} onSave={save} onCancel={onCancel} />
+    </div>
+  );
+}
+
+// ── Shared edit helpers (issue #92) ─────────────────────────────────────────────
+
+function RowActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
+  return (
+    <span style={sInner.rowActions}>
+      <button type="button" style={sInner.actionBtn} onClick={onEdit}>Edit</button>
+      <button type="button" style={sInner.actionBtnDanger} onClick={onDelete}>Delete</button>
+    </span>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label style={sForm.field}>
+      <span style={sForm.label}>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function FormFooter({ saving, error, onSave, onCancel }: {
+  saving: boolean; error: string | null; onSave: () => void; onCancel: () => void;
+}) {
+  return (
+    <>
+      {error && <span style={{ color: colors.error, fontSize: font.size.sm }}>{error}</span>}
+      <div style={sForm.actions}>
+        <button type="button" style={sForm.saveBtn} onClick={onSave} disabled={saving}>
+          {saving ? "Saving…" : "Save"}
+        </button>
+        <button type="button" style={sForm.cancelBtn} onClick={onCancel} disabled={saving}>Cancel</button>
+      </div>
+    </>
+  );
+}
+
+const EDU_COLS = "2fr 2fr 1fr 0.75fr 1.25fr 7.5rem";
+
+function EducationTab({ education, setEducation }: { education: EducationRow[]; setEducation: (rows: EducationRow[]) => void }) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
   if (education.length === 0) {
     return (
       <p style={sInner.empty}>
@@ -152,29 +279,94 @@ function EducationTab({ education }: { education: EducationRow[] }) {
       </p>
     );
   }
+
+  const onDelete = async (row: EducationRow) => {
+    if (!window.confirm(`Delete "${row.degree} at ${row.institution}"? It won't return on a re-import.`)) return;
+    const prev = education;
+    setEducation(education.filter(e => e.id !== row.id));
+    setError(null);
+    try {
+      await deleteEducation(row.id);
+    } catch (err) {
+      setEducation(prev);
+      setError(err instanceof Error ? err.message : "Delete failed");
+    }
+  };
+
+  const onSaved = (updated: EducationRow) => {
+    setEducation(education.map(e => (e.id === updated.id ? updated : e)));
+    setEditingId(null);
+  };
+
   const dates = (e: EducationRow) =>
     e.start && e.end ? `${e.start} – ${e.end}` : e.end || e.start || "—";
+
   return (
     <div style={sInner.table}>
-      <div style={{ ...sInner.tableHead, gridTemplateColumns: "2fr 2fr 1fr 0.75fr 1.25fr" }}>
-        <span>Institution</span><span>Degree</span><span>Location</span><span>GPA</span><span>Dates</span>
+      {error && <p style={{ ...sInner.empty, color: colors.error, marginBottom: "0.5rem" }}>{error}</p>}
+      <div style={{ ...sInner.tableHead, gridTemplateColumns: EDU_COLS }}>
+        <span>Institution</span><span>Degree</span><span>Location</span><span>GPA</span><span>Dates</span><span />
       </div>
-      {education.map((e, i) => (
-        <div
-          key={i}
-          style={{
-            ...sInner.tableRow,
-            gridTemplateColumns: "2fr 2fr 1fr 0.75fr 1.25fr",
-            background: i % 2 === 0 ? colors.surface : colors.boost,
-          }}
-        >
-          <span>{e.institution}</span>
-          <span style={{ color: colors.textMuted }}>{e.degree}</span>
-          <span style={{ color: colors.textMuted }}>{e.location || "—"}</span>
-          <span style={{ color: colors.textMuted }}>{e.gpa || "—"}</span>
-          <span style={{ color: colors.textMuted }}>{dates(e)}</span>
-        </div>
-      ))}
+      {education.map((e, i) =>
+        editingId === e.id ? (
+          <EducationEditForm key={e.id} row={e} onSaved={onSaved} onCancel={() => setEditingId(null)} />
+        ) : (
+          <div
+            key={e.id}
+            style={{ ...sInner.tableRow, gridTemplateColumns: EDU_COLS, background: i % 2 === 0 ? colors.surface : colors.boost }}
+          >
+            <span>{e.institution}</span>
+            <span style={{ color: colors.textMuted }}>{e.degree}</span>
+            <span style={{ color: colors.textMuted }}>{e.location || "—"}</span>
+            <span style={{ color: colors.textMuted }}>{e.gpa || "—"}</span>
+            <span style={{ color: colors.textMuted }}>{dates(e)}</span>
+            <RowActions onEdit={() => setEditingId(e.id)} onDelete={() => onDelete(e)} />
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
+function EducationEditForm({ row, onSaved, onCancel }: { row: EducationRow; onSaved: (r: EducationRow) => void; onCancel: () => void }) {
+  const [institution, setInstitution] = useState(row.institution);
+  const [degree, setDegree] = useState(row.degree === "—" ? "" : row.degree);
+  const [location, setLocation] = useState(row.location);
+  const [start, setStart] = useState(row.start);
+  const [end, setEnd] = useState(row.end);
+  const [gpa, setGpa] = useState(row.gpa);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updateEducation(row.id, {
+        institution, degree: degree.trim(),
+        location: location.trim() || null,
+        start_date: start.trim() || null,
+        end_date: end.trim() || null,
+        gpa: gpa.trim() || null,
+      });
+      onSaved(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={sForm.root}>
+      <div style={sForm.grid2}>
+        <Field label="Institution"><input style={sForm.input} value={institution} onChange={e => setInstitution(e.target.value)} /></Field>
+        <Field label="Degree"><input style={sForm.input} value={degree} onChange={e => setDegree(e.target.value)} /></Field>
+        <Field label="Location"><input style={sForm.input} value={location} onChange={e => setLocation(e.target.value)} /></Field>
+        <Field label="GPA"><input style={sForm.input} value={gpa} onChange={e => setGpa(e.target.value)} /></Field>
+        <Field label="Start"><input style={sForm.input} value={start} onChange={e => setStart(e.target.value)} placeholder="e.g. Sep 2021" /></Field>
+        <Field label="End"><input style={sForm.input} value={end} onChange={e => setEnd(e.target.value)} placeholder="e.g. Expected 2027" /></Field>
+      </div>
+      <FormFooter saving={saving} error={error} onSave={save} onCancel={onCancel} />
     </div>
   );
 }
@@ -215,19 +407,93 @@ function AchievementsTab({ achievements }: { achievements: AchievementRow[] }) {
   );
 }
 
-function ProjectsTab({ projects }: { projects: ProjectRow[] }) {
+function ProjectsTab({ projects, setProjects }: { projects: ProjectRow[]; setProjects: (rows: ProjectRow[]) => void }) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
   if (projects.length === 0) return <p style={sInner.empty}>No projects yet — ingest GitHub repos to add projects.</p>;
+
+  const onDelete = async (row: ProjectRow) => {
+    if (!window.confirm(`Delete "${row.name}"? It won't return on a re-import.`)) return;
+    const prev = projects;
+    setProjects(projects.filter(p => p.id !== row.id));
+    setError(null);
+    try {
+      await deleteProject(row.id);
+    } catch (err) {
+      setProjects(prev);
+      setError(err instanceof Error ? err.message : "Delete failed");
+    }
+  };
+
+  const onSaved = (updated: ProjectRow) => {
+    setProjects(projects.map(p => (p.id === updated.id ? updated : p)));
+    setEditingId(null);
+  };
+
   return (
-    <div style={sInner.projGrid}>
-      {projects.map((p, i) => (
-        <div key={i} style={sInner.projCard}>
-          <span style={sInner.projName}>{p.name}</span>
-          {p.url !== "—" && (
-            <a href={p.url} target="_blank" rel="noreferrer" style={sInner.projUrl}>{p.url}</a>
-          )}
-          {p.desc && <span style={sInner.projDesc}>{p.desc}</span>}
-        </div>
-      ))}
+    <>
+      {error && <p style={{ ...sInner.empty, color: colors.error, marginBottom: "0.5rem" }}>{error}</p>}
+      <div style={sInner.projGrid}>
+        {projects.map(p =>
+          editingId === p.id ? (
+            <ProjectEditForm key={p.id} row={p} onSaved={onSaved} onCancel={() => setEditingId(null)} />
+          ) : (
+            <div key={p.id} style={sInner.projCard}>
+              <span style={sInner.projName}>{p.name}</span>
+              {p.url !== "—" && (
+                <a href={p.url} target="_blank" rel="noreferrer" style={sInner.projUrl}>{p.url}</a>
+              )}
+              {p.desc && <span style={sInner.projDesc}>{p.desc}</span>}
+              <RowActions onEdit={() => setEditingId(p.id)} onDelete={() => onDelete(p)} />
+            </div>
+          )
+        )}
+      </div>
+    </>
+  );
+}
+
+function ProjectEditForm({ row, onSaved, onCancel }: { row: ProjectRow; onSaved: (r: ProjectRow) => void; onCancel: () => void }) {
+  const [name, setName] = useState(row.name);
+  const [description, setDescription] = useState(row.description);
+  const [repoUrl, setRepoUrl] = useState(row.repo_url);
+  const [demoUrl, setDemoUrl] = useState(row.demo_url);
+  const [start, setStart] = useState(row.start);
+  const [end, setEnd] = useState(row.end);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updateProject(row.id, {
+        name,
+        description: description.trim() || null,
+        repo_url: repoUrl.trim() || null,
+        demo_url: demoUrl.trim() || null,
+        start_date: start.trim() || null,
+        end_date: end.trim() || null,
+      });
+      onSaved(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ ...sForm.root, gridColumn: "1 / -1" }}>
+      <Field label="Name"><input style={sForm.input} value={name} onChange={e => setName(e.target.value)} /></Field>
+      <Field label="Description"><textarea style={sForm.textarea} value={description} onChange={e => setDescription(e.target.value)} /></Field>
+      <div style={sForm.grid2}>
+        <Field label="Repo URL"><input style={sForm.input} value={repoUrl} onChange={e => setRepoUrl(e.target.value)} /></Field>
+        <Field label="Demo URL"><input style={sForm.input} value={demoUrl} onChange={e => setDemoUrl(e.target.value)} /></Field>
+        <Field label="Start"><input style={sForm.input} value={start} onChange={e => setStart(e.target.value)} /></Field>
+        <Field label="End"><input style={sForm.input} value={end} onChange={e => setEnd(e.target.value)} /></Field>
+      </div>
+      <FormFooter saving={saving} error={error} onSave={save} onCancel={onCancel} />
     </div>
   );
 }
@@ -445,4 +711,46 @@ const sInner: Record<string, CSSProperties> = {
   graphCat: { color: colors.text, flex: 1 },
   graphSkill: { color: colors.accent, flex: 1 },
   graphCount: { color: colors.textMuted },
+  expTitleCell: { display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" },
+  incompleteBadge: {
+    color: "#d29922", fontSize: "0.65rem", border: "1px solid #d29922",
+    padding: "0 0.3rem", borderRadius: 0, whiteSpace: "nowrap",
+  },
+  rowActions: { display: "flex", gap: "0.375rem", justifyContent: "flex-end" },
+  actionBtn: {
+    background: "transparent", border: `1px solid ${colors.primary}`, color: colors.textMuted,
+    fontSize: "0.7rem", padding: "0.125rem 0.5rem", cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
+  },
+  actionBtnDanger: {
+    background: "transparent", border: `1px solid ${colors.primary}`, color: colors.error,
+    fontSize: "0.7rem", padding: "0.125rem 0.5rem", cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
+  },
+};
+
+const sForm: Record<string, CSSProperties> = {
+  root: {
+    display: "flex", flexDirection: "column", gap: "0.5rem",
+    border: `1px solid ${colors.accent}`, padding: "0.75rem", background: colors.surface,
+  },
+  grid2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" },
+  field: { display: "flex", flexDirection: "column", gap: "0.2rem" },
+  label: { color: colors.textMuted, fontSize: "0.7rem" },
+  input: {
+    background: colors.boost, border: `1px solid ${colors.primary}`, color: colors.text,
+    fontSize: font.size.sm, padding: "0.3rem 0.4rem", fontFamily: "inherit", borderRadius: 0,
+  },
+  textarea: {
+    background: colors.boost, border: `1px solid ${colors.primary}`, color: colors.text,
+    fontSize: font.size.sm, padding: "0.3rem 0.4rem", fontFamily: "inherit", borderRadius: 0,
+    minHeight: "3.5rem", resize: "vertical",
+  },
+  actions: { display: "flex", gap: "0.5rem", marginTop: "0.25rem" },
+  saveBtn: {
+    background: colors.accent, border: "none", color: colors.surface, fontWeight: 700,
+    fontSize: font.size.sm, padding: "0.35rem 0.9rem", cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
+  },
+  cancelBtn: {
+    background: "transparent", border: `1px solid ${colors.primary}`, color: colors.textMuted,
+    fontSize: font.size.sm, padding: "0.35rem 0.9rem", cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
+  },
 };

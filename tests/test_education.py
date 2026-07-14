@@ -295,14 +295,16 @@ def test_get_education_service_shape(isolated_engine):
 
     rows = services_module.get_education(user.user_id)
 
-    assert rows == [{
+    assert len(rows) == 1
+    assert rows[0]["id"]  # row id exposed for manual edit/delete (issue #92)
+    assert {k: v for k, v in rows[0].items() if k != "id"} == {
         "institution": "Texas A&M University",
         "degree": "B.S. Computer Science",
         "location": "College Station, TX",
         "start": "",
         "end": "May 2021",
         "gpa": "3.8/4.0",
-    }]
+    }
     assert services_module.get_education(None) == []
 
 

@@ -86,19 +86,31 @@ export interface SkillRow {
 }
 
 export interface ExpRow {
+  id: string;
   title: string;
   company: string;
   start: string;
   end: string;
+  description: string;
+  bullets: string[];
+  incomplete: boolean;   // missing info — surfaced for review (issue #85)
+  missing: string[];     // which parts are missing (title/company/dates/details)
 }
 
 export interface ProjectRow {
+  id: string;
   name: string;
   url: string;
   desc: string;
+  description: string;
+  repo_url: string;
+  demo_url: string;
+  start: string;
+  end: string;
 }
 
 export interface EducationRow {
+  id: string;
   institution: string;
   degree: string;
   location: string;

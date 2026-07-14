@@ -5,6 +5,7 @@ Ingestion functions return plain-English result strings and never raise.
 """
 import contextlib
 import io
+import json
 import logging
 import sys
 from pathlib import Path
@@ -17,8 +18,8 @@ from sqlmodel import Session, delete, select
 
 from database.db import engine
 from database.models import (
-    Achievement, ChatMessage, Education, Experience, JobDescription, JobSkill,
-    Project, Skill, User, UserJobResult, UserSkill,
+    Achievement, ChatMessage, DeletedEntry, Education, Experience,
+    JobDescription, JobSkill, Project, Skill, User, UserJobResult, UserSkill,
 )
 
 logger = logging.getLogger(__name__)
@@ -349,22 +350,39 @@ def set_skill_core(user_id: UUID, skill_name: str, is_core: bool) -> str:
         return f"Failed to update skill: {e}"
 
 
+# Sentinel title/company values an extractor emits when a real value is absent.
+_EXP_PLACEHOLDERS = {"", "unknown", "unknown position", "n/a", "na", "none", "?"}
+
+
+def _is_placeholder(value) -> bool:
+    return str(value or "").strip().lower() in _EXP_PLACEHOLDERS
+
+
+def _exp_missing(e: Experience) -> list[str]:
+    """Which parts of an experience are missing, for the Data Explorer's
+    'incomplete' badge (issue #85). Lets the user see a malformed row and
+    complete it (edit) or drop it (delete) rather than it silently shipping."""
+    missing: list[str] = []
+    if _is_placeholder(e.title):
+        missing.append("title")
+    if _is_placeholder(e.company):
+        missing.append("company")
+    if not (e.start_date or e.end_date):
+        missing.append("dates")
+    if not (e.bullets or (e.description or "").strip()):
+        missing.append("details")
+    return missing
+
+
 def get_experiences(user_id: Optional[UUID]) -> list[dict]:
     if user_id is None:
         return []
     with Session(engine) as session:
         exps = session.exec(
             select(Experience).where(Experience.user_id == user_id)
+            .order_by(Experience.created_at)
         ).all()
-        return [
-            {
-                "title": e.title,
-                "company": e.company,
-                "start": e.start_date or "?",
-                "end": e.end_date or "?",
-            }
-            for e in exps
-        ]
+        return [_exp_row_dict(e) for e in exps]
 
 
 def get_education(user_id: Optional[UUID]) -> list[dict]:
@@ -379,6 +397,7 @@ def get_education(user_id: Optional[UUID]) -> list[dict]:
         ).all()
         return [
             {
+                "id": str(e.education_id),
                 "institution": e.institution,
                 "degree": e.degree or "—",
                 "location": e.location or "",
@@ -417,15 +436,214 @@ def get_projects(user_id: Optional[UUID]) -> list[dict]:
     with Session(engine) as session:
         projs = session.exec(
             select(Project).where(Project.user_id == user_id)
+            .order_by(Project.created_at)
         ).all()
         return [
             {
+                "id": str(p.project_id),
                 "name": p.name,
                 "url": p.repo_url or "—",
                 "desc": (p.description or "")[:60],
+                "description": p.description or "",
+                "repo_url": p.repo_url or "",
+                "demo_url": p.demo_url or "",
+                "start": p.start_date or "",
+                "end": p.end_date or "",
             }
             for p in projs
         ]
+
+
+# ── Manual edit & delete of knowledge-graph rows (issue #92) ────────────────────
+# The durable fallback for corrections the automatic dedup/self-heal can't make.
+# Every operation is caller-scoped: a row is touched only when it belongs to the
+# passed user_id, never a client-supplied id, mirroring the isolation from #73.
+
+
+def _exp_row_dict(e: Experience) -> dict:
+    missing = _exp_missing(e)
+    return {
+        "id": str(e.experience_id), "title": e.title, "company": e.company,
+        "start": e.start_date or "?", "end": e.end_date or "?",
+        "description": e.description or "", "bullets": e.bullets or [],
+        "incomplete": bool(missing), "missing": missing,
+    }
+
+
+def _edu_row_dict(e: Education) -> dict:
+    return {
+        "id": str(e.education_id), "institution": e.institution,
+        "degree": e.degree or "—", "location": e.location or "",
+        "start": e.start_date or "", "end": e.end_date or "", "gpa": e.gpa or "",
+    }
+
+
+def _proj_row_dict(p: Project) -> dict:
+    return {
+        "id": str(p.project_id), "name": p.name, "url": p.repo_url or "—",
+        "desc": (p.description or "")[:60], "description": p.description or "",
+        "repo_url": p.repo_url or "", "demo_url": p.demo_url or "",
+        "start": p.start_date or "", "end": p.end_date or "",
+    }
+
+
+def _clean_str(val) -> Optional[str]:
+    """Normalize an edited scalar: strip; empty string → None."""
+    s = str(val or "").strip()
+    return s or None
+
+
+def _as_uuid(value) -> Optional[UUID]:
+    """Coerce a path/string id to UUID; None on a malformed id (→ 404)."""
+    if isinstance(value, UUID):
+        return value
+    try:
+        return UUID(str(value))
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def update_experience(user_id: Optional[UUID], experience_id: str, fields: dict) -> Optional[dict]:
+    """Edit a user's own Experience row. Returns the updated row dict, or None if
+    not found / not owned. Raises ValueError on an empty required field. Sets
+    manually_edited so a later re-ingest can't revert the change (issue #92)."""
+    if user_id is None:
+        return None
+    with Session(engine) as session:
+        eid = _as_uuid(experience_id)
+        row = session.get(Experience, eid) if eid else None
+        if not row or row.user_id != user_id:
+            return None
+        if "title" in fields:
+            title = str(fields["title"] or "").strip()
+            if not title:
+                raise ValueError("Title cannot be empty.")
+            row.title = title
+        if "company" in fields:
+            company = str(fields["company"] or "").strip()
+            if not company:
+                raise ValueError("Company cannot be empty.")
+            row.company = company
+        for key in ("start_date", "end_date", "description"):
+            if key in fields:
+                setattr(row, key, _clean_str(fields[key]))
+        if "bullets" in fields:
+            row.bullets = [str(b).strip() for b in (fields["bullets"] or []) if str(b or "").strip()]
+        row.manually_edited = True
+        from datetime import datetime
+        row.updated_at = datetime.utcnow()
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        return _exp_row_dict(row)
+
+
+def update_education(user_id: Optional[UUID], education_id: str, fields: dict) -> Optional[dict]:
+    """Edit a user's own Education row (issue #92)."""
+    if user_id is None:
+        return None
+    with Session(engine) as session:
+        eid = _as_uuid(education_id)
+        row = session.get(Education, eid) if eid else None
+        if not row or row.user_id != user_id:
+            return None
+        if "institution" in fields:
+            inst = str(fields["institution"] or "").strip()
+            if not inst:
+                raise ValueError("Institution cannot be empty.")
+            row.institution = inst
+        if "degree" in fields:
+            row.degree = str(fields["degree"] or "").strip()
+        for key in ("location", "start_date", "end_date", "gpa"):
+            if key in fields:
+                setattr(row, key, _clean_str(fields[key]))
+        row.manually_edited = True
+        from datetime import datetime
+        row.updated_at = datetime.utcnow()
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        return _edu_row_dict(row)
+
+
+def update_project(user_id: Optional[UUID], project_id: str, fields: dict) -> Optional[dict]:
+    """Edit a user's own Project row (issue #92)."""
+    if user_id is None:
+        return None
+    with Session(engine) as session:
+        pid = _as_uuid(project_id)
+        row = session.get(Project, pid) if pid else None
+        if not row or row.user_id != user_id:
+            return None
+        if "name" in fields:
+            name = str(fields["name"] or "").strip()
+            if not name:
+                raise ValueError("Name cannot be empty.")
+            row.name = name
+        for key in ("description", "repo_url", "demo_url", "start_date", "end_date"):
+            if key in fields:
+                setattr(row, key, _clean_str(fields[key]))
+        row.manually_edited = True
+        from datetime import datetime
+        row.updated_at = datetime.utcnow()
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        return _proj_row_dict(row)
+
+
+def _record_tombstone(session, user_id: UUID, entity_type: str, key_a: str, key_b) -> None:
+    """Record a deletion tombstone so a re-ingest won't resurrect the row."""
+    session.add(DeletedEntry(
+        user_id=user_id, entity_type=entity_type,
+        key_a=str(key_a or ""), key_b=(str(key_b).strip() or None) if key_b else None,
+    ))
+
+
+def delete_experience(user_id: Optional[UUID], experience_id: str) -> bool:
+    """Delete a user's own Experience row and tombstone it (issue #92).
+    Returns True on success, False if not found / not owned."""
+    if user_id is None:
+        return False
+    with Session(engine) as session:
+        eid = _as_uuid(experience_id)
+        row = session.get(Experience, eid) if eid else None
+        if not row or row.user_id != user_id:
+            return False
+        _record_tombstone(session, user_id, "experience", row.title, row.company)
+        session.delete(row)
+        session.commit()
+        return True
+
+
+def delete_education(user_id: Optional[UUID], education_id: str) -> bool:
+    """Delete a user's own Education row and tombstone it (issue #92)."""
+    if user_id is None:
+        return False
+    with Session(engine) as session:
+        eid = _as_uuid(education_id)
+        row = session.get(Education, eid) if eid else None
+        if not row or row.user_id != user_id:
+            return False
+        _record_tombstone(session, user_id, "education", row.institution, row.degree)
+        session.delete(row)
+        session.commit()
+        return True
+
+
+def delete_project(user_id: Optional[UUID], project_id: str) -> bool:
+    """Delete a user's own Project row and tombstone it (issue #92)."""
+    if user_id is None:
+        return False
+    with Session(engine) as session:
+        pid = _as_uuid(project_id)
+        row = session.get(Project, pid) if pid else None
+        if not row or row.user_id != user_id:
+            return False
+        _record_tombstone(session, user_id, "project", row.name, row.repo_url)
+        session.delete(row)
+        session.commit()
+        return True
 
 
 def get_jobs() -> list[dict]:
@@ -1195,6 +1413,81 @@ def _set_linkedin_status(
         logger.error("Failed to update LinkedIn ingest status: %s", e)
 
 
+def _persist_linkedin_raw(user_id: Optional[UUID], record: Optional[dict]) -> None:
+    """Store the raw Bright Data scrape record (JSON) on the user row (issue #69).
+
+    Best-effort and user-scoped: a persistence failure must never fail the
+    ingest itself. A falsy/non-dict record is ignored so a bad scrape doesn't
+    wipe a previously stored good one.
+    """
+    if user_id is None or not isinstance(record, dict) or not record:
+        return
+    try:
+        payload = json.dumps(record, ensure_ascii=False)
+    except (TypeError, ValueError) as exc:
+        logger.warning("Could not serialize LinkedIn raw record: %s", exc)
+        return
+    try:
+        with Session(engine) as session:
+            db_user = session.get(User, user_id)
+            if not db_user:
+                return
+            db_user.linkedin_raw_record = payload
+            session.add(db_user)
+            session.commit()
+    except Exception as exc:
+        logger.error("Failed to persist LinkedIn raw record: %s", exc)
+
+
+def replay_linkedin(user_id: Optional[UUID] = None) -> str:
+    """Re-run LinkedIn structured mapping against the stored raw scrape (issue #69).
+
+    Lets mapping improvements be applied to an existing profile without a new,
+    paid Bright Data scrape. Reads the raw record persisted on the user row,
+    reconstructs the parser's ingestion payload, and re-runs parse_and_save.
+    Never raises — returns a plain-English result.
+    """
+    from database.db import init_db
+    from database.user_utils import get_active_profile, set_request_user
+    from ingestion.linkedin import LinkedInIngestor
+    from agents.parser import ResumeParserAgent
+
+    init_db()
+    if user_id is None:
+        user = get_active_profile()
+        user_id = user.user_id if user else None
+    else:
+        set_request_user(user_id)
+    if user_id is None:
+        return "No active profile to replay LinkedIn data for."
+
+    with Session(engine) as session:
+        db_user = session.get(User, user_id)
+        raw = db_user.linkedin_raw_record if db_user else None
+        url = (db_user.linkedin_ingested_url if db_user else None) or ""
+    if not raw:
+        return "No stored LinkedIn scrape to replay. Run a LinkedIn import first."
+    try:
+        record = json.loads(raw)
+    except (TypeError, ValueError):
+        return "Stored LinkedIn scrape is corrupt and cannot be replayed."
+
+    pre = _snapshot_user_data(user_id)
+    data = {
+        "source_type": "linkedin",
+        "source_file": f"linkedin:{url}",
+        "full_text": LinkedInIngestor()._brightdata_to_text(record, url),
+        "linkedin_record": record,
+    }
+    try:
+        with _suppress_output():
+            ResumeParserAgent().parse_and_save(data)
+    except Exception as exc:
+        logger.error("LinkedIn replay failed: %s", exc)
+        return f"LinkedIn replay failed: {exc}"
+    return _format_ingestion_diff(user_id, pre[0], pre[1], pre[2], "LinkedIn (replay)")
+
+
 def ingest_linkedin(profile_url: str, user_id: Optional[UUID] = None) -> str:
     """
     Scrape a LinkedIn profile via Bright Data and save it to the DB.
@@ -1223,6 +1516,9 @@ def ingest_linkedin(profile_url: str, user_id: Optional[UUID] = None) -> str:
     try:
         with _suppress_output():
             data = LinkedInIngestor().ingest_brightdata(profile_url)
+            # Persist the raw scrape before mapping so future mapping
+            # improvements can be replayed without a new paid scrape (issue #69).
+            _persist_linkedin_raw(user_id, data.get("linkedin_record"))
             ResumeParserAgent().parse_and_save(data)
     except LinkedInIngestionError as e:
         _set_linkedin_status(user_id, "failed", error=str(e))

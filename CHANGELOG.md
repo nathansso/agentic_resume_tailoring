@@ -4,6 +4,24 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issues 69, 96, 92 & 85 — Ingestion quality and manual knowledge-graph editing
+**Status:** complete | **Tests:** 616 pass (24 new)
+
+A cohesive arc on LinkedIn/knowledge-graph ingestion quality plus the durable manual-correction fallback. Bright Data nests multiple roles at one employer under a `positions` array, so all-but-one role per employer was silently dropped (the "missing UCSD role" half of #95); "essentially empty" experience stubs were auto-added; and there was no way for a user to correct a bad row short of wiping their data. This arc fixes the root cause, guards against empty stubs, and adds user-scoped edit/delete that survives re-ingest.
+
+### What shipped
+- **Persist + replay raw LinkedIn scrapes (#69).** The raw Bright Data record is stored on the user row at ingest (`User.linkedin_raw_record`), and `services.replay_linkedin` / `cli.py replay-linkedin` re-run the structured mapping against it with no new (paid) scrape — so mapping improvements can be applied to an existing profile and #96 has a real record shape to regression-test against.
+- **Nested `positions` traversal + bullets capture (#96).** `_flatten_linkedin_experiences` expands each nested role into its own Experience (backfilling the parent company), so a multi-role employer yields one row per role. `_linkedin_bullets` captures bullets from a multi-line role description so a role isn't reduced to a content-empty stub the tailor drops. A pinned fixture (`tests/fixtures/linkedin_nested_positions.json`) and an end-to-end test prove both UCSD roles survive ingest → tailor.
+- **Manual edit & delete of KG rows (#92).** Caller-scoped `PATCH`/`DELETE` for a user's own Experience/Education/Project rows, surfaced as inline edit + delete-with-confirm in the Data Explorer. Two protections keep corrections durable across re-ingest: a `manually_edited` flag (an edited row wins dedup survivorship and is never reverted/enriched by merge-on-save or self-heal), and a `DeletedEntry` tombstone table (every save path skips recreating a deleted row, reusing the existing fuzzy-match functions so name variants and shared repo URLs are also blocked). Endpoints reject a non-owner id (404) and empty required fields (400).
+- **No auto-added empty experiences; flag incomplete ones (#85).** `_experience_is_includable` blocks an essentially-empty stub (no dates/description/bullets and no complete title+company identity) from being auto-added, while keeping a legitimately minimal `Title @ Company` row. The experiences getter reports `incomplete`/`missing` (title/company/dates/details) and the Data Explorer renders a warning badge so the user can complete (edit) or delete such rows.
+
+### Deviations from spec
+- **#92 delete design:** used a `DeletedEntry` tombstone table (hard delete + tombstone) rather than a soft-delete flag, so the ~20 existing read sites (tailoring, formatter, scorer, chat, graph) stay untouched — deleted rows genuinely leave the entity tables, and only the delete endpoint plus the six save-loops became tombstone-aware.
+- **#85:** rather than discarding all sparse rows, the methodology keeps a legitimately minimal role and surfaces incompleteness for the user to resolve; the tailor's existing content-empty filter remains the second line of defense for output.
+- **#69:** the "replay path" is exposed via a service function and a CLI command (no web endpoint), which is sufficient for the mapping-iteration use case and avoids adding an unused UI surface.
+
+---
+
 ## Issue 90 — Draggable pane resizing on the Jobs tab
 **Status:** complete | **Tests:** 87 frontend pass (28 new); Python suite unchanged
 
