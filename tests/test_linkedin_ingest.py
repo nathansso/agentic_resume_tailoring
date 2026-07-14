@@ -285,6 +285,110 @@ def test_structured_experience_new_company_creates_row(isolated_engine, monkeypa
     assert exps[0].title == "ML Engineer" and exps[0].company == "Acme"
 
 
+# ── nested positions traversal + bullets (issue #96) ────────────────────────────
+
+from pathlib import Path
+
+_FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _load_fixture(name):
+    return json.loads((_FIXTURES / name).read_text())
+
+
+def test_nested_positions_yield_one_row_per_role(isolated_engine, monkeypatch):
+    """A Bright Data employer with roles nested under `positions` produces one
+    Experience per role, not just the first (issue #96)."""
+    from database.models import Experience
+    user = _make_user(isolated_engine, "np1@example.com")
+    agent = _make_parser(isolated_engine, monkeypatch, user)
+
+    agent._save_linkedin_structured(_load_fixture("linkedin_nested_positions.json"))
+
+    with Session(isolated_engine) as s:
+        exps = s.exec(select(Experience).where(Experience.user_id == user.user_id)).all()
+    titles = {e.title for e in exps}
+    # Both UCSD roles + the flat single-role employer.
+    assert titles == {"Research Assistant", "Financial Assistant", "Data Science Intern"}
+    ucsd = [e for e in exps if e.company == "UC San Diego"]
+    assert len(ucsd) == 2  # both nested roles kept, company backfilled from parent
+
+
+def test_nested_positions_capture_bullets(isolated_engine, monkeypatch):
+    """A multi-line role description becomes bullets so the role isn't a
+    content-empty stub the tailor would drop (issue #96)."""
+    from database.models import Experience
+    user = _make_user(isolated_engine, "np2@example.com")
+    agent = _make_parser(isolated_engine, monkeypatch, user)
+
+    agent._save_linkedin_structured(_load_fixture("linkedin_nested_positions.json"))
+
+    with Session(isolated_engine) as s:
+        exps = s.exec(select(Experience).where(Experience.user_id == user.user_id)).all()
+    ra = next(e for e in exps if e.title == "Research Assistant")
+    assert len(ra.bullets) == 2  # two-line description split into bullets
+    fa = next(e for e in exps if e.title == "Financial Assistant")
+    assert fa.bullets == []       # single-line description stays as description
+    assert fa.description
+
+
+def test_nested_roles_survive_tailor_filter(isolated_engine, monkeypatch):
+    """End-to-end: both UCSD roles survive the tailor's dedupe/empty-stub filter
+    (issue #96 acceptance)."""
+    from database.models import Experience
+    from agents.tailor import ResumeTailorAgent
+    user = _make_user(isolated_engine, "np3@example.com")
+    agent = _make_parser(isolated_engine, monkeypatch, user)
+
+    agent._save_linkedin_structured(_load_fixture("linkedin_nested_positions.json"))
+
+    with Session(isolated_engine) as s:
+        rows = s.exec(select(Experience).where(Experience.user_id == user.user_id)).all()
+        exp_dicts = [
+            {"title": e.title, "company": e.company, "start_date": e.start_date,
+             "end_date": e.end_date, "description": e.description, "bullets": e.bullets}
+            for e in rows
+        ]
+
+    kept = ResumeTailorAgent._filter_and_dedupe_experiences(exp_dicts)
+    kept_titles = {e["title"] for e in kept}
+    assert "Research Assistant" in kept_titles
+    assert "Financial Assistant" in kept_titles
+
+
+def test_single_role_employer_unchanged(isolated_engine, monkeypatch):
+    """A flat experience record (no `positions`) still maps to exactly one row —
+    no regression to single-role employers (issue #96)."""
+    from database.models import Experience
+    user = _make_user(isolated_engine, "np4@example.com")
+    agent = _make_parser(isolated_engine, monkeypatch, user)
+
+    record = {"experience": [
+        {"title": "ML Engineer", "company": "Acme", "start_date": "2020",
+         "description": "Owned the ranking service."},
+    ]}
+    agent._save_linkedin_structured(record)
+
+    with Session(isolated_engine) as s:
+        exps = s.exec(select(Experience).where(Experience.user_id == user.user_id)).all()
+    assert len(exps) == 1
+    assert exps[0].title == "ML Engineer" and exps[0].company == "Acme"
+
+
+def test_flatten_linkedin_experiences_backfills_company():
+    """Unit: nested positions inherit the parent company; flat records pass through."""
+    import agents.parser as parser_module
+    flat = parser_module.ResumeParserAgent._flatten_linkedin_experiences([
+        {"company": "UC San Diego", "positions": [
+            {"title": "Research Assistant"}, {"title": "Financial Assistant"},
+        ]},
+        {"title": "Intern", "company": "Acme"},
+    ])
+    assert len(flat) == 3
+    assert all(r["company"] == "UC San Diego" for r in flat[:2])
+    assert flat[2] == {"title": "Intern", "company": "Acme"}
+
+
 def test_parse_and_save_linkedin_skips_llm_entity_extraction(isolated_engine, monkeypatch):
     """With a structured record present, the experience/project LLM chains must
     not run; skills extraction still does."""

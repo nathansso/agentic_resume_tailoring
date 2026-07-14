@@ -797,6 +797,56 @@ class ResumeParserAgent:
             row.updated_at = datetime.utcnow()
         return changed
 
+    @classmethod
+    def _flatten_linkedin_experiences(cls, experiences: List[Dict]) -> List[Dict]:
+        """Expand Bright Data experience records into one dict per role (issue #96).
+
+        Multiple roles at one employer arrive nested under a ``positions``
+        sub-role array with the company on the parent record; the role's own
+        title/dates/description live on each nested item. Traverse them so a
+        multi-role employer yields one Experience per role instead of silently
+        dropping all but the first. Single-role employers (no ``positions``)
+        pass through unchanged; the parent company backfills a role that omits
+        its own.
+        """
+        flat: List[Dict] = []
+        for rec in experiences:
+            if not isinstance(rec, dict):
+                continue
+            positions = rec.get("positions")
+            if isinstance(positions, list) and positions:
+                company = str(rec.get("company") or rec.get("company_name") or "").strip()
+                for pos in positions:
+                    if not isinstance(pos, dict):
+                        continue
+                    role = dict(pos)
+                    if not str(role.get("company") or "").strip() and company:
+                        role["company"] = company
+                    flat.append(role)
+            else:
+                flat.append(rec)
+        return flat
+
+    @staticmethod
+    def _linkedin_bullets(item: Dict) -> List[str]:
+        """Bullets for a LinkedIn experience role (issue #96).
+
+        Prefers an explicit ``bullets`` list; otherwise splits a multi-line
+        ``description`` into bullet lines (stripping leading glyphs) so a role
+        described as a bulleted blob isn't reduced to a content-empty stub that
+        the tailor drops. A single-line description yields no bullets — it stays
+        as the description rather than being shredded into one bullet.
+        """
+        raw = item.get("bullets")
+        if isinstance(raw, list):
+            out = [str(b).strip() for b in raw if str(b or "").strip()]
+            if out:
+                return out
+        desc = str(item.get("description") or "")
+        lines = [re.sub(r"^[\s•·\-\*]+", "", ln).strip() for ln in desc.splitlines()]
+        lines = [ln for ln in lines if ln]
+        return lines if len(lines) >= 2 else []
+
     def _save_linkedin_structured(self, record: Dict[str, Any]) -> None:
         projects = self._coerce_records(record.get("projects"), str_key="title")
         experiences = self._coerce_records(record.get("experience"), str_key="title")
@@ -835,13 +885,16 @@ class ResumeParserAgent:
             existing_exps = list(session.exec(
                 select(Experience).where(Experience.user_id == self.user.user_id)
             ).all())
-            for item in experiences:
+            # Flatten multi-role employers so each nested position becomes its
+            # own row instead of being dropped (issue #96).
+            for item in self._flatten_linkedin_experiences(experiences):
                 title = str(item.get("title") or "").strip()
                 company = str(item.get("company") or "").strip()
                 if not title and not company:
                     continue
                 item["start_date"] = _clean_date(item.get("start_date"))
                 item["end_date"] = _clean_date(item.get("end_date"))
+                bullets = self._linkedin_bullets(item)
                 # Same company + same title merges; a missing/placeholder title
                 # on either side still merges on company alone, so a sparse
                 # LinkedIn entry enriches the resume-ingested row.
@@ -851,11 +904,17 @@ class ResumeParserAgent:
                     None,
                 )
                 if match:
+                    touched = False
                     if self._is_placeholder_name(match.title) and title and not self._is_placeholder_name(title):
                         match.title = title
-                        match.updated_at = datetime.utcnow()
-                        session.add(match)
+                        touched = True
                     if self._enrich(match, item, ["description", "start_date", "end_date"]):
+                        touched = True
+                    if bullets and not (match.bullets or []):
+                        match.bullets = bullets
+                        touched = True
+                    if touched:
+                        match.updated_at = datetime.utcnow()
                         session.add(match)
                     logger.debug(f"Merged LinkedIn experience into: {match.title} @ {match.company}")
                     continue
@@ -866,6 +925,7 @@ class ResumeParserAgent:
                     start_date=item.get("start_date"),
                     end_date=item.get("end_date"),
                     description=item.get("description"),
+                    bullets=bullets,
                 )
                 session.add(exp)
                 existing_exps.append(exp)
