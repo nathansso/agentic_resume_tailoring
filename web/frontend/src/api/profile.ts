@@ -46,3 +46,48 @@ export async function getAchievements(): Promise<AchievementRow[]> {
 export async function getGraph(): Promise<GraphData> {
   return json(await fetch("/api/profile/graph", { credentials: "include" }));
 }
+
+// ── Manual edit & delete of ingested rows (issue #92) ──────────────────────────
+// Payload keys are the backend field names (start_date/end_date/repo_url/…);
+// only the keys present are applied.
+
+export interface ExperienceEdit {
+  title?: string; company?: string; start_date?: string | null;
+  end_date?: string | null; description?: string | null; bullets?: string[];
+}
+export interface EducationEdit {
+  institution?: string; degree?: string; location?: string | null;
+  start_date?: string | null; end_date?: string | null; gpa?: string | null;
+}
+export interface ProjectEdit {
+  name?: string; description?: string | null; repo_url?: string | null;
+  demo_url?: string | null; start_date?: string | null; end_date?: string | null;
+}
+
+async function patch<T>(url: string, body: unknown): Promise<T> {
+  return json(await fetch(url, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    credentials: "include",
+  }));
+}
+
+async function del(url: string): Promise<{ result: string }> {
+  return json(await fetch(url, { method: "DELETE", credentials: "include" }));
+}
+
+export const updateExperience = (id: string, body: ExperienceEdit): Promise<ExpRow> =>
+  patch(`/api/profile/experiences/${id}`, body);
+export const deleteExperience = (id: string): Promise<{ result: string }> =>
+  del(`/api/profile/experiences/${id}`);
+
+export const updateEducation = (id: string, body: EducationEdit): Promise<EducationRow> =>
+  patch(`/api/profile/education/${id}`, body);
+export const deleteEducation = (id: string): Promise<{ result: string }> =>
+  del(`/api/profile/education/${id}`);
+
+export const updateProject = (id: string, body: ProjectEdit): Promise<ProjectRow> =>
+  patch(`/api/profile/projects/${id}`, body);
+export const deleteProject = (id: string): Promise<{ result: string }> =>
+  del(`/api/profile/projects/${id}`);

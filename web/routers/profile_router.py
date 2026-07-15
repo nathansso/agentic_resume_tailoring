@@ -1,4 +1,6 @@
-from fastapi import APIRouter, BackgroundTasks, Depends
+from typing import List, Optional
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
@@ -145,6 +147,106 @@ def get_achievements(user: User = Depends(get_current_user)):
 @router.get("/projects")
 def get_projects(user: User = Depends(get_current_user)):
     return services.get_projects(user.user_id)
+
+
+# ── Manual edit & delete of ingested rows (issue #92) ───────────────────────────
+# PATCH bodies use exclude_unset so only fields the client sent are applied — a
+# field omitted is left untouched; a field sent as null is cleared. Every op is
+# caller-scoped in the service layer (row.user_id must equal the JWT user), so a
+# client-supplied id can never reach another user's data.
+
+
+class ExperienceUpdate(BaseModel):
+    title: Optional[str] = None
+    company: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    description: Optional[str] = None
+    bullets: Optional[List[str]] = None
+
+
+class EducationUpdate(BaseModel):
+    institution: Optional[str] = None
+    degree: Optional[str] = None
+    location: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    gpa: Optional[str] = None
+
+
+class ProjectUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    repo_url: Optional[str] = None
+    demo_url: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+
+@router.patch("/experiences/{experience_id}")
+def edit_experience(
+    experience_id: str, body: ExperienceUpdate, user: User = Depends(get_current_user)
+):
+    try:
+        row = services.update_experience(
+            user.user_id, experience_id, body.model_dump(exclude_unset=True)
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if row is None:
+        raise HTTPException(status_code=404, detail="Experience not found")
+    return row
+
+
+@router.delete("/experiences/{experience_id}")
+def remove_experience(experience_id: str, user: User = Depends(get_current_user)):
+    if not services.delete_experience(user.user_id, experience_id):
+        raise HTTPException(status_code=404, detail="Experience not found")
+    return {"result": "deleted"}
+
+
+@router.patch("/education/{education_id}")
+def edit_education(
+    education_id: str, body: EducationUpdate, user: User = Depends(get_current_user)
+):
+    try:
+        row = services.update_education(
+            user.user_id, education_id, body.model_dump(exclude_unset=True)
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if row is None:
+        raise HTTPException(status_code=404, detail="Education not found")
+    return row
+
+
+@router.delete("/education/{education_id}")
+def remove_education(education_id: str, user: User = Depends(get_current_user)):
+    if not services.delete_education(user.user_id, education_id):
+        raise HTTPException(status_code=404, detail="Education not found")
+    return {"result": "deleted"}
+
+
+@router.patch("/projects/{project_id}")
+def edit_project(
+    project_id: str, body: ProjectUpdate, user: User = Depends(get_current_user)
+):
+    try:
+        row = services.update_project(
+            user.user_id, project_id, body.model_dump(exclude_unset=True)
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if row is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return row
+
+
+@router.delete("/projects/{project_id}")
+def remove_project(project_id: str, user: User = Depends(get_current_user)):
+    if not services.delete_project(user.user_id, project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    return {"result": "deleted"}
 
 
 @router.get("/graph")

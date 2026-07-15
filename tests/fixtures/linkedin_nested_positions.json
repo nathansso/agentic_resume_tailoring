@@ -1,0 +1,34 @@
+{
+  "name": "Sam Student",
+  "position": "Research Assistant at UC San Diego",
+  "experience": [
+    {
+      "company": "UC San Diego",
+      "company_id": "ucsd",
+      "url": "https://www.linkedin.com/company/ucsd/",
+      "positions": [
+        {
+          "title": "Research Assistant",
+          "start_date": "Jan 2024",
+          "end_date": "Present",
+          "location": "La Jolla, CA",
+          "description": "Built data pipelines for a recommender-systems lab.\nRan offline evaluation over session-based benchmarks."
+        },
+        {
+          "title": "Financial Assistant",
+          "start_date": "Sep 2022",
+          "end_date": "Dec 2023",
+          "location": "La Jolla, CA",
+          "description": "Reconciled departmental ledgers and processed reimbursements."
+        }
+      ]
+    },
+    {
+      "title": "Data Science Intern",
+      "company": "Acme Analytics",
+      "start_date": "Jun 2023",
+      "end_date": "Sep 2023",
+      "description": "Prototyped churn models in Python."
+    }
+  ]
+}

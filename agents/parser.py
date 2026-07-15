@@ -9,7 +9,7 @@ from langchain_core.output_parsers import JsonOutputParser
 
 from llm import get_llm
 from database.db import engine
-from database.models import User, Skill, UserSkill, Education, Experience, Project, Achievement
+from database.models import User, Skill, UserSkill, Education, Experience, Project, Achievement, DeletedEntry
 from database.user_utils import get_or_create_default_user
 from agents.skill_postprocessor import postprocess_skills, normalize_skill_name
 from institution import canonicalize_institution
@@ -231,6 +231,7 @@ class ResumeParserAgent:
             existing_exps = list(session.exec(
                 select(Experience).where(Experience.user_id == self.user.user_id)
             ).all())
+            tombs = self._load_tombstones(session, self.user.user_id, "experience")
             for item in data:
                 title = str(item.get("title") or "").strip() or "Unknown"
                 company = str(item.get("company") or "").strip() or "Unknown"
@@ -250,6 +251,10 @@ class ResumeParserAgent:
                     None,
                 )
                 if match:
+                    # A user-edited row is authoritative — never revert/enrich it
+                    # from a re-ingest (issue #92).
+                    if match.manually_edited:
+                        continue
                     if self._is_placeholder_name(match.title) and not self._is_placeholder_name(title):
                         match.title = title
                         match.updated_at = datetime.utcnow()
@@ -257,6 +262,16 @@ class ResumeParserAgent:
                     if self._merge_experience(match, start, end, desc, bullets):
                         session.add(match)
                     logger.debug(f"Merged experience into: {match.title} @ {match.company}")
+                    continue
+
+                # Don't resurrect a row the user deleted (issue #92).
+                if self._experience_tombstoned(tombs, title, company):
+                    logger.debug(f"Skipping tombstoned experience: {title} @ {company}")
+                    continue
+
+                # Don't auto-add an essentially empty stub (issue #85).
+                if not self._experience_is_includable(title, company, start, end, desc, bullets):
+                    logger.debug(f"Skipping content-empty experience: {title} @ {company}")
                     continue
 
                 exp = Experience(
@@ -294,11 +309,14 @@ class ResumeParserAgent:
 
     @classmethod
     def _exp_row_richness(cls, e) -> tuple:
-        """Prefer a row with a real (non-placeholder) title, then more bullets,
-        then real dates, then description. The title term ranks first so the
-        real 'Data Science Intern' row always survives an 'Unknown Position'
-        duplicate regardless of the other fields."""
-        return (0 if cls._is_placeholder_name(e.title) else 1,
+        """Prefer a user-edited row, then a real (non-placeholder) title, then
+        more bullets, then real dates, then description. The manual-edit term
+        ranks first so a user-corrected row always survives a dedup merge and is
+        never clobbered by a re-ingested duplicate (issue #92). The title term
+        next keeps the real 'Data Science Intern' row over an 'Unknown Position'
+        duplicate."""
+        return (1 if getattr(e, "manually_edited", False) else 0,
+                0 if cls._is_placeholder_name(e.title) else 1,
                 len(e.bullets or []),
                 bool(e.start_date) + bool(e.end_date),
                 len((e.description or "").strip()))
@@ -315,11 +333,13 @@ class ResumeParserAgent:
         kept: List = []
         removed = 0
         for e in rows:
-            cs, ce = _clean_date(e.start_date), _clean_date(e.end_date)
-            if cs != e.start_date or ce != e.end_date:
-                e.start_date, e.end_date = cs, ce
-                e.updated_at = datetime.utcnow()
-                session.add(e)
+            # A user-edited row's fields are authoritative — don't coerce them.
+            if not e.manually_edited:
+                cs, ce = _clean_date(e.start_date), _clean_date(e.end_date)
+                if cs != e.start_date or ce != e.end_date:
+                    e.start_date, e.end_date = cs, ce
+                    e.updated_at = datetime.utcnow()
+                    session.add(e)
             match = next(
                 (k for k in kept
                  if cls._experiences_match(k.title, k.company, e.title, e.company)),
@@ -328,18 +348,16 @@ class ResumeParserAgent:
             if match is None:
                 kept.append(e)
                 continue
-            # Merge into the richer row; delete the poorer.
-            if cls._exp_row_richness(e) > cls._exp_row_richness(match):
-                cls._merge_experience(e, match.start_date, match.end_date,
-                                      match.description, match.bullets)
-                session.add(e)
-                session.delete(match)
+            # Keep the richer row; delete the poorer. A user-edited survivor is
+            # not backfilled, so a deliberately cleared field stays cleared.
+            winner, loser = (e, match) if cls._exp_row_richness(e) > cls._exp_row_richness(match) else (match, e)
+            if not winner.manually_edited:
+                cls._merge_experience(winner, loser.start_date, loser.end_date,
+                                      loser.description, loser.bullets)
+            session.add(winner)
+            session.delete(loser)
+            if winner is e:
                 kept[kept.index(match)] = e
-            else:
-                cls._merge_experience(match, e.start_date, e.end_date,
-                                      e.description, e.bullets)
-                session.add(match)
-                session.delete(e)
             removed += 1
         return removed
 
@@ -353,7 +371,10 @@ class ResumeParserAgent:
         ).all())
 
         def richness(p) -> tuple:
-            return (len((p.description or "").strip()),
+            # A user-edited row (issue #92) outranks all else so it survives and
+            # is not backfilled from a re-ingested duplicate.
+            return (1 if getattr(p, "manually_edited", False) else 0,
+                    len((p.description or "").strip()),
                     1 if (p.metrics or {}) else 0,
                     bool(p.repo_url) + bool(p.demo_url),
                     bool(p.start_date) + bool(p.end_date))
@@ -361,11 +382,12 @@ class ResumeParserAgent:
         kept: List = []
         removed = 0
         for p in rows:
-            cs, ce = _clean_date(p.start_date), _clean_date(p.end_date)
-            if cs != p.start_date or ce != p.end_date:
-                p.start_date, p.end_date = cs, ce
-                p.updated_at = datetime.utcnow()
-                session.add(p)
+            if not p.manually_edited:
+                cs, ce = _clean_date(p.start_date), _clean_date(p.end_date)
+                if cs != p.start_date or ce != p.end_date:
+                    p.start_date, p.end_date = cs, ce
+                    p.updated_at = datetime.utcnow()
+                    session.add(p)
             match = next(
                 (k for k in kept
                  if cls._projects_match(k.name, k.repo_url, p.name, p.repo_url)),
@@ -375,12 +397,14 @@ class ResumeParserAgent:
                 kept.append(p)
                 continue
             richer, poorer = (p, match) if richness(p) > richness(match) else (match, p)
-            # Backfill the survivor's blanks from the row being removed.
-            for field in ("description", "repo_url", "demo_url", "start_date", "end_date"):
-                if not getattr(richer, field, None) and getattr(poorer, field, None):
-                    setattr(richer, field, getattr(poorer, field))
-            if not (richer.metrics or {}) and (poorer.metrics or {}):
-                richer.metrics = poorer.metrics
+            # Backfill the survivor's blanks from the row being removed — unless
+            # the survivor is a user edit, whose cleared fields must stay cleared.
+            if not richer.manually_edited:
+                for field in ("description", "repo_url", "demo_url", "start_date", "end_date"):
+                    if not getattr(richer, field, None) and getattr(poorer, field, None):
+                        setattr(richer, field, getattr(poorer, field))
+                if not (richer.metrics or {}) and (poorer.metrics or {}):
+                    richer.metrics = poorer.metrics
             richer.updated_at = datetime.utcnow()
             session.add(richer)
             session.delete(poorer)
@@ -401,7 +425,9 @@ class ResumeParserAgent:
         ).all())
 
         def richness(e) -> tuple:
-            return (bool(e.gpa),
+            # A user-edited row (issue #92) outranks all else.
+            return (1 if getattr(e, "manually_edited", False) else 0,
+                    bool(e.gpa),
                     bool(e.start_date) + bool(e.end_date),
                     bool(e.location),
                     len((e.degree or "").strip()))
@@ -418,9 +444,10 @@ class ResumeParserAgent:
                 kept.append(e)
                 continue
             richer, poorer = (e, match) if richness(e) > richness(match) else (match, e)
-            for field in ("degree", "location", "start_date", "end_date", "gpa"):
-                if not getattr(richer, field, None) and getattr(poorer, field, None):
-                    setattr(richer, field, getattr(poorer, field))
+            if not richer.manually_edited:
+                for field in ("degree", "location", "start_date", "end_date", "gpa"):
+                    if not getattr(richer, field, None) and getattr(poorer, field, None):
+                        setattr(richer, field, getattr(poorer, field))
             richer.updated_at = datetime.utcnow()
             session.add(richer)
             session.delete(poorer)
@@ -434,6 +461,7 @@ class ResumeParserAgent:
             existing = list(session.exec(
                 select(Education).where(Education.user_id == self.user.user_id)
             ).all())
+            tombs = self._load_tombstones(session, self.user.user_id, "education")
             for item in data:
                 institution = str(item.get("institution") or "").strip()
                 degree = str(item.get("degree") or "").strip()
@@ -449,6 +477,8 @@ class ResumeParserAgent:
                     None,
                 )
                 if match:
+                    if match.manually_edited:  # user-edited row is authoritative (issue #92)
+                        continue
                     logger.debug(f"Merging duplicate education: {degree} at {institution}")
                     changed = False
                     if not match.degree and degree:
@@ -464,6 +494,11 @@ class ResumeParserAgent:
                     if changed:
                         match.updated_at = datetime.utcnow()
                         session.add(match)
+                    continue
+
+                # Don't resurrect a row the user deleted (issue #92).
+                if self._education_tombstoned(tombs, institution, degree):
+                    logger.debug(f"Skipping tombstoned education: {degree} at {institution}")
                     continue
 
                 gpa = item.get("gpa")
@@ -577,6 +612,7 @@ class ResumeParserAgent:
             existing_projects = list(session.exec(
                 select(Project).where(Project.user_id == self.user.user_id)
             ).all())
+            tombs = self._load_tombstones(session, self.user.user_id, "project")
             for item in data:
                 name = str(item.get("name") or "").strip() or "Unknown"
                 metrics = metrics_by_name.get(name.lower(), {})
@@ -591,6 +627,8 @@ class ResumeParserAgent:
                     None,
                 )
                 if match:
+                    if match.manually_edited:  # user-edited row is authoritative (issue #92)
+                        continue
                     changed = False
                     if metrics:
                         match.metrics = metrics; changed = True  # refresh GitHub signals
@@ -605,6 +643,11 @@ class ResumeParserAgent:
                     if changed:
                         session.add(match)
                     logger.debug(f"Merged project into: {match.name}")
+                    continue
+
+                # Don't resurrect a row the user deleted (issue #92).
+                if self._project_tombstoned(tombs, name, item.get("repo_url")):
+                    logger.debug(f"Skipping tombstoned project: {name}")
                     continue
 
                 proj = Project(
@@ -797,12 +840,111 @@ class ResumeParserAgent:
             row.updated_at = datetime.utcnow()
         return changed
 
+    # ── User-deletion tombstones (issue #92) ─────────────────────────────────
+    # A row the user deleted in the Data Explorer must not be resurrected by a
+    # re-ingest. Save paths load the user's tombstones once and skip creating a
+    # row that matches one, reusing the same fuzzy-match functions the deduper
+    # uses so a tombstone catches the same variants.
+
+    @staticmethod
+    def _load_tombstones(session, user_id, entity_type: str) -> List:
+        return list(session.exec(
+            select(DeletedEntry).where(
+                DeletedEntry.user_id == user_id,
+                DeletedEntry.entity_type == entity_type,
+            )
+        ).all())
+
+    @classmethod
+    def _experience_tombstoned(cls, tombs, title, company) -> bool:
+        return any(cls._experiences_match(t.key_a, t.key_b, title, company) for t in tombs)
+
+    @classmethod
+    def _project_tombstoned(cls, tombs, name, repo_url) -> bool:
+        return any(cls._projects_match(t.key_a, t.key_b, name, repo_url) for t in tombs)
+
+    @classmethod
+    def _education_tombstoned(cls, tombs, institution, degree) -> bool:
+        return any(cls._education_match(t.key_a, t.key_b, institution, degree) for t in tombs)
+
+    @classmethod
+    def _flatten_linkedin_experiences(cls, experiences: List[Dict]) -> List[Dict]:
+        """Expand Bright Data experience records into one dict per role (issue #96).
+
+        Multiple roles at one employer arrive nested under a ``positions``
+        sub-role array with the company on the parent record; the role's own
+        title/dates/description live on each nested item. Traverse them so a
+        multi-role employer yields one Experience per role instead of silently
+        dropping all but the first. Single-role employers (no ``positions``)
+        pass through unchanged; the parent company backfills a role that omits
+        its own.
+        """
+        flat: List[Dict] = []
+        for rec in experiences:
+            if not isinstance(rec, dict):
+                continue
+            positions = rec.get("positions")
+            if isinstance(positions, list) and positions:
+                company = str(rec.get("company") or rec.get("company_name") or "").strip()
+                for pos in positions:
+                    if not isinstance(pos, dict):
+                        continue
+                    role = dict(pos)
+                    if not str(role.get("company") or "").strip() and company:
+                        role["company"] = company
+                    flat.append(role)
+            else:
+                flat.append(rec)
+        return flat
+
+    @classmethod
+    def _experience_is_includable(cls, title, company, start, end, description, bullets) -> bool:
+        """Whether an experience is substantive enough to auto-add (issue #85).
+
+        Include it when it has any real content (a date, a description, or a
+        bullet) or a complete identity (both a real title and a real company).
+        This blocks the 'essentially empty' stub — e.g. an 'Unknown Position @
+        SomeCo' company grouping with no dates or detail — from being silently
+        added to the knowledge graph, while keeping a legitimately minimal
+        'Data Scientist @ Acme' row the user can flesh out later via the Data
+        Explorer.
+        """
+        has_content = (bool(bullets) or bool(str(description or "").strip())
+                       or bool(start) or bool(end))
+        identity_complete = (not cls._is_placeholder_name(title)
+                             and not cls._is_placeholder_name(company))
+        return has_content or identity_complete
+
+    @staticmethod
+    def _linkedin_bullets(item: Dict) -> List[str]:
+        """Bullets for a LinkedIn experience role (issue #96).
+
+        Prefers an explicit ``bullets`` list; otherwise splits a multi-line
+        ``description`` into bullet lines (stripping leading glyphs) so a role
+        described as a bulleted blob isn't reduced to a content-empty stub that
+        the tailor drops. A single-line description yields no bullets — it stays
+        as the description rather than being shredded into one bullet.
+        """
+        raw = item.get("bullets")
+        if isinstance(raw, list):
+            out = [str(b).strip() for b in raw if str(b or "").strip()]
+            if out:
+                return out
+        desc = str(item.get("description") or "")
+        lines = [re.sub(r"^[\s•·\-\*]+", "", ln).strip() for ln in desc.splitlines()]
+        lines = [ln for ln in lines if ln]
+        return lines if len(lines) >= 2 else []
+
     def _save_linkedin_structured(self, record: Dict[str, Any]) -> None:
         projects = self._coerce_records(record.get("projects"), str_key="title")
         experiences = self._coerce_records(record.get("experience"), str_key="title")
         education = self._coerce_records(record.get("education"), str_key="title")
 
         with Session(engine) as session:
+            uid = self.user.user_id
+            proj_tombs = self._load_tombstones(session, uid, "project")
+            exp_tombs = self._load_tombstones(session, uid, "experience")
+            edu_tombs = self._load_tombstones(session, uid, "education")
             existing_projects = list(session.exec(
                 select(Project).where(Project.user_id == self.user.user_id)
             ).all())
@@ -818,9 +960,14 @@ class ResumeParserAgent:
                     None,
                 )
                 if match:
+                    if match.manually_edited:  # user-edited row is authoritative (issue #92)
+                        continue
                     if self._enrich(match, item, ["description", "start_date", "end_date"]):
                         session.add(match)
                     logger.debug(f"Merged LinkedIn project into: {match.name}")
+                    continue
+                if self._project_tombstoned(proj_tombs, name, item.get("repo_url")):
+                    logger.debug(f"Skipping tombstoned LinkedIn project: {name}")
                     continue
                 proj = Project(
                     user_id=self.user.user_id,
@@ -835,13 +982,16 @@ class ResumeParserAgent:
             existing_exps = list(session.exec(
                 select(Experience).where(Experience.user_id == self.user.user_id)
             ).all())
-            for item in experiences:
+            # Flatten multi-role employers so each nested position becomes its
+            # own row instead of being dropped (issue #96).
+            for item in self._flatten_linkedin_experiences(experiences):
                 title = str(item.get("title") or "").strip()
                 company = str(item.get("company") or "").strip()
                 if not title and not company:
                     continue
                 item["start_date"] = _clean_date(item.get("start_date"))
                 item["end_date"] = _clean_date(item.get("end_date"))
+                bullets = self._linkedin_bullets(item)
                 # Same company + same title merges; a missing/placeholder title
                 # on either side still merges on company alone, so a sparse
                 # LinkedIn entry enriches the resume-ingested row.
@@ -851,13 +1001,32 @@ class ResumeParserAgent:
                     None,
                 )
                 if match:
+                    if match.manually_edited:  # user-edited row is authoritative (issue #92)
+                        continue
+                    touched = False
                     if self._is_placeholder_name(match.title) and title and not self._is_placeholder_name(title):
                         match.title = title
+                        touched = True
+                    if self._enrich(match, item, ["description", "start_date", "end_date"]):
+                        touched = True
+                    if bullets and not (match.bullets or []):
+                        match.bullets = bullets
+                        touched = True
+                    if touched:
                         match.updated_at = datetime.utcnow()
                         session.add(match)
-                    if self._enrich(match, item, ["description", "start_date", "end_date"]):
-                        session.add(match)
                     logger.debug(f"Merged LinkedIn experience into: {match.title} @ {match.company}")
+                    continue
+                if self._experience_tombstoned(exp_tombs, title, company):
+                    logger.debug(f"Skipping tombstoned LinkedIn experience: {title} @ {company}")
+                    continue
+                # Don't auto-add an essentially empty stub (issue #85) — e.g. a
+                # company grouping with no role title, dates, or detail.
+                if not self._experience_is_includable(
+                    title, company, item.get("start_date"), item.get("end_date"),
+                    item.get("description"), bullets,
+                ):
+                    logger.debug(f"Skipping content-empty LinkedIn experience: {title} @ {company}")
                     continue
                 exp = Experience(
                     user_id=self.user.user_id,
@@ -866,6 +1035,7 @@ class ResumeParserAgent:
                     start_date=item.get("start_date"),
                     end_date=item.get("end_date"),
                     description=item.get("description"),
+                    bullets=bullets,
                 )
                 session.add(exp)
                 existing_exps.append(exp)
@@ -891,6 +1061,9 @@ class ResumeParserAgent:
                 if any(self._education_match(e.institution, e.degree, institution, degree)
                        for e in existing_edu):
                     logger.debug(f"Skipping LinkedIn education already present: {degree} at {institution}")
+                    continue
+                if self._education_tombstoned(edu_tombs, institution, degree):
+                    logger.debug(f"Skipping tombstoned LinkedIn education: {degree} at {institution}")
                     continue
                 edu = Education(
                     user_id=self.user.user_id,

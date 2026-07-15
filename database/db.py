@@ -92,6 +92,12 @@ def _migrate_db() -> None:
         # issue 71: manually edited resume .tex per tailoring result
         "ALTER TABLE userjobresult ADD COLUMN edited_tex TEXT",
         "ALTER TABLE userjobresult ADD COLUMN edited_tex_updated_at TIMESTAMP",
+        # issue 69: persisted raw LinkedIn scrape JSON for replay
+        'ALTER TABLE "user" ADD COLUMN linkedin_raw_record TEXT',
+        # issue 92: manual-edit protection for knowledge-graph rows
+        "ALTER TABLE experience ADD COLUMN manually_edited BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE education ADD COLUMN manually_edited BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE project ADD COLUMN manually_edited BOOLEAN DEFAULT FALSE",
         # issues 91/51: per-run tailoring decision log (planner actions + reward)
         "ALTER TABLE userjobresult ADD COLUMN tailoring_decisions TEXT DEFAULT '[]'",
         # issue 91: one-level undo for chat REVERT

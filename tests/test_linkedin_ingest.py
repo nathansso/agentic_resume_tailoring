@@ -9,10 +9,11 @@ Covers:
   6. POST /api/ingest/linkedin endpoint returns the service result
 """
 import asyncio
+import json
 
 import pytest
 import requests
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 import ingestion.linkedin as linkedin_module
 from ingestion.linkedin import LinkedInIngestor, LinkedInIngestionError
@@ -284,6 +285,110 @@ def test_structured_experience_new_company_creates_row(isolated_engine, monkeypa
     assert exps[0].title == "ML Engineer" and exps[0].company == "Acme"
 
 
+# ── nested positions traversal + bullets (issue #96) ────────────────────────────
+
+from pathlib import Path
+
+_FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _load_fixture(name):
+    return json.loads((_FIXTURES / name).read_text())
+
+
+def test_nested_positions_yield_one_row_per_role(isolated_engine, monkeypatch):
+    """A Bright Data employer with roles nested under `positions` produces one
+    Experience per role, not just the first (issue #96)."""
+    from database.models import Experience
+    user = _make_user(isolated_engine, "np1@example.com")
+    agent = _make_parser(isolated_engine, monkeypatch, user)
+
+    agent._save_linkedin_structured(_load_fixture("linkedin_nested_positions.json"))
+
+    with Session(isolated_engine) as s:
+        exps = s.exec(select(Experience).where(Experience.user_id == user.user_id)).all()
+    titles = {e.title for e in exps}
+    # Both UCSD roles + the flat single-role employer.
+    assert titles == {"Research Assistant", "Financial Assistant", "Data Science Intern"}
+    ucsd = [e for e in exps if e.company == "UC San Diego"]
+    assert len(ucsd) == 2  # both nested roles kept, company backfilled from parent
+
+
+def test_nested_positions_capture_bullets(isolated_engine, monkeypatch):
+    """A multi-line role description becomes bullets so the role isn't a
+    content-empty stub the tailor would drop (issue #96)."""
+    from database.models import Experience
+    user = _make_user(isolated_engine, "np2@example.com")
+    agent = _make_parser(isolated_engine, monkeypatch, user)
+
+    agent._save_linkedin_structured(_load_fixture("linkedin_nested_positions.json"))
+
+    with Session(isolated_engine) as s:
+        exps = s.exec(select(Experience).where(Experience.user_id == user.user_id)).all()
+    ra = next(e for e in exps if e.title == "Research Assistant")
+    assert len(ra.bullets) == 2  # two-line description split into bullets
+    fa = next(e for e in exps if e.title == "Financial Assistant")
+    assert fa.bullets == []       # single-line description stays as description
+    assert fa.description
+
+
+def test_nested_roles_survive_tailor_filter(isolated_engine, monkeypatch):
+    """End-to-end: both UCSD roles survive the tailor's dedupe/empty-stub filter
+    (issue #96 acceptance)."""
+    from database.models import Experience
+    from agents.tailor import ResumeTailorAgent
+    user = _make_user(isolated_engine, "np3@example.com")
+    agent = _make_parser(isolated_engine, monkeypatch, user)
+
+    agent._save_linkedin_structured(_load_fixture("linkedin_nested_positions.json"))
+
+    with Session(isolated_engine) as s:
+        rows = s.exec(select(Experience).where(Experience.user_id == user.user_id)).all()
+        exp_dicts = [
+            {"title": e.title, "company": e.company, "start_date": e.start_date,
+             "end_date": e.end_date, "description": e.description, "bullets": e.bullets}
+            for e in rows
+        ]
+
+    kept = ResumeTailorAgent._filter_and_dedupe_experiences(exp_dicts)
+    kept_titles = {e["title"] for e in kept}
+    assert "Research Assistant" in kept_titles
+    assert "Financial Assistant" in kept_titles
+
+
+def test_single_role_employer_unchanged(isolated_engine, monkeypatch):
+    """A flat experience record (no `positions`) still maps to exactly one row —
+    no regression to single-role employers (issue #96)."""
+    from database.models import Experience
+    user = _make_user(isolated_engine, "np4@example.com")
+    agent = _make_parser(isolated_engine, monkeypatch, user)
+
+    record = {"experience": [
+        {"title": "ML Engineer", "company": "Acme", "start_date": "2020",
+         "description": "Owned the ranking service."},
+    ]}
+    agent._save_linkedin_structured(record)
+
+    with Session(isolated_engine) as s:
+        exps = s.exec(select(Experience).where(Experience.user_id == user.user_id)).all()
+    assert len(exps) == 1
+    assert exps[0].title == "ML Engineer" and exps[0].company == "Acme"
+
+
+def test_flatten_linkedin_experiences_backfills_company():
+    """Unit: nested positions inherit the parent company; flat records pass through."""
+    import agents.parser as parser_module
+    flat = parser_module.ResumeParserAgent._flatten_linkedin_experiences([
+        {"company": "UC San Diego", "positions": [
+            {"title": "Research Assistant"}, {"title": "Financial Assistant"},
+        ]},
+        {"title": "Intern", "company": "Acme"},
+    ])
+    assert len(flat) == 3
+    assert all(r["company"] == "UC San Diego" for r in flat[:2])
+    assert flat[2] == {"title": "Intern", "company": "Acme"}
+
+
 def test_parse_and_save_linkedin_skips_llm_entity_extraction(isolated_engine, monkeypatch):
     """With a structured record present, the experience/project LLM chains must
     not run; skills extraction still does."""
@@ -361,6 +466,85 @@ def test_service_ingest_linkedin_marks_failed(isolated_engine, monkeypatch):
         u = s.get(User, uid)
         assert u.linkedin_ingest_status == "failed"
         assert u.linkedin_ingest_error == "nope"
+
+
+# ── raw scrape persistence + replay (issue #69) ─────────────────────────────────
+
+def test_ingest_linkedin_persists_raw_record(isolated_engine, monkeypatch):
+    """A successful scrape stores its raw Bright Data record on the user row so
+    it can be replayed later without a new (paid) scrape."""
+    import services
+
+    with Session(isolated_engine) as s:
+        user = User(name="U", email="raw1@example.com")
+        s.add(user); s.commit(); s.refresh(user)
+        uid = user.user_id
+
+    record = {"name": "Jane", "experience": [{"title": "X", "company": "Y"}]}
+    monkeypatch.setattr(
+        LinkedInIngestor, "ingest_brightdata",
+        lambda self, url: {"source_type": "linkedin",
+                           "source_file": f"linkedin:{url}", "full_text": "x",
+                           "linkedin_record": record},
+    )
+    monkeypatch.setattr(
+        "agents.parser.ResumeParserAgent.parse_and_save", lambda self, data: None
+    )
+
+    services.ingest_linkedin("https://www.linkedin.com/in/janedev", uid)
+
+    with Session(isolated_engine) as s:
+        u = s.get(User, uid)
+        assert u.linkedin_raw_record
+        assert json.loads(u.linkedin_raw_record)["name"] == "Jane"
+
+
+def test_replay_linkedin_uses_stored_record_without_scrape(isolated_engine, monkeypatch):
+    """Replay re-runs the structured mapping against the stored raw record and
+    never triggers a new Bright Data scrape."""
+    import services
+    import agents.parser as parser_module
+    from database.models import Experience
+
+    monkeypatch.setattr(parser_module, "engine", isolated_engine)
+    monkeypatch.setattr(parser_module, "get_llm", lambda **kw: None)
+    monkeypatch.setattr(
+        parser_module.ResumeParserAgent, "_extract_skills", lambda self, text: []
+    )
+
+    record = {"experience": [
+        {"title": "ML Engineer", "company": "Acme",
+         "start_date": "2020", "description": "Built models."},
+    ]}
+    with Session(isolated_engine) as s:
+        user = User(name="U", email="replay1@example.com",
+                    linkedin_ingested_url="https://www.linkedin.com/in/janedev",
+                    linkedin_raw_record=json.dumps(record))
+        s.add(user); s.commit(); s.refresh(user)
+        uid = user.user_id
+
+    def _no_scrape(self, url):
+        raise AssertionError("replay must not call Bright Data")
+    monkeypatch.setattr(LinkedInIngestor, "ingest_brightdata", _no_scrape)
+
+    services.replay_linkedin(uid)
+
+    with Session(isolated_engine) as s:
+        exps = s.exec(select(Experience).where(Experience.user_id == uid)).all()
+    assert len(exps) == 1
+    assert exps[0].title == "ML Engineer" and exps[0].company == "Acme"
+
+
+def test_replay_linkedin_no_stored_record(isolated_engine, monkeypatch):
+    import services
+
+    with Session(isolated_engine) as s:
+        user = User(name="U", email="replay2@example.com")
+        s.add(user); s.commit(); s.refresh(user)
+        uid = user.user_id
+
+    result = services.replay_linkedin(uid)
+    assert "No stored LinkedIn scrape" in result
 
 
 # ── profile update auto-trigger ─────────────────────────────────────────────────
