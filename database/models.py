@@ -219,6 +219,13 @@ class UserJobResult(SQLModel, table=True):
     tailored_score_breakdown: Dict = Field(default={}, sa_column=Column(JSON)) # Algorithmic score of tailored output (issue #12)
     revision_notes: Optional[str] = None
     export_path: Optional[str] = None
+    # issues 91/51: per-run tailoring decision log — the planner's typed action
+    # plan plus context features and achieved reward (ATS delta). Append-only;
+    # the offline (context, action, reward) dataset for score-driven tuning.
+    tailoring_decisions: List = Field(default=[], sa_column=Column(JSON))
+    # issue 91: one-level undo for chat REVERT — {content, score_breakdown} of
+    # the tailored resume the most recent run replaced.
+    tailored_resume_previous: Dict = Field(default={}, sa_column=Column(JSON))
     # issue 71: user's manually edited .tex; NULL means "no manual edits" and
     # exports regenerate from tailored_resume_content. Cleared on re-tailor.
     edited_tex: Optional[str] = None

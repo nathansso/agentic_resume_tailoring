@@ -42,6 +42,7 @@ class PipelineState(TypedDict):
     result_id: str
     resume_text: str           # Raw resume text for tailor
     revision_notes: str        # User re-tailor instructions (issue #70)
+    plan_override: Dict        # Chat-approved tailoring plan (issue #91), optional
     # Output
     ats_score: float
     matched_skills: Dict
@@ -165,12 +166,18 @@ def match_skills_node(state: PipelineState) -> PipelineState:
 def tailor_resume_node(state: PipelineState) -> PipelineState:
     """Generate tailored resume content with reflection loop."""
     tailor = ResumeTailorAgent()
+    # plan_override is passed only when present so test fakes with the
+    # original tailor() signature keep working.
+    kwargs = {}
+    if state.get("plan_override"):
+        kwargs["plan_override"] = state["plan_override"]
     tailored = tailor.tailor(
         user_id=UUID(state["user_id"]),
         job_id=UUID(state["job_id"]),
         result_id=UUID(state["result_id"]),
         resume_text=state.get("resume_text", ""),
         revision_notes=state.get("revision_notes", ""),
+        **kwargs,
     )
     state["tailored_content"] = tailored
     state["status"] = "Resume tailored"

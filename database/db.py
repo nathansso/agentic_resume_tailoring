@@ -98,6 +98,10 @@ def _migrate_db() -> None:
         "ALTER TABLE experience ADD COLUMN manually_edited BOOLEAN DEFAULT FALSE",
         "ALTER TABLE education ADD COLUMN manually_edited BOOLEAN DEFAULT FALSE",
         "ALTER TABLE project ADD COLUMN manually_edited BOOLEAN DEFAULT FALSE",
+        # issues 91/51: per-run tailoring decision log (planner actions + reward)
+        "ALTER TABLE userjobresult ADD COLUMN tailoring_decisions TEXT DEFAULT '[]'",
+        # issue 91: one-level undo for chat REVERT
+        "ALTER TABLE userjobresult ADD COLUMN tailored_resume_previous TEXT DEFAULT '{}'",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
