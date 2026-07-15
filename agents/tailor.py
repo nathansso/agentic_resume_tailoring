@@ -30,7 +30,7 @@ from agents.project_scorer import MAX_PROJECTS, score_project, select_top_k
 from agents.skill_scorer import _env_float, _env_int, rank_and_select_skills
 from agents.skill_postprocessor import normalize_skill_name, should_reject_skill
 from agents.keyword_planner import score_keywords, assign_keywords, evaluate_placement
-from agents.tailor_planner import TailorPlanner, decision_log_entry
+from agents.tailor_planner import DEFAULT_KNOBS, TailorPlanner, decision_log_entry
 
 logger = logging.getLogger(__name__)
 
@@ -126,19 +126,18 @@ class ResumeTailorAgent:
         self.planner = TailorPlanner(llm=get_llm(role="tailor", temperature=0.0))
         self.graph = self._build_graph()
 
-    def tailor(
+    def _load_inputs(
         self,
         user_id: UUID,
         job_id: UUID,
         result_id: UUID,
-        resume_text: str = "",
-        revision_notes: str = "",
     ) -> Dict:
         """
-        Run the tailoring pipeline for a given user-job match.
-        *revision_notes* carries user instructions for iterative re-tailoring
-        (issue #70); empty means a plain tailoring run.
-        Returns the tailored resume content dict.
+        Load and prepare every generator input for a tailoring run: cleaned,
+        relevance-ranked experiences; selected projects plus the replacement
+        pool; the contextual keyword plan; and the prior tailored content.
+        Shared by tailor() and plan_preview() so a chat proposal sees exactly
+        the inputs the eventual run will use (issue #91).
         """
         with Session(engine) as session:
             # Load context
@@ -231,17 +230,93 @@ class ResumeTailorAgent:
             if not isinstance(prior_content, dict) or "error" in prior_content:
                 prior_content = {}
 
+        return {
+            "jd_text": jd_text,
+            "experiences": exp_dicts,
+            "projects": proj_dicts,
+            "project_pool": proj_pool,
+            "priority_keywords": priority_keywords,
+            "keyword_assignments": keyword_assignments,
+            "prior_content": prior_content,
+            "matched_skills": (result.matched_skills if result else None) or {},
+            "missing_skills": (result.missing_skills if result else None) or [],
+            "baseline_breakdown": ((result.score_breakdown if result else None) or {}),
+        }
+
+    def plan_preview(
+        self,
+        user_id: UUID,
+        job_id: UUID,
+        result_id: UUID,
+        revision_notes: str = "",
+    ) -> Dict:
+        """
+        Run the planner only — no generation, no DB writes (issue #91). Returns
+        the validated plan the next tailoring run would execute, so the chat
+        agent can surface the delta for approval before spending a tailor run.
+        """
+        inputs = self._load_inputs(user_id, job_id, result_id)
+        return self.planner.plan(
+            items=self._planner_items(inputs["experiences"], inputs["projects"]),
+            pool=self._planner_pool(inputs["project_pool"]),
+            jd_text=inputs["jd_text"],
+            missing_skills=list(inputs["missing_skills"]),
+            revision_notes=revision_notes.strip(),
+            prior_content=inputs["prior_content"] or None,
+        )
+
+    def tailor(
+        self,
+        user_id: UUID,
+        job_id: UUID,
+        result_id: UUID,
+        resume_text: str = "",
+        revision_notes: str = "",
+        plan_override: Optional[Dict] = None,
+    ) -> Dict:
+        """
+        Run the tailoring pipeline for a given user-job match.
+        *revision_notes* carries user instructions for iterative re-tailoring
+        (issue #70); empty means a plain tailoring run. *plan_override* is a
+        chat-approved plan from plan_preview() (issue #91): when supplied the
+        planner is skipped and the approved actions are executed instead
+        (re-validated against freshly loaded items, so a stale approval can't
+        reference rows that no longer exist).
+        Returns the tailored resume content dict.
+        """
+        inputs = self._load_inputs(user_id, job_id, result_id)
+        jd_text = inputs["jd_text"]
+        exp_dicts = inputs["experiences"]
+        proj_dicts = inputs["projects"]
+        proj_pool = inputs["project_pool"]
+        priority_keywords = inputs["priority_keywords"]
+        keyword_assignments = inputs["keyword_assignments"]
+        prior_content = inputs["prior_content"]
+
         # Typed per-item edit plan (issues #91/#51): what to keep, revise,
         # replace, or delete — and why. Validated against the real item keys,
         # then applied structurally to the generator inputs below.
-        plan = self.planner.plan(
-            items=self._planner_items(exp_dicts, proj_dicts),
-            pool=self._planner_pool(proj_pool),
-            jd_text=jd_text,
-            missing_skills=list((result.missing_skills if result else None) or []),
-            revision_notes=revision_notes.strip(),
-            prior_content=prior_content or None,
-        )
+        if plan_override:
+            knobs = plan_override.get("knobs") or None
+            plan = {
+                "actions": TailorPlanner.validate_plan(
+                    plan_override.get("actions") or [],
+                    self._planner_items(exp_dicts, proj_dicts),
+                    self._planner_pool(proj_pool),
+                    knobs,
+                ),
+                "knobs": {**DEFAULT_KNOBS, **(knobs or {})},
+                "planner": "chat_approved",
+            }
+        else:
+            plan = self.planner.plan(
+                items=self._planner_items(exp_dicts, proj_dicts),
+                pool=self._planner_pool(proj_pool),
+                jd_text=jd_text,
+                missing_skills=list(inputs["missing_skills"]),
+                revision_notes=revision_notes.strip(),
+                prior_content=prior_content or None,
+            )
         exp_dicts, proj_dicts, keyword_assignments = self._apply_plan_to_inputs(
             plan, exp_dicts, proj_dicts, proj_pool, keyword_assignments, prior_content
         )
@@ -253,12 +328,12 @@ class ResumeTailorAgent:
             "resume_text": resume_text,
             "job_text": jd_text,
             "revision_notes": revision_notes.strip(),
-            "matched_skills": result.matched_skills if result else {},
-            "missing_skills": result.missing_skills if result else [],
+            "matched_skills": inputs["matched_skills"],
+            "missing_skills": inputs["missing_skills"],
             "priority_keywords": priority_keywords,
             "keyword_assignments": keyword_assignments,
             "plan": plan,
-            "baseline_breakdown": (result.score_breakdown or {}) if result else {},
+            "baseline_breakdown": inputs["baseline_breakdown"],
             "experiences": exp_dicts,
             "projects": proj_dicts,
             "tailored_content": {},
@@ -313,6 +388,14 @@ class ResumeTailorAgent:
                 select(UserJobResult).where(UserJobResult.result_id == result_id)
             ).first()
             if result:
+                # One-level undo for chat REVERT (issue #91): snapshot the
+                # content and score this run is about to replace.
+                old_content = _as_obj(result.tailored_resume_content, {})
+                if old_content and "error" not in old_content:
+                    result.tailored_resume_previous = {
+                        "content": old_content,
+                        "score_breakdown": _as_obj(result.tailored_score_breakdown, {}),
+                    }
                 result.tailored_resume_content = tailored
                 result.tailored_score_breakdown = evaluation.get("ats_breakdown", {})
                 if revision_notes.strip():

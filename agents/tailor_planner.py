@@ -132,6 +132,7 @@ class TailorPlanner:
             actions.append({
                 "section": item.get("section"),
                 "item_key": item.get("key"),
+                "label": item.get("label"),
                 "op": "revise",
                 "strategy": strategy,
                 "keywords": kws,
@@ -184,6 +185,7 @@ class TailorPlanner:
             action: Dict = {
                 "section": item.get("section"),
                 "item_key": item.get("key"),
+                "label": item.get("label"),
                 "op": op,
                 "rationale": str(raw.get("rationale") or "").strip()[:300],
                 "propensity": _FIXED_PROPENSITY,

@@ -4,6 +4,26 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issues 91 & 51 — Typed tailoring actions, chat re-tailoring action set, RL-ready decision log
+**Status:** complete (slices A+B of the arc; the #51 bandit itself is follow-up) | **Tests:** 621 pass (29 new)
+
+Tailoring is no longer an implicit whole-resume rewrite. Every run is now planned as strict, typed, per-item edit actions with rationales; chat re-tailoring proposes that plan as a reviewable delta against the current tailored resume (the source of truth) instead of regenerating it — the root cause of #91's "new feedback, same resume" bug. Every run logs a `(context, actions, propensity, reward)` tuple, giving #51 Phase 2 its offline contextual-bandit dataset, with the ATS composite delta as the tailoring reward and an explicit 1–5 chat score as the revision reward.
+
+### What shipped
+- **`agents/tailor_planner.py` (new).** `TailorPlanner` emits one action per resume item — `keep | revise | replace | delete` — with a revision strategy (`keyword_weave | quantify | tighten | reframe`), keywords to weave, a replacement candidate from the unselected project pool, and a one-sentence rationale. LLM-planned with a deterministic fallback; validated so unknown items are dropped, replace is pool-only, and a section can never be emptied. `decision_log_entry` builds the per-run log tuple.
+- **Planner integration (`agents/tailor.py`).** Input loading extracted to `_load_inputs` (shared with the new `plan_preview()`); plans are applied structurally to the generator inputs (deletes removed, replacements swapped in), rendered as per-item prompt instructions, and enforced deterministically on the output (deleted items stay out even if regenerated; `keep` restores source bullets verbatim). Re-tailors plan a delta against the prior tailored content. `tailor(plan_override=...)` executes a chat-approved plan instead of re-planning.
+- **Decision log.** New `UserJobResult.tailoring_decisions` JSON column (append-only) records context features, executed actions with propensities, and the per-component ATS delta reward for every run.
+- **Job-chat action set (`agents/chat.py`).** `tailor <request>` on an already-tailored job now runs PROPOSE_PLAN → shows the per-item delta with rationales → `1` applies exactly that plan (threaded through the pipeline as `plan_override`), `2` cancels. New `explain` (rationales from the decision log), `what changed` (diff, ops only), and `revert` (one-level undo via the new `tailored_resume_previous` snapshot column) commands, each with router-LLM tool equivalents for freeform phrasing. The router prompt is grounded with a summary of the current tailored resume so the bot answers about it instead of offering to "look it up".
+- **1–5 score channel.** After each revision run the chat asks for a 1–5 score; the reply is written as `user_score` into that run's decision-log entry (one-shot — any other message dismisses the prompt). This is the chat-side reward for score-driven tuning.
+- **README** rewritten around the architecture: pipeline stages, chat action set, learning loop, and eval harness.
+
+### Deviations from spec
+- #91 asked to "design a policy that interprets what action should be taken based on chat" — the deterministic policy scaffolding (typed actions, propensity logging, strategy knobs) shipped here; the *learned* policy (Thompson sampling over knobs + off-policy evaluation) is the remaining #51 Phase 2 scope.
+- Revert is one-level (swap with the previous version) rather than full history — each run snapshots only what it replaced.
+- First-time tailoring still runs directly without a proposal step; only re-tailors propose first, since a first run has no delta to review.
+
+---
+
 ## Issue 90 — Draggable pane resizing on the Jobs tab
 **Status:** complete | **Tests:** 87 frontend pass (28 new); Python suite unchanged
 

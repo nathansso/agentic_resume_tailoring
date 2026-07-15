@@ -3,6 +3,7 @@ Chat Agent — TUI assistant with tool-calling for ART operations.
 Uses a role-based LLM with a simple TOOL_CALL protocol to ingest data,
 query the knowledge graph, and run tailoring pipelines conversationally.
 """
+import json
 import os
 import re
 import time
@@ -22,6 +23,17 @@ from database.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _json_obj(value, default):
+    """Normalise a JSON column that may round-trip as a JSON string on SQLite."""
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (ValueError, TypeError):
+            return default
+    return value if value is not None else default
+
 
 _COMPRESS_AT = int(os.environ.get("ART_COMPRESS_AT", 30))
 _COMPRESS_KEEP = int(os.environ.get("ART_COMPRESS_KEEP", 8))
@@ -445,6 +457,7 @@ def build_router_prompt(
     active_job_company: str | None = None,
     active_job_status: str | None = None,
     active_job_ats: float | None = None,
+    tailored_summary: str | None = None,
 ) -> str:
     """Build the router system prompt with current runtime state injected."""
     state_lines = []
@@ -460,6 +473,14 @@ def build_router_prompt(
         if active_job_ats is not None:
             job_ctx += f" | ATS: {active_job_ats:.0f}%"
         state_lines.append(f"- Active job: {job_ctx}")
+        if tailored_summary:
+            state_lines.append(
+                f"- Tailored resume on file (source of truth): {tailored_summary}"
+            )
+            state_lines.append(
+                "  Do NOT offer to look it up — it is shown above. For changes "
+                "use propose_retailor_plan; never regenerate from scratch."
+            )
     else:
         state_lines.append("- Active job: none")
     state_lines.append(
@@ -501,6 +522,10 @@ run_tailor(job)                    — tailor resume to a job description (freef
 analyze_active_job()               — extract skills from active job description; requires active job selected
 tailor_active_job()                — run tailoring pipeline for active job; requires active job with skills extracted
 export_active_job()                — export tailored resume to file; requires tailoring complete
+propose_retailor_plan(notes)       — plan a re-tailor as a reviewable per-item delta against the current tailored resume; use for ANY change request once a tailored resume exists
+explain_tailoring()                — explain the last tailoring run's per-item decisions and rationale
+show_tailoring_diff()              — list what the last tailoring run changed
+revert_tailoring()                 — restore the previous tailored resume (one-level undo)
 
 ## Examples
 "ingest my GitHub" → TOOL_CALL: run_ingest_github({gh_hint})
@@ -513,6 +538,11 @@ export_active_job()                — export tailored resume to file; requires 
 "analyze this job" → TOOL_CALL: analyze_active_job()
 "tailor my resume to this job" → TOOL_CALL: tailor_active_job()
 "export my resume" → TOOL_CALL: export_active_job()
+"emphasize my backend work more" (tailored resume exists) → TOOL_CALL: propose_retailor_plan(emphasize backend work more)
+"swap the recipe project for something stronger" → TOOL_CALL: propose_retailor_plan(replace the recipe project with a stronger one)
+"why did you change that project?" → TOOL_CALL: explain_tailoring()
+"what did the last run change?" → TOOL_CALL: show_tailoring_diff()
+"undo that" → TOOL_CALL: revert_tailoring()
 "should I apply to this job?" → RESPONSE: Based on your profile ..."""
 
 
@@ -538,11 +568,18 @@ class ChatAgent:
         self._job_histories: dict[str | None, list] = {}
         self._job_summaries: dict[str | None, Optional[str]] = {}
         self._active_job_id: str | None = None
+        # One-shot 1–5 score prompt target after a chat re-tailor (issues #91/#51):
+        # holds the result_id whose latest decision-log entry the score attaches to.
+        self._pending_score_result_id: Optional[str] = None
         self._tool_map: Dict = {
             **TOOL_MAP,
             "analyze_active_job": lambda args: self._analyze_active_job(args),
             "tailor_active_job": lambda args: self._tailor_active_job(args),
             "export_active_job": lambda args: self._export_active_job(args),
+            "propose_retailor_plan": lambda args: self._propose_retailor_plan(args),
+            "explain_tailoring": lambda args: self._explain_tailoring(args),
+            "show_tailoring_diff": lambda args: self._show_tailoring_diff(args),
+            "revert_tailoring": lambda args: self._revert_tailoring(args),
         }
 
     @staticmethod
@@ -601,6 +638,10 @@ class ChatAgent:
         if n == "analyze": return "analyze_active_job"
         if n in {"tailor", "tailor resume", "run tailoring"}: return "tailor_active_job"
         if n in {"export", "export resume", "save resume"}: return "export_active_job"
+        if n in {"explain", "explain changes", "explain tailoring", "why these changes"}: return "explain_tailoring"
+        if n in {"what changed", "show diff", "diff", "show changes"}: return "show_tailoring_diff"
+        if n in {"revert", "undo", "revert tailoring", "undo tailoring", "revert resume"}: return "revert_tailoring"
+        if n in {"show plan", "propose plan", "plan changes"}: return "propose_retailor_plan"
         if re.match(r"(?i)^add\s+(?:missing\s+)?skill\s+", raw): return "add_missing_skill"
         if re.match(r"(?i)^add\s+.+\s+to\s+(?:my\s+)?(?:profile|skills)$", raw): return "add_to_profile"
         if len(raw) > 100 and self.active_job_id: return "job_description_paste"
@@ -766,11 +807,18 @@ class ChatAgent:
             logger.error("_analyze_active_job failed: %s", e)
             return f"Analysis failed: {e}"
 
-    def _tailor_active_job(self, args: str, _confirmed: bool = False) -> str:
+    def _tailor_active_job(
+        self,
+        args: str,
+        _confirmed: bool = False,
+        _plan_override: Optional[dict] = None,
+    ) -> str:
         """Run match → tailor → format pipeline nodes for the active job.
 
         *args* carries freeform revision instructions for iterative
         re-tailoring (issue #70), e.g. "tailor emphasize Python more".
+        *_plan_override* is a chat-approved plan from _propose_retailor_plan
+        (issue #91): the pipeline executes those actions instead of re-planning.
         """
         try:
             from datetime import datetime
@@ -803,7 +851,9 @@ class ChatAgent:
                 latest = max(results, key=lambda r: r.created_at) if results else None
                 if latest and latest.edited_tex:
                     self._pending_options = {
-                        "1": lambda: self._tailor_active_job(args, _confirmed=True),
+                        "1": lambda: self._tailor_active_job(
+                            args, _confirmed=True, _plan_override=_plan_override
+                        ),
                         "2": lambda: "Kept your manual edits — no re-tailoring done.",
                     }
                     return (
@@ -827,6 +877,7 @@ class ChatAgent:
                 "job_file": "", "user_id": str(user.user_id),
                 "job_id": str(job.job_id), "result_id": "",
                 "resume_text": "", "revision_notes": args.strip(),
+                "plan_override": _plan_override or {},
                 "ats_score": 0.0,
                 "matched_skills": {}, "missing_skills": [],
                 "tailored_content": {}, "formatted_resume": "", "status": "",
@@ -899,6 +950,17 @@ class ChatAgent:
             ]
             tailored_content = state.get("tailored_content", {})
             lines.append(_summarize_tailoring_changes(user.user_id, tailored_content, missing))
+            # Explicit 1–5 score prompt after a revision run (issues #91/#51):
+            # the reply is logged as user_score on this run's decision-log
+            # entry — the chat-side reward channel for score-driven tuning.
+            was_revision = bool(args.strip()) or _plan_override is not None or runs_used > 1
+            if was_revision and result_id:
+                self._pending_score_result_id = str(result_id)
+                lines.append("")
+                lines.append(
+                    "How well did this match what you asked for? "
+                    "Reply 1–5 (5 = exactly right) to score it."
+                )
             return "\n".join(lines)
         except Exception as e:
             logger.error("_tailor_active_job failed: %s", e)
@@ -967,6 +1029,243 @@ class ChatAgent:
                 session.commit()
 
         return f"PDF exported to: {export_path}"
+
+    # ── Job-chat tailoring actions (issues #91 / #51 Phase 2) ────────────────
+    #
+    # Within a job chat the agent's tailoring surface is a strict action set:
+    #   PROPOSE_PLAN  _propose_retailor_plan — show the per-item delta, ask 1/2
+    #   APPLY_PLAN    _tailor_active_job(_plan_override=...) — run approved plan
+    #   SHOW_DIFF     _show_tailoring_diff — what the last run changed
+    #   EXPLAIN       _explain_tailoring — why it changed (decision log)
+    #   REVERT        _revert_tailoring — one-level undo
+    #   SAVE_ARTIFACT /save — persist chat-mentioned skills/projects (issue #21)
+    #   ASK_CLARIFY   the router's CLARIFY envelope
+    # The current tailored resume is the source of truth: re-tailors are deltas
+    # against it, never regenerations (the issue #91 failure mode).
+
+    def _latest_result_for_active_job(self) -> Optional[UserJobResult]:
+        """Most recent UserJobResult for the active job and active user."""
+        from database.user_utils import get_active_profile
+
+        job = self._get_active_job()
+        if not job:
+            return None
+        user = get_active_profile()
+        with Session(engine) as session:
+            query = select(UserJobResult).where(UserJobResult.job_id == job.job_id)
+            if user:
+                query = query.where(UserJobResult.user_id == user.user_id)
+            results = session.exec(query).all()
+        return max(results, key=lambda r: r.created_at) if results else None
+
+    @staticmethod
+    def _result_content(result: Optional[UserJobResult]) -> dict:
+        """The result's tailored content as a dict, {} when absent/errored."""
+        if result is None:
+            return {}
+        content = _json_obj(result.tailored_resume_content, {})
+        if not isinstance(content, dict) or "error" in content:
+            return {}
+        return content
+
+    @staticmethod
+    def _render_plan_lines(actions: list, show_rationale: bool = True) -> list:
+        """Human-readable bullet lines for a list of plan actions."""
+        lines = []
+        for a in actions or []:
+            label = a.get("label") or a.get("item_key") or "?"
+            op = a.get("op")
+            if op == "replace":
+                repl = (a.get("replacement_key") or "").split(":", 1)[-1]
+                head = f"REPLACE {label} → {repl}"
+            elif op == "revise":
+                strategy = a.get("strategy") or ""
+                kws = ", ".join(a.get("keywords") or [])
+                head = f"REVISE {label} ({strategy}" + (f": {kws}" if kws else "") + ")"
+            elif op == "delete":
+                head = f"DELETE {label}"
+            elif op == "revert":
+                head = "REVERT to the previous tailored resume"
+            else:
+                head = f"KEEP {label}"
+            lines.append(f"  • {head}")
+            if show_rationale and a.get("rationale"):
+                lines.append(f"      why: {a['rationale']}")
+        return lines
+
+    def _retailor_or_propose(self, notes: str) -> str:
+        """'tailor <notes>' with an active job: once a tailored resume exists,
+        surface the planned delta for approval first (issue #91); otherwise run
+        the first tailoring directly."""
+        if self._result_content(self._latest_result_for_active_job()):
+            return self._propose_retailor_plan(notes)
+        return self._tailor_active_job(notes)
+
+    def _propose_retailor_plan(self, notes: str) -> str:
+        """PROPOSE_PLAN: show the per-item delta a re-tailor would apply and
+        ask for approval before spending a tailor run (issue #91)."""
+        from database.user_utils import get_active_profile
+        from services import job_tailor_limit, tailor_runs_remaining
+
+        job = self._get_active_job()
+        if not job:
+            return "No active job selected. Select a job from the sidebar first."
+        user = get_active_profile()
+        if not user:
+            return "No active profile. Complete onboarding first."
+        latest = self._latest_result_for_active_job()
+        if not self._result_content(latest):
+            # Nothing tailored yet — there is no delta to propose.
+            return self._tailor_active_job(notes)
+
+        limit = job_tailor_limit()
+        remaining = tailor_runs_remaining(job)
+        if remaining <= 0:
+            return (
+                f"Re-tailor limit reached ({limit}/{limit}) for this job. "
+                "You can still edit and export the current tailored resume."
+            )
+
+        try:
+            from agents.tailor import ResumeTailorAgent
+            plan = ResumeTailorAgent().plan_preview(
+                user.user_id, job.job_id, latest.result_id, notes
+            )
+        except Exception as e:
+            logger.error("plan_preview failed: %s", e)
+            return f"Could not build a re-tailoring plan: {e}"
+
+        actions = plan.get("actions") or []
+        if not actions:
+            return "Nothing to plan — no tailorable items found on your profile."
+
+        lines = ["Proposed re-tailoring plan (nothing applied yet):"]
+        if notes.strip():
+            lines.append(f'  Request: "{notes.strip()}"')
+        lines += self._render_plan_lines(actions)
+        lines += [
+            "",
+            f"  1. Apply this plan (uses 1 of {remaining} remaining tailor runs)",
+            "  2. Cancel and keep the current resume",
+            "",
+            "Reply with 1 or 2 — or refine your request and I'll re-plan.",
+        ]
+        self._pending_options = {
+            "1": lambda: self._tailor_active_job(notes, _plan_override=plan),
+            "2": lambda: "Cancelled — the current tailored resume is unchanged.",
+        }
+        return "\n".join(lines)
+
+    def _explain_tailoring(self, args: str) -> str:
+        """EXPLAIN_DECISION: why the last tailoring run made its changes,
+        straight from the persisted decision log (issue #91)."""
+        latest = self._latest_result_for_active_job()
+        if latest is None:
+            return 'No tailoring results for this job yet. Type "tailor" first.'
+        log = _json_obj(latest.tailoring_decisions, [])
+        if not isinstance(log, list) or not log:
+            return "No decision log recorded for this job yet — run a tailoring first."
+
+        entry = log[-1]
+        lines = [f"Last tailoring run ({entry.get('planner', 'unknown')} planner):"]
+        if entry.get("revision_notes"):
+            lines.append(f'  Request: "{entry["revision_notes"]}"')
+        lines += self._render_plan_lines(entry.get("actions") or [], show_rationale=True)
+        reward = entry.get("reward") or {}
+        if reward.get("composite") is not None:
+            delta = reward.get("delta")
+            score_line = f"\nATS composite: {reward['composite']}"
+            if isinstance(delta, (int, float)):
+                score_line += f" (baseline {reward.get('baseline_composite')}, {delta:+})"
+            lines.append(score_line)
+        if reward.get("user_score") is not None:
+            lines.append(f"Your score for this run: {reward['user_score']}/5")
+        return "\n".join(lines)
+
+    def _show_tailoring_diff(self, args: str) -> str:
+        """SHOW_DIFF: what the last tailoring run changed (ops only, no
+        rationale — use explain for the why)."""
+        latest = self._latest_result_for_active_job()
+        if latest is None:
+            return 'No tailoring results for this job yet. Type "tailor" first.'
+        log = _json_obj(latest.tailoring_decisions, [])
+        if not isinstance(log, list) or not log:
+            return "No decision log recorded for this job yet — run a tailoring first."
+
+        actions = log[-1].get("actions") or []
+        changes = [a for a in actions if a.get("op") not in (None, "keep")]
+        if not changes:
+            return "The last run kept every item as-is."
+        lines = ["Changes in the last tailoring run:"]
+        lines += self._render_plan_lines(changes, show_rationale=False)
+        lines.append('\nAsk "explain" for the rationale behind each change.')
+        return "\n".join(lines)
+
+    def _revert_tailoring(self, args: str) -> str:
+        """REVERT: one-level undo — swap the current tailored resume with the
+        version the last run replaced (issue #91)."""
+        from agents.tailor_planner import decision_log_entry
+
+        latest = self._latest_result_for_active_job()
+        if latest is None:
+            return "No tailoring results for this job yet — nothing to revert."
+
+        with Session(engine) as session:
+            result = session.get(UserJobResult, latest.result_id)
+            prev = _json_obj(result.tailored_resume_previous, {})
+            prev = prev if isinstance(prev, dict) else {}
+            prev_content = prev.get("content") or {}
+            if not prev_content:
+                return "No previous version stored for this job — nothing to revert to."
+
+            current = {
+                "content": _json_obj(result.tailored_resume_content, {}),
+                "score_breakdown": _json_obj(result.tailored_score_breakdown, {}),
+            }
+            result.tailored_resume_content = prev_content
+            result.tailored_score_breakdown = prev.get("score_breakdown") or {}
+            # Swap rather than pop, so "revert" again restores what you had.
+            result.tailored_resume_previous = current
+            # Reverting invalidates manual .tex edits the same way a re-tailor
+            # does (issue #71): the saved source no longer matches the content.
+            result.edited_tex = None
+            result.edited_tex_updated_at = None
+            log = _json_obj(result.tailoring_decisions, [])
+            log = list(log) if isinstance(log, list) else []
+            log.append(decision_log_entry(
+                {"actions": [{"section": "all", "item_key": "*", "op": "revert",
+                              "propensity": 1.0}],
+                 "knobs": {}, "planner": "revert"},
+                {"is_revision": True}, {}, "",
+            ))
+            result.tailoring_decisions = log
+            session.add(result)
+            session.commit()
+
+        return (
+            "Reverted to the previous tailored resume. The replaced version is "
+            'kept — type "revert" again to swap back.'
+        )
+
+    def _record_tailor_score(self, result_id: str, score: int) -> str:
+        """Attach the user's 1–5 score to the latest decision-log entry — the
+        chat-side reward for score-driven tuning (issues #91/#51)."""
+        with Session(engine) as session:
+            result = session.get(UserJobResult, UUID(result_id))
+            if result is None:
+                return "Could not find the tailoring run to score."
+            log = _json_obj(result.tailoring_decisions, [])
+            if not isinstance(log, list) or not log:
+                return "No decision log to attach the score to."
+            last = dict(log[-1])
+            last["reward"] = {**(last.get("reward") or {}), "user_score": score}
+            result.tailoring_decisions = [*log[:-1], last]
+            session.add(result)
+            session.commit()
+        return (
+            f"Recorded {score}/5 for this revision — thanks. Scores teach ART "
+            "which tailoring choices work for you."
+        )
 
     def _add_missing_skill(self, skill_name: str, target: Optional[str] = None) -> str:
         """Add a skill directly to the active user's profile."""
@@ -1237,6 +1536,15 @@ class ChatAgent:
             self._pending_options.clear()
             return fn(stripped)
 
+        # 0c) One-shot 1–5 score reply after a chat re-tailor (issues #91/#51).
+        # Any other message dismisses the prompt and routes normally.
+        if self._pending_score_result_id:
+            rid = self._pending_score_result_id
+            self._pending_score_result_id = None
+            m_score = re.fullmatch(r"(?:score\s*)?([1-5])(?:\s*/\s*5)?", stripped, flags=re.I)
+            if m_score:
+                return self._record_tailor_score(rid, int(m_score.group(1)))
+
         # 1) Exact shortcut hit (fast path). Ingestion keywords use instance methods.
         if normalized == "ingest github":
             return self._ingest_github_with_options()
@@ -1311,13 +1619,26 @@ class ChatAgent:
         if normalized in {"export", "export resume", "save resume"}:
             return self._export_active_job("")
 
+        # Job-chat tailoring actions (issue #91): explain / diff / revert / plan.
+        if normalized in {"explain", "explain changes", "explain tailoring",
+                          "why these changes"}:
+            return self._explain_tailoring("")
+        if normalized in {"what changed", "show diff", "diff", "show changes"}:
+            return self._show_tailoring_diff("")
+        if normalized in {"revert", "undo", "revert tailoring", "undo tailoring",
+                          "revert resume"}:
+            return self._revert_tailoring("")
+        if normalized in {"show plan", "propose plan", "plan changes"}:
+            return self._propose_retailor_plan("")
+
         m = re.match(r"(?i)^(?:re-?)?tailor\s+(.+)$", raw)
         if m:
             # With an active job, freeform text after "tailor" is a revision
-            # instruction for that job (issue #70); without one it's the legacy
-            # "tailor <pasted JD>" flow.
+            # instruction for that job (issue #70); once a tailored resume
+            # exists the delta plan is proposed for approval first (issue #91).
+            # Without an active job it's the legacy "tailor <pasted JD>" flow.
             if self.active_job_id:
-                return self._tailor_active_job(m.group(1).strip())
+                return self._retailor_or_propose(m.group(1).strip())
             return run_tailor(m.group(1).strip())
 
         # "add missing skill X" / "add skill X" / "add X to my profile|skills"
@@ -1454,6 +1775,7 @@ class ChatAgent:
         _profile = get_active_profile()
         _active_job = self._get_active_job() if self.active_job_id else None
         _active_job_ats: Optional[float] = None
+        _tailored_summary: Optional[str] = None
         if _active_job:
             with Session(engine) as _s:
                 _job_results = _s.exec(
@@ -1461,6 +1783,18 @@ class ChatAgent:
                 ).all()
                 if _job_results:
                     _active_job_ats = max(r.ats_score for r in _job_results)
+                    # Ground the router in the current tailored resume (issue
+                    # #91) so it answers about it instead of offering to "look
+                    # it up" or regenerating from scratch.
+                    _latest = max(_job_results, key=lambda r: r.created_at)
+                    _content = self._result_content(_latest)
+                    if _content:
+                        _exp_titles = [e.get("title") for e in _content.get("experiences") or []]
+                        _proj_names = [p.get("name") for p in _content.get("projects") or []]
+                        _tailored_summary = (
+                            f"experiences [{', '.join(t for t in _exp_titles if t)}]; "
+                            f"projects [{', '.join(n for n in _proj_names if n)}]"
+                        )
         system_prompt = build_router_prompt(
             has_profile=_profile is not None,
             profile_name=_profile.name if _profile else None,
@@ -1470,6 +1804,7 @@ class ChatAgent:
             active_job_company=_active_job.company if _active_job else None,
             active_job_status=getattr(_active_job, "status", None) if _active_job else None,
             active_job_ats=_active_job_ats,
+            tailored_summary=_tailored_summary,
         )
         messages = [{"role": "system", "content": system_prompt}]
         _summary = self._job_summaries.get(self._active_job_id)

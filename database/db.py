@@ -94,6 +94,8 @@ def _migrate_db() -> None:
         "ALTER TABLE userjobresult ADD COLUMN edited_tex_updated_at TIMESTAMP",
         # issues 91/51: per-run tailoring decision log (planner actions + reward)
         "ALTER TABLE userjobresult ADD COLUMN tailoring_decisions TEXT DEFAULT '[]'",
+        # issue 91: one-level undo for chat REVERT
+        "ALTER TABLE userjobresult ADD COLUMN tailored_resume_previous TEXT DEFAULT '{}'",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
