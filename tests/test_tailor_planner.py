@@ -6,6 +6,7 @@ application to the generator inputs, plan enforcement on the LLM output, and
 the persisted decision log on UserJobResult.
 """
 import json
+import random
 
 from sqlmodel import Session
 
@@ -13,7 +14,9 @@ from agents.tailor_planner import (
     DEFAULT_KNOBS,
     REVISION_STRATEGIES,
     TailorPlanner,
+    _strategy_propensity,
     decision_log_entry,
+    explore_epsilon,
 )
 from database.models import Experience, JobDescription, Project, UserJobResult
 
@@ -281,6 +284,198 @@ def test_enforce_plan_noop_without_actions():
     tailored = {"experiences": [{"title": "X", "company": "Y", "bullets": ["b"]}]}
     out = ResumeTailorAgent._enforce_plan(dict(tailored), {"plan": {}})
     assert out == tailored
+
+
+# ── ε-greedy exploration (issue #112) ────────────────────────────────────────
+
+
+def _explore_on(monkeypatch, epsilon=None):
+    monkeypatch.setenv("TAILOR_EXPLORATION_MODE", "1")
+    if epsilon is not None:
+        monkeypatch.setenv("TAILOR_EXPLORE_EPSILON", str(epsilon))
+
+
+def _expected_propensity(action, item):
+    """Propensity the ε-greedy sampler must have logged for this action, given
+    the arm that is greedy for *this* item."""
+    greedy = (DEFAULT_KNOBS["default_revise_strategy"]
+              if item["suggested_keywords"] else "tighten")
+    return _strategy_propensity(action["strategy"], greedy, explore_epsilon())
+
+
+def test_exploration_off_by_default_is_todays_behavior():
+    """The regression guard: with exploration unset the plan is byte-identical
+    to the deterministic policy and every propensity is 1.0."""
+    planner = TailorPlanner(llm=object(), rng=random.Random(0))
+    actions = planner.plan(ITEMS, POOL, "jd", [])["actions"]
+    by_key = {a["item_key"]: a for a in actions}
+    assert by_key["exp:ml engineer|nimbus"]["strategy"] == "keyword_weave"
+    assert by_key["exp:swe|harbor"]["strategy"] == "tighten"
+    assert by_key["proj:recipe review"]["strategy"] == "keyword_weave"
+    assert all(a["propensity"] == 1.0 for a in actions)
+    assert all(a["strategy_source"] == "default" for a in actions)
+
+
+def test_exploration_produces_more_than_one_strategy(monkeypatch):
+    """Core acceptance criterion: the same context no longer maps to a single
+    strategy, so the decision log carries action variance to learn from."""
+    _explore_on(monkeypatch)
+    item = ITEMS[0]
+    seen = set()
+    for seed in range(50):
+        actions = TailorPlanner.default_plan(
+            [item], DEFAULT_KNOBS, rng=random.Random(seed), explore=True
+        )
+        seen.add(actions[0]["strategy"])
+    assert len(seen) > 1
+    assert seen <= set(REVISION_STRATEGIES)
+
+
+def test_greedy_arm_frequency_matches_epsilon(monkeypatch):
+    _explore_on(monkeypatch, epsilon=0.2)
+    rng = random.Random(1234)
+    n = 4000
+    greedy_hits = sum(
+        TailorPlanner.default_plan(
+            [ITEMS[0]], DEFAULT_KNOBS, rng=rng, explore=True
+        )[0]["strategy"] == "keyword_weave"
+        for _ in range(n)
+    )
+    expected = 1 - 0.2 + 0.2 / len(REVISION_STRATEGIES)   # 0.85
+    assert abs(greedy_hits / n - expected) < 0.02
+
+
+def test_logged_propensity_matches_sampling_distribution(monkeypatch):
+    """Every logged propensity equals P(chosen | ε-greedy) for that item's own
+    greedy arm — including the no-keyword item, whose greedy arm is `tighten`
+    rather than the default_revise_strategy knob."""
+    _explore_on(monkeypatch, epsilon=0.4)   # high ε so both branches show up
+    by_item = {i["key"]: i for i in ITEMS}
+    saw_greedy = saw_explored = False
+    for seed in range(40):
+        actions = TailorPlanner.default_plan(
+            ITEMS, DEFAULT_KNOBS, rng=random.Random(seed), explore=True
+        )
+        for action in actions:
+            item = by_item[action["item_key"]]
+            assert action["propensity"] == _expected_propensity(action, item)
+            if action["propensity"] > 0.5:
+                saw_greedy = True
+            else:
+                saw_explored = True
+    assert saw_greedy and saw_explored
+
+
+def test_propensities_over_strategy_set_sum_to_one(monkeypatch):
+    _explore_on(monkeypatch, epsilon=0.3)
+    for greedy in REVISION_STRATEGIES:
+        total = sum(
+            _strategy_propensity(s, greedy, explore_epsilon())
+            for s in REVISION_STRATEGIES
+        )
+        assert abs(total - 1.0) < 1e-9
+
+
+def test_no_exploration_on_a_user_revision_run(monkeypatch):
+    """A user asking for a specific change must get the greedy strategy — not a
+    sampled one that ignores what they asked for."""
+    _explore_on(monkeypatch)
+    planner = TailorPlanner(llm=object(), rng=random.Random(0))
+    plan = planner.plan(ITEMS, POOL, "jd", [],
+                        revision_notes="make the ML bullets more quantitative")
+    assert all(a["propensity"] == 1.0 for a in plan["actions"])
+    assert all(a["strategy_source"] == "default" for a in plan["actions"])
+
+
+def test_sampler_overrides_llm_strategy_and_keeps_it(monkeypatch):
+    _explore_on(monkeypatch, epsilon=1.0)   # always explore → override is visible
+    raw = [{"item_key": "exp:swe|harbor", "op": "revise", "strategy": "quantify",
+            "rationale": "metrics"}]
+    by_key = {
+        a["item_key"]: a
+        for a in TailorPlanner.validate_plan(
+            raw, ITEMS, POOL, DEFAULT_KNOBS, rng=random.Random(7), explore=True
+        )
+    }
+    action = by_key["exp:swe|harbor"]
+    assert action["strategy_source"] == "sampled"
+    assert action["llm_strategy"] == "quantify"      # LLM's pick is not lost
+    assert action["propensity"] == _expected_propensity(action, ITEMS[1])
+
+
+def test_llm_strategy_survives_when_not_exploring():
+    raw = [{"item_key": "exp:swe|harbor", "op": "revise", "strategy": "quantify"}]
+    by_key = {a["item_key"]: a
+              for a in TailorPlanner.validate_plan(raw, ITEMS, POOL)}
+    action = by_key["exp:swe|harbor"]
+    assert action["strategy"] == "quantify"
+    assert action["strategy_source"] == "llm"
+    assert action["propensity"] == 1.0
+
+
+def test_exploration_mode_forces_a_single_generation_attempt(monkeypatch):
+    """Exploration and N=1 move together: best-of-N would log the max over a
+    run-dependent number of draws instead of a sample of E[reward | plan]."""
+    from agents import tailor as tailor_module
+
+    assert tailor_module._max_attempts() == tailor_module.MAX_RETRIES
+    _explore_on(monkeypatch)
+    assert tailor_module._max_attempts() == 1
+
+
+def test_chat_approved_plan_logs_null_propensity(isolated_engine, monkeypatch):
+    """A human-chosen plan is off-policy data, marked with propensity null
+    rather than attributed to the policy at 1.0."""
+    import agents.formatter as fmt_module
+    import agents.tailor as tailor_module
+    from conftest import _seed_user_and_skill
+
+    monkeypatch.setattr(tailor_module, "engine", isolated_engine)
+    monkeypatch.setattr(tailor_module, "get_llm", lambda *a, **kw: object())
+    monkeypatch.setattr(
+        fmt_module.ResumeFormatterAgent, "fit_content_to_one_page",
+        lambda self, content, section_order=None: content,
+    )
+
+    user = _seed_user_and_skill(isolated_engine)
+    with Session(isolated_engine) as session:
+        job = JobDescription(title="MLE", company="Lab", status="analyzed",
+                             description="Python machine learning")
+        session.add(job)
+        session.add(Experience(user_id=user.user_id, title="ML Engineer",
+                               company="Nimbus", description="ml",
+                               bullets=["Built Python models"]))
+        session.commit()
+        job_id = job.job_id
+        result = UserJobResult(user_id=user.user_id, job_id=job_id)
+        session.add(result)
+        session.commit()
+        result_id = result.result_id
+
+    agent = tailor_module.ResumeTailorAgent()
+    generated = {"experiences": [{"title": "ML Engineer", "company": "Nimbus",
+                                  "bullets": ["Built Python models"]}],
+                 "projects": [], "skills_emphasized": []}
+
+    class FakeGraph:
+        def invoke(self, state):
+            return {**state, "tailored_content": generated, "evaluation": {},
+                    "best_content": generated, "best_evaluation": {},
+                    "best_score": 50.0, "attempt": 1, "done": True}
+
+    agent.graph = FakeGraph()
+    agent.tailor(user.user_id, job_id, result_id, plan_override={"actions": []})
+
+    with Session(isolated_engine) as session:
+        log = session.get(UserJobResult, result_id).tailoring_decisions
+        if isinstance(log, str):
+            log = json.loads(log)
+
+    entry = log[-1]
+    assert entry["planner"] == "chat_approved"
+    assert entry["actions"] and all(a["propensity"] is None for a in entry["actions"])
+    assert entry["exploration_mode"] is False
+    assert entry["n_attempts"] == 1
 
 
 # ── decision log ──────────────────────────────────────────────────────────────

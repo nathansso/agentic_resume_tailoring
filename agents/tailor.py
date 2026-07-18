@@ -30,7 +30,9 @@ from agents.project_scorer import MAX_PROJECTS, score_project, select_top_k
 from agents.skill_scorer import _env_float, _env_int, rank_and_select_skills
 from agents.skill_postprocessor import normalize_skill_name, should_reject_skill
 from agents.keyword_planner import score_keywords, assign_keywords, evaluate_placement
-from agents.tailor_planner import DEFAULT_KNOBS, TailorPlanner, decision_log_entry
+from agents.tailor_planner import (
+    DEFAULT_KNOBS, TailorPlanner, decision_log_entry, exploration_mode,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,25 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = _env_int("TAILOR_MAX_RETRIES", 2)
 GREAT_SKILL_COVERAGE = _env_float("TAILOR_GREAT_SKILL_COVERAGE", 90.0)
 GREAT_KW_COVERAGE = _env_float("TAILOR_GREAT_KW_COVERAGE", 0.80)
+
+
+def _max_attempts() -> int:
+    """Generation budget for this run.
+
+    Exploration mode (issue #112) forces exactly one attempt, because best-of-N
+    corrupts the logged reward in two ways that no post-hoc logging can undo:
+    the shipped score is a max over N draws rather than a sample of
+    E[reward | plan], and N itself is an outcome (a strong first draw exits at
+    N=1, a weak one spends the budget), which makes conditioning on the reward
+    condition on a collider. N=1 at the production temperature gives an
+    unbiased but noisy draw — variance costs samples, bias costs correctness.
+
+    This deliberately suspends issue #58's "never ship a worse output than one
+    we already produced" guarantee, which is why exploration is off by default
+    and must be time-boxed: restore best-of-N once the decision log carries
+    enough (context bucket, strategy) coverage for #51 Phase 2 induction.
+    """
+    return 1 if exploration_mode() else MAX_RETRIES
 
 # Per-experience bullet budgets: the most JD-relevant experience gets up to
 # MAX_EXP_BULLETS bullets, the least relevant as few as MIN_EXP_BULLETS, so
@@ -263,6 +284,9 @@ class ResumeTailorAgent:
             missing_skills=list(inputs["missing_skills"]),
             revision_notes=revision_notes.strip(),
             prior_content=inputs["prior_content"] or None,
+            # A previewed plan goes to a human for approval, which makes it
+            # off-policy whatever we sample — don't spend exploration on it.
+            allow_explore=False,
         )
 
     def tailor(
@@ -298,13 +322,19 @@ class ResumeTailorAgent:
         # then applied structurally to the generator inputs below.
         if plan_override:
             knobs = plan_override.get("knobs") or None
+            approved = TailorPlanner.validate_plan(
+                plan_override.get("actions") or [],
+                self._planner_items(exp_dicts, proj_dicts),
+                self._planner_pool(proj_pool),
+                knobs,
+            )
+            # A human chose this plan, so it is off-policy data: null propensity
+            # rather than 1.0, which would wrongly attribute it to the policy
+            # and bias any importance-weighted estimate built on the log (#112).
+            for action in approved:
+                action["propensity"] = None
             plan = {
-                "actions": TailorPlanner.validate_plan(
-                    plan_override.get("actions") or [],
-                    self._planner_items(exp_dicts, proj_dicts),
-                    self._planner_pool(proj_pool),
-                    knobs,
-                ),
+                "actions": approved,
                 "knobs": {**DEFAULT_KNOBS, **(knobs or {})},
                 "planner": "chat_approved",
             }
@@ -420,7 +450,10 @@ class ResumeTailorAgent:
                 # Copy before append: mutating the tracked list in place would
                 # not register as a change on the JSON column.
                 log = list(log) if isinstance(log, list) else []
-                log.append(decision_log_entry(plan, context_features, evaluation, revision_notes))
+                log.append(decision_log_entry(
+                    plan, context_features, evaluation, revision_notes,
+                    exploration_mode=exploration_mode(),
+                ))
                 result.tailoring_decisions = log
                 session.add(result)
                 session.commit()
@@ -658,7 +691,7 @@ class ResumeTailorAgent:
         # Below the bar we keep iterating and keep the best; we no longer halt at
         # a mediocre "good enough" floor (issue #58).
         great = skill_coverage_pct >= GREAT_SKILL_COVERAGE and kw_coverage >= GREAT_KW_COVERAGE
-        if great or state["attempt"] >= MAX_RETRIES:
+        if great or state["attempt"] >= _max_attempts():
             state["done"] = True
 
         return state

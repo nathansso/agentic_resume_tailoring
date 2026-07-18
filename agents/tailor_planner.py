@@ -31,12 +31,22 @@ executed plan is appended to UserJobResult.tailoring_decisions together with
 context features and the achieved reward (ATS composite delta) — those logged
 (context, action, propensity, reward) tuples are the training data for the
 strategy-knob bandit (issue #51 Phase 2).
+
+By default the policy is deterministic, so every logged propensity is 1.0 and
+the log has no action variance to learn from. Setting TAILOR_EXPLORATION_MODE
+switches on ε-greedy sampling over the `strategy` field (issue #112) and, in
+lockstep, suspends the best-of-N retry loop — see exploration_mode() for why
+the two cannot move independently.
 """
 import json
 import logging
+import os
+import random
 import re
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
+
+from agents.skill_scorer import _env_float
 
 logger = logging.getLogger(__name__)
 
@@ -53,14 +63,85 @@ DEFAULT_KNOBS: Dict = {
     "allow_delete": True,
 }
 
-# Propensity of the logging policy. With fixed knobs the policy is
-# deterministic, so every logged action has propensity 1.0; once a bandit
-# starts sampling knobs these become the sampling probabilities.
-_FIXED_PROPENSITY = 1.0
+# Propensity of a deterministic decision: the greedy (non-exploring) policy
+# picks its action with probability 1. Exploration replaces this with the real
+# sampling probability for the `strategy` field only — see _choose_strategy.
+_DETERMINISTIC_PROPENSITY = 1.0
+
+
+def exploration_mode() -> bool:
+    """Whether this process collects ε-greedy exploration data (issue #112).
+
+    Off by default. Turning it on does two things *together*, and they must
+    never move independently: revision strategies are sampled ε-greedily, and
+    the best-of-N retry loop is suspended (N=1, see agents.tailor). Exploration
+    without N=1 logs rewards confounded by the max-order statistic and by the
+    endogenous attempt count; N=1 without exploration is a pure regression of
+    issue #58's "never ship a worse output" guarantee for no learning gain.
+
+    Read from the environment per call rather than cached at import so tests
+    and a running server can flip it without a reload.
+    """
+    return os.environ.get("TAILOR_EXPLORATION_MODE", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+
+
+def explore_epsilon() -> float:
+    """Probability of sampling a strategy uniformly instead of taking the
+    greedy arm. At ε=0.2 with ~6 items roughly one item per run gets a
+    non-greedy strategy — the intended cost of exploration."""
+    return _env_float("TAILOR_EXPLORE_EPSILON", 0.2)
 
 
 def _norm_key(value) -> str:
     return str(value or "").strip().lower()
+
+
+def _greedy_strategy(item: Dict, knobs: Dict) -> str:
+    """The strategy today's deterministic policy would pick for this item.
+
+    Context-dependent: items carrying assigned JD keywords weave them, items
+    without tighten. Propensity must be computed against the arm that is
+    greedy *for that item*, not against a single global default.
+    """
+    return knobs["default_revise_strategy"] if item.get("suggested_keywords") else "tighten"
+
+
+def _strategy_propensity(strategy: str, greedy: str, epsilon: float) -> float:
+    """P(strategy) under ε-greedy over REVISION_STRATEGIES. Sums to 1 over the
+    strategy set: the greedy arm can be reached by exploiting or by exploring
+    onto itself, every other arm only by exploring."""
+    n = len(REVISION_STRATEGIES)
+    if strategy == greedy:
+        return 1.0 - epsilon + epsilon / n
+    return epsilon / n
+
+
+def _choose_strategy(
+    item: Dict,
+    knobs: Dict,
+    rng: Optional[random.Random] = None,
+    explore: bool = False,
+) -> Tuple[str, float]:
+    """Pick a revision strategy for one item and return (strategy, propensity).
+
+    Single source of truth for the strategy decision: both default_plan() and
+    validate_plan() route through here so the logged propensity can never drift
+    from the distribution that actually produced the action. Sampling is per
+    item and independent, so each action carries its own propensity — the right
+    granularity for per-edit reward attribution (issue #113).
+    """
+    greedy = _greedy_strategy(item, knobs)
+    if not explore:
+        return greedy, _DETERMINISTIC_PROPENSITY
+    epsilon = explore_epsilon()
+    rng = rng or random.Random()
+    if rng.random() < epsilon:
+        strategy = REVISION_STRATEGIES[rng.randrange(len(REVISION_STRATEGIES))]
+    else:
+        strategy = greedy
+    return strategy, _strategy_propensity(strategy, greedy, epsilon)
 
 
 class TailorPlanner:
@@ -72,10 +153,13 @@ class TailorPlanner:
          "suggested_keywords": [...], "relevance": <float, optional>}
     """
 
-    def __init__(self, llm=None):
+    def __init__(self, llm=None, rng: Optional[random.Random] = None):
         # Lazy LLM: constructed on first use so offline paths (tests, stub
         # runs) never touch provider config just to get the fallback plan.
         self._llm = llm
+        # Injected so exploration is reproducible under a seed; never call the
+        # module-level `random` functions, which no test can pin.
+        self._rng = rng or random.Random()
 
     # ── public API ────────────────────────────────────────────────────────
 
@@ -88,13 +172,25 @@ class TailorPlanner:
         revision_notes: str = "",
         prior_content: Optional[Dict] = None,
         knobs: Optional[Dict] = None,
+        allow_explore: bool = True,
     ) -> Dict:
         """Return {"actions": [...], "knobs": {...}, "planner": "llm"|"default"}.
 
         Never raises: any LLM/parse failure degrades to the deterministic
         default plan so tailoring always proceeds.
+
+        *allow_explore* lets a caller opt out of ε-greedy sampling even in
+        exploration mode; plan_preview() sets it False because a previewed plan
+        is shown to a human for approval, which takes it off-policy anyway.
         """
         knobs = {**DEFAULT_KNOBS, **(knobs or {})}
+        # Never explore against a user's explicit revision request: sampling
+        # `tighten` when someone asked for more numbers is user-hostile.
+        explore = (
+            allow_explore
+            and exploration_mode()
+            and not (revision_notes or "").strip()
+        )
         if not items:
             return {"actions": [], "knobs": knobs, "planner": "default"}
 
@@ -108,11 +204,13 @@ class TailorPlanner:
             logger.warning("TailorPlanner LLM plan failed, using default: %s", exc)
 
         if raw_actions is not None:
-            actions = self.validate_plan(raw_actions, items, pool, knobs)
+            actions = self.validate_plan(
+                raw_actions, items, pool, knobs, rng=self._rng, explore=explore,
+            )
             return {"actions": actions, "knobs": knobs, "planner": "llm"}
 
         return {
-            "actions": self.default_plan(items, knobs),
+            "actions": self.default_plan(items, knobs, rng=self._rng, explore=explore),
             "knobs": knobs,
             "planner": "default",
         }
@@ -120,25 +218,32 @@ class TailorPlanner:
     # ── deterministic fallback ────────────────────────────────────────────
 
     @staticmethod
-    def default_plan(items: List[Dict], knobs: Optional[Dict] = None) -> List[Dict]:
+    def default_plan(
+        items: List[Dict],
+        knobs: Optional[Dict] = None,
+        rng: Optional[random.Random] = None,
+        explore: bool = False,
+    ) -> List[Dict]:
         """One revise action per item: weave its assigned keywords when it has
         any, otherwise tighten. Never deletes or replaces — the fallback must
-        be safe to run blind."""
+        be safe to run blind. Under *explore* the strategy is sampled ε-greedily
+        around that rule instead (issue #112)."""
         knobs = {**DEFAULT_KNOBS, **(knobs or {})}
         actions = []
         for item in items:
             kws = list(item.get("suggested_keywords") or [])
-            strategy = knobs["default_revise_strategy"] if kws else "tighten"
+            strategy, propensity = _choose_strategy(item, knobs, rng, explore)
             actions.append({
                 "section": item.get("section"),
                 "item_key": item.get("key"),
                 "label": item.get("label"),
                 "op": "revise",
                 "strategy": strategy,
+                "strategy_source": "sampled" if explore else "default",
                 "keywords": kws,
                 "rationale": "default plan: revise with assigned keywords"
                              if kws else "default plan: tighten wording",
-                "propensity": _FIXED_PROPENSITY,
+                "propensity": propensity,
             })
         return actions
 
@@ -151,6 +256,8 @@ class TailorPlanner:
         items: List[Dict],
         pool: List[Dict],
         knobs: Optional[Dict] = None,
+        rng: Optional[random.Random] = None,
+        explore: bool = False,
     ) -> List[Dict]:
         """Coerce an untrusted action list into a plan execution can rely on:
 
@@ -161,6 +268,14 @@ class TailorPlanner:
         - deleting ALL items of a section is refused: the last delete in a
           section becomes keep, so a malformed plan can't empty the resume
         - every input item ends up with exactly one action (missing → default)
+
+        Under *explore* the sampler overrides the LLM's `strategy` for revise
+        actions (issue #112). That override is the whole point: logging a
+        propensity for a decision the LLM made would attribute a known density
+        to a distribution we cannot observe. The LLM stays the proposal
+        distribution for op/replacement_key/keywords, and its own strategy pick
+        is retained as `llm_strategy` — free off-policy data on the model's
+        implicit policy.
         """
         knobs = {**DEFAULT_KNOBS, **(knobs or {})}
         by_key = {_norm_key(i.get("key")): i for i in items}
@@ -188,7 +303,11 @@ class TailorPlanner:
                 "label": item.get("label"),
                 "op": op,
                 "rationale": str(raw.get("rationale") or "").strip()[:300],
-                "propensity": _FIXED_PROPENSITY,
+                # Ops stay with the planner — exploration is scoped to the
+                # `strategy` field, so a non-revise action is deterministic
+                # from the policy's point of view. The revise branch below
+                # overwrites this with the real sampling probability.
+                "propensity": _DETERMINISTIC_PROPENSITY,
             }
 
             if op == "replace":
@@ -199,13 +318,23 @@ class TailorPlanner:
                     action["replacement_key"] = repl
 
             if op == "revise":
-                strategy = _norm_key(raw.get("strategy"))
-                if strategy not in REVISION_STRATEGIES:
-                    strategy = (
-                        knobs["default_revise_strategy"]
-                        if item.get("suggested_keywords") else "tighten"
+                llm_strategy = _norm_key(raw.get("strategy"))
+                if llm_strategy not in REVISION_STRATEGIES:
+                    llm_strategy = None
+                if explore:
+                    strategy, action["propensity"] = _choose_strategy(
+                        item, knobs, rng, True
                     )
+                    action["strategy_source"] = "sampled"
+                elif llm_strategy:
+                    strategy = llm_strategy
+                    action["strategy_source"] = "llm"
+                else:
+                    strategy, action["propensity"] = _choose_strategy(item, knobs, rng)
+                    action["strategy_source"] = "default"
                 action["strategy"] = strategy
+                if llm_strategy:
+                    action["llm_strategy"] = llm_strategy
                 kws = raw.get("keywords")
                 action["keywords"] = [
                     str(k) for k in (kws if isinstance(kws, list) else [])
@@ -215,7 +344,7 @@ class TailorPlanner:
 
         # Fill items the plan didn't cover with the safe default action.
         missing = [i for i in items if _norm_key(i.get("key")) not in out]
-        for action in cls.default_plan(missing, knobs):
+        for action in cls.default_plan(missing, knobs, rng=rng, explore=explore):
             out[_norm_key(action["item_key"])] = action
 
         # Refuse to empty a section: flip the final delete back to keep.
@@ -341,11 +470,17 @@ def decision_log_entry(
     context_features: Dict,
     evaluation: Dict,
     revision_notes: str = "",
+    exploration_mode: bool = False,
 ) -> Dict:
     """One logged (context, actions, reward) tuple for a completed tailoring
     run, appended to UserJobResult.tailoring_decisions. The reward is the
     algorithmic ATS breakdown of the shipped attempt (issue #12), so entries
-    are directly comparable across runs."""
+    are directly comparable across runs.
+
+    *exploration_mode* and the derived *n_attempts* are recorded explicitly so
+    mixed-mode data stays separable: a reward logged under best-of-N is the max
+    over a run-dependent number of draws, not a sample of E[reward | plan], and
+    must never be pooled with N=1 exploration data (issue #112)."""
     breakdown = (evaluation or {}).get("ats_breakdown") or {}
     reward = {
         "composite": breakdown.get("composite"),
@@ -360,6 +495,8 @@ def decision_log_entry(
         "timestamp": datetime.utcnow().isoformat(),
         "revision_notes": (revision_notes or "").strip(),
         "planner": plan.get("planner"),
+        "exploration_mode": bool(exploration_mode),
+        "n_attempts": (context_features or {}).get("attempts"),
         "knobs": plan.get("knobs"),
         "actions": plan.get("actions"),
         "context": context_features,

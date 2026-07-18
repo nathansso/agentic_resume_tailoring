@@ -31,7 +31,8 @@ COPY --from=frontend /app/web/static/ ./web/static/
 
 ENV ART_DATA_DIR=/data
 
-VOLUME ["/data"]
+# /data is provided by the platform (fly.toml [[mounts]] / Railway volume).
+# Do not add a Docker VOLUME here — Railway rejects the instruction.
 
 EXPOSE 8000
 
