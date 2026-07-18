@@ -1233,6 +1233,8 @@ class ChatAgent:
             log = _json_obj(result.tailoring_decisions, [])
             log = list(log) if isinstance(log, list) else []
             log.append(decision_log_entry(
+                # Propensity 1.0 is literal here, not a stale placeholder:
+                # revert is genuinely deterministic and is never explored over.
                 {"actions": [{"section": "all", "item_key": "*", "op": "revert",
                               "propensity": 1.0}],
                  "knobs": {}, "planner": "revert"},

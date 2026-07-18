@@ -4,6 +4,25 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issue 112 — ε-greedy exploration over revision strategies
+**Status:** complete | **Tests:** 655 pass (9 new)
+
+The decision log shipped with #91/#51 recorded a propensity of 1.0 on every action, because the policy was deterministic: the same context always produced the same strategy. A log with no action variance cannot train a bandit. This adds ε-greedy sampling over the revision strategy, gated behind an off-by-default exploration mode that also suspends the best-of-N retry loop — the two must move together, since best-of-N corrupts the reward that exploration exists to measure.
+
+### What shipped
+- **ε-greedy strategy sampling (`agents/tailor_planner.py`).** `_choose_strategy(item, knobs, rng, explore)` is the single source of truth for the strategy decision and its propensity, replacing the `_FIXED_PROPENSITY` constant that was written in two places. Sampling is per item and independent, so each action carries its own propensity — the granularity #113's per-edit reward needs. The greedy arm is context-dependent (`default_revise_strategy` for items with assigned keywords, `tighten` for those without), so propensity is computed against the arm that is greedy *for that item*. ε defaults to 0.2 via `TAILOR_EXPLORE_EPSILON`; the RNG is injected into `TailorPlanner.__init__` so exploration is reproducible under a seed.
+- **Scope is the `strategy` field only, for `op == "revise"`.** Ops stay with the planner: exploring over `delete`/`replace` risks structurally damaging a resume for exploration's sake.
+- **Sampler authority over the LLM.** On an exploration run the sampled strategy overrides whatever `validate_plan` parsed from the model — without the override we would log a known density for a decision whose distribution we cannot observe. The LLM remains the proposal distribution for `op`, `replacement_key`, and `keywords`. Actions now record `strategy_source` (`sampled | llm | default`) and retain the model's own pick as `llm_strategy`, free off-policy data on its implicit policy.
+- **N=1 in exploration mode (`agents/tailor.py`).** `_max_attempts()` returns 1 when exploration is on. Best-of-N makes the logged reward a max over N draws rather than a sample of `E[reward | plan]`, and N is itself an outcome (a strong first draw exits early, a weak one spends the budget), so conditioning on the reward conditions on a collider — no post-hoc logging of per-attempt scores fixes that. Generator temperature stays at 0.3: N=1 there is unbiased but noisy, and variance costs samples where bias costs correctness.
+- **User-in-the-loop paths never explore.** A run carrying `revision_notes` takes the greedy arm at propensity 1.0 (sampling `tighten` when someone asked for more numbers is user-hostile); `plan_preview()` opts out via `allow_explore=False`; and a `chat_approved` plan logs propensity `null` rather than 1.0, marking it as off-policy rather than attributing a human's choice to the policy.
+- **Mode recorded per entry.** `decision_log_entry` writes `exploration_mode` and `n_attempts` on every tuple, so exploration data stays separable from historical best-of-N data instead of being inferred from the attempt count.
+
+### Deviations from spec
+- `TAILOR_EXPLORATION_MODE` and `TAILOR_EXPLORE_EPSILON` are read per call rather than cached at import, so the mode can be flipped without a reload; the rest of the module's knobs still resolve at import.
+- **This deliberately suspends #58's "never ship a worse output than one we already produced" guarantee while the mode is on.** That is a real product regression, which is why the mode is off by default and must be time-boxed: restore best-of-N once the log carries enough (context bucket, strategy) coverage for #51 Phase 2 induction. The coverage target is set once the first numbers land.
+
+---
+
 ## Issues 91 & 51 — Typed tailoring actions, chat re-tailoring action set, RL-ready decision log
 **Status:** complete (slices A+B of the arc; the #51 bandit itself is follow-up) | **Tests:** 621 pass (29 new)
 
