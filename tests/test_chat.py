@@ -281,6 +281,32 @@ def test_chat_tailor_fast_path(isolated_engine, monkeypatch):
     assert "Senior Engineer at Acme Corp" in response
 
 
+def test_run_tailor_writes_nothing_to_cwd(isolated_engine, monkeypatch, tmp_path):
+    """run_tailor is reachable from web chat, where the CWD is shared by every
+    user of the instance — it must not write artifacts there (issue #130)."""
+    import graph.pipeline as pipeline_module
+
+    class FakePipeline:
+        def invoke(self, _state):
+            return {
+                "ats_score": 88.0,
+                "status": "complete",
+                "matched_skills": {"Python": {"match_type": "exact"}},
+                "missing_skills": ["Rust"],
+                "tailored_content": {"experiences": [{"title": "Engineer"}]},
+                "formatted_resume": "\\documentclass{article}",
+            }
+
+    monkeypatch.setattr(pipeline_module, "build_pipeline", lambda: FakePipeline())
+    monkeypatch.chdir(tmp_path)
+
+    before = set(tmp_path.iterdir())
+    response = chat_module.run_tailor("Senior Engineer at Acme Corp")
+
+    assert set(tmp_path.iterdir()) == before, "run_tailor wrote to the working directory"
+    assert "88.0" in response and "Saved" not in response
+
+
 # ── PRD 06.1 — router prompt hardening and repo-scoped ingestion ───────────────
 
 def test_build_router_prompt_contains_state(isolated_engine):
@@ -1349,3 +1375,37 @@ def test_chat_no_active_profile(isolated_engine, monkeypatch):
     response = agent.chat("what are my skills?")
     assert isinstance(response, str), "Should return a string even with no profile"
     assert response  # non-empty
+
+
+# ── Help text accuracy ─────────────────────────────────────────────────────────
+
+def test_help_text_advertises_only_real_slash_commands():
+    """Every slash shortcut in the help text must be handled by the web chat panel.
+
+    Guards the root CLAUDE.md rule "do not teach prompts a capability that code
+    does not expose". The help text previously listed /viz and /copy, which were
+    TUI-era affordances that no longer exist anywhere in the codebase.
+    """
+    import re
+    from pathlib import Path
+
+    help_text = chat_module.get_help_text()
+    # Only standalone tokens — not the slashes inside "owner/repo" or "skills/projects".
+    advertised = set(re.findall(r"(?:^|\s)(/[a-z]+)", help_text, re.MULTILINE))
+    # /save is handled by the chat agent itself, not the frontend router.
+    advertised.discard("/save")
+
+    panel = Path(__file__).resolve().parents[1] / "web" / "frontend" / "src" / "components" / "ChatPanel.tsx"
+    panel_src = panel.read_text(encoding="utf-8")
+
+    unhandled = sorted(cmd for cmd in advertised if f'"{cmd}"' not in panel_src)
+    assert not unhandled, (
+        f"Help text advertises slash commands the frontend does not handle: {unhandled}"
+    )
+
+
+def test_help_text_has_no_tui_only_affordances():
+    """The web app is the only user-facing surface; the TUI was removed."""
+    help_text = chat_module.get_help_text().lower()
+    for stale in ("tui", "ctrl+q", "ctrl+c", "~/.art/exports"):
+        assert stale not in help_text, f"Help text still references TUI-era affordance: {stale!r}"

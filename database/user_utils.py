@@ -149,8 +149,41 @@ def create_profile(
         return session.get(User, uid)
 
 
-def get_or_create_default_user() -> User:
-    """Backward-compat wrapper used by the pipeline and CLI. Prefers active profile."""
+class NoActiveUserError(RuntimeError):
+    """Raised when code that acts on user data has no acting user bound.
+
+    Failing here is deliberate. The previous behavior — resolving to an
+    arbitrary ``select(User).limit(1)`` row — silently attributed one user's
+    data to another on a shared server, which is how #73 happened.
+    """
+
+
+def require_active_user() -> User:
+    """Return the acting User, or raise if none is bound (issue #131).
+
+    Use this from library code (parsers, pipeline nodes, agents). Web requests
+    bind the acting user via ``set_request_user``; the CLI binds it via
+    ``get_or_create_cli_user``. If neither ran, that is a bug in the caller and
+    must surface as an error rather than a wrong user.
+    """
+    user = get_active_profile()
+    if user is None:
+        raise NoActiveUserError(
+            "No acting user is bound. Web callers must call set_request_user() "
+            "before touching user data; CLI callers must bind via "
+            "get_or_create_cli_user()."
+        )
+    return user
+
+
+def get_or_create_cli_user() -> User:
+    """Resolve the CLI's active profile, creating a default one on first run.
+
+    CLI-only. This is the single remaining place allowed to adopt an existing
+    row or write the global ``ACTIVE_PROFILE_FILE`` pointer, because the CLI is
+    genuinely single-user: one process, one shell, one operator. Never call it
+    from server code — see ``require_active_user``.
+    """
     user = get_active_profile()
     if user:
         return user

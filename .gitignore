@@ -43,6 +43,7 @@ web/static/
 
 # Output files
 tailored_output.json
+tailored_resume.tex
 tailored_resume.md
 knowledge_graph.png
 

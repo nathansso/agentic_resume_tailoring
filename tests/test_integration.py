@@ -10,7 +10,14 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 @pytest.mark.integration
 @pytest.mark.slow
-def test_full_cli_ingestion_and_tailor_pipeline():
+def test_full_cli_ingestion_and_tailor_writes_artifacts_to_cwd():
+    """CLI-specific: `cli.py tailor` writes its artifacts to the process CWD.
+
+    This asserts CLI behavior only — the commands below run with ``cwd=ROOT``,
+    so the artifacts land in the repo root. The chat/web tailoring path
+    deliberately writes nothing (issue #130); see
+    ``test_run_tailor_writes_nothing_to_cwd`` in tests/test_chat.py.
+    """
     py = sys.executable
 
     resume = str(FIXTURES / "sample_resume.md")
@@ -31,7 +38,7 @@ def test_full_cli_ingestion_and_tailor_pipeline():
         )
 
     out_json = ROOT / "tailored_output.json"
-    out_md = ROOT / "tailored_resume.md"
+    out_tex = ROOT / "tailored_resume.tex"
 
     assert out_json.exists() and out_json.stat().st_size > 0
-    assert out_md.exists() and out_md.stat().st_size > 0
+    assert out_tex.exists() and out_tex.stat().st_size > 0
