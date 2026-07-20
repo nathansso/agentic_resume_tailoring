@@ -34,6 +34,30 @@ def _check_config() -> None:
         sys.exit(1)
 
 
+# Commands that read or write user-owned data and therefore need an acting user
+# bound before they run. Library code fails closed when nothing is bound
+# (issue #131), so the CLI opts in explicitly here rather than relying on a
+# fallback buried in user_utils.
+_USER_SCOPED_COMMANDS = {
+    "ingest-resume",
+    "ingest-github",
+    "ingest-linkedin",
+    "ingest-linkedin-pdf",
+    "replay-linkedin",
+    "tailor",
+    "pin-skill",
+    "status",
+}
+
+
+def _bind_cli_user() -> None:
+    """Resolve (creating on first run) the CLI profile and bind it for this process."""
+    from database.db import init_db
+    from database.user_utils import get_or_create_cli_user, set_request_user
+    init_db()
+    set_request_user(get_or_create_cli_user().user_id)
+
+
 def cmd_ingest_resume(args):
     """Ingest and parse a resume file into the database."""
     _check_config()
@@ -247,12 +271,12 @@ def cmd_tailor(args):
             json.dump(result["tailored_content"], f, indent=2)
         print(f"\nTailored content saved to: {output_path}")
 
-        # Save formatted markdown resume
+        # Save formatted LaTeX resume source
         if result.get("formatted_resume"):
-            md_path = Path("tailored_resume.md")
-            with open(md_path, "w", encoding="utf-8") as f:
+            tex_path = Path("tailored_resume.tex")
+            with open(tex_path, "w", encoding="utf-8") as f:
                 f.write(result["formatted_resume"])
-            print(f"Formatted resume saved to: {md_path}")
+            print(f"Formatted resume saved to: {tex_path}")
 
         # Also print a summary
         tc = result["tailored_content"]
@@ -551,6 +575,9 @@ def main():
                         help="Override artifact output directory")
 
     args = parser.parse_args()
+
+    if args.command in _USER_SCOPED_COMMANDS:
+        _bind_cli_user()
 
     if args.command == "ingest-resume":
         cmd_ingest_resume(args)

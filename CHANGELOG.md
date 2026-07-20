@@ -4,6 +4,26 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issues 130 & 131 — User-scoped tailoring artifacts and fail-closed user resolution
+**Status:** complete | **Tests:** 665 pass (8 new)
+
+Two single-user assumptions that survived into the multi-user web deployment. #130 is the instance — tailoring wrote user content to a process-global path; #131 is the class — the user-resolution helper underneath it silently substituted an arbitrary user when nothing was bound. Same root shape as #73, which fixed its call sites without removing the fail-open default they sat on.
+
+### What shipped
+- **Chat/web tailoring writes nothing to disk (`agents/chat.py`).** `run_tailor` wrote `tailored_output.json` and `tailored_resume.tex` to the CWD — one location shared by every user of the instance, where concurrent runs overwrite each other. A repo-wide search found no consumer of either file on the web path (tailored content is already persisted to `UserJobResult`), so the write was removed rather than relocated under a per-user directory. A file nobody reads is not worth making user-scoped.
+- **CLI artifact behavior unchanged.** `cli.py`'s `tailor` command has its own write and never called `run_tailor`, so the two paths were already independent. `python cli.py tailor <job>` produces its artifacts exactly as before.
+- **`require_active_user()` fails closed (`database/user_utils.py`).** Raises `NoActiveUserError` instead of resolving to `select(User).limit(1)`. The old fallback both returned someone else's user *and* wrote that choice into the global `ACTIVE_PROFILE_FILE` pointer, which `get_active_profile()` falls back to whenever the request ContextVar is unbound — so one bad resolution poisoned every later lookup in the process.
+- **Library code opts out of the fallback.** `agents/parser.py` (`ResumeParserAgent.__init__`) and `graph/pipeline.py` (`ingest_resume_node`) now call `require_active_user()`. The parser writes rows under `self.user`, and the pipeline node sets `state["user_id"]` for every downstream node, so a wrong resolution in either misattributes an entire run.
+- **The CLI opts in explicitly (`cli.py`).** `get_or_create_default_user()` is renamed `get_or_create_cli_user()` and is now the only place allowed to adopt an existing row or write the pointer file — justified because the CLI is genuinely single-user. `main()` binds it via `set_request_user()` for the eight commands in `_USER_SCOPED_COMMANDS`.
+
+### Deviations from spec
+- #130's acceptance criteria asked for a test that two runs under different `user_id`s do not overwrite each other's artifacts. Once the write is deleted that test cannot exist, so it was replaced with `test_run_tailor_writes_nothing_to_cwd` — the stronger invariant.
+- The binding in `cli.py` is per-command rather than unconditional in `main()`. Binding on every invocation would make `--help` and `supabase-setup` create a `Default User` row on an empty DB, which they do not do today.
+- **`services.py::compute_app_state()` still uses `select(User).limit(1)`** and was left alone: it has zero callers in the repo. It is the same fail-open shape and should be deleted, but that is out of scope here.
+- #131 is filed and shipped as **latent hardening, not an active leak.** Every reachable web path was traced and found correctly bound (`jobs_router` passes `user.user_id` explicitly and never enters the pipeline; `chat_router`, `ingest_router`, and the LinkedIn background task all bind). The defect was that nothing *enforced* it.
+
+---
+
 ## Issue 112 — ε-greedy exploration over revision strategies
 **Status:** complete | **Tests:** 655 pass (9 new)
 

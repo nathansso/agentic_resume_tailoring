@@ -240,3 +240,86 @@ def test_get_history_unknown_job_404(isolated_engine, history_client):
     client = history_client(alice)
     assert client.get(f"/api/chat/{uuid4()}/history").status_code == 404
     assert client.get("/api/chat/not-a-uuid/history").status_code == 404
+
+
+# ── 4. Fail-closed user resolution (issue #131) ───────────────────────────────
+#
+# #73 fixed the call sites by binding a request-scoped ContextVar. The fallback
+# underneath them stayed fail-open: it adopted an arbitrary select(User).limit(1)
+# row and wrote that into the global pointer file, so a single unbound call site
+# would misattribute data and poison every later lookup. These pin it shut.
+
+
+def test_require_active_user_raises_instead_of_picking_a_user(isolated_engine):
+    """With users in the DB but nothing bound, resolution must fail, not guess."""
+    _seed_user(isolated_engine, "Alice")
+    _seed_user(isolated_engine, "Bob")
+    user_utils_module.set_request_user(None)
+
+    with pytest.raises(user_utils_module.NoActiveUserError):
+        user_utils_module.require_active_user()
+
+
+def test_require_active_user_never_writes_the_global_pointer(isolated_engine):
+    """A failed resolution must not leave a pointer that poisons later lookups."""
+    _seed_user(isolated_engine, "Alice")
+    user_utils_module.set_request_user(None)
+    pointer = isolated_engine._test_profile_file
+
+    with pytest.raises(user_utils_module.NoActiveUserError):
+        user_utils_module.require_active_user()
+
+    assert not pointer.exists(), "fail-closed path wrote the global profile pointer"
+
+
+def test_require_active_user_returns_the_bound_user(isolated_engine):
+    alice = _seed_user(isolated_engine, "Alice")
+    _seed_user(isolated_engine, "Bob")
+    try:
+        user_utils_module.set_request_user(alice.user_id)
+        assert user_utils_module.require_active_user().user_id == alice.user_id
+    finally:
+        user_utils_module.set_request_user(None)
+
+
+def test_resume_parser_agent_refuses_to_run_unbound(isolated_engine, monkeypatch):
+    """ResumeParserAgent writes rows under self.user — unbound must raise, not
+    silently attribute Alice's resume to Bob."""
+    import agents.parser as parser_module
+    _seed_user(isolated_engine, "Alice")
+    _seed_user(isolated_engine, "Bob")
+    monkeypatch.setattr(parser_module, "get_llm", lambda **_kw: object())
+    user_utils_module.set_request_user(None)
+
+    with pytest.raises(user_utils_module.NoActiveUserError):
+        parser_module.ResumeParserAgent()
+
+
+def test_pipeline_ingest_node_refuses_to_run_unbound(isolated_engine):
+    """ingest_resume_node sets state['user_id'] for every downstream node."""
+    import graph.pipeline as pipeline_module
+    _seed_user(isolated_engine, "Alice")
+    user_utils_module.set_request_user(None)
+
+    with pytest.raises(user_utils_module.NoActiveUserError):
+        pipeline_module.ingest_resume_node({"resume_path": ""})
+
+
+def test_cli_user_helper_still_creates_and_binds_on_first_run(isolated_engine):
+    """CLI behavior is unchanged: an empty DB gets a default profile and pointer."""
+    user_utils_module.set_request_user(None)
+    pointer = isolated_engine._test_profile_file
+    assert not pointer.exists()
+
+    user = user_utils_module.get_or_create_cli_user()
+
+    assert user is not None
+    assert pointer.exists() and pointer.read_text().strip() == str(user.user_id)
+
+
+def test_cli_user_helper_adopts_the_existing_profile(isolated_engine):
+    """Second CLI run resolves the same user rather than creating another."""
+    user_utils_module.set_request_user(None)
+    first = user_utils_module.get_or_create_cli_user()
+    second = user_utils_module.get_or_create_cli_user()
+    assert first.user_id == second.user_id

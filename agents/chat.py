@@ -1,5 +1,5 @@
 """
-Chat Agent — TUI assistant with tool-calling for ART operations.
+Chat Agent — conversational assistant with tool-calling for ART operations.
 Uses a role-based LLM with a simple TOOL_CALL protocol to ingest data,
 query the knowledge graph, and run tailoring pipelines conversationally.
 """
@@ -221,15 +221,14 @@ def get_help_text() -> str:
         "Job workflow (select a job from the sidebar first):\n"
         "  analyze                         — extract skills from the active job description\n"
         "  tailor                          — tailor your resume to the active job\n"
-        "  export                          — save tailored resume to ~/.art/exports/\n"
+        "  export                          — save the tailored resume to your exports\n"
         "  tailor <job description or file> — tailor your resume to a job\n\n"
         "Profile commands:\n"
         "  add missing skill <name>        — add a skill directly to your profile\n"
         "  add <skill> to my profile       — same as above\n"
         "  /save                           — detect and save new skills/projects/experience from recent chat\n\n"
-        "TUI shortcuts (type in chat):\n"
-        "  /ingest  /data  /tailor  /viz  /profile  /copy\n\n"
-        "Note: use ctrl+q to quit. ctrl+c is disabled to allow copy/paste."
+        "Navigation shortcuts (type in chat):\n"
+        "  /ingest  /data  /profile"
     )
 
 
@@ -310,8 +309,14 @@ def run_ingest_github_repo(repo_ref: str) -> str:
 
 
 def run_tailor(job_input: str) -> str:
-    """Run the full tailoring pipeline for a job description text or file path."""
-    import json
+    """Run the full tailoring pipeline for a job description text or file path.
+
+    Returns a summary only. This path deliberately writes nothing to disk: it is
+    reachable from the web chat, where the working directory is shared by every
+    user of the instance (issue #130). Tailored content is persisted to
+    ``UserJobResult`` by the pipeline; the CLI's own ``tailor`` command still
+    writes ``tailored_output.json`` / ``tailored_resume.tex`` to the CWD.
+    """
     from pathlib import Path
     from graph.pipeline import build_pipeline
     job_input = job_input.strip()
@@ -338,12 +343,6 @@ def run_tailor(job_input: str) -> str:
         lines.append(f"Matched skills ({len(matched)}): {', '.join(list(matched)[:10])}")
     if missing:
         lines.append(f"Missing skills ({len(missing)}): {', '.join(missing[:10])}")
-    tc = result.get("tailored_content", {})
-    if tc and "error" not in tc:
-        Path("tailored_output.json").write_text(json.dumps(tc, indent=2), encoding="utf-8")
-        if result.get("formatted_resume"):
-            Path("tailored_resume.md").write_text(result["formatted_resume"], encoding="utf-8")
-        lines.append("Saved: tailored_output.json, tailored_resume.md")
     return "\n".join(lines)
 
 
@@ -548,7 +547,7 @@ revert_tailoring()                 — restore the previous tailored resume (one
 
 class ChatAgent:
     """
-    Conversational agent for the TUI. Routes user messages to tools
+    Conversational agent for the web chat panel. Routes user messages to tools
     or answers questions about the user's profile/skills/jobs.
     """
 

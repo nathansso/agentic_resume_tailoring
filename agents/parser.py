@@ -10,7 +10,7 @@ from langchain_core.output_parsers import JsonOutputParser
 from llm import get_llm
 from database.db import engine
 from database.models import User, Skill, UserSkill, Education, Experience, Project, Achievement, DeletedEntry
-from database.user_utils import get_or_create_default_user
+from database.user_utils import require_active_user
 from agents.skill_postprocessor import postprocess_skills, normalize_skill_name
 from institution import canonicalize_institution
 
@@ -38,7 +38,9 @@ def _clean_date(value):
 class ResumeParserAgent:
     def __init__(self):
         self.llm = get_llm(role="extract", temperature=0.0)
-        self.user = get_or_create_default_user()
+        # Fails closed: parsed resume data is written under this user, so an
+        # unbound caller must error rather than pick someone else (issue #131).
+        self.user = require_active_user()
 
     def parse_and_save(self, ingestion_data: Dict[str, Any]):
         """
