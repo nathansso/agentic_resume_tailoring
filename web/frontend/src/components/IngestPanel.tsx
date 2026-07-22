@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, type CSSProperties, type ChangeEvent } from "react";
-import { colors, font } from "../theme";
+import { useState, useEffect, useRef, type ChangeEvent } from "react";
+import { cn } from "../lib/utils";
 import {
   ingestResume, ingestGithub, ingestGithubRepo,
   ingestLinkedin, ingestLinkedinPdf,
@@ -15,6 +15,13 @@ const TAB_LABELS: Record<IngestTab, string> = {
   github: "GitHub",
   linkedin: "LinkedIn",
 };
+
+const btnPrimary =
+  "self-start rounded-md bg-primary px-4 py-2 font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+const btnGhost =
+  "self-start rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50";
+const textInput =
+  "rounded-md border border-input bg-background px-3 py-2 outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary";
 
 interface GithubStatus {
   connected: boolean;
@@ -102,53 +109,57 @@ export function IngestPanel({ initialTab }: Props) {
 
   function renderGithubTab() {
     if (!githubStatus) {
-      return <p style={s.hint}>Checking GitHub connection…</p>;
+      return <p className="text-sm text-muted-foreground">Checking GitHub connection…</p>;
     }
 
     return (
-      <div style={s.section}>
+      <div className="flex flex-col gap-3">
         {githubStatus.oauthConfigured ? (
           githubStatus.connected ? (
             <>
-              <p style={s.hint}>
+              <p className="text-sm text-muted-foreground">
                 Connected as{" "}
-                <span style={{ color: colors.accent }}>
+                <span className="text-success">
                   {githubStatus.username ? `@${githubStatus.username}` : "your GitHub account"}
                 </span>
                 . Import your repositories to extract skills and projects.
               </p>
               <button
-                style={{ ...s.ingestBtn, opacity: loading ? 0.5 : 1 }}
+                className={btnPrimary}
                 onClick={handleIngestConnectedGithub}
                 disabled={loading}
               >
                 Import My Repositories
               </button>
-              <p style={s.hint}>Manage the connection from the Profile menu (top right).</p>
+              <p className="text-sm text-muted-foreground">
+                Manage the connection from the Profile menu (top right).
+              </p>
             </>
           ) : (
             <>
-              <p style={s.hint}>
+              <p className="text-sm text-muted-foreground">
                 Connect your GitHub account to import your repositories — including private
                 ones — and extract skills and projects.
               </p>
-              <a href="/api/auth/github" style={s.connectBtn}>Connect GitHub</a>
+              <a href="/api/auth/github" className={cn(btnPrimary, "inline-block no-underline")}>
+                Connect GitHub
+              </a>
             </>
           )
         ) : (
           <>
-            <p style={s.hint}>
+            <p className="text-sm text-muted-foreground">
               Enter a public GitHub username to import that account's repositories.
             </p>
             <input
-              style={s.textInput}
+              className={textInput}
               placeholder="e.g. octocat"
               value={usernameInput}
               onChange={e => setUsernameInput(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handleIngestGithubUsername()}
             />
             <button
-              style={{ ...s.ingestBtn, opacity: usernameInput.trim() && !loading ? 1 : 0.5 }}
+              className={btnPrimary}
               onClick={handleIngestGithubUsername}
               disabled={!usernameInput.trim() || loading}
             >
@@ -157,17 +168,17 @@ export function IngestPanel({ initialTab }: Props) {
           </>
         )}
 
-        <div style={s.divider} />
-        <p style={s.hint}>Or import a single public repository:</p>
+        <div className="my-2 border-t border-border" />
+        <p className="text-sm text-muted-foreground">Or import a single public repository:</p>
         <input
-          style={s.textInput}
+          className={textInput}
           placeholder="owner/repo, e.g. openai/evals"
           value={repoInput}
           onChange={e => setRepoInput(e.target.value)}
           onKeyDown={e => e.key === "Enter" && handleIngestGithubRepo()}
         />
         <button
-          style={{ ...s.secondaryBtn, opacity: repoInput.trim() && !loading ? 1 : 0.5 }}
+          className={btnGhost}
           onClick={handleIngestGithubRepo}
           disabled={!repoInput.trim() || loading}
         >
@@ -178,14 +189,19 @@ export function IngestPanel({ initialTab }: Props) {
   }
 
   return (
-    <div style={s.panel}>
-      <h2 style={s.title}>Ingest</h2>
+    <div className="max-w-[64ch] p-6">
+      <h2 className="mb-5 text-xl font-bold tracking-tight">Ingest</h2>
 
-      <div style={s.tabStrip}>
+      <div className="mb-5 flex gap-1 border-b border-border">
         {(["resume", "github", "linkedin"] as IngestTab[]).map(t => (
           <button
             key={t}
-            style={{ ...s.tabBtn, ...(tab === t ? s.tabBtnActive : {}) }}
+            className={cn(
+              "-mb-px border-b-2 px-3 py-2 text-sm transition-colors",
+              tab === t
+                ? "border-accent text-accent"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
             onClick={() => { setTab(t); reset(); }}
           >
             {TAB_LABELS[t]}
@@ -194,26 +210,26 @@ export function IngestPanel({ initialTab }: Props) {
       </div>
 
       {tab === "resume" && (
-        <div style={s.section}>
-          <p style={s.hint}>Upload a resume file (PDF, DOCX, or Markdown).</p>
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">
+            Upload a resume file (PDF, DOCX, or Markdown).
+          </p>
           <input
             ref={fileInputRef}
             type="file"
             accept=".pdf,.docx,.md"
-            style={{ display: "none" }}
+            className="hidden"
             onChange={(e: ChangeEvent<HTMLInputElement>) => setFile(e.target.files?.[0] ?? null)}
           />
-          <div style={s.fileRow}>
-            <button style={s.chooseBtn} onClick={() => fileInputRef.current?.click()}>
+          <div className="flex items-center gap-3">
+            <button className={btnGhost} onClick={() => fileInputRef.current?.click()}>
               Choose file
             </button>
-            <span style={s.fileName}>{file ? file.name : "No file selected"}</span>
+            <span className="text-sm text-muted-foreground">
+              {file ? file.name : "No file selected"}
+            </span>
           </div>
-          <button
-            style={{ ...s.ingestBtn, opacity: file && !loading ? 1 : 0.5 }}
-            onClick={handleIngestResume}
-            disabled={!file || loading}
-          >
+          <button className={btnPrimary} onClick={handleIngestResume} disabled={!file || loading}>
             Ingest Resume
           </button>
         </div>
@@ -222,17 +238,17 @@ export function IngestPanel({ initialTab }: Props) {
       {tab === "github" && renderGithubTab()}
 
       {tab === "linkedin" && (
-        <div style={s.section}>
-          <div style={s.modeRow}>
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1.5">
             {(["url", "pdf"] as LinkedinMode[]).map(m => (
-              <label key={m} style={s.modeLabel}>
+              <label key={m} className="flex cursor-pointer items-center gap-2 text-sm">
                 <input
                   type="radio"
                   name="linkedin-mode"
                   value={m}
                   checked={linkedinMode === m}
                   onChange={() => { setLinkedinMode(m); reset(); }}
-                  style={{ accentColor: colors.accent }}
+                  className="accent-primary"
                 />
                 {m === "url" ? "Profile URL (auto-import)" : "Upload PDF export (fallback)"}
               </label>
@@ -241,12 +257,12 @@ export function IngestPanel({ initialTab }: Props) {
 
           {linkedinMode === "url" ? (
             <>
-              <p style={s.hint}>
+              <p className="text-sm text-muted-foreground">
                 Enter your LinkedIn profile URL or username. It also imports
                 automatically when you save your profile.
               </p>
               <input
-                style={s.textInput}
+                className={textInput}
                 placeholder="e.g. https://www.linkedin.com/in/username"
                 value={linkedinInput}
                 onChange={e => setLinkedinInput(e.target.value)}
@@ -255,28 +271,29 @@ export function IngestPanel({ initialTab }: Props) {
             </>
           ) : (
             <>
-              <p style={s.hint}>Upload a LinkedIn PDF export (Profile → More → Save to PDF).</p>
+              <p className="text-sm text-muted-foreground">
+                Upload a LinkedIn PDF export (Profile → More → Save to PDF).
+              </p>
               <input
                 ref={linkedinPdfRef}
                 type="file"
                 accept=".pdf"
-                style={{ display: "none" }}
+                className="hidden"
                 onChange={(e: ChangeEvent<HTMLInputElement>) => setLinkedinPdf(e.target.files?.[0] ?? null)}
               />
-              <div style={s.fileRow}>
-                <button style={s.chooseBtn} onClick={() => linkedinPdfRef.current?.click()}>
+              <div className="flex items-center gap-3">
+                <button className={btnGhost} onClick={() => linkedinPdfRef.current?.click()}>
                   Choose file
                 </button>
-                <span style={s.fileName}>{linkedinPdf ? linkedinPdf.name : "No file selected"}</span>
+                <span className="text-sm text-muted-foreground">
+                  {linkedinPdf ? linkedinPdf.name : "No file selected"}
+                </span>
               </div>
             </>
           )}
 
           <button
-            style={{
-              ...s.ingestBtn,
-              opacity: (linkedinMode === "url" ? linkedinInput.trim() : linkedinPdf) && !loading ? 1 : 0.5,
-            }}
+            className={btnPrimary}
             onClick={handleIngestLinkedin}
             disabled={(linkedinMode === "url" ? !linkedinInput.trim() : !linkedinPdf) || loading}
           >
@@ -286,14 +303,19 @@ export function IngestPanel({ initialTab }: Props) {
       )}
 
       {loading && (
-        <div style={s.progressWrap}>
+        <div className="mt-4">
           <ProgressBar label={loadingLabel || "Working…"} />
         </div>
       )}
 
       {(result || error) && !loading && (
-        <div style={s.resultBox}>
-          <pre style={{ ...s.resultText, color: error ? colors.error : colors.text }}>
+        <div className="mt-4 rounded-lg border border-border bg-card p-3">
+          <pre
+            className={cn(
+              "m-0 whitespace-pre-wrap break-words font-sans text-sm leading-relaxed",
+              error ? "text-destructive" : "text-foreground"
+            )}
+          >
             {error ?? result}
           </pre>
         </div>
@@ -301,57 +323,3 @@ export function IngestPanel({ initialTab }: Props) {
     </div>
   );
 }
-
-const s: Record<string, CSSProperties> = {
-  panel: { padding: "1.5rem", maxWidth: "64ch" },
-  title: { margin: "0 0 1.25rem", color: colors.accent, fontSize: font.size.xl, fontWeight: 700 },
-  tabStrip: { display: "flex", gap: "0.25rem", borderBottom: `1px solid ${colors.primary}`, marginBottom: "1.25rem" },
-  tabBtn: {
-    background: "transparent", border: "none", borderBottom: "2px solid transparent",
-    color: colors.textMuted, fontSize: font.size.sm, padding: "0.375rem 0.75rem",
-    cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
-  },
-  tabBtnActive: { color: colors.accent, borderBottomColor: colors.accent },
-  section: { display: "flex", flexDirection: "column", gap: "0.75rem" },
-  hint: { margin: 0, color: colors.textMuted, fontSize: font.size.sm },
-  fileRow: { display: "flex", alignItems: "center", gap: "0.75rem" },
-  chooseBtn: {
-    background: "transparent", border: `1px solid ${colors.primary}`,
-    color: colors.text, fontSize: font.size.sm, padding: "0.375rem 0.75rem",
-    cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
-  },
-  fileName: { color: colors.textMuted, fontSize: font.size.sm },
-  ingestBtn: {
-    background: colors.accent, border: "none", color: colors.background,
-    fontWeight: 700, fontSize: font.size.base, padding: "0.5rem 1rem",
-    cursor: "pointer", fontFamily: "inherit", borderRadius: 0, alignSelf: "flex-start",
-  },
-  secondaryBtn: {
-    background: "transparent", border: `1px solid ${colors.primary}`,
-    color: colors.text, fontSize: font.size.sm, padding: "0.375rem 0.75rem",
-    cursor: "pointer", fontFamily: "inherit", borderRadius: 0, alignSelf: "flex-start",
-  },
-  connectBtn: {
-    background: colors.accent, border: "none", color: colors.background,
-    fontWeight: 700, fontSize: font.size.base, padding: "0.5rem 1rem",
-    cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
-    textDecoration: "none", display: "inline-block", alignSelf: "flex-start",
-  },
-  divider: { borderTop: `1px solid ${colors.primary}`, margin: "0.5rem 0" },
-  modeRow: { display: "flex", flexDirection: "column", gap: "0.375rem" },
-  modeLabel: { display: "flex", alignItems: "center", gap: "0.5rem", color: colors.text, fontSize: font.size.sm, cursor: "pointer" },
-  textInput: {
-    background: colors.background, border: `1px solid ${colors.primary}`,
-    color: colors.text, fontSize: font.size.base, padding: "0.375rem 0.75rem",
-    fontFamily: "inherit", outline: "none", borderRadius: 0,
-  },
-  progressWrap: { marginTop: "1rem" },
-  resultBox: {
-    marginTop: "1rem", background: colors.surface,
-    border: `1px solid ${colors.primary}`, padding: "0.75rem",
-  },
-  resultText: {
-    margin: 0, fontFamily: "inherit", fontSize: font.size.sm,
-    whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.6,
-  },
-};

@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef, type CSSProperties, type KeyboardEvent } from "react";
+import { useState, useEffect, useRef, type KeyboardEvent } from "react";
 import type { ChatMsg } from "../types";
-import { colors, font } from "../theme";
+import { cn } from "../lib/utils";
 import { loadHistory, sendMessage } from "../api/chat";
 import { chatHPadding, messageGap } from "../lib/paneResize";
 
-const WELCOME = "Welcome to ART — your agentic resume tailoring assistant.\n\nI can help you:\n  • Ingest your resume, GitHub, or LinkedIn data\n  • View your skills, experiences, and projects\n  • Analyze job descriptions and find skill gaps\n  • Tailor your resume for specific roles\n\nTry: \"show my skills\" or type /ingest to get started.";
+const WELCOME = "Welcome to ARTie — your agentic resume tailoring assistant.\n\nI can help you:\n  • Ingest your resume, GitHub, or LinkedIn data\n  • View your skills, experiences, and projects\n  • Analyze job descriptions and find skill gaps\n  • Tailor your resume for specific roles\n\nTry: \"show my skills\" or type /ingest to get started.";
 
 interface Props {
   jobId: string | null;
@@ -125,11 +125,20 @@ export function ChatPanel({ jobId, onViewChange, onAssistantReply, welcome, cont
     rendered.push({ type: "msg", msg });
   }
 
+  const bubble = (isUser: boolean) =>
+    cn(
+      "max-w-[72ch] rounded-lg px-3.5 py-2.5",
+      isUser
+        ? "self-end bg-secondary"
+        : "self-start border-l-[3px] border-primary bg-card"
+    );
+
   return (
-    <div style={s.panel} ref={panelRef}>
+    <div className="flex h-full flex-col overflow-hidden" ref={panelRef}>
       <div
+        className="flex flex-1 flex-col overflow-y-auto p-4"
         style={{
-          ...s.scroll,
+          // Computed from the live pane width (#90) — not expressible as utilities.
           gap: `${messageGap(panelWidth)}px`,
           // Reclaim side padding before the bubble is forced to wrap tighter (#90).
           paddingLeft: `${chatHPadding(panelWidth)}px`,
@@ -138,124 +147,51 @@ export function ChatPanel({ jobId, onViewChange, onAssistantReply, welcome, cont
       >
         {rendered.map((item, i) => {
           if (item.type === "day") {
-            return <div key={`day-${i}`} style={s.daySep}>{item.label}</div>;
+            return (
+              <div key={`day-${i}`} className="py-1 text-center text-sm italic text-muted-foreground">
+                {item.label}
+              </div>
+            );
           }
           const { msg } = item;
           const isUser = msg.role === "user";
           return (
-            <div key={i} style={isUser ? s.userMsg : s.botMsg}>
-              <pre style={s.msgText}>{msg.content}</pre>
+            <div key={i} className={bubble(isUser)}>
+              <pre className="m-0 whitespace-pre-wrap break-words font-sans leading-relaxed">
+                {msg.content}
+              </pre>
             </div>
           );
         })}
         {sending && (
-          <div style={s.botMsg}>
-            <pre style={{ ...s.msgText, color: colors.textMuted }}>…</pre>
+          <div className={bubble(false)}>
+            <pre className="m-0 whitespace-pre-wrap break-words font-sans leading-relaxed text-muted-foreground">
+              …
+            </pre>
           </div>
         )}
-        {error && <p style={s.errorMsg}>{error}</p>}
+        {error && <p className="my-1 text-sm text-destructive">{error}</p>}
         <div ref={bottomRef} />
       </div>
 
-      <div style={s.inputRow}>
+      <div className="flex flex-shrink-0 gap-2 border-t border-border bg-card px-4 py-3">
         <textarea
-          style={s.textarea}
+          className="flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary"
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Message ART… (Enter to send, Shift+Enter for newline)"
+          placeholder="Message ARTie… (Enter to send, Shift+Enter for newline)"
           rows={3}
           disabled={sending}
         />
-        <button style={s.sendBtn} onClick={handleSend} disabled={sending || !input.trim()}>
+        <button
+          className="self-end rounded-md bg-primary px-5 py-2.5 font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={handleSend}
+          disabled={sending || !input.trim()}
+        >
           {sending ? "…" : "Send"}
         </button>
       </div>
     </div>
   );
 }
-
-const s: Record<string, CSSProperties> = {
-  panel: {
-    display: "flex",
-    flexDirection: "column",
-    height: "100%",
-    overflow: "hidden",
-  },
-  scroll: {
-    flex: 1,
-    overflowY: "auto",
-    padding: "1rem",
-    display: "flex",
-    flexDirection: "column",
-    gap: "0.5rem",
-  },
-  daySep: {
-    textAlign: "center",
-    color: colors.textMuted,
-    fontSize: font.size.sm,
-    fontStyle: "italic",
-    padding: "0.25rem 0",
-  },
-  userMsg: {
-    alignSelf: "flex-end",
-    maxWidth: "72ch",
-    background: "rgba(48,54,61,0.5)",
-    padding: "0.5rem 0.75rem",
-    borderRight: `2px solid ${colors.primary}`,
-  },
-  botMsg: {
-    alignSelf: "flex-start",
-    maxWidth: "72ch",
-    background: colors.surface,
-    padding: "0.5rem 0.75rem",
-    borderLeft: `3px solid ${colors.accent}`,
-  },
-  msgText: {
-    margin: 0,
-    fontFamily: "inherit",
-    fontSize: font.size.base,
-    whiteSpace: "pre-wrap",
-    wordBreak: "break-word",
-    color: colors.text,
-    lineHeight: 1.6,
-  },
-  errorMsg: {
-    color: colors.error,
-    fontSize: font.size.sm,
-    margin: "0.25rem 0",
-  },
-  inputRow: {
-    display: "flex",
-    gap: "0.5rem",
-    padding: "0.75rem 1rem",
-    borderTop: `1px solid ${colors.primary}`,
-    background: colors.surface,
-    flexShrink: 0,
-  },
-  textarea: {
-    flex: 1,
-    background: colors.background,
-    border: `1px solid ${colors.primary}`,
-    color: colors.text,
-    fontSize: font.size.base,
-    fontFamily: "inherit",
-    padding: "0.5rem 0.75rem",
-    resize: "none",
-    outline: "none",
-    borderRadius: 0,
-    lineHeight: 1.5,
-  },
-  sendBtn: {
-    background: colors.accent,
-    color: colors.background,
-    border: "none",
-    fontWeight: 700,
-    fontSize: font.size.base,
-    fontFamily: "inherit",
-    padding: "0.5rem 1rem",
-    cursor: "pointer",
-    borderRadius: 0,
-    alignSelf: "flex-end",
-  },
-};

@@ -1,0 +1,180 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Switzer — self-hosted from Fontshare (free for commercial use). Chosen as the
+ * closest free stand-in for Suisse Intl, which is commercial. Files live in
+ * public/fonts/ and are served from /fonts/, so there is no CDN dependency.
+ */
+@font-face {
+  font-family: "Switzer";
+  src: url("/fonts/Switzer-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Switzer";
+  src: url("/fonts/Switzer-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Switzer";
+  src: url("/fonts/Switzer-Semibold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Switzer";
+  src: url("/fonts/Switzer-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Switzer";
+  src: url("/fonts/Switzer-Extrabold.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+/*
+ * Palette (issue #134) — Supabase-style light theme.
+ *
+ * Light is the default and the designed-for case: white ground, near-black ink,
+ * hairline #E6E8EB borders, and the mint #3ECF8E brand green used sparingly on
+ * CTAs with a deep #006239 label. Dark is a maintained counterpart, reached by
+ * putting `.dark` on <html> (see lib/theme.ts) — not a naive inversion.
+ *
+ * `accent` is the deep green used for eyebrows and emphasis text. `warning` is
+ * kept separate for mid-range scores and incomplete-record badges, so semantic
+ * state never borrows the brand hue.
+ */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 9%;
+
+    --card: 210 17% 98%;
+    --card-foreground: 0 0% 9%;
+    --elevated: 210 16% 95%;
+
+    --muted: 210 16% 95%;
+    --muted-foreground: 0 0% 42%;
+
+    --primary: 152 60% 53%;
+    --primary-foreground: 159 100% 19%;
+
+    --secondary: 210 16% 95%;
+    --secondary-foreground: 0 0% 9%;
+
+    --accent: 159 100% 19%;
+    --accent-foreground: 0 0% 100%;
+
+    --success: 159 100% 22%;
+    --warning: 28 88% 33%;
+
+    --destructive: 0 72% 44%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 213 13% 91%;
+    --input: 213 13% 91%;
+    --ring: 152 60% 42%;
+
+    --radius: 0.375rem;
+  }
+
+  .dark {
+    --background: 0 0% 9%;
+    --foreground: 0 0% 93%;
+
+    --card: 0 0% 12%;
+    --card-foreground: 0 0% 93%;
+    --elevated: 0 0% 16%;
+
+    --muted: 0 0% 16%;
+    --muted-foreground: 0 0% 64%;
+
+    --primary: 152 60% 53%;
+    --primary-foreground: 159 100% 11%;
+
+    --secondary: 0 0% 16%;
+    --secondary-foreground: 0 0% 93%;
+
+    --accent: 152 55% 62%;
+    --accent-foreground: 0 0% 9%;
+
+    --success: 152 60% 53%;
+    --warning: 38 92% 62%;
+
+    --destructive: 0 72% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 152 60% 53%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 9999px;
+    border: 3px solid hsl(var(--background));
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+}
+
+@layer utilities {
+  /* Faint grid used behind the landing hero. */
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, hsl(var(--border) / 0.6) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--border) / 0.6) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+
+  /* Mint→deep-green run for the hero's second line, mirroring Supabase's
+     black-headline / green-headline pairing. */
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(
+      100deg,
+      hsl(152 60% 45%) 0%,
+      hsl(159 80% 26%) 100%
+    );
+  }
+  .dark .text-gradient {
+    background-image: linear-gradient(
+      100deg,
+      hsl(152 60% 60%) 0%,
+      hsl(152 55% 45%) 100%
+    );
+  }
+}

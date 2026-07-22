@@ -1,93 +1,44 @@
-import type { CSSProperties } from "react";
-import { colors, font } from "../theme";
+import { FileUp, Github, Database, MessageSquare } from "lucide-react";
 
 interface Props {
   onViewChange: (view: string) => void;
 }
 
-export function WelcomePanel({ onViewChange }: Props) {
-  const ctas = [
-    { label: "Ingest Resume", view: "ingest", desc: "Upload a PDF, DOCX, or Markdown resume" },
-    { label: "Connect GitHub", view: "ingest", desc: "Pull in repos and extract skills" },
-    { label: "Browse Data", view: "data", desc: "View your skills, experiences, and projects" },
-    { label: "Open Chat", view: "chat", desc: "Start chatting without a job selected" },
-  ];
+const CTAS = [
+  { label: "Ingest Resume", view: "ingest", desc: "Upload a PDF, DOCX, or Markdown resume", icon: FileUp },
+  { label: "Connect GitHub", view: "ingest", desc: "Pull in repos and extract skills", icon: Github },
+  { label: "Browse Data", view: "data", desc: "View your skills, experiences, and projects", icon: Database },
+  { label: "Open Chat", view: "chat", desc: "Start chatting without a job selected", icon: MessageSquare },
+];
 
+export function WelcomePanel({ onViewChange }: Props) {
   return (
-    <div style={s.panel}>
-      <div style={s.brand}>ART</div>
-      <p style={s.tagline}>Agentic Resume Tailoring</p>
-      <p style={s.sub}>
-        Create a job in the sidebar to get started, or use the actions below to build your profile.
+    <div className="flex h-full flex-col items-center justify-center p-8">
+      <h1 className="text-4xl font-extrabold tracking-tight">
+        Welcome to <span className="text-accent">ARTie</span>
+      </h1>
+      <p className="mt-3 max-w-[46ch] text-center text-muted-foreground">
+        Create a job in the sidebar to get started, or use the actions below to
+        build your profile.
       </p>
-      <div style={s.ctas}>
-        {ctas.map(cta => (
-          <button key={cta.label} style={s.ctaBtn} onClick={() => onViewChange(cta.view)}>
-            <span style={s.ctaLabel}>{cta.label}</span>
-            <span style={s.ctaDesc}>{cta.desc}</span>
+
+      <div className="mt-8 grid w-full max-w-3xl gap-3 sm:grid-cols-2">
+        {CTAS.map(cta => (
+          <button
+            key={cta.label}
+            className="group flex items-start gap-3 rounded-lg border border-border bg-card p-4 text-left transition-colors hover:border-primary/50 hover:bg-elevated"
+            onClick={() => onViewChange(cta.view)}
+          >
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-accent/10 text-accent">
+              <cta.icon className="h-4 w-4" />
+            </span>
+            <span className="flex flex-col gap-0.5">
+              <span className="text-sm font-semibold">{cta.label}</span>
+              <span className="text-xs text-muted-foreground">{cta.desc}</span>
+            </span>
           </button>
         ))}
       </div>
     </div>
   );
 }
-
-const s: Record<string, CSSProperties> = {
-  panel: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    height: "100%",
-    padding: "2rem",
-    gap: "0.75rem",
-  },
-  brand: {
-    fontSize: "3rem",
-    fontWeight: 700,
-    color: colors.accent,
-    letterSpacing: "0.15em",
-  },
-  tagline: {
-    margin: 0,
-    color: colors.textMuted,
-    fontSize: font.size.base,
-    letterSpacing: "0.05em",
-  },
-  sub: {
-    margin: "0.5rem 0 1rem",
-    color: colors.textMuted,
-    fontSize: font.size.sm,
-    textAlign: "center",
-    maxWidth: "42ch",
-  },
-  ctas: {
-    display: "flex",
-    gap: "0.75rem",
-    flexWrap: "wrap",
-    justifyContent: "center",
-  },
-  ctaBtn: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "flex-start",
-    gap: "0.25rem",
-    background: colors.surface,
-    border: `1px solid ${colors.primary}`,
-    padding: "0.75rem 1rem",
-    cursor: "pointer",
-    fontFamily: "inherit",
-    borderRadius: 0,
-    minWidth: "16ch",
-    transition: "border-color 0.1s",
-  },
-  ctaLabel: {
-    color: colors.accent,
-    fontWeight: 700,
-    fontSize: font.size.sm,
-  },
-  ctaDesc: {
-    color: colors.textMuted,
-    fontSize: "0.75rem",
-  },
-};

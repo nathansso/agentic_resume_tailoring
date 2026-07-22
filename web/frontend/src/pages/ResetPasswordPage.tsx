@@ -1,7 +1,7 @@
-import { useState, useEffect, type FormEvent, type CSSProperties } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { resetPassword } from "../api/auth";
-import { colors, font } from "../theme";
+import { AuthLayout, inputClass, buttonClass, linkClass } from "../components/AuthLayout";
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -69,104 +69,58 @@ export function ResetPasswordPage() {
 
   const invalidLink = !tokens;
 
+  if (done) {
+    return (
+      <AuthLayout title="Set a new password">
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          Your password has been updated. Redirecting to sign in…
+        </p>
+      </AuthLayout>
+    );
+  }
+
+  if (invalidLink) {
+    return (
+      <AuthLayout
+        title="Set a new password"
+        footer={<Link to="/forgot-password" className={linkClass}>Request a new link</Link>}
+      >
+        <p className="text-sm leading-relaxed text-destructive">
+          {linkError ?? "This reset link is invalid or has expired. Request a new one."}
+        </p>
+      </AuthLayout>
+    );
+  }
+
   return (
-    <div style={s.page}>
-      <div style={s.card}>
-        <h1 style={s.title}>Set a new password</h1>
-        {done ? (
-          <p style={s.success}>Your password has been updated. Redirecting to sign in…</p>
-        ) : invalidLink ? (
-          <>
-            <p style={s.error}>
-              {linkError ?? "This reset link is invalid or has expired. Request a new one."}
-            </p>
-            <p style={s.hint}>
-              <Link to="/forgot-password" style={s.link}>Request a new link</Link>
-            </p>
-          </>
-        ) : (
-          <>
-            <p style={s.subtitle}>Choose a password with at least {MIN_PASSWORD_LENGTH} characters.</p>
-            <form onSubmit={handleSubmit} style={s.form}>
-              <input
-                style={s.input}
-                type="password"
-                placeholder="New password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="new-password"
-                required
-              />
-              <input
-                style={s.input}
-                type="password"
-                placeholder="Confirm new password"
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-                autoComplete="new-password"
-                required
-              />
-              {error && <p style={s.error}>{error}</p>}
-              <button style={s.button} type="submit" disabled={submitting}>
-                {submitting ? "Updating…" : "Update password"}
-              </button>
-            </form>
-          </>
-        )}
-      </div>
-    </div>
+    <AuthLayout
+      title="Set a new password"
+      subtitle={`Choose a password with at least ${MIN_PASSWORD_LENGTH} characters.`}
+    >
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <input
+          className={inputClass}
+          type="password"
+          placeholder="New password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="new-password"
+          required
+        />
+        <input
+          className={inputClass}
+          type="password"
+          placeholder="Confirm new password"
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          autoComplete="new-password"
+          required
+        />
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <button className={`${buttonClass} mt-1`} type="submit" disabled={submitting}>
+          {submitting ? "Updating…" : "Update password"}
+        </button>
+      </form>
+    </AuthLayout>
   );
 }
-
-const s: Record<string, CSSProperties> = {
-  page: {
-    display: "flex", alignItems: "center", justifyContent: "center",
-    minHeight: "100vh", background: colors.background,
-  },
-  card: {
-    background: colors.surface,
-    padding: "2.5rem",
-    borderRadius: 0,
-    border: `1px solid ${colors.primary}`,
-    width: "100%", maxWidth: "360px",
-    color: colors.text,
-  },
-  title: {
-    margin: 0, fontSize: font.size.xl, fontWeight: 700,
-    letterSpacing: "0.03em", color: colors.accent,
-  },
-  subtitle: {
-    margin: "0.5rem 0 1.5rem",
-    color: colors.textMuted, fontSize: font.size.sm,
-  },
-  form: { display: "flex", flexDirection: "column", gap: "0.625rem" },
-  input: {
-    padding: "0.5rem 0.75rem",
-    borderRadius: 0,
-    border: `1px solid ${colors.primary}`,
-    background: colors.background,
-    color: colors.text,
-    fontSize: font.size.base,
-    outline: "none",
-    fontFamily: "inherit",
-  },
-  error: { margin: "0.75rem 0 0", color: colors.error, fontSize: font.size.sm },
-  success: { margin: "0.75rem 0 0", color: colors.text, fontSize: font.size.sm },
-  button: {
-    padding: "0.5rem",
-    borderRadius: 0,
-    background: colors.accent,
-    color: colors.background,
-    fontWeight: 700,
-    border: "none",
-    cursor: "pointer",
-    fontSize: font.size.base,
-    fontFamily: "inherit",
-    letterSpacing: "0.03em",
-  },
-  hint: {
-    marginTop: "1.25rem", textAlign: "center",
-    color: colors.textMuted, fontSize: font.size.sm,
-  },
-  link: { color: colors.accent },
-};

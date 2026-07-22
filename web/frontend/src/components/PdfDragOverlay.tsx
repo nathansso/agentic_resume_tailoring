@@ -1,5 +1,13 @@
 import { useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent } from "react";
-import { colors } from "../theme";
+
+// The overlay's geometry is computed from PDF text metrics at runtime, so these
+// bands stay inline styles — Tailwind utilities can't express per-band pixel
+// offsets. Only the highlight colour is shared, mirroring --primary (#134).
+const HL_STRONG = "hsl(250 84% 67% / 0.25)";
+const HL_SOFT = "hsl(250 84% 67% / 0.12)";
+const HL_MED = "hsl(250 84% 67% / 0.2)";
+const HL_EDGE = "hsl(250 84% 67% / 0.35)";
+const HL_SOLID = "hsl(250 84% 67%)";
 import {
   slotToIndex,
   targetIndexForPointer,
@@ -112,8 +120,8 @@ export function PdfDragOverlay({ model, width, height, enabled, onMoveSection, o
       left: 0,
       width: SECTION_HANDLE_W,
       cursor: enabled ? (isDragged ? "grabbing" : "grab") : "default",
-      background: isDragged || isHover ? "rgba(63,185,80,0.25)" : "rgba(63,185,80,0.12)",
-      borderRight: `2px solid ${isDragged || isHover ? colors.accent : "rgba(63,185,80,0.35)"}`,
+      background: isDragged || isHover ? HL_STRONG : HL_SOFT,
+      borderRight: `2px solid ${isDragged || isHover ? HL_SOLID : HL_EDGE}`,
       pointerEvents: enabled ? "auto" : "none",
       touchAction: "none",
     };
@@ -131,7 +139,7 @@ export function PdfDragOverlay({ model, width, height, enabled, onMoveSection, o
       left: SECTION_HANDLE_W,
       right: 0,
       cursor: enabled ? (isDragged ? "grabbing" : "grab") : "default",
-      background: isDragged || isHover ? "rgba(63,185,80,0.2)" : "transparent",
+      background: isDragged || isHover ? HL_MED : "transparent",
       pointerEvents: enabled ? "auto" : "none",
       touchAction: "none",
     };
@@ -148,7 +156,7 @@ export function PdfDragOverlay({ model, width, height, enabled, onMoveSection, o
       left: SECTION_HANDLE_W + 4,
       right: 0,
       cursor: enabled ? (isDragged ? "grabbing" : "grab") : "default",
-      background: isDragged ? "rgba(63,185,80,0.2)" : isHover ? "rgba(63,185,80,0.12)" : "transparent",
+      background: isDragged ? HL_MED : isHover ? HL_SOFT : "transparent",
       pointerEvents: enabled ? "auto" : "none",
       touchAction: "none",
     };
@@ -223,7 +231,7 @@ const s: Record<string, CSSProperties> = {
     position: "absolute",
     right: 0,
     height: 2,
-    background: colors.accent,
+    background: HL_SOLID,
     pointerEvents: "none",
   },
 };

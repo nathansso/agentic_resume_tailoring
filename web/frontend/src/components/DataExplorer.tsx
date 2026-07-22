@@ -1,6 +1,33 @@
 import { useState, useEffect, type CSSProperties } from "react";
 import type { SkillRow, ExpRow, ProjectRow, EducationRow, AchievementRow, GraphData } from "../types";
-import { colors, font } from "../theme";
+
+/*
+ * DataExplorer still uses the pre-#134 inline-style-object pattern. Converting
+ * its ~650 lines of table, chart, and inline-edit-form JSX to Tailwind
+ * utilities is the one piece of the migration left open; it is tracked on #134.
+ *
+ * These tokens bind the existing style objects to the new palette (via the CSS
+ * custom properties in index.css) so the panel themes correctly in the interim
+ * and nothing here depends on the deleted theme.ts. Names are kept from the old
+ * theme so the style objects below did not have to change: `primary` was the
+ * border colour and `accent` was the highlight.
+ */
+const colors = {
+  background: "hsl(var(--background))",
+  surface:    "hsl(var(--card))",
+  boost:      "hsl(var(--elevated))",
+  primary:    "hsl(var(--border))",
+  accent:     "hsl(var(--accent))",
+  brand:      "hsl(var(--primary))",
+  warning:    "hsl(var(--warning))",
+  text:       "hsl(var(--foreground))",
+  textMuted:  "hsl(var(--muted-foreground))",
+  error:      "hsl(var(--destructive))",
+} as const;
+
+const font = {
+  size: { sm: "0.8125rem", base: "0.9375rem", lg: "1rem", xl: "1.25rem" },
+} as const;
 import {
   getSkills, getExperiences, getProjects, getEducation, getAchievements, getGraph, setSkillCore,
   updateExperience, deleteExperience, updateEducation, deleteEducation, updateProject, deleteProject,
@@ -598,7 +625,7 @@ function ChartsTab({ skills, graph }: { skills: SkillRow[]; graph: GraphData | n
             <div key={sk.name} style={sChart.barRow}>
               <span style={sChart.barLabel}>{sk.name}</span>
               <div style={sChart.barTrack}>
-                <div style={{ ...sChart.barFill, width: `${(parseFloat(sk.confidence) / maxConf) * 100}%`, background: colors.accent }} />
+                <div style={{ ...sChart.barFill, width: `${(parseFloat(sk.confidence) / maxConf) * 100}%`, background: colors.brand }} />
               </div>
               <span style={sChart.barValue}>{sk.confidence}</span>
             </div>
@@ -615,7 +642,7 @@ function ChartsTab({ skills, graph }: { skills: SkillRow[]; graph: GraphData | n
               <div key={sk.name} style={sChart.barRow}>
                 <span style={sChart.barLabel}>{sk.name}</span>
                 <div style={sChart.barTrack}>
-                  <div style={{ ...sChart.barFill, width: `${(sk.connections / maxConn) * 100}%`, background: "#d29922" }} />
+                  <div style={{ ...sChart.barFill, width: `${(sk.connections / maxConn) * 100}%`, background: colors.warning }} />
                 </div>
                 <span style={sChart.barValue}>{sk.connections}</span>
               </div>
@@ -652,7 +679,7 @@ const s: Record<string, CSSProperties> = {
   tabBtn: {
     background: "transparent", border: "none", borderBottom: "2px solid transparent",
     color: colors.textMuted, fontSize: font.size.sm, padding: "0.5rem 0.75rem",
-    cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
+    cursor: "pointer", fontFamily: "inherit", borderRadius: "0.375rem",
   },
   tabBtnActive: { color: colors.accent, borderBottomColor: colors.accent },
   content: { flex: 1, overflowY: "auto", padding: "1rem" },
@@ -682,7 +709,7 @@ const sInner: Record<string, CSSProperties> = {
   skillMeta: { color: colors.textMuted, fontSize: "0.7rem" },
   skillSource: { color: colors.textMuted, fontSize: "0.7rem" },
   confBarBg: { height: "2px", background: colors.primary, width: "100%" },
-  confBarFill: { height: "2px", background: colors.accent },
+  confBarFill: { height: "2px", background: colors.brand },
   table: { display: "flex", flexDirection: "column", gap: 0 },
   tableHead: {
     display: "grid", gridTemplateColumns: "2fr 1.5fr 1fr 1fr",
@@ -713,17 +740,17 @@ const sInner: Record<string, CSSProperties> = {
   graphCount: { color: colors.textMuted },
   expTitleCell: { display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap" },
   incompleteBadge: {
-    color: "#d29922", fontSize: "0.65rem", border: "1px solid #d29922",
-    padding: "0 0.3rem", borderRadius: 0, whiteSpace: "nowrap",
+    color: colors.warning, fontSize: "0.65rem", border: `1px solid ${colors.warning}`,
+    padding: "0 0.3rem", borderRadius: "0.25rem", whiteSpace: "nowrap",
   },
   rowActions: { display: "flex", gap: "0.375rem", justifyContent: "flex-end" },
   actionBtn: {
     background: "transparent", border: `1px solid ${colors.primary}`, color: colors.textMuted,
-    fontSize: "0.7rem", padding: "0.125rem 0.5rem", cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
+    fontSize: "0.7rem", padding: "0.125rem 0.5rem", cursor: "pointer", fontFamily: "inherit", borderRadius: "0.375rem",
   },
   actionBtnDanger: {
     background: "transparent", border: `1px solid ${colors.primary}`, color: colors.error,
-    fontSize: "0.7rem", padding: "0.125rem 0.5rem", cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
+    fontSize: "0.7rem", padding: "0.125rem 0.5rem", cursor: "pointer", fontFamily: "inherit", borderRadius: "0.375rem",
   },
 };
 
@@ -737,20 +764,20 @@ const sForm: Record<string, CSSProperties> = {
   label: { color: colors.textMuted, fontSize: "0.7rem" },
   input: {
     background: colors.boost, border: `1px solid ${colors.primary}`, color: colors.text,
-    fontSize: font.size.sm, padding: "0.3rem 0.4rem", fontFamily: "inherit", borderRadius: 0,
+    fontSize: font.size.sm, padding: "0.3rem 0.4rem", fontFamily: "inherit", borderRadius: "0.375rem",
   },
   textarea: {
     background: colors.boost, border: `1px solid ${colors.primary}`, color: colors.text,
-    fontSize: font.size.sm, padding: "0.3rem 0.4rem", fontFamily: "inherit", borderRadius: 0,
+    fontSize: font.size.sm, padding: "0.3rem 0.4rem", fontFamily: "inherit", borderRadius: "0.375rem",
     minHeight: "3.5rem", resize: "vertical",
   },
   actions: { display: "flex", gap: "0.5rem", marginTop: "0.25rem" },
   saveBtn: {
-    background: colors.accent, border: "none", color: colors.surface, fontWeight: 700,
-    fontSize: font.size.sm, padding: "0.35rem 0.9rem", cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
+    background: colors.accent, border: "none", color: "hsl(var(--accent-foreground))", fontWeight: 700,
+    fontSize: font.size.sm, padding: "0.35rem 0.9rem", cursor: "pointer", fontFamily: "inherit", borderRadius: "0.375rem",
   },
   cancelBtn: {
     background: "transparent", border: `1px solid ${colors.primary}`, color: colors.textMuted,
-    fontSize: font.size.sm, padding: "0.35rem 0.9rem", cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
+    fontSize: font.size.sm, padding: "0.35rem 0.9rem", cursor: "pointer", fontFamily: "inherit", borderRadius: "0.375rem",
   },
 };

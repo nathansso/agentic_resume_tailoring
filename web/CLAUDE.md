@@ -17,13 +17,16 @@ web/
     ingest_router.py  # /api/ingest/ — resume upload, GitHub ingestion
   frontend/
     src/
-      App.tsx                  # Router: /login, /register, /* (RequireAuth → MainPage)
+      App.tsx                  # Router: / (landing or app), /login, /register, /* (RequireAuth → MainPage)
       context/AuthContext.tsx  # Auth state, setUser, logout
+      index.css                # Tailwind directives + the palette custom properties
       pages/
+        LandingPage.tsx        # Public marketing page at `/` for signed-out visitors
         LoginPage.tsx
         RegisterPage.tsx
         MainPage.tsx           # Top-level layout: header, JobSidebar, main content area
       components/
+        AuthLayout.tsx         # Shared card/brand chrome for the signed-out pages
         WelcomePanel.tsx       # Shown to new users with no jobs — 4 CTAs
         ChatPanel.tsx          # Chat UI with SSE streaming
         DataExplorer.tsx       # Tabs: Skills, Experiences, Projects, Graph, Charts
@@ -82,10 +85,21 @@ web/
 
 ## Frontend conventions
 
-- Styles are plain `CSSProperties` objects (`const s: Record<string, CSSProperties> = { ... }`), no CSS files or CSS-in-JS libraries.
+- **Styling is Tailwind CSS** (issue #134). Write utility classes in `className`; compose conditionals with `cn()` from `src/lib/utils.ts`. The old `const s: Record<string, CSSProperties>` pattern is retired — do not add new style objects.
+- The palette lives in `src/index.css` as HSL custom properties (`--background`, `--primary`, `--accent`, `--muted-foreground`, …) and is surfaced to Tailwind through `tailwind.config.js`. Use the semantic utilities (`bg-card`, `text-muted-foreground`, `border-border`) — **never hardcode a hex colour**. There is no `theme.ts`; it was deleted.
+- **Light is the default and the designed-for case** — a Supabase-style theme: white ground, near-black ink, `#E6E8EB` hairlines, mint `#3ECF8E` brand green on CTAs with a deep `#006239` label. Dark is a maintained counterpart under the `.dark` class on `<html>`, not a naive inversion.
+- **Contrast rule:** `bg-primary` (mint) is for *fills* — buttons, the logo mark — always paired with `text-primary-foreground`. Mint fails contrast as small text on white, so green **text** uses `text-accent` (deep green in light, light green in dark). `text-warning` is separate again, for mid-range scores and incomplete-record badges, so semantic state never borrows the brand hue.
+- Theme state: `lib/theme.ts` (pure resolution + DOM apply, unit-tested), `context/ThemeContext.tsx` (provider), `components/ThemeToggle.tsx` (the button, present in the landing nav and app header). An inline script in `index.html` sets the class before first paint to avoid a flash — **if you change the resolution rule, change it in both places.**
+- Fonts: `font-sans` is **Switzer**, self-hosted from `public/fonts/` via `@font-face` in `index.css` (Fontshare, free for commercial use; chosen as the closest free stand-in for the commercial Suisse Intl). Only the monospace face still comes from Google Fonts. `font-mono` (JetBrains Mono) is reserved for genuinely code-like surfaces — the LaTeX source editor and compile errors.
+- **Inline `style` is still correct for runtime-computed geometry** and nothing else: pane widths and split fractions (`JobWorkspace`, `ResumeSplit`), chat padding/gap from `paneResize`, and the PDF drag bands in `PdfDragOverlay`, whose positions come from PDF text metrics. Keep a comment saying why when you do this.
+- `AuthLayout` (`src/components/AuthLayout.tsx`) owns the shared card/brand chrome and the `inputClass` / `buttonClass` / `linkClass` constants for all four signed-out pages.
+- **Known gap:** `DataExplorer.tsx` still uses the old style-object pattern. Its tokens are rebound to the new palette via a local constant block, so it themes correctly and imports nothing, but converting its JSX to utilities is outstanding work on #134.
 - `ActiveView` union: `"chat" | "data" | "ingest" | "profile" | "job"`.
 - `WelcomePanel` is shown in `MainPage` only when: no jobs exist, no job is selected, loading is complete, AND `welcomeDismissed` is false. Any CTA click sets `welcomeDismissed = true`.
-- Color palette and font sizes come from `src/theme.ts` — do not hardcode colors.
+
+## Routing
+
+`/` is public: signed-out visitors get `LandingPage` (marketing, issue #83), signed-in users get the app shell. `MainPage` itself does not use the router — it switches on `ActiveView` state — so the `/*` catch-all simply renders the shell for any other path.
 
 ---
 
