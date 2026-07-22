@@ -1,6 +1,6 @@
 """
-DB query functions and ingestion service functions for the TUI.
-Query functions return plain data (lists/dicts) for widget rendering.
+Shared DB query and ingestion service functions.
+Query functions return plain data (lists/dicts) for the web API and CLI.
 Ingestion functions return plain-English result strings and never raise.
 """
 import contextlib
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 @contextlib.contextmanager
 def _suppress_output():
-    """Redirect stdout/stderr during heavy ingestion to prevent TUI corruption."""
+    """Redirect stdout/stderr during heavy ingestion to keep library output off the console."""
     buf = io.StringIO()
     old_stdout, old_stderr = sys.stdout, sys.stderr
     sys.stdout = buf
@@ -724,7 +724,7 @@ def save_github_token(token: str) -> None:
         unset_key(str(_ENV_PATH), "GITHUB_TOKEN")
 
 
-# ── GitHub OAuth device flow (TUI) ───────────────────────────
+# ── GitHub OAuth device flow ─────────────────────────────────
 
 def start_github_device_flow() -> dict:
     """Initiate GitHub device flow. Returns { user_code, verification_uri, device_code, interval } or raises."""
@@ -785,7 +785,8 @@ def get_llm_config() -> tuple[str, bool]:
     import os
     from dotenv import dotenv_values
     vals = dotenv_values(_ENV_PATH)
-    provider = vals.get("LLM_PROVIDER") or os.environ.get("LLM_PROVIDER") or "anthropic"
+    from config import normalize_provider
+    provider = normalize_provider(vals.get("LLM_PROVIDER") or os.environ.get("LLM_PROVIDER"))
     if provider == "anthropic":
         has_key = bool(vals.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY"))
     else:
@@ -801,6 +802,8 @@ def save_llm_config(provider: str, api_key: str) -> None:
     """
     import os
     from dotenv import set_key
+    from config import normalize_provider
+    provider = normalize_provider(provider)
     _ENV_PATH.touch()
     set_key(str(_ENV_PATH), "LLM_PROVIDER", provider)
     key_name = "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENAI_API_KEY"
@@ -813,6 +816,8 @@ def save_llm_provider_only(provider: str) -> None:
     """Persist only the LLM_PROVIDER to .env and os.environ, leaving existing keys untouched."""
     import os
     from dotenv import set_key
+    from config import normalize_provider
+    provider = normalize_provider(provider)
     _ENV_PATH.touch()
     set_key(str(_ENV_PATH), "LLM_PROVIDER", provider)
     os.environ["LLM_PROVIDER"] = provider

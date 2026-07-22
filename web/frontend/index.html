@@ -3,25 +3,37 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ART — Agentic Resume Tailoring</title>
+    <title>ARTie — Land your first role</title>
+    <meta
+      name="description"
+      content="ARTie tailors your resume to the internships and entry-level roles you actually want — grounded in your real experience, never invented."
+    />
+    <!-- Switzer (the UI face) is self-hosted from /fonts via @font-face in
+         index.css. Only the monospace face still comes from Google Fonts. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
-    <style>
-      *, *::before, *::after { box-sizing: border-box; }
-      body {
-        margin: 0;
-        font-family: 'JetBrains Mono', 'Fira Mono', 'Cascadia Code', monospace;
-        font-size: 15px;
-        line-height: 1.6;
-        background: #0d1117;
-        color: #e6edf3;
-      }
-      :focus-visible { outline: 1px solid #3fb950; outline-offset: 1px; }
-      ::-webkit-scrollbar { width: 6px; }
-      ::-webkit-scrollbar-track { background: #0d1117; }
-      ::-webkit-scrollbar-thumb { background: #30363d; }
-    </style>
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="preload" href="/fonts/Switzer-Regular.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/Switzer-Semibold.woff2" as="font" type="font/woff2" crossorigin />
+    <script>
+      // Set the theme class before first paint so a dark-mode user never sees a
+      // white flash. Mirrors resolveInitialTheme() in src/lib/theme.ts.
+      (function () {
+        try {
+          var stored = localStorage.getItem("art:theme");
+          var dark =
+            stored === "dark" ||
+            (stored !== "light" &&
+              window.matchMedia &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.classList.add("dark");
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

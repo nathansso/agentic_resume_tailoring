@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as pdfjs from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import { colors, font } from "../theme";
+import { cn } from "../lib/utils";
 import {
   buildOverlayModel,
   groupIntoLines,
@@ -232,16 +232,28 @@ export function PdfPreview({ pdfData, compiling, error, paused, onRecompile, ove
             : "Preview up to date";
 
   return (
-    <div style={s.pane}>
-      <div style={s.statusBar}>
-        <span style={s.statusText}>{statusText}</span>
+    <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+      <div className="flex min-h-6 flex-shrink-0 items-center justify-between gap-2">
+        <span className="text-[0.7rem] italic text-muted-foreground">{statusText}</span>
         {(error || paused) && (
-          <button style={s.recompileBtn} onClick={onRecompile}>Recompile</button>
+          <button
+            className="rounded-md border border-border px-2 py-0.5 text-sm transition-colors hover:bg-secondary"
+            onClick={onRecompile}
+          >
+            Recompile
+          </button>
         )}
       </div>
-      {error && <pre style={s.compileError}>{error}</pre>}
-      <div ref={containerRef} style={s.scroll}>
-        <div style={s.pagesWrap}>
+      {error && (
+        <pre className="m-0 max-h-32 flex-shrink-0 overflow-y-auto whitespace-pre-wrap break-words rounded-md border border-destructive bg-card px-2.5 py-2 font-mono text-[0.7rem] text-destructive">
+          {error}
+        </pre>
+      )}
+      <div ref={containerRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden rounded-md border border-border bg-neutral-300 dark:bg-[#525659]">
+        {/* fit-content + auto margins center the page when it's height-constrained
+            (narrower than the pane); the drag overlay is absolutely positioned
+            within this wrapper, so canvas and overlay stay aligned. */}
+        <div className="relative mx-auto w-fit">
           <div ref={pagesRef} />
           {overlay && model && dragReady && page1 && (
             <PdfDragOverlay
@@ -259,56 +271,24 @@ export function PdfPreview({ pdfData, compiling, error, paused, onRecompile, ove
               drop the canvas was already re-composited optimistically, so
               only the badge shows (no dim over an already-correct preview). */}
           {hasRender && !error && (compiling || (overlay && !overlay.enabled)) && (
-            <div style={{ ...s.staleVeil, ...(patched ? s.staleVeilClear : {}) }}>
-              <span style={s.staleBadge}>Updating preview…</span>
+            <div
+              className={cn(
+                "pointer-events-none absolute inset-0 z-[3] flex items-start justify-center",
+                patched ? "bg-transparent" : "bg-background/40"
+              )}
+            >
+              <span className="sticky top-12 mt-12 rounded-md border border-border bg-card px-3.5 py-1.5 text-sm font-bold text-accent shadow-sm">
+                Updating preview…
+              </span>
             </div>
           )}
         </div>
         {!hasRender && !error && (
-          <p style={s.muted}>{compiling ? "Compiling preview…" : "The preview appears here once compiled."}</p>
+          <p className="m-3 text-sm text-neutral-600 dark:text-neutral-300">
+            {compiling ? "Compiling preview…" : "The preview appears here once compiled."}
+          </p>
         )}
       </div>
     </div>
   );
 }
-
-const s: Record<string, CSSProperties> = {
-  pane: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0, gap: "0.375rem" },
-  statusBar: {
-    display: "flex", alignItems: "center", justifyContent: "space-between",
-    gap: "0.5rem", minHeight: "1.5rem", flexShrink: 0,
-  },
-  statusText: { color: colors.textMuted, fontSize: "0.7rem", fontStyle: "italic" },
-  recompileBtn: {
-    background: "transparent", border: `1px solid ${colors.primary}`,
-    color: colors.text, fontSize: font.size.sm, padding: "0.125rem 0.5rem",
-    cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
-  },
-  compileError: {
-    margin: 0, color: colors.error, fontSize: "0.7rem", whiteSpace: "pre-wrap",
-    wordBreak: "break-word", background: colors.surface,
-    border: `1px solid ${colors.error}`, padding: "0.5rem 0.625rem",
-    maxHeight: "8rem", overflowY: "auto", flexShrink: 0,
-  },
-  scroll: {
-    flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden",
-    border: `1px solid ${colors.primary}`, background: "#525659",
-  },
-  // fit-content + auto margins center the page when it's height-constrained
-  // (narrower than the pane); the drag overlay is absolutely positioned within
-  // this wrapper, so canvas and overlay shift together and stay aligned.
-  pagesWrap: { position: "relative", width: "fit-content", margin: "0 auto" },
-  staleVeil: {
-    position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 3,
-    background: "rgba(13,17,23,0.35)", display: "flex",
-    justifyContent: "center", alignItems: "flex-start",
-    pointerEvents: "none",
-  },
-  staleVeilClear: { background: "transparent" },
-  staleBadge: {
-    marginTop: "3rem", background: colors.surface, color: colors.accent,
-    border: `1px solid ${colors.accent}`, padding: "0.375rem 0.875rem",
-    fontSize: font.size.sm, fontWeight: 700, position: "sticky", top: "3rem",
-  },
-  muted: { margin: "0.75rem", color: "#c9d1d9", fontSize: font.size.sm },
-};

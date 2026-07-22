@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { JobDetail, TailorResult } from "../types";
-import { colors, font } from "../theme";
+import { cn } from "../lib/utils";
 import { saveDescription, analyzeJob, tailorJob, getJob, exportUrl } from "../api/jobs";
 import { ChatPanel } from "./ChatPanel";
 import { ProgressBar } from "./ProgressBar";
@@ -33,10 +33,19 @@ type Phase = "idle" | "analyzing" | "tailoring";
 const startedChains = new Set<string>();
 
 function statusColor(status: string): string {
-  if (status === "exported" || status === "tailored") return colors.accent;
-  if (status === "analyzed") return "#d29922";
-  return colors.textMuted;
+  if (status === "exported" || status === "tailored") return "text-success";
+  if (status === "analyzed") return "text-warning";
+  return "text-muted-foreground";
 }
+
+function scoreColor(score: number): string {
+  if (score >= 70) return "text-success";
+  if (score >= 50) return "text-warning";
+  return "text-destructive";
+}
+
+const actionBtn =
+  "self-start rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50";
 
 export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Props) {
   const [descInput, setDescInput] = useState("");
@@ -171,30 +180,35 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
       ? "Analyzing job description… (~60s)"
       : "Tailoring resume… this may take 1–2 minutes";
 
+  const exportLink =
+    "rounded-md border border-border px-2 py-0.5 text-sm font-semibold text-accent no-underline transition-colors hover:bg-secondary";
+
   return (
-    <div style={s.workspace}>
+    <div className="flex h-full flex-col overflow-hidden">
       {/* Header */}
-      <div style={s.header}>
-        <div style={s.headerLeft}>
-          <h2 style={s.jobTitle}>{job.title}</h2>
-          <span style={s.company}>{job.company}</span>
+      <div className="flex flex-shrink-0 items-center justify-between gap-4 border-b border-border bg-card px-4 py-2.5">
+        <div className="flex min-w-0 items-baseline gap-2.5">
+          <h2 className="truncate font-bold tracking-tight">{job.title}</h2>
+          <span className="whitespace-nowrap text-sm text-muted-foreground">{job.company}</span>
         </div>
-        <div style={s.headerRight}>
-          <span style={{ ...s.statusBadge, color: statusColor(job.status) }}>[{job.status}]</span>
+        <div className="flex flex-shrink-0 items-baseline gap-3">
+          <span className={cn("text-sm font-semibold", statusColor(job.status))}>
+            [{job.status}]
+          </span>
           {job.ats_score !== null && (
-            <span style={{ ...s.atsBadge, color: job.ats_score >= 70 ? colors.accent : job.ats_score >= 50 ? "#d29922" : colors.error }}>
+            <span className={cn("font-bold", scoreColor(job.ats_score))}>
               ATS: {Math.round(job.ats_score)}%
             </span>
           )}
-          <span style={{ ...s.budget, color: budgetUsed ? colors.error : colors.textMuted }}>
+          <span className={cn("text-sm", budgetUsed ? "text-destructive" : "text-muted-foreground")}>
             Tailor runs: {job.retailor_count}/{job.retailor_limit}
           </span>
           {tailored && (
-            <span style={s.exportLinks}>
-              <span style={s.exportLabel}>Export:</span>
+            <span className="flex items-baseline gap-2">
+              <span className="text-sm text-muted-foreground">Export:</span>
               <a
                 href={exportUrl(job.job_id, "pdf")}
-                style={s.exportLink}
+                className={exportLink}
                 download
                 title={job.has_manual_edits ? "Includes your manual .tex edits" : undefined}
               >
@@ -202,7 +216,7 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
               </a>
               <a
                 href={exportUrl(job.job_id, "tex")}
-                style={s.exportLink}
+                className={exportLink}
                 download
                 title={job.has_manual_edits ? "Includes your manual .tex edits" : undefined}
               >
@@ -210,7 +224,7 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
               </a>
               <a
                 href={exportUrl(job.job_id, "docx")}
-                style={s.exportLink}
+                className={exportLink}
                 download
                 title={job.has_manual_edits ? "DOCX is generated from the AI-tailored content and ignores manual .tex edits" : undefined}
               >
@@ -222,10 +236,14 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
       </div>
 
       {/* Three panes: chat (with insight briefings) | .tex editor | preview */}
-      <div style={s.columns} ref={columnsRef}>
+      <div className="flex min-h-0 flex-1" ref={columnsRef}>
         <div
+          className={cn(
+            "flex min-h-0 flex-none flex-col",
+            !dragging && "transition-[width] duration-[250ms] ease-out"
+          )}
           style={{
-            ...s.chatCol,
+            minWidth: MIN_CHAT_WIDTH,
             // Undragged width. When a single resume pane is showing (chatWide),
             // the chat claims the extra room — but never so much that the preview
             // drops below its legibility floor, so cap it at columns − floor. Once
@@ -236,10 +254,9 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
                 : chatWide
                   ? `min(calc(50% + 200px), calc(100% - ${MIN_PREVIEW_ONLY_WIDTH}px))`
                   : "400px",
-            transition: dragging ? "none" : s.chatCol.transition,
           }}
         >
-          <div style={s.chatWrap}>
+          <div className="flex min-h-0 flex-1 flex-col">
             <ChatPanel
               jobId={job.job_id}
               welcome={jobWelcome(job)}
@@ -257,12 +274,12 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
           onReset={resetChatWidth}
         />
 
-        <div style={s.resumeArea}>
+        <div className="flex min-w-0 flex-1 flex-col gap-2 overflow-hidden p-2">
           {error && (
-            <div style={s.errorBox}>
-              <p style={s.error}>{error}</p>
+            <div className="flex flex-shrink-0 flex-col gap-2">
+              <p className="text-sm text-destructive">{error}</p>
               <button
-                style={s.actionBtn}
+                className={actionBtn}
                 onClick={() => {
                   if (job.has_manual_edits &&
                       !window.confirm("Re-tailoring will discard your manual .tex edits. Continue?")) return;
@@ -290,9 +307,11 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
           {/* No JD yet: paste panel */}
           {phase === "idle" && !job.description && (
             <>
-              <p style={s.hint}>Paste the full job description to analyze and tailor automatically.</p>
+              <p className="text-sm text-muted-foreground">
+                Paste the full job description to analyze and tailor automatically.
+              </p>
               <textarea
-                style={s.textarea}
+                className="resize-y rounded-md border border-input bg-background px-3 py-2 leading-relaxed outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary"
                 value={descInput}
                 onChange={e => setDescInput(e.target.value)}
                 rows={12}
@@ -300,7 +319,7 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
                 autoFocus
               />
               <button
-                style={{ ...s.actionBtn, background: colors.accent, color: colors.background }}
+                className="self-start rounded-md bg-primary px-4 py-2 font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={handleSaveDescAndRun}
                 disabled={!descInput.trim()}
               >
@@ -311,60 +330,12 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
 
           {/* JD present but nothing tailored yet and no pipeline running */}
           {phase === "idle" && !tailored && job.description && !error && (
-            <p style={s.hint}>No tailored resume yet — ask the chat to “tailor”.</p>
+            <p className="text-sm text-muted-foreground">
+              No tailored resume yet — ask the chat to “tailor”.
+            </p>
           )}
         </div>
       </div>
     </div>
   );
 }
-
-const s: Record<string, CSSProperties> = {
-  workspace: { display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" },
-  header: {
-    display: "flex", alignItems: "center", justifyContent: "space-between",
-    gap: "1rem", padding: "0.625rem 1rem", borderBottom: `1px solid ${colors.primary}`,
-    background: colors.surface, flexShrink: 0,
-  },
-  headerLeft: { display: "flex", alignItems: "baseline", gap: "0.625rem", minWidth: 0 },
-  jobTitle: {
-    margin: 0, color: colors.accent, fontSize: font.size.lg, fontWeight: 700,
-    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-  },
-  company: { color: colors.textMuted, fontSize: font.size.sm, whiteSpace: "nowrap" },
-  headerRight: { display: "flex", alignItems: "baseline", gap: "0.75rem", flexShrink: 0 },
-  statusBadge: { fontSize: font.size.sm, fontWeight: 600 },
-  atsBadge: { fontSize: font.size.base, fontWeight: 700 },
-  budget: { fontSize: font.size.sm },
-  exportLinks: { display: "flex", alignItems: "baseline", gap: "0.5rem" },
-  exportLabel: { color: colors.textMuted, fontSize: font.size.sm },
-  exportLink: {
-    color: colors.accent, fontSize: font.size.sm, fontWeight: 700,
-    textDecoration: "none", border: `1px solid ${colors.accent}`,
-    padding: "0.125rem 0.5rem",
-  },
-  columns: { display: "flex", flex: 1, minHeight: 0 },
-  chatCol: {
-    flex: "0 0 auto", minWidth: MIN_CHAT_WIDTH,
-    display: "flex", flexDirection: "column", minHeight: 0,
-    transition: "width 0.25s ease",
-  },
-  chatWrap: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" },
-  resumeArea: {
-    flex: 1, minWidth: 0, overflow: "hidden", padding: "0.5rem",
-    display: "flex", flexDirection: "column", gap: "0.5rem",
-  },
-  errorBox: { display: "flex", flexDirection: "column", gap: "0.5rem", flexShrink: 0 },
-  error: { margin: 0, color: colors.error, fontSize: font.size.sm },
-  hint: { margin: 0, color: colors.textMuted, fontSize: font.size.sm },
-  textarea: {
-    background: colors.background, border: `1px solid ${colors.primary}`,
-    color: colors.text, fontSize: font.size.base, padding: "0.5rem 0.75rem",
-    fontFamily: "inherit", outline: "none", borderRadius: 0, resize: "vertical", lineHeight: 1.5,
-  },
-  actionBtn: {
-    background: "transparent", border: `1px solid ${colors.primary}`,
-    color: colors.text, fontSize: font.size.sm, padding: "0.375rem 0.75rem",
-    cursor: "pointer", fontFamily: "inherit", borderRadius: 0, alignSelf: "flex-start",
-  },
-};

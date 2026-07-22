@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { colors, font } from "../theme";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { cn } from "../lib/utils";
 import { getTex, saveTex, discardTex } from "../api/jobs";
 import { useAutoCompile } from "../hooks/useAutoCompile";
 import { moveBulletTo, moveSectionTo } from "../lib/texStructure";
@@ -22,6 +22,9 @@ interface Props {
 }
 
 const SAVE_DEBOUNCE_MS = 1800;
+
+const btn =
+  "rounded-md border border-border px-2.5 py-1 text-sm transition-colors hover:bg-secondary";
 
 /** Overleaf-style live editor: .tex source on the left, compiled preview on
  *  the right. Edits auto-save and auto-compile a moment after typing stops
@@ -203,12 +206,12 @@ export function ResumeSplit({ jobId, view, onViewChange, onEditsChanged }: Props
     }
   }
 
-  if (loading) return <p style={s.muted}>Loading resume source…</p>;
+  if (loading) return <p className="text-sm text-muted-foreground">Loading resume source…</p>;
   if (loadError) {
     return (
-      <div style={s.errorBox}>
-        <p style={s.error}>{loadError}</p>
-        <button style={s.btn} onClick={load}>Retry</button>
+      <div className="flex flex-col gap-2">
+        <p className="text-sm text-destructive">{loadError}</p>
+        <button className={cn(btn, "self-start")} onClick={load}>Retry</button>
       </div>
     );
   }
@@ -228,14 +231,19 @@ export function ResumeSplit({ jobId, view, onViewChange, onEditsChanged }: Props
   ];
 
   return (
-    <div style={s.container}>
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
       {/* One shared toolbar: view toggle + edit state */}
-      <div style={s.toolbar}>
-        <div style={s.toggleGroup}>
+      <div className="flex min-h-6 flex-shrink-0 flex-wrap items-center gap-2">
+        <div className="flex rounded-md border border-border p-0.5">
           {views.map(v => (
             <button
               key={v.key}
-              style={{ ...s.toggleBtn, ...(view === v.key ? s.toggleBtnActive : {}) }}
+              className={cn(
+                "rounded px-2.5 py-1 text-sm transition-colors",
+                view === v.key
+                  ? "bg-accent/10 text-accent"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
               onClick={() => onViewChange(v.key)}
             >
               {v.label}
@@ -243,33 +251,40 @@ export function ResumeSplit({ jobId, view, onViewChange, onEditsChanged }: Props
           ))}
         </div>
         {source === "edited" && (
-          <button style={{ ...s.btn, color: colors.error, borderColor: colors.error }} onClick={handleDiscard}>
+          <button
+            className="rounded-md border border-destructive/60 px-2.5 py-1 text-sm text-destructive transition-colors hover:bg-destructive/10"
+            onClick={handleDiscard}
+          >
             Discard edits
           </button>
         )}
-        <span style={s.sourceTag}>
+        <span className="text-[0.7rem] italic text-muted-foreground">
           {source === "edited" ? "manually edited" : "AI-generated"}
           {saveStatus ? ` · ${saveStatus}` : ""}
         </span>
       </div>
 
-      {saveError && <pre style={s.saveError}>{saveError}</pre>}
+      {saveError && (
+        <pre className="m-0 max-h-24 flex-shrink-0 overflow-y-auto whitespace-pre-wrap break-words rounded-md border border-destructive bg-card px-2.5 py-2 font-mono text-[0.7rem] text-destructive">
+          {saveError}
+        </pre>
+      )}
 
-      <div style={s.split} ref={attachSplit}>
+      <div className="flex min-h-0 flex-1 gap-2" ref={attachSplit}>
         {/* Left: .tex source (hidden in preview-only view, state retained).
             In split view its width is user-draggable; in source view it fills. */}
         <div
-          style={
-            view === "preview"
-              ? s.hidden
-              : view === "split"
-                ? { ...s.editorPane, flex: `0 0 ${effectiveFrac * 100}%` }
-                : s.editorPane
-          }
+          className={cn(
+            "min-w-0 flex-col gap-2",
+            view === "preview" ? "hidden" : "flex",
+            view === "split" ? "flex-none" : "flex-1"
+          )}
+          // Computed split fraction (#90) — not expressible as a utility.
+          style={view === "split" ? { flexBasis: `${effectiveFrac * 100}%` } : undefined}
         >
           <textarea
             ref={texAreaRef}
-            style={s.texArea}
+            className="min-h-0 flex-1 resize-none overflow-auto whitespace-pre rounded-md border border-input bg-background px-3 py-2 font-mono text-sm leading-[1.45] outline-none transition-colors focus:border-primary"
             value={tex}
             onChange={e => setTex(e.target.value)}
             spellCheck={false}
@@ -287,68 +302,25 @@ export function ResumeSplit({ jobId, view, onViewChange, onEditsChanged }: Props
         )}
 
         {/* Right: live compiled preview with drag-to-reorder */}
-        <div style={{ ...s.previewPane, ...(view === "source" ? s.hidden : {}) }}>
-        <PdfPreview
-          pdfData={compile.pdfData}
-          compiling={compile.compiling}
-          error={compile.error}
-          paused={compile.paused}
-          onRecompile={compile.recompileNow}
-          overlay={{
-            tex: compile.compiledTex,
-            // Drag only when the preview reflects the live buffer — indices
-            // computed on a stale render must never touch a diverged buffer.
-            enabled: !compile.compiling && compile.compiledTex === tex,
-            onMoveSection: (key, targetIndex) => applyReorder(moveSectionTo(tex, key, targetIndex)),
-            onMoveBullet: (g, from, to) => applyReorder(moveBulletTo(tex, g, from, to)),
-            onJumpToLine: jumpToLine,
-          }}
-        />
+        <div className={cn("min-w-0 flex-1 flex-col", view === "source" ? "hidden" : "flex")}>
+          <PdfPreview
+            pdfData={compile.pdfData}
+            compiling={compile.compiling}
+            error={compile.error}
+            paused={compile.paused}
+            onRecompile={compile.recompileNow}
+            overlay={{
+              tex: compile.compiledTex,
+              // Drag only when the preview reflects the live buffer — indices
+              // computed on a stale render must never touch a diverged buffer.
+              enabled: !compile.compiling && compile.compiledTex === tex,
+              onMoveSection: (key, targetIndex) => applyReorder(moveSectionTo(tex, key, targetIndex)),
+              onMoveBullet: (g, from, to) => applyReorder(moveBulletTo(tex, g, from, to)),
+              onJumpToLine: jumpToLine,
+            }}
+          />
         </div>
       </div>
     </div>
   );
 }
-
-const s: Record<string, CSSProperties> = {
-  container: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0, gap: "0.5rem" },
-  split: { display: "flex", flex: 1, minHeight: 0, gap: "0.5rem" },
-  editorPane: {
-    flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "0.5rem",
-  },
-  previewPane: {
-    flex: 1, minWidth: 0, display: "flex", flexDirection: "column",
-  },
-  hidden: { display: "none" },
-  toolbar: { display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", flexShrink: 0, minHeight: "1.5rem" },
-  toggleGroup: { display: "flex" },
-  toggleBtn: {
-    background: "transparent", border: `1px solid ${colors.primary}`,
-    color: colors.textMuted, fontSize: font.size.sm, padding: "0.125rem 0.625rem",
-    cursor: "pointer", fontFamily: "inherit", borderRadius: 0, marginLeft: -1,
-  },
-  toggleBtnActive: { color: colors.accent, borderColor: colors.accent, position: "relative", zIndex: 1 },
-  btn: {
-    background: "transparent", border: `1px solid ${colors.primary}`,
-    color: colors.text, fontSize: font.size.sm, padding: "0.25rem 0.625rem",
-    cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
-  },
-  sourceTag: { color: colors.textMuted, fontSize: "0.7rem", fontStyle: "italic" },
-  muted: { margin: 0, color: colors.textMuted, fontSize: font.size.sm },
-  errorBox: { display: "flex", flexDirection: "column", gap: "0.5rem" },
-  error: { margin: 0, color: colors.error, fontSize: font.size.sm },
-  saveError: {
-    margin: 0, color: colors.error, fontSize: "0.7rem", whiteSpace: "pre-wrap",
-    wordBreak: "break-word", background: colors.surface,
-    border: `1px solid ${colors.error}`, padding: "0.5rem 0.625rem",
-    maxHeight: "6rem", overflowY: "auto", flexShrink: 0,
-  },
-  texArea: {
-    flex: 1, minHeight: 0,
-    background: colors.background, border: `1px solid ${colors.primary}`,
-    color: colors.text, fontSize: font.size.sm, padding: "0.5rem 0.75rem",
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-    outline: "none", borderRadius: 0, resize: "none", lineHeight: 1.45,
-    whiteSpace: "pre", overflow: "auto",
-  },
-};

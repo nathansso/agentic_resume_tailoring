@@ -1,9 +1,14 @@
-import { useState, useEffect, type CSSProperties, type ChangeEvent } from "react";
+import { useState, useEffect, type ChangeEvent } from "react";
 import type { ProfileData } from "../types";
-import { colors, font } from "../theme";
+import { cn } from "../lib/utils";
 import { getProfile, updateProfile } from "../api/profile";
 import { getGithubStatus, disconnectGithub } from "../api/auth";
 import { ProgressBar } from "./ProgressBar";
+
+const btnGhost =
+  "rounded-md border border-border px-3 py-1.5 text-sm transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60";
+const btnPrimary =
+  "rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60";
 
 export function ProfilePanel() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -75,7 +80,13 @@ export function ProfilePanel() {
     }
   }
 
-  if (loading) return <div style={s.page}><p style={s.muted}>Loading…</p></div>;
+  if (loading) {
+    return (
+      <div className="max-w-[60ch] p-6">
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      </div>
+    );
+  }
 
   const fields: { key: keyof ProfileData; label: string }[] = [
     { key: "name", label: "Name" },
@@ -85,69 +96,82 @@ export function ProfilePanel() {
     { key: "linkedin_url", label: "LinkedIn URL" },
   ];
 
+  const messageIsError = !!message && (message.includes("fail") || message.includes("Error"));
+
   return (
-    <div style={s.page}>
-      <div style={s.header}>
-        <h2 style={s.title}>Profile</h2>
+    <div className="max-w-[60ch] p-6">
+      <div className="mb-5 flex items-center justify-between">
+        <h2 className="text-xl font-bold tracking-tight">Profile</h2>
         {!editing ? (
-          <button style={s.editBtn} onClick={() => { setEditing(true); setMessage(null); }}>Edit</button>
+          <button className={btnGhost} onClick={() => { setEditing(true); setMessage(null); }}>
+            Edit
+          </button>
         ) : (
-          <div style={{ display: "flex", gap: "0.5rem" }}>
-            <button style={s.saveBtn} onClick={handleSave} disabled={saving}>
+          <div className="flex gap-2">
+            <button className={btnPrimary} onClick={handleSave} disabled={saving}>
               {saving ? "Saving…" : "Save"}
             </button>
-            <button style={s.cancelBtn} onClick={() => { setEditing(false); setForm(profile ?? {}); setMessage(null); }}>
+            <button
+              className={btnGhost}
+              onClick={() => { setEditing(false); setForm(profile ?? {}); setMessage(null); }}
+            >
               Cancel
             </button>
           </div>
         )}
       </div>
 
-      {loadError && <p style={{ ...s.muted, color: colors.error }}>{loadError}</p>}
-      {message && <p style={{ ...s.muted, color: message.includes("fail") || message.includes("Error") ? colors.error : colors.accent }}>{message}</p>}
+      {loadError && <p className="text-sm text-destructive">{loadError}</p>}
+      {message && (
+        <p className={cn("text-sm", messageIsError ? "text-destructive" : "text-success")}>
+          {message}
+        </p>
+      )}
 
-      <div style={s.grid}>
+      <div className="mb-6 flex flex-col gap-2.5">
         {fields.map(({ key, label }) => (
-          <div key={key} style={s.field}>
-            <span style={s.label}>{label}</span>
+          <div key={key} className="grid grid-cols-[14ch_1fr] items-center gap-3">
+            <span className="text-sm text-muted-foreground">{label}</span>
             {editing ? (
               <input
-                style={s.input}
+                className="rounded-md border border-input bg-background px-2 py-1.5 outline-none transition-colors focus:border-primary"
                 value={(form[key] as string) ?? ""}
                 onChange={onChange(key)}
               />
             ) : (
-              <span style={s.value}>{(form[key] as string) || <span style={{ color: colors.textMuted }}>—</span>}</span>
+              <span>
+                {(form[key] as string) || <span className="text-muted-foreground">—</span>}
+              </span>
             )}
           </div>
         ))}
       </div>
 
       {profile?.linkedin_ingest_status === "importing" && (
-        <div style={{ margin: "0.75rem 0" }}>
+        <div className="my-3">
           <ProgressBar label="LinkedIn import in progress…" showElapsed={false} />
         </div>
       )}
       {profile?.linkedin_ingest_status === "done" && (
-        <p style={{ ...s.muted, color: colors.accent }}>LinkedIn profile imported.</p>
+        <p className="text-sm text-success">LinkedIn profile imported.</p>
       )}
       {profile?.linkedin_ingest_status === "failed" && (
-        <p style={{ ...s.muted, color: colors.error }}>
+        <p className="text-sm text-destructive">
           LinkedIn import failed{profile.linkedin_ingest_error ? `: ${profile.linkedin_ingest_error}` : ""}.
         </p>
       )}
 
       {profile && (
-        <div style={s.stats}>
-          <span style={s.statChip}>{profile.skills} skills</span>
-          <span style={s.statDot}>·</span>
-          <span style={s.statChip}>{profile.experiences} experiences</span>
-          <span style={s.statDot}>·</span>
-          <span style={s.statChip}>{profile.projects} projects</span>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span>{profile.skills} skills</span>
+          <span className="text-muted-foreground">·</span>
+          <span>{profile.experiences} experiences</span>
+          <span className="text-muted-foreground">·</span>
+          <span>{profile.projects} projects</span>
           {profile.sources.length > 0 && (
             <>
-              <span style={s.statDot}>·</span>
-              <span style={{ ...s.statChip, color: colors.textMuted }}>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-muted-foreground">
                 Sources: {profile.sources.join(", ")}
               </span>
             </>
@@ -156,15 +180,15 @@ export function ProfilePanel() {
       )}
 
       {oauthConfigured && (
-        <div style={s.githubSection}>
-          <p style={s.githubLabel}>GitHub</p>
+        <div className="mt-5 border-t border-border pt-4">
+          <p className="mb-2 text-sm font-semibold text-muted-foreground">GitHub</p>
           {githubConnected ? (
-            <div style={s.githubRow}>
-              <span style={{ ...s.muted, color: colors.accent }}>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-success">
                 {githubUsername ? `@${githubUsername}` : "Connected"}
               </span>
               <button
-                style={{ ...s.cancelBtn, marginLeft: "1rem" }}
+                className={btnGhost}
                 onClick={handleGithubDisconnect}
                 disabled={githubWorking}
               >
@@ -172,9 +196,9 @@ export function ProfilePanel() {
               </button>
             </div>
           ) : (
-            <div style={s.githubRow}>
-              <span style={s.muted}>Not connected</span>
-              <a href="/api/auth/github" style={s.connectBtn}>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-muted-foreground">Not connected</span>
+              <a href="/api/auth/github" className={cn(btnPrimary, "inline-block no-underline")}>
                 Connect GitHub
               </a>
             </div>
@@ -184,46 +208,3 @@ export function ProfilePanel() {
     </div>
   );
 }
-
-const s: Record<string, CSSProperties> = {
-  page: { padding: "1.5rem", maxWidth: "60ch" },
-  header: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem" },
-  title: { margin: 0, color: colors.accent, fontSize: font.size.xl, fontWeight: 700 },
-  editBtn: {
-    background: "transparent", border: `1px solid ${colors.primary}`,
-    color: colors.text, fontSize: font.size.sm, padding: "0.25rem 0.75rem",
-    cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
-  },
-  saveBtn: {
-    background: colors.accent, border: "none", color: colors.background,
-    fontWeight: 700, fontSize: font.size.sm, padding: "0.25rem 0.75rem",
-    cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
-  },
-  cancelBtn: {
-    background: "transparent", border: `1px solid ${colors.primary}`,
-    color: colors.text, fontSize: font.size.sm, padding: "0.25rem 0.75rem",
-    cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
-  },
-  grid: { display: "flex", flexDirection: "column", gap: "0.625rem", marginBottom: "1.5rem" },
-  field: { display: "grid", gridTemplateColumns: "14ch 1fr", alignItems: "center", gap: "0.75rem" },
-  label: { color: colors.textMuted, fontSize: font.size.sm },
-  value: { color: colors.text, fontSize: font.size.base },
-  input: {
-    background: colors.background, border: `1px solid ${colors.primary}`,
-    color: colors.text, fontSize: font.size.base, padding: "0.25rem 0.5rem",
-    fontFamily: "inherit", outline: "none", borderRadius: 0,
-  },
-  stats: { display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" },
-  statChip: { color: colors.text, fontSize: font.size.sm },
-  statDot: { color: colors.textMuted },
-  muted: { color: colors.textMuted, fontSize: font.size.sm },
-  githubSection: { marginTop: "1.25rem", borderTop: `1px solid ${colors.primary}`, paddingTop: "1rem" },
-  githubLabel: { margin: "0 0 0.5rem", color: colors.textMuted, fontSize: font.size.sm, fontWeight: 600 },
-  githubRow: { display: "flex", alignItems: "center", gap: "0.75rem" },
-  connectBtn: {
-    background: colors.accent, border: "none", color: colors.background,
-    fontWeight: 700, fontSize: font.size.sm, padding: "0.25rem 0.75rem",
-    cursor: "pointer", fontFamily: "inherit", borderRadius: 0,
-    textDecoration: "none", display: "inline-block",
-  },
-};

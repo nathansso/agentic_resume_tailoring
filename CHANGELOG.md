@@ -4,6 +4,24 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issues 83 & 134 — Landing page, Tailwind migration, and the Supabase-light theme
+**Status:** complete | **Tests:** 670 Python pass (5 new), 90 frontend pass (3 new)
+
+A first-time visitor previously hit `/` and was bounced straight to a login form with no framing at all. This adds the public landing page that precedes auth, and — because every component worth borrowing for it ships as Tailwind + shadcn — migrates the frontend off its hand-rolled `CSSProperties` style objects. The theme moves from the terminal-green palette inherited from the removed TUI to a Supabase-style light theme, which suits the audience the page is actually addressed to: students writing a resume for the first time.
+
+### What shipped
+- **`web/frontend/src/pages/LandingPage.tsx` (new).** Public marketing page at `/`. `Root` renders it for signed-out visitors and the app shell for signed-in ones, so a returning user never sees marketing. Hero states the audience (entry-level internships and roles); the method is explained in four beats — knowledge graph (#21, #92) → JD profile (#121) → planned edits (#114–#117) → check and score (#122–#126) — followed by the no-fabrication section that carries the actual differentiator.
+- **Tailwind + shadcn foundation.** `tailwind.config.js`, `postcss.config.js`, `src/index.css`, and `cn()` in `src/lib/utils.ts`. Every page and component under `src/pages/` and `src/components/` converted off the `const s: Record<string, CSSProperties>` pattern; `theme.ts` deleted with no importers remaining.
+- **Supabase-style light theme, dark retained.** Palette lives in `index.css` as HSL custom properties: white ground, `#171717` ink, `#E6E8EB` hairlines, mint `#3ECF8E` on CTAs with a deep `#006239` label, 6px radius. Dark is a maintained counterpart under `.dark` — not an inversion — with `lib/theme.ts` (pure resolution, unit-tested), `ThemeContext`, and a `ThemeToggle` in both the landing nav and the app header. An inline script in `index.html` stamps the class before first paint so a dark-mode user never sees a white flash.
+- **Switzer, self-hosted.** Five weights in `public/fonts/` via `@font-face`. noahpdillon.com uses Suisse Intl, which is commercial; Switzer (Fontshare, free for commercial use) is drawn as a Suisse-style neo-grotesque and is the closest free equivalent. No CDN dependency; only the monospace face still comes from Google Fonts.
+- **Contrast correctness as an explicit rule.** Mint measures ~1.8:1 as text on white, so `bg-primary` is fill-only (always paired with `text-primary-foreground`) and green *text* uses `text-accent` (deep green in light, light green in dark). `warning` was split into its own token so mid-range ATS scores and incomplete-record badges stop borrowing the brand hue. The PDF gutter became theme-aware instead of a hardcoded `#525659` charcoal.
+- **`AuthLayout`.** The four signed-out pages were near-identical copies; the card, brand mark, and control styling now live in one place.
+
+### Deviations from spec
+- **`DataExplorer.tsx` still uses the old style-object pattern.** Converting ~650 lines of table, chart, and inline-edit-form JSX carried more regression risk than the rest of the migration combined, so its tokens were rebound to the new palette instead — it themes correctly and imports nothing, but the JSX conversion remains open on #134. Noted in `web/CLAUDE.md`.
+- **Inline `style` is retained for runtime-computed geometry** — pane widths and split fractions (`JobWorkspace`, `ResumeSplit`), chat padding from `paneResize`, and the PDF drag bands in `PdfDragOverlay`, whose positions come from PDF text metrics. Tailwind utilities cannot express these; each site carries a comment saying why.
+- **#83 was re-phased from P4 to P0** on 2026-07-21 and pulled ahead of the normal phase sequence at the owner's direction. Its issue body was empty and was written as part of this work; #134 was split out so a whole-app refactor did not ride inside the landing-page diff.
+- The theme was verified in-browser across chat, data (all seven sub-tabs), ingest, profile, and the job workspace in both themes, with a per-node WCAG sweep. Responsive behaviour below tablet width rests on standard Tailwind breakpoints and was not observed directly.
 ## Issues 130 & 131 — User-scoped tailoring artifacts and fail-closed user resolution
 **Status:** complete | **Tests:** 665 pass (8 new)
 

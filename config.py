@@ -40,7 +40,23 @@ BRIGHTDATA_LINKEDIN_DATASET_ID = os.getenv(
 )
 
 # LLM Provider Config
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")  # "anthropic" or "openai"
+def normalize_provider(value: str | None) -> str:
+    """Canonicalise an LLM_PROVIDER value: trim, unquote, lowercase.
+
+    Env values reach us quoted more often than you'd think — `set_key()` writes
+    `LLM_PROVIDER='anthropic'` to .env, a shell `export LLM_PROVIDER="'x'"`
+    keeps the inner quotes, and hosted secret stores (Fly, Railway) preserve
+    whatever was pasted in. python-dotenv strips quotes when it parses .env, but
+    nothing strips them off a value that was already in the process environment,
+    which surfaced as `Unknown LLM_PROVIDER: "'anthropic'"`. Normalising at the
+    read sites means an extra pair of quotes can never take the app down again.
+    """
+    if not value:
+        return "anthropic"
+    return value.strip().strip("\"'").strip().lower() or "anthropic"
+
+
+LLM_PROVIDER = normalize_provider(os.getenv("LLM_PROVIDER"))  # "anthropic" or "openai"
 
 # Per-role model names (overridable via env)
 CHAT_MODEL = os.getenv("CHAT_MODEL", "claude-haiku-4-5-20251001")

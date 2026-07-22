@@ -1,5 +1,5 @@
-import { useCallback, useState, type CSSProperties } from "react";
-import { colors } from "../theme";
+import { useCallback, useState } from "react";
+import { cn } from "../lib/utils";
 
 interface Props {
   /** Called on each pointer move with the absolute `clientX`; the parent
@@ -16,7 +16,6 @@ interface Props {
  *  document-level drag lifecycle so panes only supply the geometry (#90). */
 export function ResizeDivider({ onDrag, onDragEnd, onReset, ariaLabel }: Props) {
   const [active, setActive] = useState(false);
-  const [hover, setHover] = useState(false);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -40,8 +39,6 @@ export function ResizeDivider({ onDrag, onDragEnd, onReset, ariaLabel }: Props) 
     [onDrag, onDragEnd],
   );
 
-  const lit = active || hover;
-
   return (
     <div
       role="separator"
@@ -50,30 +47,17 @@ export function ResizeDivider({ onDrag, onDragEnd, onReset, ariaLabel }: Props) 
       title="Drag to resize · double-click to reset"
       onMouseDown={handleMouseDown}
       onDoubleClick={onReset}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{ ...divider, background: lit ? colors.accent : "transparent" }}
+      className={cn(
+        "group flex w-[7px] flex-none cursor-col-resize items-center justify-center self-stretch transition-colors",
+        active ? "bg-primary" : "hover:bg-primary",
+      )}
     >
-      <span style={{ ...grip, background: lit ? colors.accent : colors.primary }} />
+      <span
+        className={cn(
+          "h-10 max-h-[60%] w-px rounded-full transition-colors",
+          active ? "bg-primary" : "bg-border group-hover:bg-primary",
+        )}
+      />
     </div>
   );
 }
-
-const divider: CSSProperties = {
-  flex: "0 0 auto",
-  width: 7,
-  cursor: "col-resize",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  alignSelf: "stretch",
-  transition: "background 0.12s ease",
-};
-
-const grip: CSSProperties = {
-  width: 1,
-  height: "2.5rem",
-  maxHeight: "60%",
-  borderRadius: 1,
-  transition: "background 0.12s ease",
-};

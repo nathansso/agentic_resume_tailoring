@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef, type CSSProperties } from "react";
+import { useState, useEffect, useRef } from "react";
+import { ChevronDown } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { colors, font } from "../theme";
+import { cn } from "../lib/utils";
 import { JobSidebar } from "../components/JobSidebar";
 import { ChatPanel } from "../components/ChatPanel";
 import { ProfilePanel } from "../components/ProfilePanel";
@@ -8,6 +9,7 @@ import { DataExplorer } from "../components/DataExplorer";
 import { IngestPanel, type IngestTab } from "../components/IngestPanel";
 import { JobWorkspace } from "../components/JobWorkspace";
 import { WelcomePanel } from "../components/WelcomePanel";
+import { ThemeToggle } from "../components/ThemeToggle";
 import { listJobs, createJob, deleteJob, getJob } from "../api/jobs";
 import type { JobListItem, JobDetail } from "../types";
 
@@ -124,7 +126,7 @@ export function MainPage() {
               onJobUpdate={handleJobUpdate}
               onViewChange={v => setActiveView(v as ActiveView)}
             />
-          : <p style={{ color: colors.textMuted, padding: "1rem", fontSize: font.size.sm }}>Loading job…</p>;
+          : <p className="p-4 text-sm text-muted-foreground">Loading job…</p>;
       default:
         if (!welcomeDismissed && !selectedJobId && jobs.length === 0 && !jobsLoading) {
           return <WelcomePanel onViewChange={v => { setWelcomeDismissed(true); setActiveView(v as ActiveView); }} />;
@@ -141,16 +143,30 @@ export function MainPage() {
     { key: "ingest", label: "Ingest" },
   ];
 
+  const navBtn = (active: boolean) =>
+    cn(
+      "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+      active
+        ? "bg-accent/10 text-accent"
+        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+    );
+
   return (
-    <div style={s.page}>
+    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
       {/* Header */}
-      <header style={s.header}>
-        <span style={s.brand}>ART</span>
-        <nav style={s.nav}>
+      <header className="flex h-12 flex-shrink-0 items-center gap-3 border-b border-border bg-card px-4">
+        <span className="flex items-center gap-2 font-bold tracking-tight">
+          <span className="grid h-6 w-6 place-items-center rounded bg-primary text-xs text-primary-foreground">
+            A
+          </span>
+          ARTie
+        </span>
+
+        <nav className="flex flex-1 gap-1">
           {navItems.map(({ key, label }) => (
             <button
               key={key}
-              style={{ ...s.navBtn, ...(activeView === key ? s.navBtnActive : {}) }}
+              className={navBtn(activeView === key)}
               onClick={() => setActiveView(key)}
             >
               {label}
@@ -158,33 +174,49 @@ export function MainPage() {
           ))}
           {selectedJob && (
             <button
-              style={{ ...s.navBtn, ...(activeView === "job" ? s.navBtnActive : {}) }}
+              className={navBtn(activeView === "job")}
               onClick={() => setActiveView("job")}
             >
               Job
             </button>
           )}
         </nav>
-        <div style={s.headerRight} ref={menuRef}>
+
+        <ThemeToggle className="mr-1 flex-shrink-0" />
+
+        <div className="relative flex flex-shrink-0 items-center" ref={menuRef}>
           <button
-            style={{ ...s.userBtn, ...(menuOpen || activeView === "profile" ? s.userBtnActive : {}) }}
+            className={cn(
+              "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
+              menuOpen || activeView === "profile"
+                ? "border-primary/50 bg-primary/10 text-foreground"
+                : "border-border text-muted-foreground hover:bg-secondary hover:text-foreground"
+            )}
             onClick={() => setMenuOpen(o => !o)}
             aria-haspopup="menu"
             aria-expanded={menuOpen}
           >
-            {user?.name} <span style={s.caret}>▾</span>
+            {user?.name}
+            <ChevronDown className="h-3.5 w-3.5" />
           </button>
           {menuOpen && (
-            <div style={s.menu} role="menu">
+            <div
+              className="absolute right-0 top-[calc(100%+0.375rem)] z-20 flex min-w-[10rem] flex-col overflow-hidden rounded-md border border-border bg-card py-1 shadow-xl"
+              role="menu"
+            >
               <button
-                style={s.menuItem}
+                className="px-3 py-2 text-left text-sm transition-colors hover:bg-secondary"
                 role="menuitem"
                 onClick={() => { setActiveView("profile"); setMenuOpen(false); }}
               >
                 Profile
               </button>
-              <div style={s.menuDivider} />
-              <button style={s.menuItem} role="menuitem" onClick={logout}>
+              <div className="my-1 border-t border-border" />
+              <button
+                className="px-3 py-2 text-left text-sm transition-colors hover:bg-secondary"
+                role="menuitem"
+                onClick={logout}
+              >
                 Sign out
               </button>
             </div>
@@ -193,7 +225,7 @@ export function MainPage() {
       </header>
 
       {/* Body */}
-      <div style={s.body}>
+      <div className="flex flex-1 overflow-hidden">
         <JobSidebar
           jobs={jobs}
           selectedJobId={selectedJobId}
@@ -202,117 +234,10 @@ export function MainPage() {
           onDelete={handleDeleteJob}
           loading={jobsLoading}
         />
-        <main style={s.main}>
+        <main className="flex-1 overflow-y-auto bg-background">
           {renderMain()}
         </main>
       </div>
     </div>
   );
 }
-
-
-const s: Record<string, CSSProperties> = {
-  page: {
-    display: "flex",
-    flexDirection: "column",
-    height: "100vh",
-    overflow: "hidden",
-    background: colors.background,
-    color: colors.text,
-  },
-  header: {
-    display: "flex",
-    alignItems: "center",
-    gap: "1rem",
-    height: "2.25rem",
-    padding: "0 1rem",
-    background: colors.boost,
-    borderBottom: `1px solid ${colors.primary}`,
-    flexShrink: 0,
-  },
-  brand: {
-    fontWeight: 700,
-    fontSize: font.size.base,
-    color: colors.accent,
-    letterSpacing: "0.1em",
-    marginRight: "0.5rem",
-  },
-  nav: {
-    display: "flex",
-    gap: "0.25rem",
-    flex: 1,
-  },
-  navBtn: {
-    background: "transparent",
-    border: "none",
-    color: colors.textMuted,
-    fontSize: font.size.sm,
-    padding: "0.125rem 0.5rem",
-    cursor: "pointer",
-    fontFamily: "inherit",
-    borderRadius: 0,
-  },
-  navBtnActive: {
-    color: colors.accent,
-    borderBottom: `1px solid ${colors.accent}`,
-  },
-  headerRight: {
-    position: "relative",
-    display: "flex",
-    alignItems: "center",
-    flexShrink: 0,
-  },
-  userBtn: {
-    padding: "0.125rem 0.5rem",
-    borderRadius: 0,
-    background: "transparent",
-    color: colors.text,
-    border: `1px solid ${colors.primary}`,
-    cursor: "pointer",
-    fontSize: font.size.sm,
-    fontFamily: "inherit",
-  },
-  userBtnActive: {
-    color: colors.accent,
-    borderColor: colors.accent,
-  },
-  caret: {
-    color: colors.textMuted,
-    fontSize: "0.7rem",
-  },
-  menu: {
-    position: "absolute",
-    top: "calc(100% + 0.25rem)",
-    right: 0,
-    minWidth: "10rem",
-    background: colors.surface,
-    border: `1px solid ${colors.primary}`,
-    display: "flex",
-    flexDirection: "column",
-    zIndex: 10,
-  },
-  menuItem: {
-    background: "transparent",
-    border: "none",
-    color: colors.text,
-    fontSize: font.size.sm,
-    fontFamily: "inherit",
-    textAlign: "left",
-    padding: "0.5rem 0.75rem",
-    cursor: "pointer",
-    borderRadius: 0,
-  },
-  menuDivider: {
-    borderTop: `1px solid ${colors.primary}`,
-  },
-  body: {
-    display: "flex",
-    flex: 1,
-    overflow: "hidden",
-  },
-  main: {
-    flex: 1,
-    background: colors.background,
-    overflowY: "auto",
-  },
-};
