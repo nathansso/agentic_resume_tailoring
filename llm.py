@@ -47,7 +47,8 @@ def get_llm(role: str = ModelRole.CHAT, temperature: float = 0.0) -> BaseChatMod
         temperature: Sampling temperature passed to the model.
     """
     import os
-    provider = os.environ.get("LLM_PROVIDER") or LLM_PROVIDER
+    from config import normalize_provider
+    provider = normalize_provider(os.environ.get("LLM_PROVIDER")) or LLM_PROVIDER
     model_name = _ROLE_MODELS.get(role, CHAT_MODEL)
 
     if provider == "anthropic":

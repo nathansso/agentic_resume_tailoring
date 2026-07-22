@@ -25,7 +25,7 @@ def validate_config() -> list[str]:
 
     # 1. Provider must be a known value.
     # Check os.environ first — save_llm_config() sets it there for immediate effect.
-    provider = os.environ.get("LLM_PROVIDER") or _cfg.LLM_PROVIDER
+    provider = _cfg.normalize_provider(os.environ.get("LLM_PROVIDER")) or _cfg.LLM_PROVIDER
     if provider not in _VALID_PROVIDERS:
         errors.append(
             f"LLM_PROVIDER must be one of {sorted(_VALID_PROVIDERS)}, got: {provider!r}"
