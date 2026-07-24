@@ -5,9 +5,11 @@ from datetime import datetime
 from typing import Dict, Any, List
 from sqlmodel import Session, select
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
 
-from llm import get_llm
+from llm import get_llm, get_extractor
+from agents.extraction_schemas import (
+    ExperienceList, EducationList, AchievementList, ProjectList, SkillList,
+)
 from database.db import engine
 from database.models import User, Skill, UserSkill, Education, Experience, Project, Achievement, DeletedEntry
 from database.user_utils import require_active_user
@@ -103,10 +105,12 @@ class ResumeParserAgent:
 
     @staticmethod
     def _coerce_records(data: Any, str_key: str | None = None) -> List[Dict]:
-        """Normalize LLM JSON output into a list of dicts.
+        """Normalize a source's records into a list of dicts.
 
-        Models sometimes wrap the list in an object ({"skills": [...]}) or
-        return bare strings instead of objects; both crash downstream
+        Since #142 the LLM extractors return schema-validated Pydantic models, so
+        this only guards the *deterministic* Bright Data / LinkedIn mapping in
+        `_save_linkedin_structured`, whose upstream JSON still arrives wrapped in
+        an object ({"skills": [...]}) or as bare strings — both crash downstream
         .get() calls if passed through untouched.
 
         str_key: when set, bare-string items become {str_key: item};
@@ -128,12 +132,14 @@ class ResumeParserAgent:
     def _extract_experiences(self, text: str) -> List[Dict]:
         prompt = ChatPromptTemplate.from_messages([
             ("system", "You are an expert resume parser. Extract work experiences from the text."),
-            ("user", "Text:\n{text}\n\nReturn a JSON list of objects with keys: title, company, start_date (YYYY-MM), end_date (YYYY-MM or Present), description (summary), bullets (list of strings). "
+            ("user", "Text:\n{text}\n\nExtract each work experience with its title, company, "
+             "start_date (YYYY-MM), end_date (YYYY-MM or Present), a short description, and its bullets. "
              "If a bullet references a URL (e.g. an embedded demo or repo link), preserve it verbatim as markdown `[text](url)` inside the bullet string — never drop it.")
         ])
-        chain = prompt | self.llm | JsonOutputParser()
+        extractor = get_extractor(schema=ExperienceList, llm=self.llm)
         try:
-            return self._coerce_records(chain.invoke({"text": text}), str_key="title")
+            result = extractor.invoke(prompt.format_messages(text=text))
+            return [item.model_dump() for item in result.experiences]
         except Exception as e:
             logger.error(f"Experience extraction failed: {e}")
             return []
@@ -141,11 +147,12 @@ class ResumeParserAgent:
     def _extract_education(self, text: str) -> List[Dict]:
         prompt = ChatPromptTemplate.from_messages([
             ("system", "You are an expert resume parser. Extract education entries from the text."),
-            ("user", "Text:\n{text}\n\nReturn a JSON list of objects with keys: institution, degree (full degree name including major/minor), location, start_date, end_date (graduation date, e.g. 'June 2025' or 'Expected June 2027'), gpa (string, or null if not stated). Only include entries explicitly present in the text — never invent one.")
+            ("user", "Text:\n{text}\n\nExtract each education entry: institution, degree (full degree name including major/minor), location, start_date, end_date (graduation date, e.g. 'June 2025' or 'Expected June 2027'), and gpa (or null if not stated). Only include entries explicitly present in the text — never invent one.")
         ])
-        chain = prompt | self.llm | JsonOutputParser()
+        extractor = get_extractor(schema=EducationList, llm=self.llm)
         try:
-            return self._coerce_records(chain.invoke({"text": text}), str_key="institution")
+            result = extractor.invoke(prompt.format_messages(text=text))
+            return [item.model_dump() for item in result.education]
         except Exception as e:
             logger.error(f"Education extraction failed: {e}")
             return []
@@ -153,14 +160,15 @@ class ResumeParserAgent:
     def _extract_achievements(self, text: str) -> List[Dict]:
         prompt = ChatPromptTemplate.from_messages([
             ("system", "You are an expert resume parser. Extract achievements, honors, and awards from the text."),
-            ("user", "Text:\n{text}\n\nReturn a JSON list of objects with keys: title (the award/honor name), "
+            ("user", "Text:\n{text}\n\nExtract each achievement: title (the award/honor name), "
              "description (any supporting detail, or null), issuer (awarding organization or publication, or null), "
              "date (year or date awarded, or null). Only include entries explicitly present in the text — never invent one. "
              "Do not include work experience, education degrees, or projects here.")
         ])
-        chain = prompt | self.llm | JsonOutputParser()
+        extractor = get_extractor(schema=AchievementList, llm=self.llm)
         try:
-            return self._coerce_records(chain.invoke({"text": text}), str_key="title")
+            result = extractor.invoke(prompt.format_messages(text=text))
+            return [item.model_dump() for item in result.achievements]
         except Exception as e:
             logger.error(f"Achievement extraction failed: {e}")
             return []
@@ -168,14 +176,15 @@ class ResumeParserAgent:
     def _extract_projects(self, text: str) -> List[Dict]:
         prompt = ChatPromptTemplate.from_messages([
             ("system", "You are an expert resume parser. Extract projects."),
-            ("user", "Text:\n{text}\n\nReturn a JSON list with keys: name, description, start_date, end_date. "
-             "If a source-code/repository URL is found, include 'repo_url'. "
-             "If a separate live/demo URL is found (distinct from the repo link), include 'demo_url'. "
+            ("user", "Text:\n{text}\n\nExtract each project: name, description, start_date, end_date. "
+             "If a source-code/repository URL is found, set 'repo_url'. "
+             "If a separate live/demo URL is found (distinct from the repo link), set 'demo_url'. "
              "Preserve any other URL referenced in the description verbatim as markdown `[text](url)` — never drop it.")
         ])
-        chain = prompt | self.llm | JsonOutputParser()
+        extractor = get_extractor(schema=ProjectList, llm=self.llm)
         try:
-            return self._coerce_records(chain.invoke({"text": text}), str_key="name")
+            result = extractor.invoke(prompt.format_messages(text=text))
+            return [item.model_dump() for item in result.projects]
         except Exception as e:
             logger.error(f"Project extraction failed: {e}")
             return []
@@ -183,11 +192,12 @@ class ResumeParserAgent:
     def _extract_skills(self, text: str) -> List[Dict]:
         prompt = ChatPromptTemplate.from_messages([
             ("system", "You are an expert resume parser. Extract technical skills, tools, and languages."),
-            ("user", "Text:\n{text}\n\nReturn a JSON list with keys: name, category (e.g. Language, Framework, Tool), proficiency (1-5 estimate based on context).")
+            ("user", "Text:\n{text}\n\nExtract each skill: name, category (e.g. Language, Framework, Tool), proficiency (1-5 estimate based on context).")
         ])
-        chain = prompt | self.llm | JsonOutputParser()
+        extractor = get_extractor(schema=SkillList, llm=self.llm)
         try:
-            return self._coerce_records(chain.invoke({"text": text}), str_key="name")
+            result = extractor.invoke(prompt.format_messages(text=text))
+            return [item.model_dump() for item in result.skills]
         except Exception as e:
             logger.error(f"Skill extraction failed: {e}")
             return []
@@ -216,14 +226,15 @@ class ResumeParserAgent:
              "For example, list 'xgboost', 'lightgbm', 'scikit-learn' separately, not 'ML libraries'."),
             ("user",
              "GitHub Repository Data:\n{text}\n\n"
-             "Return a JSON list of objects. Each object must have:\n"
+             "Extract each skill. Each must have:\n"
              "- name: the specific skill/library/tool name (e.g. 'XGBoost', 'Feature Engineering', 'pandas')\n"
              "- category: one of 'Language', 'Library', 'Framework', 'Tool', 'Technique', 'Database', 'Cloud'\n"
              "- proficiency: 1-5 estimate (3 if used in a project, 4 if used extensively)")
         ])
-        chain = prompt | self.llm | JsonOutputParser()
+        extractor = get_extractor(schema=SkillList, llm=self.llm)
         try:
-            return self._coerce_records(chain.invoke({"text": text}), str_key="name")
+            result = extractor.invoke(prompt.format_messages(text=text))
+            return [item.model_dump() for item in result.skills]
         except Exception as e:
             logger.error(f"Repo skill extraction failed: {e}")
             return []
