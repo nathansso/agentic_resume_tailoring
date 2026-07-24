@@ -117,3 +117,68 @@ class JobSkillItem(BaseModel):
 
 class JobSkillList(BaseModel):
     skills: List[JobSkillItem] = Field(default_factory=list)
+
+
+# ── Chain-of-Note chat extraction (agents/knowledge_extractor.py, issue #21) ──
+#
+# Two passes over the same seam: the model first writes grounded *notes* about
+# what the conversation claims, then reasons over those notes plus the facts
+# already in the knowledge graph to a per-note decision. Splitting extraction
+# from the add/supersede/no-op judgement is the Chain-of-Note shape the P0 arc
+# (LongMemEval, #108) landed on — a single pass conflates "what was said" with
+# "what should change", and reliably misses the contradiction case.
+
+class ChatArtifactNote(BaseModel):
+    """One candidate knowledge artifact observed in the conversation."""
+    type: Optional[str] = Field(
+        None, description="One of 'skill', 'project', 'experience'")
+    name: Optional[str] = Field(
+        None,
+        description=(
+            "Skill name, project name, or — for an experience — the job title"),
+    )
+    category: Optional[str] = Field(None, description="Skills only, e.g. 'Database'")
+    company: Optional[str] = Field(None, description="Experiences only: the employer")
+    description: Optional[str] = Field(None, description="Short supporting detail")
+    proficiency: Optional[int] = Field(
+        None, description="Skills only: 1-5 estimate, when the user states a level")
+    evidence: Optional[str] = Field(
+        None,
+        description=(
+            "Verbatim quote from the conversation supporting this note. Required "
+            "— omit the note entirely rather than inventing a quote."),
+    )
+    note: Optional[str] = Field(
+        None,
+        description=(
+            "One-line note on what the conversation claims about this artifact, "
+            "including whether it revises something stated earlier"),
+    )
+
+
+class ChatArtifactNoteList(BaseModel):
+    notes: List[ChatArtifactNote] = Field(default_factory=list)
+
+
+class ArtifactDecision(BaseModel):
+    """What to do with one note, judged against the existing knowledge graph."""
+    note_index: Optional[int] = Field(
+        None, description="0-based index of the note this decision is about")
+    decision: Optional[str] = Field(
+        None,
+        description=(
+            "'add' for a genuinely new fact, 'supersede' when it contradicts or "
+            "updates a fact already in the profile, 'no_op' when already known"),
+    )
+    target: Optional[str] = Field(
+        None,
+        description=(
+            "For 'supersede'/'no_op': the existing profile fact this refers to, "
+            "quoted from the supplied list"),
+    )
+    rationale: Optional[str] = Field(
+        None, description="One short sentence justifying the decision")
+
+
+class ArtifactDecisionList(BaseModel):
+    decisions: List[ArtifactDecision] = Field(default_factory=list)

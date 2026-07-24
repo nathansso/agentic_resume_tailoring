@@ -1,0 +1,33 @@
+{
+  "id": "restated_fact_is_noop",
+  "description": "The user restates a fact the graph already holds, unchanged. Nothing may be written — this is the duplicate-row failure mode, and the deterministic decide layer must catch it even when the model says 'add'.",
+  "seed": {
+    "skills": [
+      {"name": "PostgreSQL", "category": "Database", "proficiency": 4}
+    ]
+  },
+  "turns": [
+    {"role": "user", "content": "Just so it's on the record, I use PostgreSQL heavily."}
+  ],
+  "notes": [
+    {
+      "type": "skill",
+      "name": "PostgreSQL",
+      "category": "Database",
+      "evidence": "I use PostgreSQL heavily",
+      "note": "Restates a skill already in the profile."
+    }
+  ],
+  "decisions": [
+    {
+      "note_index": 0,
+      "decision": "add",
+      "rationale": "Deliberately wrong: the deterministic layer must override this to no_op."
+    }
+  ],
+  "expect": {
+    "decisions": ["no_op"],
+    "skills": [{"name": "PostgreSQL", "proficiency": 4, "count": 1}],
+    "skills_total": 1
+  }
+}

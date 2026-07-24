@@ -74,6 +74,11 @@ class UserSkill(SQLModel, table=True):
     # Pinned "core" skill (issue #54): always rendered in the tailored skills
     # section, bypassing the JD-relevance cap and ordering floor.
     is_core: bool = Field(default=False)
+    # Where a chat-captured artifact came from, e.g. "chat:<job_id>" (issue #21).
+    # Deliberately a free-form string and NOT a foreign key: deleting the job or
+    # its chat history must never cascade into knowledge-graph rows, which belong
+    # to the user profile.
+    source_context: Optional[str] = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -92,6 +97,8 @@ class Experience(SQLModel, table=True):
     # User manually edited this row via the Data Explorer (issue #92). Protects
     # the row's fields from being reverted/enriched by a later re-ingest.
     manually_edited: bool = Field(default=False)
+    # Soft origin-chat back-reference (issue #21). See UserSkill.source_context.
+    source_context: Optional[str] = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -152,6 +159,8 @@ class Project(SQLModel, table=True):
     metrics: Dict = Field(default={}, sa_column=Column(JSON)) # GitHub signals: stars, languages, readme_length (issue #46)
     # User manually edited this row via the Data Explorer (issue #92).
     manually_edited: bool = Field(default=False)
+    # Soft origin-chat back-reference (issue #21). See UserSkill.source_context.
+    source_context: Optional[str] = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

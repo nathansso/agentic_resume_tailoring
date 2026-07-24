@@ -1144,82 +1144,87 @@ def test_analyze_job_does_not_create_user_skill_rows(isolated_engine, monkeypatc
 
 # ── _extract_chat_artifacts ───────────────────────────────────────────────────
 
-def test_extract_chat_artifacts_with_fixture_llm(isolated_engine, monkeypatch):
-    """_extract_chat_artifacts parses a canned JSON response from the LLM correctly."""
-    import json
+def _patch_chain_of_note(monkeypatch, notes, decisions):
+    """Route agents.knowledge_extractor's get_extractor to scripted payloads.
 
+    Patching the #142 seam itself (rather than get_llm) is the point: after #21
+    chat extraction never sees raw model text, only schema-validated models.
+    """
+    import agents.knowledge_extractor as ke_module
+    from agents.extraction_schemas import ArtifactDecisionList, ChatArtifactNoteList
+
+    payloads = {
+        ChatArtifactNoteList: ChatArtifactNoteList(notes=notes),
+        ArtifactDecisionList: ArtifactDecisionList(decisions=decisions),
+    }
+
+    class _Scripted:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def invoke(self, _messages):
+            return self.payload
+
+    monkeypatch.setattr(
+        ke_module, "get_extractor",
+        lambda role=None, schema=None, **kw: _Scripted(payloads[schema]),
+    )
+
+
+def test_extract_chat_artifacts_with_fixture_llm(isolated_engine, monkeypatch):
+    """_extract_chat_artifacts returns decided proposals off the Chain-of-Note seam."""
     _seed_user_and_skill(isolated_engine)
 
-    canned_response = json.dumps([
-        {"type": "skill", "name": "Redis", "category": "Database", "description": "",
-         "evidence": "I built a distributed cache at my last job using Redis"},
-        {"type": "project", "name": "Distributed Cache", "description": "Redis-backed layer",
-         "evidence": "I built a distributed cache at my last job using Redis"},
-    ])
-
-    class FixtureLLM:
-        def invoke(self, *_args, **_kwargs):
-            class Resp:
-                content = canned_response
-            return Resp()
-
-    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: FixtureLLM())
+    _patch_chain_of_note(
+        monkeypatch,
+        notes=[
+            {"type": "skill", "name": "Redis", "category": "Database",
+             "evidence": "I built a distributed cache at my last job using Redis"},
+            {"type": "project", "name": "Distributed Cache",
+             "description": "Redis-backed layer",
+             "evidence": "I built a distributed cache at my last job using Redis"},
+        ],
+        decisions=[
+            {"note_index": 0, "decision": "add"},
+            {"note_index": 1, "decision": "add"},
+        ],
+    )
 
     agent = chat_module.ChatAgent()
-    messages = [
+    candidates = agent._extract_chat_artifacts([
         {"role": "user", "content": "I built a distributed cache at my last job using Redis."},
         {"role": "assistant", "content": "That's great experience!"},
-    ]
-    candidates = agent._extract_chat_artifacts(messages)
+    ])
 
     assert len(candidates) == 2, f"Expected 2 candidates, got {len(candidates)}: {candidates}"
-    types = {c["type"] for c in candidates}
-    assert "skill" in types
-    assert "project" in types
-    names = {c["name"] for c in candidates}
-    assert "Redis" in names
-    assert "Distributed Cache" in names
+    assert {c["type"] for c in candidates} == {"skill", "project"}
+    assert {c["name"] for c in candidates} == {"Redis", "Distributed Cache"}
+    assert {c["decision"] for c in candidates} == {"add"}
 
 
 def test_extract_chat_artifacts_returns_empty_on_nothing_new(isolated_engine, monkeypatch):
-    """_extract_chat_artifacts returns [] when the LLM finds no new items."""
+    """_extract_chat_artifacts returns [] when the extractor finds no notes."""
     _seed_user_and_skill(isolated_engine)
-
-    class FixtureLLM:
-        def invoke(self, *_args, **_kwargs):
-            class Resp:
-                content = "[]"
-            return Resp()
-
-    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: FixtureLLM())
+    _patch_chain_of_note(monkeypatch, notes=[], decisions=[])
 
     agent = chat_module.ChatAgent()
-    candidates = agent._extract_chat_artifacts([{"role": "user", "content": "Hello!"}])
-    assert candidates == []
+    assert agent._extract_chat_artifacts([{"role": "user", "content": "Hello!"}]) == []
 
 
 def test_extract_chat_artifacts_filters_no_evidence(isolated_engine, monkeypatch):
-    """_extract_chat_artifacts drops candidates that have empty or missing evidence."""
-    import json
-
+    """Notes with empty or missing evidence are dropped before they can be offered."""
     _seed_user_and_skill(isolated_engine)
 
-    # Item 1 has evidence (should be kept); item 2 has empty evidence (should be dropped);
-    # item 3 is missing the key entirely (should be dropped).
-    canned = json.dumps([
-        {"type": "skill", "name": "Redis", "category": "Database",
-         "evidence": "I use Redis daily for caching in my current role"},
-        {"type": "project", "name": "No Evidence Project", "description": "...", "evidence": ""},
-        {"type": "skill", "name": "Kafka", "category": "Messaging"},
-    ])
-
-    class FixtureLLM:
-        def invoke(self, *_a, **_kw):
-            class Resp:
-                content = canned
-            return Resp()
-
-    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: FixtureLLM())
+    _patch_chain_of_note(
+        monkeypatch,
+        notes=[
+            {"type": "skill", "name": "Redis", "category": "Database",
+             "evidence": "I use Redis daily for caching in my current role"},
+            {"type": "project", "name": "No Evidence Project", "evidence": ""},
+            {"type": "skill", "name": "Kafka", "category": "Messaging"},
+        ],
+        decisions=[{"note_index": 0, "decision": "add"}],
+    )
 
     agent = chat_module.ChatAgent()
     candidates = agent._extract_chat_artifacts([
@@ -1230,24 +1235,86 @@ def test_extract_chat_artifacts_filters_no_evidence(isolated_engine, monkeypatch
     assert candidates[0]["name"] == "Redis"
 
 
-def test_save_command_fast_path_no_llm_call_on_empty(isolated_engine, monkeypatch):
-    """/save with an LLM returning [] reports 'no new items' without touching DB."""
-    _seed_user_and_skill(isolated_engine)
+def test_extract_chat_artifacts_sees_the_users_existing_graph(isolated_engine, monkeypatch):
+    """A restated known fact comes back as no_op, so /save has nothing to offer."""
+    _seed_user_and_skill(isolated_engine)  # seeds the Python skill
 
-    class EmptyExtractLLM:
-        def invoke(self, *_args, **_kwargs):
+    _patch_chain_of_note(
+        monkeypatch,
+        notes=[{"type": "skill", "name": "Python", "evidence": "I use Python a lot"}],
+        decisions=[{"note_index": 0, "decision": "add"}],
+    )
+
+    agent = chat_module.ChatAgent()
+    candidates = agent._extract_chat_artifacts([
+        {"role": "user", "content": "I use Python a lot."},
+    ])
+    assert [c["decision"] for c in candidates] == ["no_op"]
+
+
+def test_save_command_offers_but_does_not_write(isolated_engine, monkeypatch):
+    """/save requires explicit confirmation — listing candidates writes nothing."""
+    from sqlmodel import Session as S, select as sel
+    from database.models import Skill as SkillModel
+
+    _seed_user_and_skill(isolated_engine)
+    _patch_chain_of_note(
+        monkeypatch,
+        notes=[{"type": "skill", "name": "Redis", "category": "Database",
+                "evidence": "I use Redis daily"}],
+        decisions=[{"note_index": 0, "decision": "add"}],
+    )
+
+    agent = chat_module.ChatAgent()
+    agent.history.append({"role": "user", "content": "I use Redis daily."})
+    response = agent._handle_save_command()
+
+    assert "Redis" in response
+    assert agent._pending_options, "the accept/dismiss options should be pending"
+    with S(isolated_engine) as session:
+        assert session.exec(sel(SkillModel).where(SkillModel.name == "Redis")).first() is None, (
+            "nothing may be written before the user confirms"
+        )
+
+    # Confirming option 1 is what actually writes.
+    assert "added" in agent._pending_options["1"]().lower()
+    with S(isolated_engine) as session:
+        assert session.exec(sel(SkillModel).where(SkillModel.name == "Redis")).first()
+
+
+def test_save_command_labels_a_supersede_as_an_update(isolated_engine, monkeypatch):
+    _seed_user_and_skill(isolated_engine)
+    _patch_chain_of_note(
+        monkeypatch,
+        notes=[{"type": "skill", "name": "Python", "proficiency": 2,
+                "evidence": "I'm rusty at Python now"}],
+        decisions=[{"note_index": 0, "decision": "supersede", "target": "skill: Python"}],
+    )
+
+    agent = chat_module.ChatAgent()
+    agent.history.append({"role": "user", "content": "I'm rusty at Python now."})
+    response = agent._handle_save_command()
+    assert "Update skill: Python" in response
+    assert "Replaces: skill: Python" in response
+
+
+def test_save_command_fast_path_no_llm_call_on_empty(isolated_engine, monkeypatch):
+    """/save with no extracted notes reports 'no new items' without touching the DB."""
+    _seed_user_and_skill(isolated_engine)
+    _patch_chain_of_note(monkeypatch, notes=[], decisions=[])
+
+    class UnusedLLM:
+        def invoke(self, *_a, **_kw):
             class Resp:
-                content = "[]"
+                content = "RESPONSE: unused"
             return Resp()
 
-    # Both initial LLM (router) and extraction LLM use the same monkeypatch here.
-    monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.0: EmptyExtractLLM())
-    monkeypatch.setattr(chat_module, "get_llm", lambda **kw: EmptyExtractLLM())
+    monkeypatch.setattr(chat_module, "get_llm", lambda **kw: UnusedLLM())
 
     agent = chat_module.ChatAgent()
     response = agent.chat("/save")
 
-    assert "no new" in response.lower() or "not detected" in response.lower() or "detected" in response.lower()
+    assert "no new" in response.lower() or "detected" in response.lower()
 
 
 # ── Edge cases and error paths ────────────────────────────────────────────────

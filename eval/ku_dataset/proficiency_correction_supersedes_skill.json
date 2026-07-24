@@ -1,0 +1,37 @@
+{
+  "id": "proficiency_correction_supersedes_skill",
+  "description": "The user corrects how strong they are at a skill the graph already holds. The existing UserSkill link must be updated in place — the pre-#21 path dead-ended on 'already in your profile' and left the stale value.",
+  "seed": {
+    "skills": [
+      {"name": "Kubernetes", "category": "Tool", "proficiency": 2}
+    ]
+  },
+  "turns": [
+    {"role": "user", "content": "My resume lists Kubernetes as a beginner skill."},
+    {"role": "assistant", "content": "Noted — that's how it's stored right now."},
+    {"role": "user", "content": "That's out of date. I've run production Kubernetes clusters for two years now, I'd call myself advanced."}
+  ],
+  "notes": [
+    {
+      "type": "skill",
+      "name": "Kubernetes",
+      "category": "Tool",
+      "proficiency": 5,
+      "evidence": "I've run production Kubernetes clusters for two years now, I'd call myself advanced",
+      "note": "Revises the stored beginner-level proficiency upward."
+    }
+  ],
+  "decisions": [
+    {
+      "note_index": 0,
+      "decision": "supersede",
+      "target": "skill: Kubernetes",
+      "rationale": "Same skill, corrected proficiency."
+    }
+  ],
+  "expect": {
+    "decisions": ["supersede"],
+    "skills": [{"name": "Kubernetes", "proficiency": 5, "count": 1}],
+    "skills_total": 1
+  }
+}

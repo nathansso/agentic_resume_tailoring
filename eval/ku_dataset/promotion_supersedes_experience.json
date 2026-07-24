@@ -1,0 +1,37 @@
+{
+  "id": "promotion_supersedes_experience",
+  "description": "A later turn revises the user's title at an employer already in the graph. The existing Experience row must move to the new title — not stay stale, and not gain a second row for the same job.",
+  "seed": {
+    "experiences": [
+      {"title": "Senior Engineer", "company": "Acme", "description": "Backend services"}
+    ]
+  },
+  "turns": [
+    {"role": "user", "content": "I'm a Senior Engineer at Acme, mostly backend services."},
+    {"role": "assistant", "content": "Got it — I'll keep that in mind while tailoring."},
+    {"role": "user", "content": "Actually, update that: I got promoted to Staff Engineer at Acme last month."}
+  ],
+  "notes": [
+    {
+      "type": "experience",
+      "name": "Staff Engineer",
+      "company": "Acme",
+      "description": "Backend services",
+      "evidence": "I got promoted to Staff Engineer at Acme last month",
+      "note": "Revises the earlier claim of Senior Engineer at the same employer."
+    }
+  ],
+  "decisions": [
+    {
+      "note_index": 0,
+      "decision": "supersede",
+      "target": "experience: Senior Engineer @ Acme",
+      "rationale": "Same employer, new title — this replaces the stored role."
+    }
+  ],
+  "expect": {
+    "decisions": ["supersede"],
+    "experiences": [{"company": "Acme", "title": "Staff Engineer", "count": 1}],
+    "experiences_total": 1
+  }
+}
