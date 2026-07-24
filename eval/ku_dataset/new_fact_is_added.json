@@ -1,0 +1,39 @@
+{
+  "id": "new_fact_is_added",
+  "description": "Control case for the supersede tasks: a genuinely new artifact must still be added. A pipeline that superseded everything would pass the update tasks and fail here.",
+  "seed": {
+    "skills": [
+      {"name": "Python", "category": "Language", "proficiency": 5}
+    ]
+  },
+  "turns": [
+    {"role": "user", "content": "I built a distributed cache at my last job using Redis."}
+  ],
+  "notes": [
+    {
+      "type": "skill",
+      "name": "Redis",
+      "category": "Database",
+      "evidence": "I built a distributed cache at my last job using Redis",
+      "note": "New skill, not currently in the profile."
+    },
+    {
+      "type": "project",
+      "name": "Distributed Cache",
+      "description": "Redis-backed caching layer",
+      "evidence": "I built a distributed cache at my last job using Redis",
+      "note": "New project, not currently in the profile."
+    }
+  ],
+  "decisions": [
+    {"note_index": 0, "decision": "add", "rationale": "Redis is not in the profile."},
+    {"note_index": 1, "decision": "add", "rationale": "This project is not in the profile."}
+  ],
+  "expect": {
+    "decisions": ["add", "add"],
+    "skills": [{"name": "Redis", "category": "Database", "count": 1}],
+    "projects": [{"name": "Distributed Cache", "count": 1}],
+    "skills_total": 2,
+    "projects_total": 1
+  }
+}
