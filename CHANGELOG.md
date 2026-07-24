@@ -4,6 +4,25 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issue 138 — Wire the knowledge graph into the tailoring planner as a mandatory evidence step
+**Status:** complete | **Tests:** 674 pass (12 new)
+
+The knowledge graph informed skill *matching* (`agents/matcher.py`) but never the *tailoring decision* that writes the resume. `tailor.py::_load_inputs` read flat `Experience`/`Project`/`UserSkill` rows and pre-selected projects by JD-keyword overlap, so a project that evidences a *required* JD skill whose name the JD's own prose never repeats scored low, dropped into the replacement pool, and the planner never saw it. This adds a mandatory KG-evidence node to the tailoring pipeline so "the graph is actually consulted during tailoring" is a guarantee, not incidental — the facts-side mirror of the planned mandatory persona node (#129/#133).
+
+### What shipped
+- **One shared evidence-traversal surface (`knowledge_graph/builder.py`).** `SkillGraphBuilder` gains `get_experiences_using_skill()` (the experience-side mirror of the existing `get_projects_using_skill()`, returning `{title, company}`) and `evidence_for_skills(skill_names)` → `{skill: {projects, experiences}}`, omitting skills with no evidence edge. The matcher and the planner now reach the graph through this one builder; no traversal is duplicated into `tailor.py`.
+- **A mandatory KG-evidence node in `_load_inputs` (`agents/tailor.py`).** After project pre-selection, tailoring always builds the user's graph and gathers evidence for the active JD's skills (`JobSkill → Skill.name`), then:
+  - *promotes* a pooled project the graph ties to a JD skill no already-selected item covers into the candidate set the planner sees (and drops it from the replace pool), capped at `MAX_PROJECTS`;
+  - *annotates* each evidenced candidate with a `graph_evidence` list.
+  Wrapped in try/except → `{}`, so a build failure or sparse graph degrades gracefully.
+- **Planner consumption (`agents/tailor_planner.py`).** `_planner_items` carries `graph_evidence` onto each item; `_llm_plan` includes it in the per-item planning payload and the prompt instructs the planner to treat it as strong relevance evidence — prefer keep/revise over delete, never replace an item that uniquely evidences a required skill. `plan_preview()` inherits this. `n_graph_evidence` is added to the decision-log context features.
+- **Backward compatibility as a hard guarantee.** Every touch is additive and gated on non-empty evidence: an empty graph means no promotion, no `graph_evidence` keys, and byte-for-byte-identical planner/generator payloads. The deterministic `default_plan`/`validate_plan` never read the new field. Covered by a test asserting the candidate set is unchanged and deterministic when evidence is empty.
+
+### Deviations from spec
+- **Promotion is projects-only.** All experiences already reach the planner (they are budgeted, not pooled), so for experiences the graph value is annotation; only projects get dropped into a pool, so only they need promotion. The issue names experiences too — they are covered by annotation, not promotion.
+- **The graph-only demonstration uses a required-skill-not-in-JD-prose path**, not GitHub provenance. Provenance edges (the strongest graph-only signal) live in the unmerged #136 branch; this change is based on `main`, so the test evidences the same "text pre-selection misses it, the graph catches it" gap with the substring graph `main` already has. On top of #136's richer builder the same code additionally surfaces provenance-only ties for free.
+- **All JD skills feed evidence, not only `required` ones** — a graph tie is a tie; keeps the surface minimal.
+
 ## Issues 83 & 134 — Landing page, Tailwind migration, and the Supabase-light theme
 **Status:** complete | **Tests:** 670 Python pass (5 new), 90 frontend pass (3 new)
 
