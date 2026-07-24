@@ -2,7 +2,7 @@ import networkx as nx
 import logging
 from uuid import UUID
 from sqlmodel import Session, select
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from database.db import engine
 from database.models import User, Skill, UserSkill, Project, Experience
@@ -126,3 +126,45 @@ class SkillGraphBuilder:
             if self.graph.nodes[n]['type'] == 'Project':
                 sources.append(self.graph.nodes[n]['name'])
         return sources
+
+    def get_experiences_using_skill(self, skill_name: str) -> List[Dict[str, Optional[str]]]:
+        """Experiences that DEMONSTRATE this skill, as {title, company} dicts.
+
+        The Experience->Skill edge is set in _connect_entities from the role's
+        title/description/bullets, so a hit means the skill is evidenced by that
+        experience's logged work. Returns title *and* company (not just the node
+        name) because titles collide across employers, and the planner keys an
+        experience by both. Mirrors get_projects_using_skill for the experience
+        side (issue #138)."""
+        target = f"Skill:{skill_name}"
+        if target not in self.graph:
+            return []
+        out: List[Dict[str, Optional[str]]] = []
+        for n in self.graph.predecessors(target):
+            node = self.graph.nodes[n]
+            if node.get("type") == "Experience":
+                out.append({"title": node.get("name"), "company": node.get("company")})
+        return out
+
+    def evidence_for_skills(self, skill_names: List[str]) -> Dict[str, Dict[str, List]]:
+        """Graph evidence tying each given (JD) skill to this user's work.
+
+        For every skill, the projects that USE it and the experiences that
+        DEMONSTRATE it — including ties the JD-keyword pre-selection in the
+        tailoring pipeline misses, such as a required skill a project evidences
+        whose name the JD's own prose never repeats (issue #138). build_graph()
+        must have run first; skills with no evidence edge are omitted, so an
+        empty/sparse graph yields {}.
+
+        This is the single evidence-traversal surface shared by the matcher and
+        the tailoring planner — neither reimplements graph traversal on top of
+        the raw networkx graph.
+        """
+        evidence: Dict[str, Dict[str, List]] = {}
+        # dict.fromkeys de-dupes while preserving caller order.
+        for name in dict.fromkeys(n for n in (skill_names or []) if n):
+            projects = self.get_projects_using_skill(name)
+            experiences = self.get_experiences_using_skill(name)
+            if projects or experiences:
+                evidence[name] = {"projects": projects, "experiences": experiences}
+        return evidence
