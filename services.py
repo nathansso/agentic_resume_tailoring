@@ -908,6 +908,8 @@ def create_artifact_from_chat(
           title/company/description for experience).  Must include a non-empty 'evidence' key:
           a verbatim quote or paraphrase from the conversation that supports saving this artifact.
     source_context: free-form back-reference (e.g. 'chat:job_<id>') stored on the artifact.
+          Soft metadata only — a plain text column, never a foreign key, so deleting the job
+          or its chat history can never cascade into these rows (issue #21).
     Returns a plain-English result string. Never raises.
     """
     try:
@@ -944,13 +946,15 @@ def create_artifact_from_chat(
                 ).first()
                 if existing:
                     return f"'{name}' is already in your profile."
+                proficiency = data.get("proficiency")
                 session.add(UserSkill(
                     user_id=user_id,
                     skill_id=skill.skill_id,
-                    proficiency=3,
+                    proficiency=proficiency if isinstance(proficiency, int) else 3,
                     evidence_source="chat",
                     confidence_score=0.7,
                     evidence_detail=evidence,  # verbatim quote from the conversation
+                    source_context=source_context,
                 ))
                 session.commit()
             return f"Added skill '{name}' to your profile (source: chat)."
@@ -975,6 +979,7 @@ def create_artifact_from_chat(
                     name=name,
                     description=description,
                     repo_url=repo_url,
+                    source_context=source_context,
                 ))
                 session.commit()
             return f"Added project '{name}' to your profile."
@@ -1000,6 +1005,7 @@ def create_artifact_from_chat(
                     title=title,
                     company=company,
                     description=description,
+                    source_context=source_context,
                 ))
                 session.commit()
             return f"Added experience '{title} @ {company}' to your profile."
@@ -1008,6 +1014,255 @@ def create_artifact_from_chat(
     except Exception as e:
         logger.error("create_artifact_from_chat failed: %s", e)
         return f"Failed to create artifact: {e}"
+
+
+# ── Chain-of-Note decision application (issue #21) ────────────────────────────
+#
+# The extractor in agents/knowledge_extractor.py proposes one of three actions
+# per artifact; this is where a *confirmed* proposal becomes rows. Nothing here
+# runs without an explicit user accept — there is no auto-write path.
+
+
+def _supersede_skill(session, user_id: UUID, data: dict, evidence: str,
+                     source_context: Optional[str]) -> Optional[str]:
+    """Update an existing UserSkill in place. None when there's no row to update."""
+    from datetime import datetime
+
+    name = (data.get("name") or "").strip()
+    all_skills = session.exec(select(Skill)).all()
+    skill = next((s for s in all_skills if s.name.lower() == name.lower()), None)
+    if not skill:
+        return None
+    link = session.exec(
+        select(UserSkill).where(
+            UserSkill.user_id == user_id,
+            UserSkill.skill_id == skill.skill_id,
+        )
+    ).first()
+    if not link:
+        return None
+
+    changes = []
+    category = (data.get("category") or "").strip()
+    if category and category != (skill.category or ""):
+        changes.append(f"category → {category}")
+        skill.category = category
+        session.add(skill)
+    proficiency = data.get("proficiency")
+    if isinstance(proficiency, int) and proficiency != link.proficiency:
+        changes.append(f"proficiency → {proficiency}")
+        link.proficiency = proficiency
+    link.evidence_detail = evidence
+    link.evidence_source = "chat"
+    link.source_context = source_context
+    link.updated_at = datetime.utcnow()
+    session.add(link)
+    session.commit()
+    detail = f" ({', '.join(changes)})" if changes else ""
+    return f"Updated skill '{skill.name}' from our conversation{detail}."
+
+
+def _target_name(target: Optional[str], kind: str) -> Optional[str]:
+    """The artifact name inside a decision target label, e.g. 'project: Foo' → 'Foo'.
+
+    The reason step points at the fact it means to replace by quoting the label
+    `knowledge_extractor.load_known_facts` built. Parsing it back lets a rename
+    or a promotion find the right row — the *new* name can't, by definition.
+    """
+    if not target:
+        return None
+    prefix = f"{kind}:"
+    label = target.strip()
+    if label.lower().startswith(prefix):
+        label = label[len(prefix):].strip()
+    if kind == "experience" and " @ " in label:
+        label = label.split(" @ ", 1)[0].strip()
+    return label or None
+
+
+def _supersede_project(session, user_id: UUID, data: dict, evidence: str,
+                       source_context: Optional[str]) -> Optional[str]:
+    """Update an existing Project in place. None when there's no row to update."""
+    from datetime import datetime
+
+    from agents.parser import ResumeParserAgent
+
+    name = (data.get("name") or "").strip()
+    repo_url = (data.get("repo_url") or "").strip() or None
+    rows = session.exec(select(Project).where(Project.user_id == user_id)).all()
+    # Reuse the ingestion deduper's matcher rather than a second notion of
+    # "same project" (shared repo URL, spacing/containment on the name).
+    row = next(
+        (p for p in rows
+         if ResumeParserAgent._projects_match(name, repo_url, p.name, p.repo_url)),
+        None,
+    )
+    if row is None:
+        # A rename changes the name the matcher keys on; the decision's target
+        # still names the row we mean.
+        old_name = _target_name(data.get("target"), "project")
+        row = next(
+            (p for p in rows
+             if old_name and ResumeParserAgent._names_match(old_name, p.name)),
+            None,
+        )
+    if not row:
+        return None
+
+    changes = []
+    if name and name.lower() != (row.name or "").lower():
+        changes.append(f"name → {name}")
+        row.name = name
+    # Only fall back to the evidence quote when there is no description to lose:
+    # on an update, overwriting a real description with a chat quote is a downgrade.
+    description = (data.get("description") or "").strip() or (
+        evidence if not row.description else None)
+    if description and description != row.description:
+        changes.append("description")
+        row.description = description
+    if repo_url and repo_url != row.repo_url:
+        changes.append("repo link")
+        row.repo_url = repo_url
+    for field in ("start_date", "end_date"):
+        value = (data.get(field) or "").strip()
+        if value and value != getattr(row, field):
+            changes.append(field.replace("_", " "))
+            setattr(row, field, value)
+    row.source_context = source_context
+    row.updated_at = datetime.utcnow()
+    session.add(row)
+    session.commit()
+    detail = f" ({', '.join(changes)})" if changes else ""
+    return f"Updated project '{row.name}' from our conversation{detail}."
+
+
+def _supersede_experience(session, user_id: UUID, data: dict, evidence: str,
+                          source_context: Optional[str]) -> Optional[str]:
+    """Update an existing Experience in place. None when there's no row to update.
+
+    The headline case is a role change at the same employer ("I got promoted to
+    Staff Engineer"): the title on the existing row moves rather than a second
+    row appearing for the same job.
+    """
+    from datetime import datetime
+
+    from agents.parser import ResumeParserAgent
+
+    title = (data.get("title") or data.get("name") or "").strip()
+    company = (data.get("company") or "").strip()
+    rows = session.exec(select(Experience).where(Experience.user_id == user_id)).all()
+    row = next(
+        (e for e in rows
+         if ResumeParserAgent._experiences_match(title, company, e.title, e.company)),
+        None,
+    )
+    if row is None:
+        # A promotion changes the title, so title matching fails by design.
+        # The decision's target still names the role being replaced; fall back
+        # to the employer only when it doesn't.
+        old_title = _target_name(data.get("target"), "experience")
+        row = next(
+            (e for e in rows
+             if ResumeParserAgent._experiences_match(
+                 old_title, company, e.title, e.company)),
+            None,
+        ) if old_title else None
+    if row is None and company:
+        # Last resort: the employer alone. Only when it is unambiguous — with two
+        # roles at the same company there is no way to tell which one the user
+        # meant, and overwriting the wrong one is worse than adding a new row.
+        at_company = [e for e in rows
+                      if ResumeParserAgent._institutions_match(company, e.company)]
+        row = at_company[0] if len(at_company) == 1 else None
+    if not row:
+        return None
+
+    changes = []
+    if title and title.lower() != (row.title or "").lower():
+        changes.append(f"title → {title}")
+        row.title = title
+    description = (data.get("description") or "").strip()
+    if description and description != row.description:
+        changes.append("description")
+        row.description = description
+    for field in ("start_date", "end_date"):
+        value = (data.get(field) or "").strip()
+        if value and value != getattr(row, field):
+            changes.append(field.replace("_", " "))
+            setattr(row, field, value)
+    row.source_context = source_context
+    row.updated_at = datetime.utcnow()
+    session.add(row)
+    session.commit()
+    detail = f" ({', '.join(changes)})" if changes else ""
+    return f"Updated experience '{row.title} @ {row.company}' from our conversation{detail}."
+
+
+_SUPERSEDERS = {
+    "skill": _supersede_skill,
+    "project": _supersede_project,
+    "experience": _supersede_experience,
+}
+
+
+def apply_artifact_decision(
+    user_id: UUID,
+    proposal: dict,
+    source_context: str = "chat",
+) -> str:
+    """Persist one *confirmed* Chain-of-Note proposal. Returns plain English.
+
+    `proposal` is one entry from `agents.knowledge_extractor.run_chain_of_note`:
+    the note's fields plus a `decision` of 'add' | 'supersede' | 'no_op'.
+
+    - add       → create the row (delegates to create_artifact_from_chat)
+    - supersede → update the matching row in place, so a later turn that
+                  contradicts an earlier fact refreshes the graph instead of
+                  duplicating it or being silently dropped as "already known"
+    - no_op     → nothing to do; say so
+
+    Never raises. Called only after an explicit user accept — this function is
+    not wired to any automatic path.
+    """
+    try:
+        decision = (proposal.get("decision") or "add").strip().lower()
+        artifact_type = (proposal.get("type") or "").strip().lower()
+        # The note schema carries the job title in `name` (one field across all
+        # three artifact types); the Experience row and its creator want `title`.
+        if artifact_type == "experience" and not proposal.get("title"):
+            proposal = {**proposal, "title": proposal.get("name")}
+
+        if decision == "no_op":
+            label = proposal.get("name") or artifact_type or "That"
+            return f"'{label}' is already in your profile — nothing to change."
+
+        if decision != "supersede":
+            return create_artifact_from_chat(
+                user_id, artifact_type, proposal, source_context=source_context)
+
+        evidence = (proposal.get("evidence") or "").strip()
+        if not evidence:
+            return (
+                "Evidence is required to update this artifact from chat. "
+                "Describe what was said in the conversation that supports this."
+            )
+        superseder = _SUPERSEDERS.get(artifact_type)
+        if not superseder:
+            return (
+                f"Unknown artifact type: '{artifact_type}'. "
+                "Use 'skill', 'project', or 'experience'."
+            )
+        with Session(engine) as session:
+            result = superseder(session, user_id, proposal, evidence, source_context)
+        if result:
+            return result
+        # Nothing matched — the graph doesn't hold what we meant to update, so
+        # the honest action is to create it rather than report a phantom update.
+        return create_artifact_from_chat(
+            user_id, artifact_type, proposal, source_context=source_context)
+    except Exception as e:
+        logger.error("apply_artifact_decision failed: %s", e)
+        return f"Failed to save artifact: {e}"
 
 
 def delete_resume(user_id: UUID) -> None:
