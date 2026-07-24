@@ -153,6 +153,7 @@ class ResumeTailorAgent:
         user_id: UUID,
         job_id: UUID,
         result_id: UUID,
+        allow_classify: bool = True,
     ) -> Dict:
         """
         Load and prepare every generator input for a tailoring run: cleaned,
@@ -160,6 +161,9 @@ class ResumeTailorAgent:
         pool; the contextual keyword plan; and the prior tailored content.
         Shared by tailor() and plan_preview() so a chat proposal sees exactly
         the inputs the eventual run will use (issue #91).
+
+        *allow_classify* False keeps JobCard selection (issue #137) off the
+        model: the active JD's role family is then read from cache only.
         """
         with Session(engine) as session:
             # Load context
@@ -268,6 +272,17 @@ class ResumeTailorAgent:
                 exp_dicts, proj_dicts, jd_text, missing_keywords, skill_terms, corpus
             )
 
+            # ── Cross-job memory: relevance-ranked JobCards (issue #137) ─────
+            # The KG above supplies facts about *this* candidate; JobCards
+            # supply outcomes from their *previous* jobs — what they led with,
+            # what they took out, how it scored. Selection is bounded (top-N
+            # under a token budget), so prompt cost stays flat as jobs
+            # accumulate. Everything is gated on there being cards at all, so a
+            # first-time user pays nothing, not even the role classify.
+            job_cards, active_role_family = self._select_job_cards(
+                user_id, job_id, job, jd_skill_names, session, allow_classify,
+            )
+
             # Prior tailored content is the source of truth for re-tailoring
             # (issue #91): the planner plans a delta against it instead of
             # regenerating from scratch.
@@ -289,6 +304,11 @@ class ResumeTailorAgent:
             # KG-derived evidence (issue #138): item_key -> [JD skills the graph
             # ties this candidate to]. Empty when the graph is sparse.
             "item_evidence": item_evidence,
+            # Cross-job memory (issue #137): the top-N prior JobCards ranked
+            # against this JD, and this JD's own role family. Empty for a user
+            # with no completed jobs, which makes every consumer a no-op.
+            "job_cards": job_cards,
+            "role_family": active_role_family,
         }
 
     def plan_preview(
@@ -303,7 +323,10 @@ class ResumeTailorAgent:
         the validated plan the next tailoring run would execute, so the chat
         agent can surface the delta for approval before spending a tailor run.
         """
-        inputs = self._load_inputs(user_id, job_id, result_id)
+        # allow_classify=False: a preview is a cheap look-ahead, so JobCard
+        # ranking reads the role-family cache but never spends a model call
+        # on it (issue #137).
+        inputs = self._load_inputs(user_id, job_id, result_id, allow_classify=False)
         return self.planner.plan(
             items=self._planner_items(inputs["experiences"], inputs["projects"]),
             pool=self._planner_pool(inputs["project_pool"]),
@@ -311,6 +334,7 @@ class ResumeTailorAgent:
             missing_skills=list(inputs["missing_skills"]),
             revision_notes=revision_notes.strip(),
             prior_content=inputs["prior_content"] or None,
+            job_cards=inputs.get("job_cards"),
             # A previewed plan goes to a human for approval, which makes it
             # off-policy whatever we sample — don't spend exploration on it.
             allow_explore=False,
@@ -373,6 +397,7 @@ class ResumeTailorAgent:
                 missing_skills=list(inputs["missing_skills"]),
                 revision_notes=revision_notes.strip(),
                 prior_content=prior_content or None,
+                job_cards=inputs.get("job_cards"),
             )
         exp_dicts, proj_dicts, keyword_assignments = self._apply_plan_to_inputs(
             plan, exp_dicts, proj_dicts, proj_pool, keyword_assignments, prior_content
@@ -474,6 +499,8 @@ class ResumeTailorAgent:
                     "attempts": final_state["attempt"],
                     # How many candidate items carried KG evidence this run (#138).
                     "n_graph_evidence": len(inputs.get("item_evidence") or {}),
+                    # How many prior JobCards were injected this run (#137).
+                    "n_job_cards": len(inputs.get("job_cards") or []),
                 }
                 log = _as_obj(result.tailoring_decisions, [])
                 # Copy before append: mutating the tracked list in place would
@@ -492,8 +519,10 @@ class ResumeTailorAgent:
         # web, chat, CLI — reaches tailoring through this method, so hooking it
         # here is the one place that covers them all. Never fatal: a card is an
         # optimization and rebuild_job_card swallows its own failures.
+        # The role family was already resolved for card selection above, so hand
+        # it back rather than paying for the same classification twice.
         from services import rebuild_job_card
-        rebuild_job_card(user_id, job_id)
+        rebuild_job_card(user_id, job_id, role_family=inputs.get("role_family"))
 
         logger.info(
             "Tailoring complete after %d attempt(s); shipped best (composite %s)",
@@ -1439,6 +1468,57 @@ class ResumeTailorAgent:
             ev = item_evidence.get(cls._proj_key(p))
             if ev:
                 p["graph_evidence"] = ev
+
+    # ── Cross-job memory: JobCard selection (issue #137) ─────────────────────
+
+    @staticmethod
+    def _select_job_cards(
+        user_id: UUID,
+        job_id: UUID,
+        job,
+        jd_skill_names: List[str],
+        session,
+        allow_classify: bool = True,
+    ) -> tuple:
+        """Rank this user's prior JobCards against the active JD.
+
+        Returns (selected_cards, active_role_family). Every failure mode — no
+        cards, no embedding model, a bad row — degrades to ([], None), which
+        makes the planner payload byte-for-byte identical to the pre-#137
+        prompt. That is the backward-compatibility guarantee: absent cards mean
+        absent behavior change.
+
+        The JD centroid comes from `ensure_job_embedding`, the same cache the
+        skill scorer uses, and similarity is computed by the #142 vector seam in
+        candidates mode inside `select_cards`.
+        """
+        try:
+            from agents.job_card import select_cards
+            from services import load_job_cards, resolve_role_family
+
+            cards = load_job_cards(user_id, exclude_job_id=job_id)
+            if not cards:
+                # No prior jobs: nothing to rank, and no reason to spend a
+                # classify on a query with an empty candidate set.
+                return [], None
+
+            role_family = resolve_role_family(
+                user_id, job, allow_classify=allow_classify)
+
+            jd_vector = None
+            if job is not None:
+                from agents.skill_embeddings import ensure_job_embedding
+                jd_vector = ensure_job_embedding(session, job)
+
+            return select_cards(
+                cards,
+                jd_vector=jd_vector,
+                jd_skill_names=jd_skill_names,
+                role_family=role_family,
+            ), role_family
+        except Exception as exc:  # memory is optional; tailoring is not
+            logger.warning("JobCard selection failed, proceeding without it: %s", exc)
+            return [], None
 
     # ── Typed action plan (issues #91 / #51 Phase 2) ─────────────────────────
 

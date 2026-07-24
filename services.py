@@ -1282,7 +1282,54 @@ def _latest_job_result(session, user_id: UUID, job_id: UUID):
     return max(results, key=lambda r: r.created_at) if results else None
 
 
-def rebuild_job_card(user_id: UUID, job_id: UUID) -> Optional[UUID]:
+def resolve_role_family(
+    user_id: UUID, job, *, allow_classify: bool = True
+) -> Optional[str]:
+    """The active JD's role family — the query side of the selection index.
+
+    Checks the card cache first, keyed by the classify inputs rather than by
+    job, so a JD the user has already had classified (a re-tailor, or simply a
+    similar posting) costs nothing. Only a genuinely novel JD reaches the model,
+    and callers thread the answer into `rebuild_job_card` so a single tailoring
+    run never classifies twice.
+
+    *allow_classify* False makes this cache-only. `plan_preview` uses that: a
+    preview is a cheap look-ahead and must not spend a model call on ranking.
+
+    Returns None when unresolved, which simply zeroes the role-match term and
+    leaves the other three selection signals to rank.
+    """
+    from agents.job_card import (
+        ROLE_FAMILY_VERSION, classify_role_family, role_family_key,
+    )
+    from database.models import JobCard
+
+    title = getattr(job, "title", "") or ""
+    company = getattr(job, "company", "") or ""
+    description = getattr(job, "description", "") or ""
+    try:
+        key = role_family_key(title, company, description)
+        with Session(engine) as session:
+            cached = session.exec(
+                select(JobCard)
+                .where(JobCard.user_id == user_id)
+                .where(JobCard.role_family_key == key)
+                .where(JobCard.role_family_version == ROLE_FAMILY_VERSION)
+            ).first()
+        if cached and cached.role_family:
+            return cached.role_family
+        if not allow_classify:
+            return None
+        return classify_role_family(title, company, description)
+    except Exception as exc:
+        logger.warning("resolve_role_family failed for job %s: %s",
+                       getattr(job, "job_id", None), exc)
+        return None
+
+
+def rebuild_job_card(
+    user_id: UUID, job_id: UUID, role_family: Optional[str] = None
+) -> Optional[UUID]:
     """Recompile this job's JobCard from its current result. Never raises.
 
     Event-driven, not lazy — called when the job's result changes, so the
@@ -1291,6 +1338,10 @@ def rebuild_job_card(user_id: UUID, job_id: UUID) -> Optional[UUID]:
     pays when its prefill cost sits outside the inline latency budget, and
     compiling lazily at next-tailoring time would put that cost back inline and
     break the condition that justifies distilling at all.
+
+    *role_family* lets a caller hand back a classification it already resolved
+    this run (see `resolve_role_family`), so the tailoring path never pays for
+    the same label twice.
 
     Returns the card id, or None when there is nothing worth carrying forward
     (no result, no tailored content) or the compile failed. Failure is always
@@ -1334,7 +1385,9 @@ def rebuild_job_card(user_id: UUID, job_id: UUID) -> Optional[UUID]:
             # rebuild triggered by a re-tailor of the same JD reuses the label.
             key = role_family_key(job.title or "", job.company or "",
                                   job.description or "")
-            if (card and card.role_family
+            if role_family:
+                family = role_family
+            elif (card and card.role_family
                     and card.role_family_key == key
                     and card.role_family_version == ROLE_FAMILY_VERSION):
                 family = card.role_family
