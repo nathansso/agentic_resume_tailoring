@@ -2,9 +2,9 @@ import logging
 from typing import Dict, Any, List
 from sqlmodel import Session, select
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
 
-from llm import get_llm
+from llm import get_llm, get_extractor
+from agents.extraction_schemas import JobMetadata, JobSkillList
 from database.db import engine
 from database.models import JobDescription, JobSkill, Skill
 
@@ -47,12 +47,16 @@ class JobAnalyzerAgent:
 
     def _extract_metadata(self, text: str) -> Dict[str, str]:
         prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are a job description parser. Extract the job title and company name from the text. Respond with ONLY valid JSON, no extra text."),
-            ("user", 'Text:\n{text}\n\nReturn JSON: {{"title": "...", "company": "..."}}')
+            ("system", "You are a job description parser. Extract the job title and company name from the text."),
+            ("user", "Text:\n{text}\n\nExtract the job title and company name.")
         ])
-        chain = prompt | self.llm | JsonOutputParser()
+        extractor = get_extractor(schema=JobMetadata, llm=self.llm)
         try:
-            return chain.invoke({"text": text})
+            result = extractor.invoke(prompt.format_messages(text=text))
+            return {
+                "title": result.title or "Unknown",
+                "company": result.company or "Unknown",
+            }
         except Exception as e:
             logger.error(f"Metadata extraction failed: {e}")
             return {"title": "Unknown", "company": "Unknown"}
@@ -62,18 +66,15 @@ class JobAnalyzerAgent:
             ("system",
              "You are an expert job description analyzer. Extract all technical skills, tools, "
              "languages, and frameworks mentioned in the job posting. Classify each as required "
-             "or preferred. Assign a weight from 0.1 to 1.0 based on how prominently it appears. "
-             "Respond with ONLY valid JSON, no extra text."),
+             "or preferred. Assign a weight from 0.1 to 1.0 based on how prominently it appears."),
             ("user",
              "Job Description:\n{text}\n\n"
-             'Return a JSON list: [{{"name": "Python", "category": "Language", "required": true, "weight": 0.9}}, ...]')
+             "Extract each skill with its name, category, whether it is required, and its weight.")
         ])
-        chain = prompt | self.llm | JsonOutputParser()
+        extractor = get_extractor(schema=JobSkillList, llm=self.llm)
         try:
-            result = chain.invoke({"text": text})
-            if isinstance(result, list):
-                return result
-            return []
+            result = extractor.invoke(prompt.format_messages(text=text))
+            return [item.model_dump() for item in result.skills]
         except Exception as e:
             logger.error(f"Skill extraction failed: {e}")
             return []

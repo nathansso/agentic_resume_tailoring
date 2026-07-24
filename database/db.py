@@ -155,10 +155,44 @@ def _migrate_pg_uuid_columns() -> None:
                 conn.rollback()
 
 
+def _migrate_pg_vector_columns() -> None:
+    """PostgreSQL only: enable pgvector and add vector(384) accelerator columns.
+
+    Guarded on the live engine's dialect (issue #142), the same way
+    _migrate_pg_uuid_columns is — tests patch in a SQLite engine while the env
+    var may still point at PostgreSQL, so DATABASE_URL is not consulted here.
+
+    The JSON `embedding` TEXT column stays the SQLite path and the portable
+    source of truth; this only adds a Postgres-side ANN column beside it, so a
+    SQLite DB never gains (or attempts) a vector column. Idempotent via
+    IF NOT EXISTS.
+    """
+    if engine.dialect.name != "postgresql":
+        return
+    from sqlalchemy import text
+    import logging
+    statements = [
+        "CREATE EXTENSION IF NOT EXISTS vector",
+        "ALTER TABLE skill ADD COLUMN IF NOT EXISTS embedding_vec vector(384)",
+        "ALTER TABLE jobdescription ADD COLUMN IF NOT EXISTS embedding_vec vector(384)",
+    ]
+    with engine.connect() as conn:
+        for stmt in statements:
+            try:
+                conn.execute(text(stmt))
+                conn.commit()
+            except Exception as exc:  # extension unavailable / perms — degrade
+                conn.rollback()
+                logging.getLogger("ART").warning(
+                    "pgvector migration step skipped (%s): %s", stmt.split()[0:2], exc
+                )
+
+
 def init_db():
     SQLModel.metadata.create_all(engine)
     _migrate_db()
     _migrate_pg_uuid_columns()
+    _migrate_pg_vector_columns()
 
 def get_session():
     with Session(engine) as session:

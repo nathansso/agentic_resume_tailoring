@@ -225,16 +225,20 @@ class SkillMatcherAgent:
             return ()
 
         try:
-            job_embedding = model.encode([job_skill_name], normalize_embeddings=True)
-            # Cosine similarity (already normalized, so dot product = cosine sim)
-            similarities = np.dot(user_embeddings, job_embedding.T).flatten()
-            best_idx = int(np.argmax(similarities))
-            best_score = float(similarities[best_idx])
-
-            if best_score >= self.SEMANTIC_THRESHOLD:
-                matched_name = user_skill_names[best_idx]
-                logger.debug(f"Semantic match: '{job_skill_name}' -> '{matched_name}' ({best_score:.3f})")
-                return (matched_name, best_score)
+            from database.vector_search import search_similar
+            job_embedding = model.encode([job_skill_name], normalize_embeddings=True)[0]
+            # Route through the shared vector seam (issue #142). The vectors are in
+            # memory, so this takes the numpy dot-product path — top-1 is identical
+            # to the previous argmax of np.dot(user_embeddings, job_embedding).
+            top = search_similar(
+                job_embedding, k=1,
+                candidates=list(zip(user_skill_names, user_embeddings)),
+            )
+            if top:
+                matched_name, best_score = top[0]
+                if best_score >= self.SEMANTIC_THRESHOLD:
+                    logger.debug(f"Semantic match: '{job_skill_name}' -> '{matched_name}' ({best_score:.3f})")
+                    return (matched_name, best_score)
         except Exception as e:
             logger.debug(f"Semantic match check failed: {e}")
 

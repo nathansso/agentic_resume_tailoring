@@ -166,10 +166,13 @@ def _present_components(skills: List[Dict], matched_skills: Dict) -> set:
 
 
 def _semantic_similarity(skill_vec, jd_vec) -> float:
-    """Cosine of two normalized vectors, clamped to [0, 1] (negatives → 0)."""
-    if skill_vec is None or jd_vec is None:
-        return 0.0
-    return max(0.0, min(1.0, float(skill_vec @ jd_vec)))
+    """Cosine of two normalized vectors, clamped to [0, 1] (negatives → 0).
+
+    Routes through the shared vector seam (issue #142); for the normalized
+    all-MiniLM vectors this equals the previous ``skill_vec @ jd_vec``.
+    """
+    from database.vector_search import cosine_sim
+    return max(0.0, min(1.0, cosine_sim(skill_vec, jd_vec)))
 
 
 def score_skills(

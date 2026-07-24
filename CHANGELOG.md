@@ -4,6 +4,24 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issue 142 — Foundation: structured-extraction seam + pgvector dual-path retrieval + LangSmith scaffold
+**Status:** complete | **Tests:** 700 pass (19 new)
+
+The P1 capture/knowledge issues (#121/#21/#129/#133/#137) each needed the same three pieces of plumbing — one validated extraction path, one vector-search path, and tracing — and would otherwise have re-implemented them three ways. This is that shared foundation and has no user-facing behavior of its own. Grounded in the 2026-07-23 framework-adoption review: on a LangChain stack, `.with_structured_output` gives schema-validated Pydantic output natively and stays on the LangChain path (so LangSmith traces it for free), which is why it was chosen over Instructor.
+
+### What shipped
+- **Structured-extraction seam (`llm.py`).** New `get_extractor(role, schema)` wraps `get_llm(role).with_structured_output(PydanticModel)` in a `StructuredExtractor` with a bounded validation-retry: it retries once on a validation/parse miss, then re-raises so each call site's existing `try/except → []` graceful-degrade still holds (an extraction failure never crashes ingestion). Typed schemas live in `agents/extraction_schemas.py`.
+- **All 8 extractors migrated off `JsonOutputParser`.** `agents/parser.py` (6: experiences, education, achievements, projects, skills, repo-skills) and `agents/job_analyzer.py` (2: metadata, JD skills) now return schema-validated Pydantic models, `.model_dump()`'d back to the `List[Dict]` the `_save_*`/dedup/heal persistence layer already consumes — so that heavily-tested layer is untouched.
+- **pgvector dual-path retrieval (`database/vector_search.py`).** One `search_similar()` / `cosine_sim()` seam branching numpy dot-product (SQLite / in-memory) vs pgvector `<=>` ANN (Postgres). A Postgres-only guarded migration (`_migrate_pg_vector_columns`, mirroring `_migrate_pg_uuid_columns`'s `engine.dialect.name` guard) runs `CREATE EXTENSION IF NOT EXISTS vector` and adds a `vector(384)` `embedding_vec` column beside the JSON `embedding` TEXT column — which stays the SQLite path and portable source of truth. `matcher._check_semantic_match` and `skill_scorer._semantic_similarity` now route through the seam (numpy branch, behavior identical); pgvector is the accelerated path for the #137/#121 consumers.
+- **LangSmith scaffold (`config.py`, `.env.example`), OFF by default.** Env-gated `langsmith_enabled()` reads `LANGCHAIN_TRACING_V2` live; nothing writes to `os.environ`, so tracing turns on only on explicit opt-in. Because extraction stays on the LangChain path, one trace covers extraction + chat + tailor uniformly. PII caveat documented: traces carry resume + JD text — do not enable in prod until P3.
+- **Tests (19 new).** Extraction-seam retry fires on malformed output then recovers, exhausted retries re-raise, schema `model_dump` keeps persistence keys; vector numpy top-1 is bit-identical to the old `np.dot`/argmax and `cosine_sim` matches the old raw dot for normalized vectors, a SQLite `model_cls` query never emits vector SQL, and the guarded migration is a no-op on SQLite; LangSmith is disabled for unset/falsey env and never force-enabled on import.
+
+### Deviations from spec
+- **`_coerce_records` stays.** The issue said to delete the coercion the schema now covers, but it still maps the *deterministic* Bright Data / LinkedIn structured records in `_save_linkedin_structured` — which is not LLM output — so only the 6 LLM extractors stopped using it. Its docstring and tests remain.
+- **Extractors return `List[Dict]`, not raw Pydantic models, at the method boundary.** The seam returns validated models; each `_extract_*` `.model_dump()`s them so the persistence/dedup/heal layer keeps its `List[Dict]` contract untouched. This honors "keep changes scoped / preserve backward-compat" — converting every `_save_*` to consume models was a far larger, higher-risk blast radius for no functional gain here.
+- **pgvector is not yet consumed in scoring or populated on ingest.** This issue produces the column + helper only; writing vectors into `embedding_vec` and reading them in scoring is #121/#137 downstream (explicit non-goal). The PG `<=>` branch is validated on staging Postgres, not in the SQLite suite.
+- **The benchmark stub LLM gained `with_structured_output`.** `eval/tailoring_benchmark.py`'s stub was a `RunnableLambda` and had to become a small `_StubLLM` Runnable to serve both the extraction seam and the tailor `JsonOutputParser` chain; prompt markers are unchanged.
+
 ## Issue 138 — Wire the knowledge graph into the tailoring planner as a mandatory evidence step
 **Status:** complete | **Tests:** 674 pass (12 new)
 
