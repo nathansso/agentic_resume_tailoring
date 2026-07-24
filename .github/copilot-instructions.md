@@ -5,7 +5,7 @@ This file is a thin planning summary for VS Code tooling.
 Authoritative guidance lives here:
 - Root `CLAUDE.md` for repo-wide rules
 - Local `agents/CLAUDE.md` and `web/CLAUDE.md` for folder-specific implementation rules
-- Active PRDs in `docs/prd/` for task scope and acceptance
+- GitHub issues and the ART Development Plan board for task scope and acceptance
 
 ## Build and Test
 - Activate `.venv` when present before running Python commands.
@@ -19,8 +19,8 @@ Authoritative guidance lives here:
 - Keep schema changes backward-compatible for existing local SQLite databases.
 
 ## Workflow
-- Treat `docs/prd/` files as forward-looking specs; update only their `## Progress` sections while implementing.
-- Add completed PRDs to the top of `CHANGELOG.md` immediately.
+- Treat GitHub issues and the ART Development Plan board as forward-looking specs; track status on the board.
+- Add completed issue-level deliveries to the top of `CHANGELOG.md` immediately.
 - Keep folder-specific detail in local `CLAUDE.md` files. Keep `.github/` instructions short and non-authoritative.
 
 ## Conventions
