@@ -188,35 +188,65 @@ def _stub_tailored(jd_text: str) -> Dict:
     }
 
 
+def _stub_payload(text: str):
+    """Route a formatted prompt to its canned/deterministic payload (dict/list)."""
+    if "Extract work experiences" in text:
+        return STUB_EXPERIENCES
+    if "Extract projects" in text:
+        return [{k: p[k] for k in ("name", "description")} | (
+            {"repo_url": p["repo_url"]} if "repo_url" in p else {}) for p in STUB_PROJECTS]
+    if "Extract technical skills" in text:
+        return STUB_SKILLS
+    if "Extract the job title" in text:
+        return {"title": "Benchmark Role", "company": "Benchmark Co"}
+    if "job description analyzer" in text:
+        return _stub_extract_jd_skills(text)
+    if "resume tailoring assistant" in text:
+        return _stub_tailored(text)
+    return {}
+
+
+def _prompt_text(prompt_value) -> str:
+    """Text of a PromptValue or a list of formatted messages."""
+    if hasattr(prompt_value, "to_string"):
+        return prompt_value.to_string()
+    if isinstance(prompt_value, (list, tuple)):
+        return "\n".join(str(getattr(m, "content", m)) for m in prompt_value)
+    return str(prompt_value)
+
+
 def _make_stub_llm():
     """
-    A drop-in for get_llm(): a Runnable that routes on distinctive prompt
-    markers and returns canned/deterministic JSON, so the whole user flow runs
-    offline through the real chains (prompt | llm | JsonOutputParser).
+    A drop-in for get_llm(): a Runnable that routes on distinctive prompt markers
+    and returns canned/deterministic output, so the whole user flow runs offline
+    through the real chains. Supports both surfaces the app now uses:
+    - `prompt | llm | JsonOutputParser` (tailor/chat) via `.invoke` → AIMessage.
+    - `llm.with_structured_output(Schema)` (the #142 extraction seam) → a
+      validated Pydantic model, matching the real provider's behavior.
     """
     from langchain_core.messages import AIMessage
-    from langchain_core.runnables import RunnableLambda
+    from langchain_core.runnables import Runnable, RunnableLambda
 
-    def respond(prompt_value) -> AIMessage:
-        text = prompt_value.to_string()
-        if "Extract work experiences" in text:
-            payload = STUB_EXPERIENCES
-        elif "Extract projects" in text:
-            payload = [{k: p[k] for k in ("name", "description") } | (
-                {"repo_url": p["repo_url"]} if "repo_url" in p else {}) for p in STUB_PROJECTS]
-        elif "Extract technical skills" in text:
-            payload = STUB_SKILLS
-        elif "Extract the job title" in text:
-            payload = {"title": "Benchmark Role", "company": "Benchmark Co"}
-        elif "job description analyzer" in text:
-            payload = _stub_extract_jd_skills(text)
-        elif "resume tailoring assistant" in text:
-            payload = _stub_tailored(text)
-        else:
-            payload = {}
-        return AIMessage(content=json.dumps(payload))
+    def _to_schema(payload, schema):
+        # Wrapper schemas hold a single list field (experiences/skills/…); flat
+        # schemas (JobMetadata) take the dict directly.
+        if isinstance(payload, list):
+            key = next(iter(schema.model_fields))
+            return schema(**{key: payload})
+        if isinstance(payload, dict):
+            return schema(**payload)
+        return schema()
 
-    return lambda role="chat", temperature=0.0: RunnableLambda(respond)
+    class _StubLLM(Runnable):
+        def invoke(self, input, config=None, **kwargs):
+            return AIMessage(content=json.dumps(_stub_payload(_prompt_text(input))))
+
+        def with_structured_output(self, schema, **kwargs):
+            return RunnableLambda(
+                lambda pv: _to_schema(_stub_payload(_prompt_text(pv)), schema)
+            )
+
+    return lambda role="chat", temperature=0.0: _StubLLM()
 
 
 class _StubEmbeddingModel:
