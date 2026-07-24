@@ -102,6 +102,11 @@ def _migrate_db() -> None:
         "ALTER TABLE userjobresult ADD COLUMN tailoring_decisions TEXT DEFAULT '[]'",
         # issue 91: one-level undo for chat REVERT
         "ALTER TABLE userjobresult ADD COLUMN tailored_resume_previous TEXT DEFAULT '{}'",
+        # issue 21: soft origin-chat back-reference on chat-captured artifacts.
+        # Free-form text, never an FK — job/chat deletion must not cascade here.
+        "ALTER TABLE userskill ADD COLUMN source_context TEXT",
+        "ALTER TABLE project ADD COLUMN source_context TEXT",
+        "ALTER TABLE experience ADD COLUMN source_context TEXT",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
