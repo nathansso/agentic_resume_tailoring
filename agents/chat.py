@@ -1263,6 +1263,15 @@ class ChatAgent:
             result.tailoring_decisions = [*log[:-1], last]
             session.add(result)
             session.commit()
+            user_id, job_id = result.user_id, result.job_id
+
+        # The result changed, so the card is stale (issue #137). The score is
+        # one of the fields the card carries, and it arrives after the tailoring
+        # run that built the card — without this hook every card would record a
+        # null user_score forever. Cheap: the cached role_family makes a rebuild
+        # a pure recompile, no LLM call.
+        services.rebuild_job_card(user_id, job_id)
+
         return (
             f"Recorded {score}/5 for this revision — thanks. Scores teach ART "
             "which tailoring choices work for you."

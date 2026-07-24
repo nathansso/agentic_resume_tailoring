@@ -1265,6 +1265,169 @@ def apply_artifact_decision(
         return f"Failed to save artifact: {e}"
 
 
+# ── JobCard: distilled completed-job memory (issue #137) ──────────────────────
+
+# Jobs whose tailoring is finished enough to be worth remembering. A job still
+# at 'created'/'analyzed' has no outcome to distil.
+_JOBCARD_TERMINAL_STATUSES = ("tailored", "exported")
+
+
+def _latest_job_result(session, user_id: UUID, job_id: UUID):
+    """This user's most recent result for a job (a job can accumulate several)."""
+    results = session.exec(
+        select(UserJobResult)
+        .where(UserJobResult.user_id == user_id)
+        .where(UserJobResult.job_id == job_id)
+    ).all()
+    return max(results, key=lambda r: r.created_at) if results else None
+
+
+def rebuild_job_card(user_id: UUID, job_id: UUID) -> Optional[UUID]:
+    """Recompile this job's JobCard from its current result. Never raises.
+
+    Event-driven, not lazy — called when the job's result changes, so the
+    compile is paid off the next turn's critical path. That is not a style
+    preference: per the #109 amortization amendment, k-step summarization only
+    pays when its prefill cost sits outside the inline latency budget, and
+    compiling lazily at next-tailoring time would put that cost back inline and
+    break the condition that justifies distilling at all.
+
+    Returns the card id, or None when there is nothing worth carrying forward
+    (no result, no tailored content) or the compile failed. Failure is always
+    silent-with-a-log: a card is an optimization, and losing one must never take
+    down the tailoring run that triggered it.
+    """
+    from datetime import datetime
+
+    from agents.job_card import (
+        ROLE_FAMILY_VERSION, build_index_keys, classify_role_family,
+        compile_card_payload, payload_digest, role_family_key,
+    )
+    from database.models import JobCard
+
+    try:
+        with Session(engine) as session:
+            job = session.get(JobDescription, job_id)
+            if not job:
+                return None
+            result = _latest_job_result(session, user_id, job_id)
+            if not result:
+                return None
+            content = result.tailored_resume_content
+            if isinstance(content, str):
+                try:
+                    content = json.loads(content)
+                except (ValueError, TypeError):
+                    content = {}
+            if not content or not isinstance(content, dict) or "error" in content:
+                # Nothing was successfully tailored — there is no outcome to
+                # distil, and an empty card would only dilute selection.
+                return None
+
+            card = session.exec(
+                select(JobCard)
+                .where(JobCard.user_id == user_id)
+                .where(JobCard.job_id == job_id)
+            ).first()
+
+            # The one LLM call, and only when the cache is cold or stale. A
+            # rebuild triggered by a re-tailor of the same JD reuses the label.
+            key = role_family_key(job.title or "", job.company or "",
+                                  job.description or "")
+            if (card and card.role_family
+                    and card.role_family_key == key
+                    and card.role_family_version == ROLE_FAMILY_VERSION):
+                family = card.role_family
+            else:
+                family = classify_role_family(
+                    job.title or "", job.company or "", job.description or "")
+
+            payload = compile_card_payload(job, result, role_family=family)
+            digest = payload_digest(payload)
+            now = datetime.utcnow()
+
+            if card is None:
+                card = JobCard(user_id=user_id, job_id=job_id)
+            elif card.payload_hash == digest and card.role_family == family:
+                # Identical projection — the determinism guarantee means there
+                # is genuinely nothing to write.
+                return card.card_id
+
+            card.result_id = result.result_id
+            card.title = job.title or ""
+            card.company = job.company or ""
+            card.role_family = family
+            card.role_family_key = key
+            card.role_family_version = ROLE_FAMILY_VERSION
+            card.payload = payload
+            card.payload_hash = digest
+            card.index_keys = build_index_keys(payload)
+            card.source_updated_at = result.updated_at or now
+            card.updated_at = now
+            session.add(card)
+            session.commit()
+            session.refresh(card)
+            return card.card_id
+    except Exception as exc:
+        logger.warning("JobCard rebuild failed for job %s: %s", job_id, exc)
+        return None
+
+
+def load_job_cards(user_id: UUID, exclude_job_id: Optional[UUID] = None) -> list[dict]:
+    """This user's cards for *completed* jobs, ready for `job_card.select_cards`.
+
+    Each dict carries the card plus its source job's cached JD centroid
+    (`JobDescription.embedding`, the portable JSON column) as `embedding`, so
+    ranking can score a card against the active JD without any new embedding
+    infrastructure — populating the Postgres `embedding_vec` accelerator is a
+    separate write-path concern.
+
+    *exclude_job_id* drops the job currently being tailored: its own card is
+    memory of the run in progress, not a prior job. Returns [] on any failure,
+    which makes injection a no-op and reproduces today's behavior exactly.
+    """
+    from agents.skill_embeddings import deserialize
+    from database.models import JobCard
+
+    try:
+        with Session(engine) as session:
+            cards = session.exec(
+                select(JobCard).where(JobCard.user_id == user_id)
+            ).all()
+            out: list[dict] = []
+            for card in cards:
+                if exclude_job_id and card.job_id == exclude_job_id:
+                    continue
+                job = session.get(JobDescription, card.job_id)
+                if not job or job.status not in _JOBCARD_TERMINAL_STATUSES:
+                    continue
+                payload = card.payload
+                if isinstance(payload, str):
+                    try:
+                        payload = json.loads(payload)
+                    except (ValueError, TypeError):
+                        continue
+                index_keys = card.index_keys
+                if isinstance(index_keys, str):
+                    try:
+                        index_keys = json.loads(index_keys)
+                    except (ValueError, TypeError):
+                        index_keys = []
+                out.append({
+                    "card_id": card.card_id,
+                    "job_id": card.job_id,
+                    "payload": payload or {},
+                    "index_keys": index_keys or [],
+                    "role_family": card.role_family,
+                    "embedding": deserialize(job.embedding),
+                    "source_updated_at": card.source_updated_at,
+                })
+            return out
+    except Exception as exc:
+        logger.warning("load_job_cards failed for user %s: %s", user_id, exc)
+        return []
+
+
 def delete_resume(user_id: UUID) -> None:
     """Clear resume_path on the User row. Does not delete the file or any ingested data."""
     with Session(engine) as session:

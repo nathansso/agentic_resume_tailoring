@@ -487,6 +487,14 @@ class ResumeTailorAgent:
                 session.add(result)
                 session.commit()
 
+        # Event-driven JobCard rebuild (issue #137): the result just changed, so
+        # distil it now, off the next turn's critical path. Every surface —
+        # web, chat, CLI — reaches tailoring through this method, so hooking it
+        # here is the one place that covers them all. Never fatal: a card is an
+        # optimization and rebuild_job_card swallows its own failures.
+        from services import rebuild_job_card
+        rebuild_job_card(user_id, job_id)
+
         logger.info(
             "Tailoring complete after %d attempt(s); shipped best (composite %s)",
             final_state["attempt"], final_state.get("best_score"),

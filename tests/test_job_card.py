@@ -393,3 +393,227 @@ def test_render_always_emits_the_top_card_even_over_budget():
     card = {"card_id": "c1", "payload": payload, "index_keys": [],
             "role_family": "research"}
     assert "ML Engineer" in jc.render_cards([card], budget=1)
+
+
+# ── persistence + event-driven lifecycle ──────────────────────────────────────
+
+def _seed_job_and_result(engine, user_id, *, title="ML Engineer", company="Acme",
+                         status="tailored", description="Build ML systems",
+                         content=None, decisions=None, embedding=None):
+    """A completed job plus its result, as the tailoring pipeline would leave them."""
+    import json as _json
+
+    from sqlmodel import Session
+
+    from database.models import JobDescription, UserJobResult
+
+    with Session(engine) as session:
+        job = JobDescription(
+            user_id=user_id, title=title, company=company,
+            description=description, status=status,
+            embedding=_json.dumps(embedding) if embedding else None,
+        )
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+
+        result = UserJobResult(
+            user_id=user_id, job_id=job.job_id, ats_score=72.0,
+            tailored_score_breakdown={"composite": 78.5, "delta": 22.5},
+            tailored_resume_content=content if content is not None else {
+                "experiences": [{"title": "ML Engineer", "company": "Nimbus"}],
+                "projects": [{"name": "SemanticSearch"}],
+                "skills_emphasized": ["Python"],
+            },
+            tailoring_decisions=decisions or [],
+        )
+        session.add(result)
+        session.commit()
+        session.refresh(result)
+        return job.job_id, result.result_id
+
+
+@pytest.fixture()
+def scripted_family(monkeypatch):
+    """Pin the one LLM call and count how often it actually fires."""
+    calls = []
+
+    def _classify(title, company="", description="", **kwargs):
+        calls.append((title, company, description))
+        return "machine_learning"
+
+    monkeypatch.setattr(jc, "classify_role_family", _classify)
+    return calls
+
+
+def test_rebuild_persists_a_card(isolated_engine, scripted_family):
+    import services
+
+    from conftest import _seed_user_and_skill
+    user = _seed_user_and_skill(isolated_engine)
+    job_id, result_id = _seed_job_and_result(isolated_engine, user.user_id)
+
+    card_id = services.rebuild_job_card(user.user_id, job_id)
+    assert card_id is not None
+
+    from sqlmodel import Session
+
+    from database.models import JobCard
+    with Session(isolated_engine) as session:
+        card = session.get(JobCard, card_id)
+    assert card.role_family == "machine_learning"
+    assert card.result_id == result_id
+    assert card.payload["emphasized"]["led_project"] == "SemanticSearch"
+    assert card.index_keys and "role:machine learning" in card.index_keys
+    assert card.payload_hash
+
+
+def test_rebuild_is_idempotent_and_reuses_the_cached_role_family(
+    isolated_engine, scripted_family,
+):
+    """A rebuild must not be an LLM call — that is what makes the compile cheap
+    enough to run on every result change."""
+    import services
+
+    from conftest import _seed_user_and_skill
+    user = _seed_user_and_skill(isolated_engine)
+    job_id, _ = _seed_job_and_result(isolated_engine, user.user_id)
+
+    first = services.rebuild_job_card(user.user_id, job_id)
+    second = services.rebuild_job_card(user.user_id, job_id)
+
+    assert first == second, "a rebuild must update in place, never duplicate"
+    assert len(scripted_family) == 1, "role_family should be classified exactly once"
+
+    from sqlmodel import Session, select
+
+    from database.models import JobCard
+    with Session(isolated_engine) as session:
+        assert len(session.exec(select(JobCard)).all()) == 1
+
+
+def test_editing_the_job_description_reclassifies(isolated_engine, scripted_family):
+    """The cache key covers the classify inputs, so a real JD change invalidates."""
+    import services
+
+    from sqlmodel import Session
+
+    from conftest import _seed_user_and_skill
+    from database.models import JobDescription
+
+    user = _seed_user_and_skill(isolated_engine)
+    job_id, _ = _seed_job_and_result(isolated_engine, user.user_id)
+    services.rebuild_job_card(user.user_id, job_id)
+
+    with Session(isolated_engine) as session:
+        job = session.get(JobDescription, job_id)
+        job.description = "Lead a product design team and own the roadmap"
+        session.add(job)
+        session.commit()
+
+    services.rebuild_job_card(user.user_id, job_id)
+    assert len(scripted_family) == 2
+
+
+def test_rebuild_skips_a_job_with_no_tailored_content(isolated_engine, scripted_family):
+    """Nothing was successfully tailored, so there is no outcome to distil."""
+    import services
+
+    from conftest import _seed_user_and_skill
+    user = _seed_user_and_skill(isolated_engine)
+    job_id, _ = _seed_job_and_result(
+        isolated_engine, user.user_id, content={"error": "generation failed"})
+
+    assert services.rebuild_job_card(user.user_id, job_id) is None
+    assert scripted_family == [], "a skipped compile must not spend an LLM call"
+
+
+def test_rebuild_never_raises_on_a_missing_job(isolated_engine):
+    """A card is an optimization — losing one must never break its caller."""
+    import uuid
+
+    import services
+
+    from conftest import _seed_user_and_skill
+    user = _seed_user_and_skill(isolated_engine)
+    assert services.rebuild_job_card(user.user_id, uuid.uuid4()) is None
+
+
+def test_load_job_cards_excludes_the_active_job_and_unfinished_jobs(
+    isolated_engine, scripted_family,
+):
+    import services
+
+    from conftest import _seed_user_and_skill
+    user = _seed_user_and_skill(isolated_engine)
+    done_id, _ = _seed_job_and_result(isolated_engine, user.user_id, title="Done Role")
+    active_id, _ = _seed_job_and_result(isolated_engine, user.user_id, title="Active Role")
+    draft_id, _ = _seed_job_and_result(
+        isolated_engine, user.user_id, title="Draft Role", status="analyzed")
+
+    for job_id in (done_id, active_id, draft_id):
+        services.rebuild_job_card(user.user_id, job_id)
+
+    loaded = services.load_job_cards(user.user_id, exclude_job_id=active_id)
+    assert [c["payload"]["job"]["title"] for c in loaded] == ["Done Role"]
+
+
+def test_load_job_cards_is_scoped_to_the_owner(isolated_engine, scripted_family):
+    import services
+
+    from sqlmodel import Session
+
+    from conftest import _seed_user_and_skill
+    from database.models import User
+
+    owner = _seed_user_and_skill(isolated_engine)
+    with Session(isolated_engine) as session:
+        other = User(name="Other", email="other@example.com")
+        session.add(other)
+        session.commit()
+        session.refresh(other)
+        other_id = other.user_id
+
+    job_id, _ = _seed_job_and_result(isolated_engine, owner.user_id)
+    services.rebuild_job_card(owner.user_id, job_id)
+
+    assert len(services.load_job_cards(owner.user_id)) == 1
+    assert services.load_job_cards(other_id) == []
+
+
+def test_load_job_cards_carries_the_source_job_vector(isolated_engine, scripted_family):
+    """Ranking scores a card against its source job's already-cached JD centroid,
+    so no new embedding infrastructure is needed."""
+    import services
+
+    from conftest import _seed_user_and_skill
+    user = _seed_user_and_skill(isolated_engine)
+    job_id, _ = _seed_job_and_result(
+        isolated_engine, user.user_id, embedding=[1.0, 0.0, 0.0])
+    services.rebuild_job_card(user.user_id, job_id)
+
+    loaded = services.load_job_cards(user.user_id)
+    assert loaded[0]["embedding"] is not None
+    assert list(loaded[0]["embedding"]) == [1.0, 0.0, 0.0]
+
+
+def test_scoring_a_run_refreshes_the_card(isolated_engine, scripted_family, monkeypatch):
+    """The 1-5 score lands after the run that built the card, so without a
+    rebuild on that event every card would record a null user_score forever."""
+    import agents.chat as chat_module
+    import services
+
+    from conftest import _seed_user_and_skill
+    user = _seed_user_and_skill(isolated_engine)
+    job_id, result_id = _seed_job_and_result(
+        isolated_engine, user.user_id,
+        decisions=[_decision(_action("proj:a", "keep", "Alpha"))],
+    )
+    services.rebuild_job_card(user.user_id, job_id)
+    assert services.load_job_cards(user.user_id)[0]["payload"]["user_score"] is None
+
+    agent = chat_module.ChatAgent.__new__(chat_module.ChatAgent)
+    agent._record_tailor_score(str(result_id), 5)
+
+    assert services.load_job_cards(user.user_id)[0]["payload"]["user_score"] == 5
+    assert len(scripted_family) == 1, "the refresh must reuse the cached role_family"
