@@ -33,6 +33,7 @@ from agents.keyword_planner import score_keywords, assign_keywords, evaluate_pla
 from agents.tailor_planner import (
     DEFAULT_KNOBS, TailorPlanner, decision_log_entry, exploration_mode,
 )
+from knowledge_graph.builder import SkillGraphBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -222,6 +223,29 @@ class ResumeTailorAgent:
             # planner may swap in via op=replace (issue #91).
             proj_dicts, proj_pool = self._score_and_split_projects(proj_dicts_all, jd_text)
 
+            # ── Mandatory knowledge-graph evidence step (issue #138) ─────────
+            # Consult the KG for the active JD's skills so the planner sees
+            # experience->skill->project evidence — including ties the JD-keyword
+            # pre-selection above misses (a required skill the project evidences
+            # but whose name the JD's own prose never repeats). The facts-side
+            # mirror of the mandatory persona node (#129/#133). Degrades to {} on
+            # a sparse/empty graph, in which case every step below is a no-op and
+            # the candidate set is byte-for-byte unchanged.
+            jd_skill_ids = session.exec(
+                select(JobSkill.skill_id).where(JobSkill.job_id == job_id)
+            ).all()
+            jd_skill_names = list(session.exec(
+                select(Skill.name).where(Skill.skill_id.in_(jd_skill_ids))
+            ).all()) if jd_skill_ids else []
+            kg_evidence = self._assemble_kg_evidence(user_id, jd_skill_names)
+            item_evidence = self._item_evidence_map(
+                kg_evidence, proj_dicts, proj_pool, exp_dicts
+            )
+            proj_dicts, proj_pool = self._promote_evidenced_projects(
+                proj_dicts, proj_pool, item_evidence
+            )
+            self._annotate_graph_evidence(exp_dicts, proj_dicts, item_evidence)
+
             # Signal-rank the missing JD keywords and assign each to the specific
             # experience/project whose own content supports it (issue #72), so the
             # generator inserts keywords contextually instead of stapling the first
@@ -262,6 +286,9 @@ class ResumeTailorAgent:
             "matched_skills": (result.matched_skills if result else None) or {},
             "missing_skills": (result.missing_skills if result else None) or [],
             "baseline_breakdown": ((result.score_breakdown if result else None) or {}),
+            # KG-derived evidence (issue #138): item_key -> [JD skills the graph
+            # ties this candidate to]. Empty when the graph is sparse.
+            "item_evidence": item_evidence,
         }
 
     def plan_preview(
@@ -445,6 +472,8 @@ class ResumeTailorAgent:
                     "baseline_composite": (initial_state["baseline_breakdown"] or {}).get("composite"),
                     "is_revision": bool(revision_notes.strip()) or bool(prior_content),
                     "attempts": final_state["attempt"],
+                    # How many candidate items carried KG evidence this run (#138).
+                    "n_graph_evidence": len(inputs.get("item_evidence") or {}),
                 }
                 log = _as_obj(result.tailoring_decisions, [])
                 # Copy before append: mutating the tracked list in place would
@@ -1283,6 +1312,126 @@ class ResumeTailorAgent:
         """Back-compat wrapper: the selected projects only."""
         return cls._score_and_split_projects(proj_dicts, jd_text)[0]
 
+    # ── Knowledge-graph evidence (issue #138) ────────────────────────────────
+
+    @staticmethod
+    def _assemble_kg_evidence(user_id: UUID, jd_skill_names: List[str]) -> Dict[str, Dict]:
+        """Mandatory KG-evidence node (issue #138): build this user's knowledge
+        graph and return, per active-JD skill, the projects/experiences the graph
+        ties it to. Shares SkillGraphBuilder with the matcher, so there is one
+        evidence-traversal path. Any failure (or a sparse graph) degrades to {},
+        which makes every downstream consumer a no-op — the backward-compat
+        guarantee that an empty evidence set reproduces prior output exactly."""
+        try:
+            builder = SkillGraphBuilder(user_id)
+            builder.build_graph()
+            return builder.evidence_for_skills(jd_skill_names)
+        except Exception as exc:  # never let KG assembly break tailoring
+            logger.warning("KG evidence assembly failed, proceeding without it: %s", exc)
+            return {}
+
+    @classmethod
+    def _item_evidence_map(
+        cls,
+        kg_evidence: Dict[str, Dict],
+        proj_dicts: List[Dict],
+        proj_pool: List[Dict],
+        exp_dicts: List[Dict],
+    ) -> Dict[str, List[str]]:
+        """Invert per-skill evidence into per-item: item_key -> [JD skills the
+        graph ties this candidate to]. Scoped to items in the current candidate
+        set (selected/pooled projects, experiences); skills are de-duped per item
+        while preserving order. Empty evidence -> {}."""
+        if not kg_evidence:
+            return {}
+        known_proj = {cls._proj_key(p) for p in list(proj_dicts) + list(proj_pool)}
+        known_exp = {cls._exp_key(e) for e in exp_dicts}
+        out: Dict[str, List[str]] = {}
+
+        def add(key: str, skill: str, known: set) -> None:
+            if key not in known:
+                return
+            bucket = out.setdefault(key, [])
+            if skill not in bucket:
+                bucket.append(skill)
+
+        for skill, ev in kg_evidence.items():
+            for pname in ev.get("projects") or []:
+                add(cls._proj_key({"name": pname}), skill, known_proj)
+            for e in ev.get("experiences") or []:
+                add(
+                    cls._exp_key({"title": e.get("title"), "company": e.get("company")}),
+                    skill, known_exp,
+                )
+        return out
+
+    @classmethod
+    def _promote_evidenced_projects(
+        cls,
+        proj_dicts: List[Dict],
+        proj_pool: List[Dict],
+        item_evidence: Dict[str, List[str]],
+    ) -> tuple:
+        """Surface pooled projects the graph ties to a JD skill not already
+        evidenced by the selected set (issue #138).
+
+        Text/embedding pre-selection scores a project on its own prose, so a
+        project that evidences a required JD skill whose name the JD's own text
+        never repeats scores low and lands in the replacement pool — the planner
+        never sees it. This pulls such a project into the selected candidates,
+        and drops it from the pool so it is not simultaneously a candidate and a
+        replacement.
+
+        Conservative by design: a pooled project is promoted only when it adds
+        graph evidence for a JD skill no already-selected item (project or
+        experience) covers, capped at MAX_PROJECTS promotions. Empty evidence ->
+        no change, preserving byte-for-byte backward compatibility."""
+        if not item_evidence:
+            return proj_dicts, proj_pool
+
+        covered: set = set()
+        for p in proj_dicts:
+            covered.update(item_evidence.get(cls._proj_key(p), []))
+        # Experiences always reach the planner, so a skill they evidence is
+        # already surfaced — no project promotion needed to expose it.
+        for key, skills in item_evidence.items():
+            if key.startswith("exp:"):
+                covered.update(skills)
+
+        promoted: List[Dict] = []
+        remaining: List[Dict] = []
+        for p in proj_pool:
+            ev_skills = item_evidence.get(cls._proj_key(p), [])
+            new_skills = [s for s in ev_skills if s not in covered]
+            if new_skills and len(promoted) < MAX_PROJECTS:
+                covered.update(ev_skills)
+                promoted.append(p)
+            else:
+                remaining.append(p)
+        return proj_dicts + promoted, remaining
+
+    @classmethod
+    def _annotate_graph_evidence(
+        cls,
+        exp_dicts: List[Dict],
+        proj_dicts: List[Dict],
+        item_evidence: Dict[str, List[str]],
+    ) -> None:
+        """Attach a 'graph_evidence' list (JD skills evidenced via the KG) to each
+        candidate item that has one, so the planner and generator can weigh it.
+        Set only when non-empty, so a sparse graph leaves the dicts — and thus
+        the planner/generator inputs — byte-for-byte unchanged (issue #138)."""
+        if not item_evidence:
+            return
+        for e in exp_dicts:
+            ev = item_evidence.get(cls._exp_key(e))
+            if ev:
+                e["graph_evidence"] = ev
+        for p in proj_dicts:
+            ev = item_evidence.get(cls._proj_key(p))
+            if ev:
+                p["graph_evidence"] = ev
+
     # ── Typed action plan (issues #91 / #51 Phase 2) ─────────────────────────
 
     @classmethod
@@ -1297,6 +1446,7 @@ class ResumeTailorAgent:
                 "source_text": cls._exp_source_text(e),
                 "suggested_keywords": e.get("suggested_keywords") or [],
                 "relevance": e.get("relevance_score"),
+                "graph_evidence": e.get("graph_evidence") or [],
             }
             for e in exp_dicts
         ] + [
@@ -1307,6 +1457,7 @@ class ResumeTailorAgent:
                 "source_text": cls._proj_source_text(p),
                 "suggested_keywords": p.get("suggested_keywords") or [],
                 "relevance": p.get("selection_score"),
+                "graph_evidence": p.get("graph_evidence") or [],
             }
             for p in proj_dicts
         ]

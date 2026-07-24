@@ -383,13 +383,19 @@ class TailorPlanner:
     ) -> List[Dict]:
         """One LLM call → raw action list (unvalidated). Raises on failure."""
         def item_line(i: Dict) -> Dict:
-            return {
+            line = {
                 "key": i.get("key"),
                 "section": i.get("section"),
                 "label": i.get("label"),
                 "source_text": (i.get("source_text") or "")[:400],
                 "suggested_keywords": i.get("suggested_keywords") or [],
             }
+            # KG evidence: JD skills this item is tied to through the knowledge
+            # graph (issue #138). Included only when present, so a sparse graph
+            # leaves the planning payload byte-for-byte unchanged.
+            if i.get("graph_evidence"):
+                line["graph_evidence"] = list(i["graph_evidence"])
+            return line
 
         payload = {
             "items": [item_line(i) for i in items],
@@ -444,6 +450,12 @@ class TailorPlanner:
             "- op=revise must name a strategy; with keyword_weave include the "
             "keywords to weave (prefer the item's suggested_keywords).\n"
             "- op=delete only when an item actively hurts fit for this job.\n"
+            "- An item may carry `graph_evidence`: JD skills it is tied to through "
+            "the candidate's knowledge graph (shared skills across their "
+            "projects/experience), even when the item's own text does not name "
+            "them. Treat it as strong evidence the item is relevant to this job: "
+            "prefer keep/revise over delete, and do NOT replace an item that "
+            "uniquely evidences a required skill.\n"
             "- Every action needs a one-sentence rationale.\n\n"
             f"JOB DESCRIPTION:\n{(jd_text or '')[:2000]}\n\n"
             f"PLANNING INPUT:\n{json.dumps(payload, indent=1)}"
