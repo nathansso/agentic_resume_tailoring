@@ -46,13 +46,13 @@ Do not break the CLI when making web changes.
 
 Use the repo guidance in this order:
 
-1. The active PRD in `docs/prd/` defines task scope, sequencing, and acceptance criteria.
+1. The active GitHub issue and its ART Development Plan board card define task scope, sequencing, and acceptance criteria.
 2. This root `CLAUDE.md` defines stable repo-wide workflow, testing, and architecture rules.
 3. Local `CLAUDE.md` files add folder-specific implementation constraints without replacing the root rules.
 4. `.github/` Copilot instruction files are thin planning aids and should not become a second policy system.
 
 Keep these roles separate:
-- PRDs are task specs.
+- GitHub issues / board cards are task specs.
 - Root `CLAUDE.md` is the repo policy surface.
 - Local `CLAUDE.md` files are implementation-local supplements.
 - `.github/` instruction files mirror the essentials for VS Code tooling.
@@ -61,10 +61,9 @@ Keep these roles separate:
 
 ## Work tracking
 
-- Use the PRDs in `docs/prd/` as forward-looking specs.
-- Do not retroactively edit PRD task checklists. Update only the `## Progress` section while work is in flight.
-- `CHANGELOG.md` records completed deliveries — both PRD deliveries and self-contained issue-level work (issues/arcs that ship outside a PRD). Add a new top entry when the work merges to `main`.
-  - Title the entry by its source: `PRD NN — …` for PRD work, `Issue NN — …` (or `Issues NN & MM — …` for a multi-issue arc) for issue-level work.
+- Use GitHub issues and the ART Development Plan board as the forward-looking specs. Track status on the board, not in checked-in task files.
+- `CHANGELOG.md` records completed deliveries — self-contained issue-level work (issues/arcs). Add a new top entry when the work merges to `main`.
+  - Title the entry by its source: `Issue NN — …` (or `Issues NN & MM — …` for a multi-issue arc) for issue-level work.
   - Include a `**Status:** complete | **Tests:** N pass (M new)` line, a short summary, a `### What shipped` list, and a `### Deviations from spec` section.
   - The entry must reflect shipped (merged) state. When a PR carries the entry, the entry only reaches `main` on merge, so it may describe everything in that PR.
 - Keep one logical unit of work per commit.
@@ -73,9 +72,9 @@ Keep these roles separate:
 **Commit format:** `type(scope): short description`
 
 Examples:
-- `feat(prd-03): onboarding screen and active profile flow`
+- `feat(onboarding): onboarding screen and active profile flow`
 - `test(chat): fast-path routing regression coverage`
-- `docs: mark PRD 02.5 complete`
+- `docs: remove deprecated TUI-era PRDs and roadmap`
 
 ---
 

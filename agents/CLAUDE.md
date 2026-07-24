@@ -6,7 +6,7 @@ Use this file for work under `agents/`.
 
 - Root `CLAUDE.md` still controls repo-wide workflow, testing, and delivery rules.
 - This file adds only `agents/`-specific implementation guidance.
-- Use the active PRD for task acceptance and sequencing.
+- Use the active GitHub issue and its board card for task acceptance and sequencing.
 
 ## Routing and prompts
 
