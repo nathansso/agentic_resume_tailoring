@@ -1,0 +1,70 @@
+{
+  "id": "rejected_project_recurs",
+  "description": "The flagship negation case: the user explicitly removed a project from a previous tailoring, and that same project resurfaces as a candidate for the next job. A card that loses the rejection makes the planner re-propose something the user already said no to — the failure a generic recap cannot catch.",
+  "prior_job": {
+    "title": "Machine Learning Engineer",
+    "company": "Nimbus Analytics",
+    "description": "Train, serve and monitor ranking models in production.",
+    "role_family": "machine_learning",
+    "status": "tailored",
+    "ats_score": 74.0,
+    "tailored_score_breakdown": {
+      "composite": 81.2,
+      "baseline_composite": 58.7,
+      "delta": 22.5,
+      "skill_coverage": {"score": 90.0},
+      "keyword_coverage": {"score": 72.0}
+    },
+    "matched_skills": {"python": {"match_type": "direct"}, "pytorch": {"match_type": "direct"}},
+    "tailored_resume_content": {
+      "experiences": [{"title": "ML Engineer", "company": "Nimbus"}],
+      "projects": [{"name": "SemanticSearch"}],
+      "skills_emphasized": ["Python", "PyTorch"]
+    },
+    "tailoring_decisions": [
+      {
+        "planner": "chat_approved",
+        "revision_notes": "drop the game project, it's not relevant to ML roles",
+        "actions": [
+          {
+            "item_key": "proj:pixel adventure",
+            "label": "Pixel Adventure",
+            "section": "project",
+            "op": "delete",
+            "rationale": "a 2D platformer says nothing about ML engineering"
+          }
+        ],
+        "reward": {"composite": 81.2, "delta": 22.5, "user_score": 5}
+      }
+    ]
+  },
+  "next_job": {
+    "title": "Applied Scientist",
+    "company": "Harbor Labs",
+    "description": "Build machine learning ranking and retrieval systems in python and pytorch. Own model training, evaluation and deployment.",
+    "role_family": "machine_learning",
+    "matched_skills": {"python": {}, "pytorch": {}, "ranking": {}},
+    "items": [
+      {
+        "key": "proj:pixel adventure",
+        "section": "project",
+        "label": "Pixel Adventure",
+        "source_text": "2D platformer game built in C# and Unity, published on itch.io"
+      },
+      {
+        "key": "proj:semanticsearch",
+        "section": "project",
+        "label": "SemanticSearch",
+        "source_text": "semantic search library using sentence-transformers, FAISS and python"
+      },
+      {
+        "key": "exp:ml engineer",
+        "section": "experience",
+        "label": "ML Engineer",
+        "source_text": "trained and served pytorch ranking models for retrieval and evaluation"
+      }
+    ]
+  },
+  "recurring_rejected": ["proj:pixel adventure"],
+  "expect": {"min_card_quality": 1.0}
+}

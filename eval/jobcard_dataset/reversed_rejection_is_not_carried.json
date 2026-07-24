@@ -1,0 +1,77 @@
+{
+  "id": "reversed_rejection_is_not_carried",
+  "description": "The temporal half of the negation signal: the user removed an item on one run and put it back on the next. Only the latest decision counts, so the card must carry no standing rejection. A card that appended rejections instead of resolving them would suppress an item the user deliberately restored — the same stale-memory failure the #21 Knowledge-Updates eval guards against on the KG side.",
+  "prior_job": {
+    "title": "Research Engineer",
+    "company": "Nimbus Analytics",
+    "description": "Prototype and evaluate retrieval and ranking research.",
+    "role_family": "research",
+    "status": "tailored",
+    "ats_score": 70.0,
+    "tailored_score_breakdown": {
+      "composite": 79.0,
+      "baseline_composite": 62.0,
+      "delta": 17.0,
+      "skill_coverage": {"score": 88.0}
+    },
+    "matched_skills": {"pytorch": {"match_type": "direct"}},
+    "tailored_resume_content": {
+      "experiences": [{"title": "Research Engineer", "company": "Nimbus"}],
+      "projects": [{"name": "SemanticSearch"}],
+      "skills_emphasized": ["PyTorch"]
+    },
+    "tailoring_decisions": [
+      {
+        "planner": "chat_approved",
+        "revision_notes": "cut the LLM Resume Coach project",
+        "actions": [
+          {
+            "item_key": "proj:llm resume coach",
+            "label": "LLM Resume Coach",
+            "section": "project",
+            "op": "delete",
+            "rationale": "user asked to remove it"
+          }
+        ],
+        "reward": {"composite": 74.0, "delta": 12.0, "user_score": 3}
+      },
+      {
+        "planner": "chat_approved",
+        "revision_notes": "actually put the resume coach back, it shows LLM work",
+        "actions": [
+          {
+            "item_key": "proj:llm resume coach",
+            "label": "LLM Resume Coach",
+            "section": "project",
+            "op": "keep",
+            "rationale": "user reinstated it"
+          }
+        ],
+        "reward": {"composite": 79.0, "delta": 17.0, "user_score": 5}
+      }
+    ]
+  },
+  "next_job": {
+    "title": "LLM Research Engineer",
+    "company": "Harbor Labs",
+    "description": "Evaluate and improve retrieval augmented generation systems with pytorch and langchain.",
+    "role_family": "research",
+    "matched_skills": {"pytorch": {}, "langchain": {}},
+    "items": [
+      {
+        "key": "proj:llm resume coach",
+        "section": "project",
+        "label": "LLM Resume Coach",
+        "source_text": "langchain application that critiques resumes against job descriptions"
+      },
+      {
+        "key": "proj:semanticsearch",
+        "section": "project",
+        "label": "SemanticSearch",
+        "source_text": "retrieval library with hybrid BM25 and dense search using pytorch embeddings"
+      }
+    ]
+  },
+  "recurring_rejected": [],
+  "expect": {"min_card_quality": 1.0}
+}
