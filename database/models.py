@@ -306,3 +306,54 @@ class AIUsage(SQLModel, table=True):
     # Tracked separately so each kind gets its own daily cap.
     kind: str = Field(default="ai")
     call_count: int = Field(default=0)
+
+
+class JobCard(SQLModel, table=True):
+    """Distilled sufficient-statistics record of one completed job (issue #137).
+
+    The episodic memory tier: the knowledge graph holds durable facts and the
+    active job chat holds the live transcript, but nothing carried *what
+    happened last time you tailored to a similar role*. A JobCard is a
+    **deterministic projection** of a finished `UserJobResult` — never an LLM
+    summary of the transcript — so two compiles of the same result produce the
+    same `payload_hash`. The one exception is `role_family`, a cached, versioned
+    classify (see `agents/job_card.py`) so a rebuild costs no LLM call.
+
+    Cards live *beside* the knowledge graph, never inside it, and are rebuilt
+    event-driven when the job's result changes. Per the #109 amortization
+    amendment that is what keeps the compile off the next turn's critical path;
+    compiling lazily at next-tailoring time would put the prefill cost back
+    inline and break the condition that justifies distilling at all.
+
+    Absent card ⇒ today's behavior: nothing reads a row that does not exist.
+    """
+    card_id: UUID = Field(default_factory=uuid4, primary_key=True)
+    user_id: UUID = Field(foreign_key="user.user_id", index=True)
+    job_id: UUID = Field(foreign_key="jobdescription.job_id", index=True)
+    # The result this card was compiled from. Not an FK: a card must survive
+    # result churn, and a dangling id is preferable to a cascade.
+    result_id: Optional[UUID] = Field(default=None)
+
+    title: str = Field(default="")
+    company: str = Field(default="")
+
+    # Cached, versioned role classification — the single LLM call in the compile.
+    # role_family_key is a digest of the classify inputs; role_family_version
+    # tracks the prompt/label set. Recompute only when either changes.
+    role_family: Optional[str] = Field(default=None, index=True)
+    role_family_version: Optional[int] = Field(default=None)
+    role_family_key: Optional[str] = Field(default=None)
+
+    # The deterministic card itself, plus its digest so determinism is directly
+    # assertable and an unchanged rebuild can skip the write.
+    payload: Dict = Field(default={}, sa_column=Column(JSON))
+    payload_hash: Optional[str] = Field(default=None)
+    # Fact-level multi-key index (LongMemEval #108 finding 1): the card is
+    # indexed under its emphasized items / matched skills / role_family, not
+    # just one embedding of the whole card. Expanded at compile time.
+    index_keys: List = Field(default=[], sa_column=Column(JSON))
+
+    # When the source result last changed — the recency signal for selection.
+    source_updated_at: Optional[datetime] = Field(default=None)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
