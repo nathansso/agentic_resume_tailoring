@@ -65,6 +65,33 @@ TAILOR_MODEL = os.getenv("TAILOR_MODEL", "claude-sonnet-4-6")
 EVAL_MODEL = os.getenv("EVAL_MODEL", CHAT_MODEL)
 REVIEW_MODEL = os.getenv("REVIEW_MODEL", TAILOR_MODEL)
 
+# ── Observability: LangSmith tracing scaffold (issue #142) ───────────────────
+# OFF by default, wired for P3 RL. LangChain auto-reads LANGCHAIN_TRACING_V2 /
+# LANGCHAIN_API_KEY / LANGCHAIN_PROJECT from the environment, so tracing turns on
+# ONLY when the operator sets those env vars. This scaffold documents and
+# surfaces them — it never force-enables them (nothing here writes to os.environ).
+# Because extraction now stays on the LangChain path (get_extractor), a single
+# trace covers extraction + chat + tailor uniformly.
+#
+# PII CAVEAT: traces carry full resume + JD text (PII). Before enabling in
+# production, self-host LangSmith or set a data region and scrub the payloads.
+# Do NOT enable in prod until P3.
+LANGSMITH_API_KEY = os.getenv("LANGCHAIN_API_KEY")
+LANGSMITH_PROJECT = os.getenv("LANGCHAIN_PROJECT")
+
+_TRUTHY = {"1", "true", "yes", "on"}
+
+
+def langsmith_enabled() -> bool:
+    """True only when LangSmith tracing is explicitly enabled via env.
+
+    Reads the environment live so a test or runtime toggle is reflected, and
+    never enables tracing as a side effect of being called.
+    """
+    val = os.getenv("LANGCHAIN_TRACING_V2")
+    return bool(val) and val.strip().strip("\"'").lower() in _TRUTHY
+
+
 # Global Config
 MODEL_NAME = "gpt-4o-mini"  # legacy alias for openai fallback
 EMBEDDING_MODEL = "all-MiniLM-L6-v2" # Standard HuggingFace model for Resume-Matcher style vectors
