@@ -76,6 +76,50 @@ add/supersede/no_op multiset), per-kind row assertions with `count` and field
 equality (or `<field>_contains`), and `skills_total` / `experiences_total` /
 `projects_total` to catch stray rows.
 
+## JobCard card-quality eval (issue #137)
+
+Is a completed job summarized *well enough*? A JobCard claims to be a sufficient
+statistic for the next tailoring decision, so the claim is measured. Each task in
+`eval/jobcard_dataset/` pairs a finished job (`prior_job`) with the next job it
+should inform (`next_job`). Two arms plan `next_job` — one reading the compiled
+card, one reading the raw finished result — and the plans are compared as **typed
+ops per item**, not text.
+
+```bash
+python eval/jobcard_eval.py                 # offline, deterministic
+python eval/jobcard_eval.py --live          # real TailorPlanner (needs API keys)
+python eval/jobcard_eval.py --tasks rejected_project_recurs
+python eval/jobcard_eval.py --no-ablation   # skip the field sweep
+```
+
+Metrics:
+- `card_quality` — weighted agreement between the arms. A miss on a
+  **user-rejected item that recurs** in the next job weighs `NEGATION_WEIGHT`
+  (3x) against 1x for a generic-recap miss, because opposed cases are where
+  summarization silently fails (#129 finding 1).
+- `functional_equivalence` — unweighted per-item plan agreement.
+- `outcome_delta` / `relevance_delta` — the downstream arm. Both are reported
+  because the ATS composite is a *coverage* measure and is structurally blind to
+  an off-topic item being removed: it reads 0.0 on every task here, while JD
+  keyword density moves +0.104 on the negation task.
+- Per-field **ablation** table (mean and worst case): blank each card field in
+  turn and re-run, so the report shows which fields carry the signal.
+
+Default mode is **scripted**: the planner arm is a deterministic probe rule over
+a structured memory record, and `role_family` is pinned by the task file, so what
+is pinned is the compile's information-preservation contract.
+`tests/test_jobcard_eval.py` runs it in-suite and proves it goes red when the
+negation signal is dropped.
+
+### Adding a task
+
+One JSON file in `eval/jobcard_dataset/` with `id`, `description`, `prior_job`
+(a finished job: `tailored_resume_content`, `tailoring_decisions`,
+`tailored_score_breakdown`, `role_family`), `next_job` (`description`,
+`matched_skills`, and the candidate `items` to plan over), optional
+`recurring_rejected` (item keys the prior user rejected that reappear here), and
+`expect.min_card_quality`.
+
 ## Skill-selection tuning harness (issue #54 Phase 4)
 
 `python eval/skill_selection_eval.py` — LLM-free comparison of skill-scorer
