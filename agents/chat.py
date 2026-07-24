@@ -1277,141 +1277,82 @@ class ChatAgent:
         return services.add_skill_to_profile(user.user_id, skill_name, target)
 
     def _extract_chat_artifacts(self, messages: list[dict]) -> list[dict]:
-        """Extract new skill/project/experience candidates from recent messages using the LLM.
+        """Chain-of-Note extraction of knowledge artifacts from recent messages (issue #21).
 
-        Returns a list of candidate dicts, each with keys: type, name/title, category/company,
-        description. Returns [] on LLM failure or parse error. Isolated and unit-testable with
-        a fixture LLM response.
+        Returns decided proposals — each the candidate's fields plus a `decision`
+        of 'add' | 'supersede' | 'no_op' and the existing `target` fact it refers
+        to. Runs the `extract → reason → decide` subgraph in
+        agents/knowledge_extractor.py, which goes through the #142
+        `get_extractor` seam (schema-validated output, no hand-rolled JSON
+        parsing). Returns [] on any failure; writes nothing.
         """
-        import json
+        from agents.knowledge_extractor import load_known_facts, run_chain_of_note
         from database.user_utils import get_active_profile
-        try:
-            user = get_active_profile()
-            existing_skills: list[str] = []
-            if user:
-                with Session(engine) as session:
-                    user_skills = session.exec(
-                        select(UserSkill).where(UserSkill.user_id == user.user_id)
-                    ).all()
-                    for us in user_skills:
-                        skill = session.get(Skill, us.skill_id)
-                        if skill:
-                            existing_skills.append(skill.name)
 
-            # Build a compact transcript from the supplied messages
-            transcript_lines = []
-            for msg in messages[-10:]:
-                role = msg.get("role", "user")
-                content = (msg.get("content") or "")[:500]
-                if role in ("user", "assistant"):
-                    transcript_lines.append(f"{role.capitalize()}: {content}")
-            transcript = "\n".join(transcript_lines)
+        user = get_active_profile()
+        known_facts = load_known_facts(user.user_id) if user else []
+        return run_chain_of_note(messages, known_facts)
 
-            skills_str = ", ".join(existing_skills[:30]) if existing_skills else "none"
-            extraction_prompt = [{"role": "user", "content": (
-                f"Given this conversation excerpt, extract any skills, projects, or experiences "
-                f"the user mentioned that are NEW (not in their current skill list: {skills_str}).\n\n"
-                f"Return ONLY a JSON array (no markdown, no explanation). Each item:\n"
-                f'  {{"type": "skill"|"project"|"experience", "name": "...", '
-                f'"category": "..." (for skills only), "company": "..." (for experience only), '
-                f'"description": "...", '
-                f'"evidence": "<verbatim quote or close paraphrase from the conversation that shows the user mentioned this>"}}\n\n'
-                f"For experience items set \"name\" equal to the job title and include \"company\".\n"
-                f"Only include an item when a clear supporting quote is present in the conversation. "
-                f"Do NOT invent items not grounded in the transcript.\n"
-                f"Return [] if nothing new was mentioned with clear supporting evidence.\n\n"
-                f"Conversation:\n{transcript}"
-            )}]
-
-            resp = get_llm(role="chat", temperature=0.0).invoke(extraction_prompt)
-            raw = (resp.content if hasattr(resp, "content") else str(resp)).strip()
-            # Strip markdown code fences if the model wraps output
-            if raw.startswith("```"):
-                raw = re.sub(r"^```(?:json)?\n?", "", raw)
-                raw = re.sub(r"\n?```$", "", raw).strip()
-
-            candidates = json.loads(raw)
-            if not isinstance(candidates, list):
-                return []
-
-            result = []
-            for item in candidates:
-                if not isinstance(item, dict):
-                    continue
-                atype = (item.get("type") or "").lower()
-                if atype not in ("skill", "project", "experience"):
-                    continue
-                name = (item.get("name") or item.get("title") or "").strip()
-                if not name:
-                    continue
-                # Require evidence — items without a supporting quote from the conversation
-                # are not safe to surface for persistence (guards against hallucination).
-                if not (item.get("evidence") or "").strip():
-                    logger.debug(
-                        "_extract_chat_artifacts: dropped '%s' (%s) — no evidence quote",
-                        name, atype,
-                    )
-                    continue
-                result.append(item)
-            return result
-        except Exception as exc:
-            logger.debug("_extract_chat_artifacts failed: %s", exc)
-            return []
+    @staticmethod
+    def _describe_proposal(index: int, proposal: dict) -> str:
+        """One display line for a proposed artifact, labelled by its decision."""
+        atype = (proposal.get("type") or "").lower()
+        name = (proposal.get("name") or proposal.get("title") or "").strip()
+        verb = "Update" if proposal.get("decision") == "supersede" else "Add"
+        extra = (
+            proposal.get("category") or proposal.get("company")
+            or proposal.get("description") or ""
+        )
+        line = f"  {index}. {verb} {atype}: {name}"
+        if extra:
+            line += f" ({extra[:60]})"
+        if proposal.get("decision") == "supersede" and proposal.get("target"):
+            line += f"\n     Replaces: {proposal['target']}"
+        evidence = (proposal.get("evidence") or "")[:100]
+        if evidence:
+            line += f'\n     Evidence: "{evidence}"'
+        return line
 
     def _handle_save_command(self) -> str:
-        """Handle /save: extract knowledge artifacts from recent chat and offer to persist them."""
+        """Handle /save: extract knowledge artifacts from recent chat and offer to persist them.
+
+        Explicit confirmation is the only write path — nothing reaches the
+        knowledge graph until the user picks a number or 'all'.
+        """
         from database.user_utils import get_active_profile
         user = get_active_profile()
         if not user:
             return "No active profile. Complete onboarding first."
 
-        candidates = self._extract_chat_artifacts(self.history[-10:])
-        if not candidates:
+        proposals = self._extract_chat_artifacts(self.history[-10:])
+        # no_op proposals are already in the graph unchanged — nothing to offer.
+        actionable = [p for p in proposals if p.get("decision") != "no_op"]
+        if not actionable:
             return "No new skills, projects, or experiences detected in recent messages."
 
         lines = ["I found these new items in our conversation:\n"]
         option_data: dict[str, dict] = {}
-        for i, item in enumerate(candidates, start=1):
-            atype = (item.get("type") or "").lower()
-            name = (item.get("name") or item.get("title") or "").strip()
-            extra = item.get("category") or item.get("company") or item.get("description") or ""
-            evidence_snippet = (item.get("evidence") or "")[:100]
-            display = f"  {i}. {atype.capitalize()}: {name}"
-            if extra:
-                display += f" ({extra[:60]})"
-            if evidence_snippet:
-                display += f'\n     Evidence: "{evidence_snippet}"'
-            lines.append(display)
-            option_data[str(i)] = {
-                "user_id": user.user_id,
-                "type": atype,
-                "data": item,
-                "name": name,
-            }
+        for i, proposal in enumerate(actionable, start=1):
+            lines.append(self._describe_proposal(i, proposal))
+            option_data[str(i)] = proposal
 
         lines.append("\nType a number to save that item, 'all' to save all, or 'skip' to dismiss.")
 
         uid = user.user_id
-        active = self._active_job_id
+        context = f"chat:{self._active_job_id or 'landing'}"
 
-        for key, info in option_data.items():
-            t, d, a = info["type"], info["data"], active
-            def _make_single(u=uid, typ=t, dat=d, ajid=a):
+        for key, proposal in option_data.items():
+            def _make_single(u=uid, prop=proposal, ctx=context):
                 def _save(_=None):
-                    return services.create_artifact_from_chat(
-                        u, typ, dat, source_context=f"chat:{ajid or 'landing'}"
-                    )
+                    return services.apply_artifact_decision(u, prop, source_context=ctx)
                 return _save
             self._pending_options[key] = _make_single()
 
         def _save_all(_=None):
-            results = []
-            for info in option_data.values():
-                results.append(services.create_artifact_from_chat(
-                    info["user_id"], info["type"], info["data"],
-                    source_context=f"chat:{active or 'landing'}",
-                ))
-            return "\n".join(results)
+            return "\n".join(
+                services.apply_artifact_decision(uid, prop, source_context=context)
+                for prop in option_data.values()
+            )
 
         self._pending_options["all"] = _save_all
         self._pending_options["skip"] = lambda: "Dismissed — no items saved."
