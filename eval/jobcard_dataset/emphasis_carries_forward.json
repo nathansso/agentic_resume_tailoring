@@ -1,0 +1,73 @@
+{
+  "id": "emphasis_carries_forward",
+  "description": "The positive half of the claim: the items a previous tailoring led with must survive the compile, so the next job keeps the framing that already worked instead of rediscovering it. No rejections here, so this task isolates the emphasized-items field.",
+  "prior_job": {
+    "title": "Backend Software Engineer",
+    "company": "Bluefin Software",
+    "description": "Design and operate backend microservices at scale.",
+    "role_family": "software_engineering",
+    "status": "exported",
+    "ats_score": 69.0,
+    "tailored_score_breakdown": {
+      "composite": 76.0,
+      "baseline_composite": 61.0,
+      "delta": 15.0,
+      "skill_coverage": {"score": 85.0}
+    },
+    "matched_skills": {"fastapi": {"match_type": "direct"}, "postgres": {"match_type": "direct"}},
+    "tailored_resume_content": {
+      "experiences": [
+        {"title": "Backend Engineer", "company": "Bluefin"},
+        {"title": "Software Engineer", "company": "Harbor Labs"}
+      ],
+      "projects": [{"name": "StreamBoard"}],
+      "skills_emphasized": ["FastAPI", "Postgres", "Docker"]
+    },
+    "tailoring_decisions": [
+      {
+        "planner": "llm",
+        "revision_notes": "",
+        "actions": [
+          {
+            "item_key": "exp:backend engineer",
+            "label": "Backend Engineer",
+            "section": "experience",
+            "op": "revise",
+            "strategy": "keyword_weave",
+            "rationale": "weave the JD's service keywords into the strongest role"
+          }
+        ],
+        "reward": {"composite": 76.0, "delta": 15.0, "user_score": 4}
+      }
+    ]
+  },
+  "next_job": {
+    "title": "Platform Engineer",
+    "company": "Nimbus Analytics",
+    "description": "Build and run backend services with fastapi, postgres and docker. Own service reliability and deployment.",
+    "role_family": "software_engineering",
+    "matched_skills": {"fastapi": {}, "postgres": {}, "docker": {}},
+    "items": [
+      {
+        "key": "exp:backend engineer",
+        "section": "experience",
+        "label": "Backend Engineer",
+        "source_text": "built fastapi services on postgres behind an nginx gateway"
+      },
+      {
+        "key": "proj:streamboard",
+        "section": "project",
+        "label": "StreamBoard",
+        "source_text": "real-time analytics dashboard with kafka, clickhouse and docker"
+      },
+      {
+        "key": "proj:pixel adventure",
+        "section": "project",
+        "label": "Pixel Adventure",
+        "source_text": "2D platformer game built in C# and Unity"
+      }
+    ]
+  },
+  "recurring_rejected": [],
+  "expect": {"min_card_quality": 1.0}
+}

@@ -173,6 +173,7 @@ class TailorPlanner:
         prior_content: Optional[Dict] = None,
         knobs: Optional[Dict] = None,
         allow_explore: bool = True,
+        job_cards: Optional[List[Dict]] = None,
     ) -> Dict:
         """Return {"actions": [...], "knobs": {...}, "planner": "llm"|"default"}.
 
@@ -182,6 +183,9 @@ class TailorPlanner:
         *allow_explore* lets a caller opt out of ε-greedy sampling even in
         exploration mode; plan_preview() sets it False because a previewed plan
         is shown to a human for approval, which takes it off-policy anyway.
+
+        *job_cards* are the top-N distilled prior jobs selected for this JD
+        (issue #137). Empty or absent leaves the planning payload untouched.
         """
         knobs = {**DEFAULT_KNOBS, **(knobs or {})}
         # Never explore against a user's explicit revision request: sampling
@@ -198,7 +202,7 @@ class TailorPlanner:
         try:
             raw_actions = self._llm_plan(
                 items, pool, jd_text, missing_skills, revision_notes,
-                prior_content, knobs,
+                prior_content, knobs, job_cards,
             )
         except Exception as exc:
             logger.warning("TailorPlanner LLM plan failed, using default: %s", exc)
@@ -380,6 +384,7 @@ class TailorPlanner:
         revision_notes: str,
         prior_content: Optional[Dict],
         knobs: Dict,
+        job_cards: Optional[List[Dict]] = None,
     ) -> List[Dict]:
         """One LLM call → raw action list (unvalidated). Raises on failure."""
         def item_line(i: Dict) -> Dict:
@@ -431,6 +436,24 @@ class TailorPlanner:
             if revision_notes.strip() else ""
         )
 
+        # Cross-job memory (issue #137). Built only when cards were selected, so
+        # a user with no completed jobs gets the byte-for-byte pre-#137 prompt —
+        # the same conditional-inclusion discipline graph_evidence uses above.
+        memory_block = ""
+        if job_cards:
+            from agents.job_card import render_cards
+            rendered = render_cards(job_cards)
+            if rendered:
+                memory_block = (
+                    "\n\nPRIOR SIMILAR JOBS — this candidate's own tailoring "
+                    "history, most relevant first:\n" + rendered
+                    + "\nUse this as evidence of what works for this candidate: "
+                    "prefer the framings and items that scored well before, and "
+                    "treat anything under 'User removed' as a standing "
+                    "preference — do not reintroduce it unless this job "
+                    "specifically calls for it."
+                )
+
         allowed_ops = ["keep", "revise"]
         if knobs["allow_delete"]:
             allowed_ops.append("delete")
@@ -459,7 +482,7 @@ class TailorPlanner:
             "- Every action needs a one-sentence rationale.\n\n"
             f"JOB DESCRIPTION:\n{(jd_text or '')[:2000]}\n\n"
             f"PLANNING INPUT:\n{json.dumps(payload, indent=1)}"
-            f"{prior_block}{revision_block}\n\n"
+            f"{prior_block}{revision_block}{memory_block}\n\n"
             'Return: [{"item_key": "...", "op": "...", "strategy": "...", '
             '"keywords": [...], "replacement_key": "...", "rationale": "..."}]'
         )

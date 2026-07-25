@@ -17,6 +17,7 @@ Design notes:
   tested `_save_*` / dedup / heal persistence layer keeps its existing
   `List[Dict]` contract untouched.
 """
+from enum import Enum
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
@@ -182,3 +183,38 @@ class ArtifactDecision(BaseModel):
 
 class ArtifactDecisionList(BaseModel):
     decisions: List[ArtifactDecision] = Field(default_factory=list)
+
+
+# ── JobCard role classification (agents/job_card.py, issue #137) ──────────────
+#
+# The single LLM call the JobCard compile is allowed. Everything else in the
+# compile is a deterministic projection of `UserJobResult`, which is what makes
+# "two compiles of the same result produce identical cards" hold. A closed enum
+# (rather than a free-form string) is what makes the classification usable as a
+# selection key: `role_family` match is one of the ranking signals, and two
+# spellings of the same family would silently never match.
+
+class RoleFamily(str, Enum):
+    """Closed label set for the role a job description is hiring for."""
+    SOFTWARE_ENGINEERING = "software_engineering"
+    MACHINE_LEARNING = "machine_learning"
+    DATA_SCIENCE = "data_science"
+    DATA_ENGINEERING = "data_engineering"
+    RESEARCH = "research"
+    PRODUCT_MANAGEMENT = "product_management"
+    DESIGN = "design"
+    DEVOPS_INFRASTRUCTURE = "devops_infrastructure"
+    SECURITY = "security"
+    HARDWARE = "hardware"
+    OTHER = "other"
+
+
+class RoleFamilyClassification(BaseModel):
+    role_family: RoleFamily = Field(
+        RoleFamily.OTHER,
+        description=(
+            "The single family this role belongs to. Use 'other' only when the "
+            "role genuinely fits none of the listed families"),
+    )
+    rationale: Optional[str] = Field(
+        None, description="One short sentence justifying the classification")

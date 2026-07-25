@@ -1,0 +1,63 @@
+{
+  "id": "planner_drop_is_not_a_preference",
+  "description": "Provenance discipline: the planner dropped an item on its own, with no user involvement. That is a per-job optimisation, not a standing preference, and a card that promoted it to one would teach the next job something the user never said. Both arms must agree the item is simply a normal candidate again.",
+  "prior_job": {
+    "title": "Data Engineer",
+    "company": "Harbor Labs",
+    "description": "Own batch and streaming data pipelines.",
+    "role_family": "data_engineering",
+    "status": "tailored",
+    "ats_score": 66.0,
+    "tailored_score_breakdown": {
+      "composite": 71.0,
+      "baseline_composite": 60.0,
+      "delta": 11.0,
+      "skill_coverage": {"score": 80.0}
+    },
+    "matched_skills": {"airflow": {"match_type": "direct"}, "spark": {"match_type": "direct"}},
+    "tailored_resume_content": {
+      "experiences": [{"title": "Data Engineer", "company": "Harbor"}],
+      "projects": [{"name": "DataPipeline"}],
+      "skills_emphasized": ["Airflow", "Spark"]
+    },
+    "tailoring_decisions": [
+      {
+        "planner": "llm",
+        "revision_notes": "",
+        "actions": [
+          {
+            "item_key": "proj:streamboard",
+            "label": "StreamBoard",
+            "section": "project",
+            "op": "delete",
+            "rationale": "crowded out by two stronger pipeline projects for this JD"
+          }
+        ],
+        "reward": {"composite": 71.0, "delta": 11.0}
+      }
+    ]
+  },
+  "next_job": {
+    "title": "Streaming Data Engineer",
+    "company": "Bluefin Software",
+    "description": "Build real-time streaming pipelines with kafka and clickhouse alongside batch airflow and spark jobs.",
+    "role_family": "data_engineering",
+    "matched_skills": {"kafka": {}, "airflow": {}, "spark": {}},
+    "items": [
+      {
+        "key": "proj:streamboard",
+        "section": "project",
+        "label": "StreamBoard",
+        "source_text": "real-time analytics dashboard with kafka and clickhouse processing 10k events/second"
+      },
+      {
+        "key": "proj:datapipeline",
+        "section": "project",
+        "label": "DataPipeline",
+        "source_text": "batch pipeline with airflow and spark feeding an analytics warehouse"
+      }
+    ]
+  },
+  "recurring_rejected": [],
+  "expect": {"min_card_quality": 1.0}
+}

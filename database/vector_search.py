@@ -140,5 +140,17 @@ def search_similar(
     vector column.
     """
     if candidates is not None or not _is_postgres(session):
+        if candidates is None and model_cls is not None:
+            # Loud on purpose. This combination returns [] rather than raising,
+            # and an empty result is indistinguishable from "nothing similar" —
+            # so a consumer written against the pgvector path silently does
+            # nothing on SQLite while its tests still pass. Pass `candidates`
+            # for a dialect-portable search.
+            logger.warning(
+                "search_similar: %s query on a non-Postgres session has no vector "
+                "column to scan and is returning [] — pass candidates= for a "
+                "dialect-portable search",
+                getattr(model_cls, "__name__", model_cls),
+            )
         return _search_numpy(query_vec, candidates or [], k)
     return _search_pgvector(session, query_vec, k, model_cls, vector_column)
