@@ -4,6 +4,39 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issue 150 — `score_tailored` counted the `_explainability` metadata key as a missing required skill
+**Status:** complete | **Tests:** 813 pass (9 new)
+
+`UserJobResult.matched_skills` is a `{skill_name: match_info}` dict that also doubles as a carrier for internal metadata: after a chat-driven tailor, `agents/chat.py` merges an `_explainability` block into it. `ATSScoringEngine.score_tailored` treated every key as a skill name, so on the *next* tailor of that job it counted `_explainability` as a required skill that is never present in resume prose — a permanent phantom coverage gap deflating the 0.45-weighted `skill_coverage` by `n/(n+1)`.
+
+The reason this rated a fix ahead of the policy arc rather than beside it: the metadata is only ever written on the chat path, so the deflation fires **on re-tailors only**. A constant offset would be survivable; an error that correlates with `is_revision` is a learnable spurious feature for anything trained on the logged reward — #113's per-edit mechanism, #127's net objective, #51 Phase 2's rule induction, and #137's JobCards, which record a run's ATS composite as the outcome of its plan and re-inject it into future planning.
+
+### What shipped
+- **One shared helper (`agents/skill_selection.py`, new).** `is_metadata_key` / `skill_names` / `visible_matched_skills`, deliberately dependency-free (stdlib `typing` only) so the scorer, the FastAPI routers, the eval harness and `services.py` can all import it without a cycle. It could not live in `agents/skill_scorer.py`, which already imports `ATSScoringEngine`. `web/routers/jobs_router.py:63` was already the *second* hand-rolled copy of this filter, so the fix extracts one helper and routes every site through it rather than adding a third — the module #151 grows its required/preferred decomposition into.
+- **The fix (`agents/ats_scorer.py`).** `score_tailored` derives `covered` / `gaps` / `total` from the filtered name list. On the issue's own reproduction the polluted breakdown goes from `{score: 75.0, total: 4, gaps: ['_explainability']}` / composite 73.8 to byte-identical with the clean call: `{score: 100.0, total: 3, gaps: []}` / composite 85.0.
+- **Four more consumers with the same assumption, found by the audit and fixed.** `eval/metrics.py` (the key inflated the `matched_recall` denominator — a *reported benchmark metric*), `agents/tailor.py::_score_section_relevance` (it injected an `explainability` token into the section-relevance term set), and `services.py` + `agents/chat.py`, which printed `_explainability` in user-facing matched-skill lists.
+- **Two consumers audited and deliberately left alone.** `agents/job_card.py` reads `matched_skills["_explainability"]` *on purpose*; the helper filters name lists and never strips the key from the dict, which the existing `test_compile_carries_the_sufficient_statistics` already pins. `cli.py` iterates fresh matcher output, where the key cannot be present.
+- **Tests (9 new).** The acceptance test asserts the *entire* breakdown — not just `skill_coverage` — is identical with and without the key; plus metadata-is-never-a-gap, a metadata-only dict scoring as empty (100.0, not 0.0) rather than dividing by zero, `delta` no longer one-sidedly biased, and unit coverage of the three helpers including non-mutation of the caller's dict.
+
+### Benchmark re-baseline
+`python eval/tailoring_benchmark.py --stub`, before → after, on `167f0e9`:
+
+| metric | before | after |
+|---|---|---|
+| `ats_delta` | +21.925 | +21.925 |
+| `baseline_composite` | 49.525 | 49.525 |
+| `tailored_composite` | 71.45 | 71.45 |
+| `skills_matched_recall` | 1.0 | 1.0 |
+
+`python eval/jobcard_eval.py`: 4/4 PASS, `card_quality` 1.0, `functional_equivalence` 1.0, and `ats_composite_delta` still `+0.0` on the negation task — #127's monotonicity defect is unchanged, as required.
+
+### Deviations from spec
+- **The ATS numbers do not move, and that was predicted rather than discovered.** `eval/tailoring_benchmark.py::_run_task` drives `analyze → tailor` **once** per task and never goes through chat, so `_explainability` is never written and the bug cannot fire. The issue's Impact section claims the #51 aggregate is polluted; with a single-tailor harness it is not, and `skills_matched_recall` was already 1.0 for the same reason. The fix is evidenced by the direct reproduction above and by the regression tests instead. **Adding a re-tailor arm to the benchmark would make this class of bug measurable and should be filed** — it is real scope growth, not a line change.
+- **The recorded ≈+42.4 baseline is a real-LLM run and was not overwritten.** `CHANGELOG.md` records it as "Baseline measurement (real-LLM run, 8/8 tasks): composite 33.0 → 75.4 (mean delta +42.4)". The `--stub` configuration measures +21.925 on unmodified `167f0e9`. These are different configurations, not a regression; the stub figure is recorded here as the stub baseline and the real-LLM figure is left standing.
+- **`skills_rendered` / `skills_selection_ratio` are nondeterministic in the harness, independently of this change.** Two consecutive runs of the *same* post-fix tree gave 9.625 and 12.375. Pinning `PYTHONHASHSEED=0` makes them reproducible (12.125 twice), so the cause is set/dict iteration order somewhere in skill selection — pre-existing, unrelated, and worth its own issue. Every ATS metric is bit-identical across all runs regardless of seed, which is why the table above is trustworthy.
+- **`score()` needed no change, but the `delta` was biased anyway.** It takes `skill_coverage_score` as a pre-computed float, derived in `agents/matcher.py` from a freshly built `matched_skills` dict before chat ever merges metadata. So the baseline side was always clean — which is precisely why the deflated tailored side biased `delta` *on top of* the component rather than cancelling out. Fixing the tailored side fixes both, and a test now pins it.
+- **No decomposition of `skill_coverage` into required/preferred (#151), no scoring weight touched (#152), no schema change.**
+
 ## Issue 137 — JobCard: distill completed jobs into sufficient-statistics cards + relevance-ranked injection
 **Status:** complete | **Tests:** 800 pass (54 new)
 

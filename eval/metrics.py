@@ -16,6 +16,7 @@ import re
 from typing import Dict, List, Optional
 
 from agents.ats_scorer import ATSScoringEngine
+from agents.skill_selection import skill_names
 from agents.skill_scorer import MAX_SKILLS, MIN_SKILLS
 
 # A skill term mentioned more than this many times across one resume reads as
@@ -124,7 +125,8 @@ def skills_metrics(
     ranked = tailored_content.get("skills_ranked") or []
     names = [s.get("name", "") for s in ranked]
     lower = {n.lower() for n in names}
-    matched_names = [m.lower() for m in (matched_skills or {})]
+    # Metadata keys would inflate the recall denominator (issue #150).
+    matched_names = [m.lower() for m in skill_names(matched_skills)]
     recall = (
         sum(1 for m in matched_names if m in lower) / len(matched_names)
         if matched_names else None

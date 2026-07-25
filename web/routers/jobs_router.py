@@ -7,6 +7,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
+from agents.skill_selection import skill_names
 from database.db import engine
 from database.models import JobDescription, UserJobResult, User
 from web.auth import get_current_user
@@ -59,8 +60,7 @@ def _job_detail(job: JobDescription, result: UserJobResult | None) -> dict:
     base = _job_list_item(job, result)
     base["description"] = job.description or ""
     if result:
-        # Underscore keys are internal metadata (e.g. _explainability), not skills.
-        matched = [k for k in (result.matched_skills or {}) if not k.startswith("_")][:10]
+        matched = skill_names(result.matched_skills)[:10]
         missing = result.missing_skills[:10] if result.missing_skills else []
     else:
         matched, missing = [], []
@@ -269,7 +269,7 @@ async def tailor_job(
         increment_ai_usage(user.user_id, s)
         refreshed = s.get(JobDescription, UUID(job_id))
         latest2 = _latest_result(s, UUID(job_id))
-        matched = [k for k in (latest2.matched_skills or {}) if not k.startswith("_")][:10] if latest2 else []
+        matched = skill_names(latest2.matched_skills)[:10] if latest2 else []
         missing = latest2.missing_skills[:10] if latest2 and latest2.missing_skills else []
         from services import job_tailor_limit as _limit
         return {

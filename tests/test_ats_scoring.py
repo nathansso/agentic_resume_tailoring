@@ -264,6 +264,68 @@ def test_score_tailored_skill_gaps():
     assert bd["skill_coverage"]["gaps"] == ["Kubernetes"]
 
 
+# ── issue #150: internal metadata keys are not skills ────────────────────────
+
+_EXPLAINABILITY = {
+    "matched": ["Python"],
+    "emphasized": [],
+    "inferred": [],
+    "missing": ["Kubernetes"],
+    "ats_score": 71.4,
+}
+
+
+def test_score_tailored_ignores_explainability_metadata_key():
+    """The whole breakdown must be identical with and without the metadata key.
+
+    `agents/chat.py` merges `_explainability` into `UserJobResult.matched_skills`
+    after a chat-driven tailor, so the *next* tailor of that job read it back as
+    a required skill that is never present in resume prose. That deflated the
+    0.45-weighted skill_coverage by n/(n+1) on re-tailors only (issue #150).
+    """
+    clean = {"Python": {}, "FastAPI": {}}
+    polluted = {**clean, "_explainability": _EXPLAINABILITY}
+
+    assert ATSScoringEngine.score_tailored(_TAILORED, _JD, matched_skills=polluted) == (
+        ATSScoringEngine.score_tailored(_TAILORED, _JD, matched_skills=clean)
+    )
+
+
+def test_score_tailored_metadata_key_is_not_a_coverage_gap():
+    bd = ATSScoringEngine.score_tailored(
+        _TAILORED, _JD, matched_skills={"Python": {}, "_explainability": _EXPLAINABILITY},
+    )
+    assert bd["skill_coverage"]["gaps"] == []
+    assert bd["skill_coverage"]["total"] == 1
+    assert bd["skill_coverage"]["covered"] == 1
+    assert bd["skill_coverage"]["score"] == pytest.approx(100.0)
+
+
+def test_score_tailored_metadata_only_scores_as_empty():
+    """A dict holding nothing but metadata has no skills to cover — not 0%."""
+    bd = ATSScoringEngine.score_tailored(
+        _TAILORED, _JD, matched_skills={"_explainability": _EXPLAINABILITY},
+    )
+    assert bd["skill_coverage"]["score"] == pytest.approx(100.0)
+    assert bd["skill_coverage"]["total"] == 0
+    assert bd["skill_coverage"]["gaps"] == []
+
+
+def test_score_tailored_delta_is_not_deflated_by_metadata():
+    """The baseline is scored clean, so a deflated tailored side biases `delta`."""
+    baseline = {"composite": 50.0}
+    clean = {"Python": {}, "FastAPI": {}}
+    polluted = {**clean, "_explainability": _EXPLAINABILITY}
+
+    with_meta = ATSScoringEngine.score_tailored(
+        _TAILORED, _JD, matched_skills=polluted, baseline_breakdown=baseline,
+    )
+    without = ATSScoringEngine.score_tailored(
+        _TAILORED, _JD, matched_skills=clean, baseline_breakdown=baseline,
+    )
+    assert with_meta["delta"] == without["delta"]
+
+
 def test_score_tailored_missing_section():
     content = {"experiences": _TAILORED["experiences"], "projects": []}
     bd = ATSScoringEngine.score_tailored(content, _JD, matched_skills={})

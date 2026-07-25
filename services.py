@@ -16,6 +16,7 @@ _ENV_PATH = Path(__file__).parent.parent / ".env"
 
 from sqlmodel import Session, delete, select
 
+from agents.skill_selection import skill_names
 from database.db import engine
 from database.models import (
     Achievement, ChatMessage, DeletedEntry, Education, Experience,
@@ -689,7 +690,7 @@ def get_job_details(job_uuid: str) -> Optional[dict]:
         if results:
             latest = max(results, key=lambda r: r.created_at)
             detail["ats_score"] = latest.ats_score
-            detail["matched_skills"] = list(latest.matched_skills.keys())[:10] if latest.matched_skills else []
+            detail["matched_skills"] = skill_names(latest.matched_skills)[:10]
             detail["missing_skills"] = latest.missing_skills[:10] if latest.missing_skills else []
         return detail
 

@@ -6,6 +6,7 @@ from typing import Dict, List, Set
 from sqlmodel import Session, select
 
 from database.models import User, UserSkill, Skill, Experience, Project
+from agents import skill_selection
 
 logger = logging.getLogger(__name__)
 
@@ -134,10 +135,12 @@ class ATSScoringEngine:
         text = cls.flatten_tailored_text(tailored_content)
         haystack = text.lower()
 
-        skill_names = list(matched_skills or {})
-        covered = [s for s in skill_names if s.lower() in haystack]
-        gaps = [s for s in skill_names if s.lower() not in haystack]
-        skill_score = (len(covered) / len(skill_names) * 100) if skill_names else 100.0
+        # Metadata keys (e.g. _explainability) are not skills. Counting them
+        # reported a phantom coverage gap on every re-tailor (issue #150).
+        names = skill_selection.skill_names(matched_skills)
+        covered = [s for s in names if s.lower() in haystack]
+        gaps = [s for s in names if s.lower() not in haystack]
+        skill_score = (len(covered) / len(names) * 100) if names else 100.0
 
         kd = cls._keyword_coverage(text, jd_text)
         sp = cls._tailored_section_presence(tailored_content)
@@ -147,7 +150,7 @@ class ATSScoringEngine:
             "skill_coverage": {
                 "score": round(skill_score, 1),
                 "covered": len(covered),
-                "total": len(skill_names),
+                "total": len(names),
                 "gaps": gaps,
                 **_weight_meta(_WEIGHTS["skill_coverage"]),
             },
