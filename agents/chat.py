@@ -15,6 +15,7 @@ from uuid import UUID
 from sqlmodel import Session, select
 
 from llm import get_llm
+from agents.skill_selection import skill_names
 from database.db import engine
 import services
 from database.models import (
@@ -404,7 +405,7 @@ def query_skills_vs_jobs() -> str:
                 lines.append(f"\n{job.title} @ {job.company}\n  No match results yet — run `tailor` to score.")
                 continue
             latest = max(results, key=lambda r: r.created_at)
-            matched = list(latest.matched_skills.keys()) if latest.matched_skills else []
+            matched = skill_names(latest.matched_skills)
             missing = latest.missing_skills or []
             matched_str = ", ".join(matched[:8]) + (f" (+{len(matched)-8} more)" if len(matched) > 8 else "")
             missing_str = ", ".join(missing[:5]) + (f" (+{len(missing)-5} more)" if len(missing) > 5 else "")

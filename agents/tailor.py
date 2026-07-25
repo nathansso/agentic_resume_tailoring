@@ -26,6 +26,7 @@ from database.models import (
     JobDescription, JobSkill, UserJobResult, Achievement,
 )
 from agents.ats_scorer import ATSScoringEngine
+from agents.skill_selection import skill_names
 from agents.project_scorer import MAX_PROJECTS, score_project, select_top_k
 from agents.skill_scorer import _env_float, _env_int, rank_and_select_skills
 from agents.skill_postprocessor import normalize_skill_name, should_reject_skill
@@ -1156,7 +1157,7 @@ class ResumeTailorAgent:
         if not tokens:
             return 0.0
         relevant = ATSScoringEngine._extract_keywords(
-            " ".join(matched_skills or {}) + " " + (jd_text or "")
+            " ".join(skill_names(matched_skills)) + " " + (jd_text or "")
         )
         if not relevant:
             return 0.0
