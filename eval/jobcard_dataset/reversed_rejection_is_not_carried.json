@@ -1,6 +1,6 @@
 {
   "id": "reversed_rejection_is_not_carried",
-  "description": "The temporal half of the negation signal: the user removed an item on one run and put it back on the next. Only the latest decision counts, so the card must carry no standing rejection. A card that appended rejections instead of resolving them would suppress an item the user deliberately restored — the same stale-memory failure the #21 Knowledge-Updates eval guards against on the KG side.",
+  "description": "The temporal half of the negation signal: the user removed an item on one run and put it back on the next. The rejection must be *superseded, not deleted* (#133) — the card retains it with status 'reversed' so the trajectory stays recoverable for policy training, but it is no longer pushed at the planner as a standing preference. A card that treated it as still active would suppress an item the user deliberately restored (the stale-memory failure #21's Knowledge-Updates eval guards against on the KG side); a card that dropped it entirely would discard a trajectory #51/#119 need.",
   "prior_job": {
     "title": "Research Engineer",
     "company": "Nimbus Analytics",

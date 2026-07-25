@@ -198,16 +198,79 @@ def test_planner_and_user_rejections_are_labelled_apart():
     assert by_label == {"Alpha": "planner", "Beta": "user"}
 
 
-def test_a_reversed_rejection_is_not_a_standing_rejection():
-    """Deleted on run 1, kept on run 2 — the user changed their mind, and the
-    card must not carry the stale negation forward."""
+def test_a_reversed_rejection_is_superseded_not_deleted():
+    """Deleted on run 1, kept on run 2. The user changed their mind, so the
+    rejection must stop binding — but it must NOT vanish.
+
+    #133 locks "a contradicted preference is superseded, never deleted — negation
+    must not expire", and #51/#119 train on these trajectories. So the card keeps
+    the rejection marked `reversed`, and only `active` ones reach the planner.
+    """
     result = _result(tailoring_decisions=[
         _decision(_action("proj:a", "delete", "Alpha"),
                   planner="chat_approved", revision_notes="cut Alpha"),
         _decision(_action("proj:a", "keep", "Alpha"),
                   planner="chat_approved", revision_notes="actually keep Alpha"),
     ])
-    assert jc.compile_card_payload(_job(), result)["rejected_items"] == []
+    payload = jc.compile_card_payload(_job(), result)
+
+    # Retained, with the reversal recorded — the trajectory is recoverable.
+    rejected = payload["rejected_items"]
+    assert len(rejected) == 1
+    assert rejected[0]["label"] == "Alpha"
+    assert rejected[0]["status"] == jc.REJECTION_REVERSED
+    assert rejected[0]["run"] == 0            # the run that rejected it
+    assert rejected[0]["reversed_at_run"] == 1
+    assert rejected[0]["reversed_by_op"] == "keep"
+
+    # …but it no longer binds, so it is never pushed at the planner.
+    assert jc.active_rejections(payload) == []
+    card = {"card_id": "c1", "payload": payload, "index_keys": [],
+            "role_family": None}
+    assert "Alpha" not in jc.render_cards([card])
+
+
+def test_a_re_rejected_item_becomes_active_again():
+    """Rejected, restored, rejected again — the latest word wins."""
+    result = _result(tailoring_decisions=[
+        _decision(_action("proj:a", "delete", "Alpha"),
+                  planner="chat_approved", revision_notes="cut Alpha"),
+        _decision(_action("proj:a", "keep", "Alpha"),
+                  planner="chat_approved", revision_notes="put it back"),
+        _decision(_action("proj:a", "delete", "Alpha"),
+                  planner="chat_approved", revision_notes="no, cut it after all"),
+    ])
+    payload = jc.compile_card_payload(_job(), result)
+    rejected = payload["rejected_items"]
+    assert len(rejected) == 1
+    assert rejected[0]["status"] == jc.REJECTION_ACTIVE
+    assert rejected[0]["run"] == 2, "attributed to the run that most recently rejected it"
+    assert "reversed_at_run" not in rejected[0]
+    assert len(jc.active_rejections(payload)) == 1
+
+
+def test_active_rejections_sort_ahead_of_reversed_ones():
+    """Truncation must never drop a binding rejection in favour of history."""
+    result = _result(tailoring_decisions=[
+        _decision(_action("proj:gone", "delete", "Gone"),
+                  _action("proj:back", "delete", "Back"),
+                  planner="chat_approved", revision_notes="cut both"),
+        _decision(_action("proj:back", "keep", "Back"),
+                  planner="chat_approved", revision_notes="restore Back"),
+    ])
+    rejected = jc.compile_card_payload(_job(), result)["rejected_items"]
+    assert [(r["label"], r["status"]) for r in rejected] == [
+        ("Gone", jc.REJECTION_ACTIVE), ("Back", jc.REJECTION_REVERSED)]
+
+
+def test_a_card_written_before_supersession_still_reads_as_active():
+    """Backward compat for already-persisted cards: no `status` key means the
+    rejection was active when the card was written."""
+    legacy = {"rejected_items": [
+        {"item_key": "proj:a", "label": "Alpha", "source": "user"},
+    ]}
+    assert len(jc.active_rejections(legacy)) == 1
+    assert len(jc.active_rejections(legacy, source="user")) == 1
 
 
 def test_replace_counts_as_a_rejection_of_the_replaced_item():

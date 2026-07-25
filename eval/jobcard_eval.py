@@ -15,9 +15,13 @@ Three nested signals, as #137 specifies:
    structural diff is both cheaper and far less noisy than trajectory
    similarity.
 
-2. **Downstream outcome delta** — the card-informed plan is executed into a
-   resume and scored by the real `ATSScoringEngine` against the next JD, then
-   compared with a memoryless plan. This is the "did it actually help" arm.
+2. **Downstream outcome** — the card-informed plan is executed into a resume and
+   compared with a memoryless plan on two figures. `ats_composite_delta` uses
+   the real `ATSScoringEngine`; `relevance_delta` uses JD-keyword density. Both,
+   because ATS is only one term of the intended objective — #127 defines it as
+   `net(a) = ΔATS − λ·Δcost` — and the composite is provably unable to reward a
+   deletion (see `_relevance_density`). Reporting the composite alone would say
+   the memory did nothing.
 
 3. **Negation guard** — a card that loses a `user-rejected` item which then
    *recurs* in the next job is penalized `NEGATION_WEIGHT` times harder than a
@@ -40,7 +44,7 @@ makes this a regression eval rather than a benchmark, the same choice
     python eval/jobcard_eval.py --no-ablation   # skip the field-ablation sweep
 
 Metric: `card_quality` (weighted, see above) plus `functional_equivalence`,
-`outcome_delta`, and a per-field ablation table showing which card fields carry
+`ats_composite_delta`, and a per-field ablation table showing which card fields carry
 the signal.
 """
 import argparse
@@ -162,15 +166,22 @@ def memory_from_full_history(prior: Dict) -> Dict:
 
 
 def memory_from_card(payload: Dict) -> Dict:
-    """The same record, read off the compiled card."""
+    """The same record, read off the compiled card.
+
+    Reads only *active* rejections. The card also retains reversed ones so the
+    trajectory is recoverable for policy training (#133: negation must not
+    expire), but a reversed rejection is history, not a standing preference —
+    counting it here would suppress an item the user deliberately restored.
+    """
+    from agents.job_card import active_rejections
+
     emphasized = payload.get("emphasized") or {}
     labels = [
         _norm(label.split(" @ ")[0]) for label in emphasized.get("experiences") or []
     ] + [_norm(label) for label in emphasized.get("projects") or []]
     removed = [
         _norm(r.get("label") or r.get("item_key"))
-        for r in payload.get("rejected_items") or []
-        if r.get("source") == "user"
+        for r in active_rejections(payload, source="user")
     ]
     return {
         "emphasized": [e for e in labels if e],
@@ -261,14 +272,19 @@ def _relevance_density(items: List[Dict], plan: Dict[str, str], task: Dict) -> f
     """Fraction of the resume's content tokens that are JD keywords.
 
     Reported alongside the ATS composite because the composite alone **cannot
-    see this issue's main benefit**. Every ATS component is a *coverage*
-    measure: it asks whether the JD's requirements appear in the resume. Honour
-    a user's rejection and drop an off-topic project, and coverage is unchanged
-    — the composite is identical with and without the memory. What changes is
-    precision: the same signal in fewer words.
+    see this issue's main benefit**, and that is a known property of the scorer
+    rather than a discovery here: **#127** records that 0.75 of the composite
+    (`skill_coverage` 0.45 + `keyword_coverage` 0.30) is coverage, coverage is
+    monotone non-decreasing in edits, and marginal ATS therefore "saturates
+    toward zero but essentially never goes negative". A deletion can only hold
+    or lower it, so the composite can never reward honouring a rejection.
 
-    So the two arms answer different questions and both are reported. Reusing
-    `eval/metrics._keyword_relevance`, already on the #51 harness.
+    What a good deletion changes is *precision*: the same signal in fewer words.
+    That is the cost side of #127's `net(a) = ΔATS − λ·Δcost` objective, whose
+    proper cost term is the #122 redundancy suite (semantic duplication,
+    stuffing, dilution). This density figure is a stand-in for that term until
+    #122 lands — reusing `eval/metrics._keyword_relevance`, already on the #51
+    harness — and it is why both numbers are reported rather than one.
     """
     from agents.ats_scorer import ATSScoringEngine
     from eval.metrics import _keyword_relevance
@@ -348,7 +364,7 @@ def run_task(task: Dict, live: bool = False, ablation: bool = True) -> Dict:
     # Both arms of the answer — see _relevance_density for why the composite
     # alone under-reports.
     memoryless = plan_from_memory(items, {})
-    scores["outcome_delta"] = round(
+    scores["ats_composite_delta"] = round(
         _composite(items, candidate, task) - _composite(items, memoryless, task), 3)
     scores["relevance_delta"] = round(
         _relevance_density(items, candidate, task)
@@ -393,7 +409,7 @@ def run_eval(
     records = [run_task(task, live=live, ablation=ablation) for task in tasks]
     quality = [r["card_quality"] for r in records]
     equivalence = [r["functional_equivalence"] for r in records]
-    deltas = [r["outcome_delta"] for r in records]
+    deltas = [r["ats_composite_delta"] for r in records]
     relevance = [r["relevance_delta"] for r in records]
 
     aggregate_ablation: Dict[str, Dict] = {}
@@ -415,7 +431,7 @@ def run_eval(
         "tasks": len(records),
         "card_quality": round(sum(quality) / len(quality), 3),
         "functional_equivalence": round(sum(equivalence) / len(equivalence), 3),
-        "outcome_delta": round(sum(deltas) / len(deltas), 3),
+        "ats_composite_delta": round(sum(deltas) / len(deltas), 3),
         "relevance_delta": round(sum(relevance) / len(relevance), 4),
         "negation_failures": sum(len(r["negation_failures"]) for r in records),
         "ablation": aggregate_ablation,
@@ -450,7 +466,7 @@ def main() -> int:
         print(f"[{'PASS' if record['passed'] else 'FAIL'}] {record['task_id']}  "
               f"quality={record['card_quality']} "
               f"fe={record['functional_equivalence']} "
-              f"ats_delta={record['outcome_delta']:+} "
+              f"ats_delta={record['ats_composite_delta']:+} "
               f"relevance_delta={record['relevance_delta']:+}")
         for failure in record["negation_failures"]:
             print(f"       {failure}")
@@ -469,7 +485,7 @@ def main() -> int:
 
     print(f"\ncard_quality: {results['card_quality']} | "
           f"functional_equivalence: {results['functional_equivalence']} | "
-          f"ats_delta: {results['outcome_delta']:+} | "
+          f"ats_delta: {results['ats_composite_delta']:+} | "
           f"relevance_delta: {results['relevance_delta']:+} "
           f"({results['tasks']} task(s), mode={results['mode']})")
     return 0 if all(r["passed"] for r in results["task_results"]) else 1

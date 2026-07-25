@@ -155,6 +155,28 @@ def test_full_history_and_card_arms_agree_on_the_shipped_compile():
     assert card["user_score"] == full["user_score"] == 5
 
 
+def test_a_reversed_rejection_is_retained_but_does_not_drive_the_plan(tmp_path):
+    """Both halves of the supersession rule, on the eval's own dataset: the card
+    keeps the reversed rejection (recoverable for #51/#119) and the two arms
+    still agree, because neither treats it as binding."""
+    from agents.job_card import (
+        REJECTION_REVERSED, active_rejections, compile_card_payload,
+    )
+
+    task = _task("reversed_rejection_is_not_carried")
+    job, result = je._rows(task["prior_job"])
+    payload = compile_card_payload(job, result, role_family="research")
+
+    statuses = [r["status"] for r in payload["rejected_items"]]
+    assert statuses == [REJECTION_REVERSED], "the trajectory must be retained"
+    assert active_rejections(payload) == [], "…but it must not bind"
+
+    assert je.memory_from_card(payload)["removed"] == []
+    assert je.memory_from_full_history(task["prior_job"])["removed"] == []
+    results = je.run_eval(task_ids=[task["id"]], out_dir=tmp_path)
+    assert results["card_quality"] == 1.0
+
+
 def test_ablation_reports_every_field(tmp_path):
     results = je.run_eval(out_dir=tmp_path)
     assert set(results["ablation"]) == set(je.ABLATION_FIELDS)
@@ -176,4 +198,4 @@ def test_respecting_a_rejection_raises_jd_keyword_density(tmp_path):
     results = je.run_eval(task_ids=["rejected_project_recurs"], out_dir=tmp_path)
     record = results["task_results"][0]
     assert record["relevance_delta"] > 0
-    assert record["outcome_delta"] == 0.0
+    assert record["ats_composite_delta"] == 0.0

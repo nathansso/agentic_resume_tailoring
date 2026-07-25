@@ -62,6 +62,13 @@ CARD_VERSION = 1
 # changes, which invalidates every cached role_family.
 ROLE_FAMILY_VERSION = 1
 
+# Whether a recorded rejection still binds. A reversed rejection is kept, never
+# deleted (#133: "negation must not expire") — it is history the policy work
+# (#51 Phase 2 / #119) needs, but it must not be pushed at the planner as a
+# current preference.
+REJECTION_ACTIVE = "active"
+REJECTION_REVERSED = "reversed"
+
 # ATS components carried on the card, matching the set
 # `tailor_planner.decision_log_entry` records so card and decision log stay
 # directly comparable.
@@ -296,21 +303,30 @@ def _entry_is_user_driven(entry: Dict) -> bool:
 
 
 def extract_rejected_items(tailoring_decisions) -> List[Dict]:
-    """Items dropped from the resume, latest decision per item wins.
+    """Every item ever dropped from the resume, with whether that still stands.
 
-    The negation signal. Reads the append-only decision log (issues #91/#51) and
-    keeps, per item, only its **most recent** action: an item deleted on run 2
-    and kept on run 3 is not a standing rejection, and recording it as one would
-    teach the next job a preference the user already reversed.
+    The negation signal. Reads the append-only decision log (issues #91/#51).
 
-    Ordering is user-sourced first, then most recent, then item key — stable, and
-    it puts the rejections that matter at the front of any truncation.
+    **Supersession, not deletion.** An item deleted on run 1 and kept on run 2 is
+    no longer a *standing* rejection — pushing it at the planner would suppress
+    something the user deliberately restored. But the rejection still happened,
+    and #133 locks the rule that "a contradicted preference is superseded, never
+    deleted — negation must not expire". So the reversal is recorded as
+    ``status="reversed"`` rather than dropped: `render_cards` pushes only
+    ``active`` rejections at the planner, while the card keeps the full
+    rejection history for the #51/#119 policy work to condition on. Dropping it
+    would make the card a lossy view of a trajectory that the decision log
+    itself retains.
+
+    Ordering is active first, then user-sourced, then most recent, then item key
+    — stable, and it puts the rejections that actually bind at the front of any
+    truncation.
     """
     log = _as_obj(tailoring_decisions, []) or []
     if not isinstance(log, list):
         return []
 
-    latest: Dict[str, Dict] = {}
+    history: Dict[str, List[Dict]] = {}
     for run_index, entry in enumerate(log):
         if not isinstance(entry, dict):
             continue
@@ -321,7 +337,7 @@ def extract_rejected_items(tailoring_decisions) -> List[Dict]:
             key = str(action.get("item_key") or "").strip()
             if not key:
                 continue
-            latest[key] = {
+            history.setdefault(key, []).append({
                 "item_key": key,
                 "label": action.get("label") or key,
                 "section": action.get("section"),
@@ -329,11 +345,46 @@ def extract_rejected_items(tailoring_decisions) -> List[Dict]:
                 "source": "user" if user_driven else "planner",
                 "rationale": str(action.get("rationale") or "").strip()[:200],
                 "run": run_index,
-            }
+            })
 
-    rejected = [r for r in latest.values() if r["op"] in ("delete", "replace")]
-    rejected.sort(key=lambda r: (r["source"] != "user", -r["run"], r["item_key"]))
+    rejected: List[Dict] = []
+    for records in history.values():
+        rejections = [r for r in records if r["op"] in ("delete", "replace")]
+        if not rejections:
+            continue
+        # Attribute the rejection to the run that made it; judge whether it
+        # still stands by the item's most recent action of any kind.
+        entry = dict(rejections[-1])
+        final = records[-1]
+        if final["op"] in ("delete", "replace"):
+            entry["status"] = REJECTION_ACTIVE
+        else:
+            entry["status"] = REJECTION_REVERSED
+            entry["reversed_at_run"] = final["run"]
+            entry["reversed_by_op"] = final["op"]
+        rejected.append(entry)
+
+    rejected.sort(key=lambda r: (
+        r["status"] != REJECTION_ACTIVE, r["source"] != "user",
+        -r["run"], r["item_key"],
+    ))
     return rejected
+
+
+def active_rejections(payload: Dict, source: Optional[str] = None) -> List[Dict]:
+    """Rejections that still stand — what may be pushed at the planner.
+
+    Reads `status` defensively so a card persisted before supersession existed
+    (no `status` key) is treated as active, matching its behavior at the time it
+    was written.
+    """
+    rows = [
+        r for r in payload.get("rejected_items") or []
+        if r.get("status", REJECTION_ACTIVE) == REJECTION_ACTIVE
+    ]
+    if source is not None:
+        rows = [r for r in rows if (r.get("source") == "user") == (source == "user")]
+    return rows
 
 
 def _final_user_score(tailoring_decisions) -> Optional[int]:
@@ -450,10 +501,22 @@ def _similarities(
 ) -> Dict[Any, float]:
     """card_id → JD similarity, through the #142 vector seam.
 
-    Candidates mode by construction: the card vectors are held in memory and
-    passed in. The `session=`/`model_cls=` table-scan mode is Postgres-only and
-    silently returns `[]` on SQLite, so routing this through it would disable
-    injection everywhere the suite runs.
+    Candidates mode by construction, and **this stays correct on an all-Postgres
+    stack** — it is not a SQLite concession. Three reasons, in order of weight:
+
+    1. **The ranking is a four-signal blend** (role match + similarity + key
+       overlap + recency, see `select_cards`). `ORDER BY embedding_vec <=> q
+       LIMIT n` can only order by *one* of those four terms, so it returns the
+       wrong top-N. Using pgvector here would mean over-fetching and re-ranking
+       in Python anyway — and at tens of cards per user the over-fetch is the
+       entire table, i.e. this function with extra round trips.
+    2. `embedding_vec` is unpopulated (no write path — see the follow-up issue),
+       so the table-scan mode returns `[]` on Postgres too, today.
+    3. Cardinality. 384 dims × tens of rows is one small matmul; ANN indexes
+       start paying somewhere around 10^5 vectors.
+
+    The table-scan mode is the right call for a large single-signal search over a
+    shared table; it is the wrong call for a small blended per-user ranking.
     """
     candidates: List[Tuple[Any, Any]] = [
         (c.get("card_id"), c.get("embedding"))
@@ -567,14 +630,12 @@ def _render_card(card: Dict) -> str:
     if emphasized.get("skills"):
         lines.append(f"  Emphasized skills: {', '.join(emphasized['skills'][:10])}")
 
-    # User-sourced rejections are never elided. They are the whole reason this
-    # tier exists, and they are the first thing a length-driven trim would drop.
-    user_rejected = [
-        r for r in payload.get("rejected_items") or [] if r.get("source") == "user"
-    ]
-    planner_rejected = [
-        r for r in payload.get("rejected_items") or [] if r.get("source") != "user"
-    ]
+    # Only *active* rejections are pushed: a reversed one is retained on the card
+    # for the policy work but must not be restated as a current preference.
+    # Among the active ones, user-sourced are never elided — they are the whole
+    # reason this tier exists, and the first thing a length trim would drop.
+    user_rejected = active_rejections(payload, source="user")
+    planner_rejected = active_rejections(payload, source="planner")
     for label, rows, cap in (
         ("User removed", user_rejected, None),
         ("Planner dropped", planner_rejected, 3),
