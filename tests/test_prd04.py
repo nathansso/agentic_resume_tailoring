@@ -396,6 +396,148 @@ def test_tailor_persists_section_order(isolated_engine, monkeypatch):
     assert order.index("projects") < order.index("experience")
 
 
+# ── section order + ranked skills freeze across re-tailors (issue #115) ──────
+
+
+def _retailor_with_prior(isolated_engine, monkeypatch, prior_content,
+                         plan_actions=None, content=None):
+    """Drive one tailor() run against a result that already holds prior tailored
+    content, and return the freshly stored tailored_resume_content."""
+    import agents.tailor as tailor_module
+    import services as services_module
+    from conftest import _seed_user_and_skill
+    from database.models import Experience, Project
+
+    monkeypatch.setattr(tailor_module, "engine", isolated_engine)
+    monkeypatch.setattr(tailor_module, "get_llm", lambda *a, **kw: object())
+    # The JobCard rebuild classifies the role family through a live model call
+    # (#137); irrelevant here and it would put a network hop in a unit test.
+    monkeypatch.setattr(services_module, "rebuild_job_card",
+                        lambda *a, **kw: None)
+    _skip_one_page_fit(monkeypatch)
+
+    user = _seed_user_and_skill(isolated_engine)
+    job = _make_job(isolated_engine, title="MLE", company="Lab",
+                    status="tailored", description=_RESEARCH_JD)
+    with Session(isolated_engine) as session:
+        # Real rows, so a plan_override action validates against real item keys.
+        session.add(Experience(user_id=user.user_id, title="Software Engineer",
+                               company="BigCo", bullets=["source bullet"]))
+        # Two projects: validate_plan refuses to delete the last item of a
+        # section, so a one-project profile would silently degrade to `keep`.
+        session.add(Project(user_id=user.user_id, name="Research Pipeline",
+                            description="ml research"))
+        session.add(Project(user_id=user.user_id, name="Side Tool",
+                            description="cli utility"))
+        result = UserJobResult(user_id=user.user_id, job_id=job.job_id,
+                               tailored_resume_content=prior_content)
+        session.add(result)
+        session.commit()
+        result_id = result.result_id
+
+    agent = tailor_module.ResumeTailorAgent()
+    shipped = dict(content or _REORDER_CONTENT)
+
+    class FakeGraph:
+        def invoke(self, state):
+            return {**state, "tailored_content": dict(shipped),
+                    "evaluation": {}, "attempt": 1, "done": True}
+
+    agent.graph = FakeGraph()
+    agent.tailor(user.user_id, job.job_id, result_id,
+                 plan_override={"actions": plan_actions or []})
+
+    with Session(isolated_engine) as session:
+        return session.get(UserJobResult, result_id).tailored_resume_content
+
+
+_FROZEN_ORDER = ["education", "skills", "experience", "projects"]
+_FROZEN_SKILLS = [{"name": "Rust", "category": "language"}]
+
+
+def test_retailor_carries_section_order_and_ranked_skills_forward(
+    isolated_engine, monkeypatch
+):
+    """A re-tailor must not silently reorder sections or re-rank skills the
+    user was already happy with (issue #115).
+
+    The frozen order is deliberately the *opposite* of what this research JD
+    would rank (projects ahead of experience), so a recompute is unmistakable.
+    """
+    stored = _retailor_with_prior(isolated_engine, monkeypatch, {
+        **_REORDER_CONTENT,
+        "_section_order": list(_FROZEN_ORDER),
+        "skills_ranked": list(_FROZEN_SKILLS),
+    })
+
+    assert stored["_section_order"] == _FROZEN_ORDER
+    assert stored["skills_ranked"] == _FROZEN_SKILLS
+
+
+def test_first_run_still_computes_order_and_skills_from_scratch(
+    isolated_engine, monkeypatch
+):
+    """No prior content → the existing first-run path, unchanged."""
+    stored = _retailor_with_prior(isolated_engine, monkeypatch, {})
+
+    order = stored["_section_order"]
+    assert order[0] == "education"
+    # research JD ranks projects ahead of experience
+    assert order.index("projects") < order.index("experience")
+    assert order != _FROZEN_ORDER
+
+
+def test_a_structural_plan_action_forces_a_recompute(isolated_engine, monkeypatch):
+    """A delete changes the content both signals were derived from, so the
+    carried-forward values must not be reused."""
+    stored = _retailor_with_prior(
+        isolated_engine, monkeypatch,
+        {
+            **_REORDER_CONTENT,
+            "_section_order": list(_FROZEN_ORDER),
+            "skills_ranked": list(_FROZEN_SKILLS),
+        },
+        plan_actions=[{"section": "project", "item_key": "proj:research pipeline",
+                       "op": "delete", "rationale": "off topic"}],
+    )
+
+    # skills_ranked is the unambiguous witness: the frozen value is Rust, and a
+    # recompute can only produce the seeded profile skill. The section order is
+    # gated on the same flag, but a deleted project can legitimately re-rank
+    # into the frozen permutation, so asserting it differs would be flaky.
+    assert stored["skills_ranked"] != _FROZEN_SKILLS
+    assert [s["name"] for s in stored["skills_ranked"]] == ["Python"]
+
+
+def test_a_stale_order_naming_a_missing_section_is_recomputed(
+    isolated_engine, monkeypatch
+):
+    """A carried order must never name a section this run does not have —
+    achievements here, which the user no longer has."""
+    stale = ["education", "achievements", "skills", "experience", "projects"]
+    stored = _retailor_with_prior(isolated_engine, monkeypatch, {
+        **_REORDER_CONTENT,
+        "_section_order": stale,
+    })
+
+    assert "achievements" not in stored["_section_order"]
+    assert set(stored["_section_order"]) == {
+        "education", "experience", "projects", "skills"
+    }
+
+
+def test_expected_sections_tracks_achievements():
+    """The membership rule both the freeze check and _ranked_section_order read."""
+    from agents.tailor import ResumeTailorAgent
+
+    without = ResumeTailorAgent._expected_sections({"experiences": [{}]})
+    assert "achievements" not in without
+    assert without[0] == "education"
+
+    with_ach = ResumeTailorAgent._expected_sections({"achievements": [{"title": "A"}]})
+    assert "achievements" in with_ach
+
+
 def test_tailor_fits_content_to_one_page(isolated_engine, monkeypatch):
     """tailor() runs the one-page fit on the shipped content before saving, so
     the editor .tex / preview / exports all derive from fitted content."""
