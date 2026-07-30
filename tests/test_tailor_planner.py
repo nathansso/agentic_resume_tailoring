@@ -286,6 +286,106 @@ def test_enforce_plan_noop_without_actions():
     assert out == tailored
 
 
+# ── faithful keep: experiences carry prior tailored bullets (issue #115) ─────
+
+
+_PRIOR_TAILORED = {
+    "experiences": [
+        {"title": "ML Engineer", "company": "Nimbus",
+         "bullets": ["prior tailored bullet", "second tailored bullet"]},
+    ],
+    "projects": [{"name": "Recipe Review", "bullets": ["prior project bullet"]}],
+}
+
+
+def _keep_everything():
+    return _plan_with([
+        {"section": "experience", "item_key": "exp:ml engineer|nimbus", "op": "keep",
+         "rationale": "already strong"},
+        {"section": "project", "item_key": "proj:recipe review", "op": "keep",
+         "rationale": "user liked it"},
+    ])
+
+
+def test_apply_plan_keep_experience_carries_prior_bullets():
+    """The experience mirror of test_apply_plan_keep_project_carries_prior_bullets."""
+    from agents.tailor import ResumeTailorAgent
+
+    exps, _, _ = ResumeTailorAgent._apply_plan_to_inputs(
+        _keep_everything(), list(_EXPS), list(_PROJS), [], {}, _PRIOR_TAILORED
+    )
+
+    kept = next(e for e in exps if e["title"] == "ML Engineer")
+    assert kept["plan_op"] == "keep"
+    assert kept["prior_bullets"] == ["prior tailored bullet", "second tailored bullet"]
+
+
+def test_keep_experience_restores_prior_tailored_bullets_not_source():
+    """The regression test for issue #115.
+
+    `keep` on an experience used to reset it to the raw knowledge-graph source
+    bullets, throwing the tailoring away — while `keep` on a project correctly
+    preserved it. Both halves are run together, because each looked correct in
+    isolation and the bug lived in the seam between them.
+    """
+    from agents.tailor import ResumeTailorAgent
+
+    exps, projs, _ = ResumeTailorAgent._apply_plan_to_inputs(
+        _keep_everything(), list(_EXPS), list(_PROJS), [], {}, _PRIOR_TAILORED
+    )
+    state = {"plan": _keep_everything(), "experiences": exps, "projects": projs}
+    tailored = {
+        "experiences": [{"title": "ML Engineer", "company": "Nimbus",
+                         "bullets": ["the LLM rewrote this"]}],
+        "projects": [{"name": "Recipe Review", "bullets": ["rewritten too"]}],
+    }
+
+    out = ResumeTailorAgent._enforce_plan(tailored, state)
+
+    kept = out["experiences"][0]
+    assert kept["bullets"] == ["prior tailored bullet", "second tailored bullet"]
+    # the raw source bullets are what the bug used to restore
+    assert kept["bullets"] != ["built models", "shipped it"]
+    # projects were already correct; pinned so the two cannot diverge again
+    assert out["projects"][0]["bullets"] == ["prior project bullet"]
+
+
+def test_keep_experience_falls_back_to_source_on_a_first_run():
+    """With no prior tailored content there is nothing to carry, so `keep`
+    still means the knowledge-graph source verbatim."""
+    from agents.tailor import ResumeTailorAgent
+
+    exps, _, _ = ResumeTailorAgent._apply_plan_to_inputs(
+        _keep_everything(), list(_EXPS), list(_PROJS), [], {}, {}
+    )
+    assert "prior_bullets" not in exps[0]
+
+    out = ResumeTailorAgent._enforce_plan(
+        {"experiences": [{"title": "ML Engineer", "company": "Nimbus",
+                          "bullets": ["rewritten"]}]},
+        {"plan": _keep_everything(), "experiences": exps, "projects": []},
+    )
+    assert out["experiences"][0]["bullets"] == ["built models", "shipped it"]
+
+
+def test_bullet_budget_still_trims_carried_forward_bullets():
+    """A budget reduction must apply to carried-forward bullets too, or the
+    freeze would quietly defeat the one-page guarantee."""
+    from agents.tailor import ResumeTailorAgent
+
+    exps, _, _ = ResumeTailorAgent._apply_plan_to_inputs(
+        _keep_everything(), list(_EXPS), list(_PROJS), [], {}, _PRIOR_TAILORED
+    )
+    exps[0]["bullet_budget"] = 1
+
+    out = ResumeTailorAgent._enforce_plan(
+        {"experiences": [{"title": "ML Engineer", "company": "Nimbus",
+                          "bullets": ["rewritten"]}]},
+        {"plan": _keep_everything(), "experiences": exps, "projects": []},
+    )
+    assert out["experiences"][0]["bullets"] == ["prior tailored bullet"]
+
+
 # ── ε-greedy exploration (issue #112) ────────────────────────────────────────
 
 

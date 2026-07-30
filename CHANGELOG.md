@@ -4,6 +4,42 @@ All completed deliveries are recorded here — both PRD deliveries and self-cont
 
 ---
 
+## Issue 115 — Faithful keep: carry prior tailored bullets, section order, and ranked skills across re-tailors
+**Status:** complete | **Tests:** 822 pass (9 new)
+
+The planner's `keep` op is supposed to mean "leave this item alone." For projects it did. For **experiences** it meant the opposite: the item was reset to its raw knowledge-graph source bullets, discarding the tailoring. Users lost work they never asked to change, on every chat re-tailor.
+
+This is Stage 0.5 of the #114 policy arc — a correctness floor, not a polish item. Stages 2 (#113) and 3 (#51 Phase 2) both read the reward attached to a `keep` action, and that reward was measuring an unintended reset. #137 widened it further: its `PRIOR SIMILAR JOBS` block instructs the planner to "prefer the framings and items that scored well before," biasing it toward the one op that was broken — and a JobCard records the run's ATS composite as the outcome of its plan, so the card credited an outcome to a plan that was not executed and re-injected it as "what works for this candidate." Per-run corruption became cross-job.
+
+### What shipped
+- **Leak 1 — experiences now carry prior tailored bullets (`agents/tailor.py`).** `_apply_plan_to_inputs` built `prior_bullets_by_key` from `prior_content["projects"]` only; it now builds the matching `_exp_key`-keyed lookup from `prior_content["experiences"]` and attaches `prior_bullets` to kept experiences exactly as the project loop already did. `_enforce_plan`'s experience branch prefers `src["prior_bullets"]` over the raw source, keeping the `bullet_budget` trim so a budget reduction still applies to carried-forward bullets. Both branches now read identically (prior wins, then trim); `bullet_budget` is experience-only today, so adding the trim to the project branch is a no-op that future-proofs it.
+- **The `_enforce_plan` docstring stated the bug as if it were intended** ("keep experiences get their *source* bullets restored verbatim … keep projects restore prior tailored bullets"). Rewritten to state the actual rule, so the code no longer reads as contradicting its own contract.
+- **Leaks 2 and 3 — section order and ranked skills are frozen across re-tailors.** `_rank_skills` and `_ranked_section_order` ran unconditionally, so a re-tailor reordered sections and re-ranked skills the user was happy with. Both are now carried forward from `prior_content`, with a recompute forced when the plan contains a `delete`/`replace` — the actions that change the content the signals were derived from. The gate lands before `fit_content_to_one_page`, which consumes `_section_order`.
+- **A carried-forward order can never name a section this run does not have.** `_expected_sections` extracts the membership rule that `_ranked_section_order` already encoded (reorderable sections, minus `achievements` when the user has none, plus the pinned ones) into one classmethod that both the validity check and the ranker read, so the reconciliation is not duplicated. A stale order is rejected and recomputed rather than reaching the formatter.
+- **Achievements are unchanged** — they load verbatim from the graph and are keep-all. A carried order preserves the position of the section; item order inside it is never touched.
+- **Tests (9 new).** The regression test runs `_apply_plan_to_inputs` → `_enforce_plan` together, because each half looked correct in isolation and the bug lived in the seam. Plus: the first-run fallback to source bullets still holds, `bullet_budget` still trims carried-forward bullets, order and skills survive an all-`keep` re-tailor byte-identical, a structural action forces a recompute, a stale order naming a departed section is recomputed, and `_expected_sections` tracks achievements.
+
+### Benchmark re-baseline
+`python eval/tailoring_benchmark.py --stub` with `PYTHONHASHSEED=0`, before (`2a04d63`) → after — every metric identical:
+
+| metric | before | after |
+|---|---|---|
+| `ats_delta` | +21.925 | +21.925 |
+| `baseline_composite` | 49.525 | 49.525 |
+| `tailored_composite` | 71.45 | 71.45 |
+| `skills_matched_recall` | 1.0 | 1.0 |
+| `skills_rendered` | 12.125 | 12.125 |
+
+`python eval/jobcard_eval.py`: 4/4 PASS, `card_quality` 1.0, `functional_equivalence` 1.0, `ats_composite_delta` still `+0.0` on the negation task — #127's monotonicity defect unchanged.
+
+### Deviations from spec
+- **The benchmark cannot observe this fix either, for the same reason as #150.** `eval/tailoring_benchmark.py::_run_task` tailors **once** per task and never re-tailors, so a re-tailor-only fix leaves every aggregate untouched. The numbers are reported unmoved rather than a delta being manufactured; the fix is evidenced by the regression tests. This is now the second consecutive issue whose effect the #51 harness structurally cannot measure — **a re-tailor arm is the missing capability** and should be filed.
+- **The two `_enforce_plan` branches were made to read identically for the carry-forward rule only, not the first-run fallback.** The issue asked to "make the two read identically." Taken literally that would also align the fallback — but an experience with no prior content falls back to its *source* bullets (what `keep` means before anything is tailored) while a project falls back to the *generated* bullets, and changing the project fallback would alter first-run project output, which is outside this issue. The remaining difference is now documented in the docstring as deliberate.
+- **The structural-recompute test asserts on `skills_ranked`, not on `_section_order`.** Deleting a project legitimately re-ranks the remaining sections into the same permutation the frozen order used, so asserting the order "differs" would have been a coincidence-dependent test. `skills_ranked` is the unambiguous witness (frozen `Rust` vs. the recomputed profile skill), and the order path is covered by the carry-forward and stale-order tests.
+- **The new end-to-end tests stub `services.rebuild_job_card`.** The #137 card rebuild classifies role family through a live model call; the pre-existing `tailor()` tests in this file make that network hop on every run. The new ones do not.
+- **Two test-harness constraints worth recording**, both found by tests failing honestly rather than being tuned around: `validate_plan` refuses to delete the last item of a section, so a structural-action test needs two projects seeded or the delete silently degrades to `keep`; and a `plan_override` action is dropped entirely unless real rows back its item key.
+- **No schema change, no UI.** Backward compatible: a result row with no `prior_content` takes the existing first-run path unchanged. Out of scope and untouched: persisted user overrides of order/skills (#118), the planner's keep bias (#117), #113's incremental controller, any scoring weight (#152).
+
 ## Issue 150 — `score_tailored` counted the `_explainability` metadata key as a missing required skill
 **Status:** complete | **Tests:** 813 pass (9 new)
 

@@ -442,21 +442,47 @@ class ResumeTailorAgent:
         # them later. Skills are ranked first so the section-order relevance signal
         # (which flattens skills_ranked) sees the tailored skill set.
         if tailored and "error" not in tailored:
-            ranked_skills = self._rank_skills(
-                user_id, job_id, final_state["job_text"], final_state["matched_skills"]
+            # Both signals are frozen across re-tailors (issue #115): recomputing
+            # them every run reordered sections and re-ranked skills the user was
+            # happy with. A plan that deletes or replaces an item changes the
+            # content they were derived from, so that forces a fresh computation.
+            structural_change = any(
+                a.get("op") in ("delete", "replace")
+                for a in (plan.get("actions") or [])
             )
-            if ranked_skills:
-                tailored["skills_ranked"] = ranked_skills
+            prior_ranked = (prior_content or {}).get("skills_ranked") or []
+            if prior_ranked and not structural_change:
+                tailored["skills_ranked"] = list(prior_ranked)
+            else:
+                ranked_skills = self._rank_skills(
+                    user_id, job_id, final_state["job_text"], final_state["matched_skills"]
+                )
+                if ranked_skills:
+                    tailored["skills_ranked"] = ranked_skills
             # Achievements pass through verbatim from the knowledge graph — never
             # LLM-rewritten or fabricated (keep-all). Injected before ranking so
             # the section is scored and placed like any other reorderable section.
             achievements = self._load_achievements(user_id)
             if achievements:
                 tailored["achievements"] = achievements
-            tailored["_section_order"] = self._ranked_section_order(
-                tailored, final_state["matched_skills"], final_state["job_text"],
-                self._ingested_section_order(user_id),
-            )
+            # A carried-forward order may only be reused while it still names
+            # exactly the sections this run has; otherwise it could hand the
+            # formatter a section a delete/replace emptied.
+            prior_order = [
+                s for s in (prior_content or {}).get("_section_order") or []
+                if isinstance(s, str)
+            ]
+            if (
+                prior_order
+                and not structural_change
+                and set(prior_order) == set(self._expected_sections(tailored))
+            ):
+                tailored["_section_order"] = prior_order
+            else:
+                tailored["_section_order"] = self._ranked_section_order(
+                    tailored, final_state["matched_skills"], final_state["job_text"],
+                    self._ingested_section_order(user_id),
+                )
             # One-page guarantee at the source (issue #34 follow-up): trim the
             # stored content so the editor .tex, live preview, and exports all
             # fit a single page — not just the PDF export path.
@@ -1180,14 +1206,12 @@ class ResumeTailorAgent:
         """
         # Default seed order: the ingested resume's reorderable sections in their
         # original positions, then any reorderable section it didn't mention.
+        present = set(cls._expected_sections(tailored_content))
         seed = [k for k in (ingested_order or []) if k in REORDERABLE_SECTIONS]
         for k in REORDERABLE_SECTIONS:
             if k not in seed:
                 seed.append(k)
-        # Achievements is optional: only place it when the user actually has some,
-        # so a user without achievements keeps a clean section order.
-        if not tailored_content.get("achievements"):
-            seed = [k for k in seed if k != "achievements"]
+        seed = [k for k in seed if k in present]
         scores = {
             key: cls._score_section_relevance(key, tailored_content, matched_skills, jd_text)
             for key in seed
@@ -1196,6 +1220,24 @@ class ResumeTailorAgent:
         ranked = sorted(seed, key=lambda k: scores[k], reverse=True)
         logger.debug("Section relevance: %s", scores)
         return PINNED_SECTIONS + ranked
+
+    @staticmethod
+    def _expected_sections(tailored_content: Dict) -> List[str]:
+        """Which sections a valid order must name, for this content.
+
+        Single source of truth for section membership, read both by
+        `_ranked_section_order` and by the carry-forward validity check in
+        `tailor()` (issue #115) — a prior order must not survive into a run
+        whose section set has changed under it.
+
+        Achievements is optional: only place it when the user actually has
+        some, so a user without achievements keeps a clean section order.
+        """
+        seed = [
+            k for k in REORDERABLE_SECTIONS
+            if k != "achievements" or tailored_content.get("achievements")
+        ]
+        return PINNED_SECTIONS + seed
 
     @staticmethod
     def _load_achievements(user_id: UUID) -> List[Dict]:
@@ -1605,16 +1647,30 @@ class ResumeTailorAgent:
             cls._proj_key(p): p.get("bullets")
             for p in (prior_content or {}).get("projects") or []
         }
+        # Experiences need the same lookup: without it a kept experience fell
+        # back to its raw knowledge-graph bullets in _enforce_plan, so `keep`
+        # discarded the tailoring instead of preserving it (issue #115).
+        prior_exp_bullets_by_key = {
+            cls._exp_key(e): e.get("bullets")
+            for e in (prior_content or {}).get("experiences") or []
+        }
 
         removed: set = set()
 
         new_exps: List[Dict] = []
         for e in exp_dicts:
-            action = actions_by_key.get(cls._exp_key(e))
+            key = cls._exp_key(e)
+            action = actions_by_key.get(key)
             if action and action.get("op") == "delete":
-                removed.add(cls._exp_key(e))
+                removed.add(key)
                 continue
-            new_exps.append(cls._annotate_with_action(e, action))
+            annotated = cls._annotate_with_action(e, action)
+            # A kept experience on a re-tailor carries its prior tailored
+            # bullets so enforcement can restore them verbatim (issue #115),
+            # mirroring the project branch below.
+            if action and action.get("op") == "keep" and prior_exp_bullets_by_key.get(key):
+                annotated["prior_bullets"] = prior_exp_bullets_by_key[key]
+            new_exps.append(annotated)
 
         new_projs: List[Dict] = []
         for p in proj_dicts:
@@ -1659,9 +1715,16 @@ class ResumeTailorAgent:
 
         - Experiences/projects the plan deleted or replaced are dropped from
           the output even if the model regenerated them.
-        - plan_op=keep experiences get their source bullets restored verbatim
-          (trimmed to budget); keep projects restore prior tailored bullets
-          when a re-tailor supplied them.
+        - plan_op=keep items restore their prior *tailored* bullets verbatim
+          when a re-tailor supplied them (trimmed to budget), for experiences
+          and projects alike — `keep` means keep the tailoring (issue #115).
+
+        The two branches differ only in their first-run fallback, when there is
+        no prior tailored content to carry: an experience falls back to its
+        knowledge-graph source bullets, which is what `keep` means before
+        anything has been tailored, while a project keeps what the generator
+        produced. That difference is deliberate; the carry-forward rule above
+        is not allowed to diverge again.
         """
         plan = state.get("plan") or {}
         actions = plan.get("actions") or []
@@ -1686,7 +1749,7 @@ class ResumeTailorAgent:
                 src = exp_by_key.get(key)
                 if src is not None and src.get("plan_op") == "keep":
                     budget = src.get("bullet_budget")
-                    bullets = list(src.get("bullets") or [])
+                    bullets = list(src.get("prior_bullets") or src.get("bullets") or [])
                     gen = {**gen, "bullets": bullets[:budget] if budget else bullets}
                 out.append(gen)
             tailored["experiences"] = out
@@ -1699,7 +1762,9 @@ class ResumeTailorAgent:
                     continue
                 src = proj_by_key.get(key)
                 if src is not None and src.get("plan_op") == "keep" and src.get("prior_bullets"):
-                    gen = {**gen, "bullets": list(src["prior_bullets"])}
+                    budget = src.get("bullet_budget")
+                    bullets = list(src["prior_bullets"])
+                    gen = {**gen, "bullets": bullets[:budget] if budget else bullets}
                 out.append(gen)
             tailored["projects"] = out
 
