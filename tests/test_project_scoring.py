@@ -96,6 +96,90 @@ def test_scorer_uses_stars_when_present():
     )
 
 
+# ── GitHub authorship signals (issue #155) ────────────────────────────────────
+
+def test_github_signal_none_without_metrics():
+    """No metrics at all still yields no signal — not a zero (unchanged contract)."""
+    assert project_scorer._github_signal({}) is None
+    assert project_scorer._github_signal(None) is None
+
+
+def test_legacy_metrics_still_score_without_authorship_data():
+    """Repos ingested before #155 carry no authorship keys and must still score."""
+    legacy = {"stars": 10, "languages": ["Python", "Go"], "readme_length": 1000}
+    signal = project_scorer._github_signal(legacy)
+    assert signal is not None
+    assert 0.0 <= signal <= 1.0
+
+
+def test_authored_repo_beats_drive_by_contribution():
+    """The signal separates 'wrote it' from 'one commit on someone else's repo'."""
+    authored = {
+        "stars": 0,
+        "author_commits": 90,
+        "total_commits": 100,
+        "project_type": "open_source",
+    }
+    drive_by = {
+        "stars": 0,
+        "author_commits": 2,
+        "total_commits": 100,
+        "project_type": "open_source",
+    }
+    assert project_scorer._github_signal(authored) > project_scorer._github_signal(drive_by)
+
+
+def test_commit_share_rewards_solo_authorship():
+    """A solo repo is not punished — commit_share is 1.0 when they wrote it all."""
+    solo = {"author_commits": 40, "total_commits": 40, "project_type": "self_project"}
+    minority = {"author_commits": 40, "total_commits": 400, "project_type": "open_source"}
+    assert project_scorer._github_signal(solo) > project_scorer._github_signal(minority)
+
+
+def test_authorship_outweighs_stars():
+    """A heavily-authored unstarred repo beats a starred repo they barely touched.
+
+    This is the point of #155: stars measure the repo's popularity, not the
+    candidate's input into it.
+    """
+    theirs = {"stars": 0, "author_commits": 100, "total_commits": 100}
+    popular_but_not_theirs = {"stars": STARS_CAP * 10, "author_commits": 1, "total_commits": 500}
+    assert (
+        project_scorer._github_signal(theirs)
+        > project_scorer._github_signal(popular_but_not_theirs)
+    )
+
+
+def test_zero_total_commits_does_not_divide_by_zero():
+    """An empty repo must not crash the share calculation."""
+    signal = project_scorer._github_signal({"author_commits": 0, "total_commits": 0})
+    assert signal is not None
+    assert 0.0 <= signal <= 1.0
+
+
+def test_github_weights_cover_every_emitted_signal():
+    """Every signal _github_signal can emit must have a weight, or it KeyErrors."""
+    full = {
+        "stars": 5,
+        "languages": ["Python"],
+        "readme_length": 500,
+        "author_commits": 10,
+        "total_commits": 20,
+        "project_type": "open_source",
+    }
+    assert project_scorer._github_signal(full) is not None
+    assert set(project_scorer._GITHUB_WEIGHTS) >= {
+        "stars", "languages", "readme_length",
+        "author_commits", "commit_share", "collaboration",
+    }
+    assert all(w > 0 for w in project_scorer._GITHUB_WEIGHTS.values())
+    # Authorship must outrank popularity, or the change is cosmetic.
+    assert (
+        project_scorer._GITHUB_WEIGHTS["author_commits"]
+        > project_scorer._GITHUB_WEIGHTS["stars"]
+    )
+
+
 # ── score_project: acceptance case ────────────────────────────────────────────
 
 def test_impressive_adjacent_outranks_thin_exact_match():

@@ -1716,15 +1716,29 @@ def ingest_resume_file(file_path: str, display_name: str | None = None) -> str:
 
 
 def _build_repo_metrics(repos: list) -> dict:
-    """Map repo name -> GitHub signals for project complexity scoring (issue #46)."""
-    return {
-        repo["name"]: {
+    """Map repo name -> GitHub signals for project complexity scoring (issue #46).
+
+    Authorship signals (issue #155) are merged in only when the ingestor
+    returned them, so repos scanned before the change — or skipped by the
+    language gate — keep scoring on the original signals alone.
+    """
+    metrics = {}
+    for repo in repos:
+        entry = {
             "stars": repo.get("stars", 0),
             "languages": repo.get("languages", []),
             "readme_length": len(repo.get("readme") or ""),
         }
-        for repo in repos
-    }
+        contributions = repo.get("contributions")
+        if contributions:
+            entry.update(contributions)
+            # >1 contributor means other people worked on it — stronger evidence
+            # than a solo repo, and the distinction hiring-agent draws.
+            entry["project_type"] = (
+                "open_source" if contributions.get("contributors", 0) > 1 else "self_project"
+            )
+        metrics[repo["name"]] = entry
+    return metrics
 
 
 _GITHUB_RATE_LIMIT_MESSAGE = (

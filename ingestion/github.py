@@ -124,6 +124,10 @@ class GitHubIngestor:
                 # Fetch dependency/config files (only for scannable repos)
                 dependencies = self._fetch_dependency_files(repo_name, tree) if should_deep_scan else {}
 
+                # Authorship signals (issue #155) — gated on should_deep_scan like
+                # its siblings above, so no extra API calls for repos we skip.
+                contributions = self._fetch_contributors(repo_name) if should_deep_scan else None
+
                 project_info = {
                     "name": repo_name,
                     "description": repo.get("description"),
@@ -133,6 +137,7 @@ class GitHubIngestor:
                     "languages": lang_list,
                     "readme": readme_text,
                     "dependencies": dependencies,
+                    "contributions": contributions,
                 }
                 project_data.append(project_info)
 
@@ -152,6 +157,45 @@ class GitHubIngestor:
         except Exception as e:
             logger.error(f"GitHub Ingestion failed: {e}")
             return []
+
+    def _fetch_contributors(self, repo_name: str) -> Optional[Dict[str, int]]:
+        """Authorship signals for a repo (issue #155).
+
+        Stars measure a repo's popularity, not the user's input into it. The
+        contributors endpoint gives both: how many commits *they* authored, and
+        how many people worked on it at all.
+
+        Returns None when the data is unavailable (empty repo, 404, error) so
+        callers can omit the signal rather than score a zero.
+        """
+        url = f"{self.api_url}/repos/{self.username}/{repo_name}/contributors?per_page=100"
+        try:
+            resp = self._get(url)
+            if resp.status_code != 200:
+                return None
+            contributors = resp.json()
+            if not isinstance(contributors, list) or not contributors:
+                return None
+
+            total = sum(c.get("contributions", 0) for c in contributors)
+            author = next(
+                (
+                    c.get("contributions", 0)
+                    for c in contributors
+                    if (c.get("login") or "").lower() == self.username.lower()
+                ),
+                0,
+            )
+            return {
+                "contributors": len(contributors),
+                "author_commits": author,
+                "total_commits": total,
+            }
+        except GitHubRateLimitError:
+            raise
+        except Exception as e:
+            logger.debug(f"Could not fetch contributors for {repo_name}: {e}")
+        return None
 
     def _fetch_readme(self, repo_name: str) -> Optional[str]:
         """Fetch the README content for a repo (decoded from base64)."""

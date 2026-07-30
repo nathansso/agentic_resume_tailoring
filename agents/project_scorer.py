@@ -13,8 +13,12 @@ average of saturating sub-signals (each min(value / cap, 1.0)):
   - linked_skills:  distinct skills evidencing the project in the knowledge graph
   - text_richness:  keyword-token count of description + blurbs
   - blurb_variety:  number of distinct pre-generated blurb styles
-  - github_metrics: stars / language count / README length, omitted from the
-    average when the project has no ingested GitHub metrics
+  - github_metrics: a weighted mean of authorship signals (commits the user
+    authored, their share of total commits, whether anyone else contributed)
+    plus stars / language count / README length. Authorship dominates: the
+    question is how much of the repo is *theirs*, not how popular it is
+    (issue #155). Omitted from the average when the project has no ingested
+    GitHub metrics.
 
 Recency (0-100) reads the project's end_date: an active project ("Present")
 scores highest and decays with age. This keeps a strong project the user is
@@ -62,6 +66,22 @@ BLURB_VARIETY_CAP = 4      # distinct blurb styles (concise/detailed/metrics/tec
 STARS_CAP = 25             # GitHub stargazers
 LANGUAGES_CAP = 4          # GitHub language count
 README_LENGTH_CAP = 2000   # README characters (ingestion truncates at 3000)
+AUTHOR_COMMITS_CAP = 100   # commits authored by the user in the repo (issue #155)
+
+# Relative weights for the GitHub sub-signals (issue #155). Authorship signals
+# dominate because the question this component answers is "how much of this is
+# *theirs*", not "how popular is it". Stars is kept as a weak tiebreaker rather
+# than dropped — a genuinely popular repo is still signal, just not their signal.
+# Weights renormalize over whichever signals are present, so a repo missing
+# authorship data is scored on what it has instead of being penalized for it.
+_GITHUB_WEIGHTS = {
+    "author_commits": 1.0,
+    "commit_share":   1.0,
+    "collaboration":  0.6,
+    "languages":      0.6,
+    "readme_length":  0.6,
+    "stars":          0.3,
+}
 
 
 def _saturate(value: float, cap: float) -> float:
@@ -90,19 +110,49 @@ def _relevance(proj: Dict, jd_text: str) -> Dict:
 
 
 def _github_signal(metrics: Dict) -> Optional[float]:
-    """Average of available GitHub sub-signals in [0, 1]; None when no metrics ingested."""
+    """Weighted mean of available GitHub sub-signals in [0, 1]; None when no
+    metrics ingested.
+
+    Authorship signals (issue #155) are only present for repos ingested after
+    that change and only where GitHub returned contributor data, so every
+    sub-signal is independently optional and the weights renormalize over the
+    ones actually available.
+    """
     if not metrics:
         return None
-    signals = []
+
+    signals: Dict[str, float] = {}
+
     if metrics.get("stars") is not None:
-        signals.append(_saturate(metrics["stars"], STARS_CAP))
+        signals["stars"] = _saturate(metrics["stars"], STARS_CAP)
     if metrics.get("languages"):
-        signals.append(_saturate(len(metrics["languages"]), LANGUAGES_CAP))
+        signals["languages"] = _saturate(len(metrics["languages"]), LANGUAGES_CAP)
     if metrics.get("readme_length"):
-        signals.append(_saturate(metrics["readme_length"], README_LENGTH_CAP))
+        signals["readme_length"] = _saturate(metrics["readme_length"], README_LENGTH_CAP)
+
+    # ── Authorship (issue #155) ──────────────────────────────────────────────
+    author = metrics.get("author_commits")
+    if author is not None:
+        signals["author_commits"] = _saturate(author, AUTHOR_COMMITS_CAP)
+
+    total = metrics.get("total_commits")
+    if author is not None and total:
+        # Separates "wrote it" from "one drive-by commit on someone else's repo".
+        signals["commit_share"] = min(author / total, 1.0)
+
+    project_type = metrics.get("project_type")
+    if project_type:
+        # Other people worked on it — evidence a solo repo cannot provide. A solo
+        # repo is not punished here: it earns its score through commit_share,
+        # which is 1.0 when they authored everything.
+        signals["collaboration"] = 1.0 if project_type == "open_source" else 0.0
+
     if not signals:
         return None
-    return sum(signals) / len(signals)
+
+    weighted = sum(_GITHUB_WEIGHTS[name] * value for name, value in signals.items())
+    total_weight = sum(_GITHUB_WEIGHTS[name] for name in signals)
+    return weighted / total_weight
 
 
 def _complexity(proj: Dict) -> Dict:
