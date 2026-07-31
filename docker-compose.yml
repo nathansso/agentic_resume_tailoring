@@ -11,7 +11,12 @@ services:
       POSTGRES_PASSWORD: art
       POSTGRES_DB: art
     ports:
-      - "5432:5432"
+      # 5433 on the host, not 5432: a developer-installed Postgres commonly
+      # holds 5432, and when it does `localhost` resolves to it instead of this
+      # container — which then fails on an unknown `art` role rather than
+      # anything that points at the real cause. 5432 inside the network is
+      # unchanged, so the `art` service's DSN below still uses it.
+      - "5433:5432"
     volumes:
       - art_pgdata:/var/lib/postgresql/data
     healthcheck:

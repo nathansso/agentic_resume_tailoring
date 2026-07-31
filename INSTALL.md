@@ -85,7 +85,7 @@ against Postgres when you can:
 
 ```bash
 docker compose up -d postgres
-export DATABASE_URL=postgresql://art:art@localhost:5432/art
+export DATABASE_URL=postgresql://art:art@localhost:5433/art
 ```
 
 ### Running the test suite
@@ -96,7 +96,7 @@ The suite runs on SQLite by default and on Postgres when `ART_TEST_DATABASE_URL`
 python run_tests.py                                              # SQLite leg
 
 docker compose up -d postgres
-export ART_TEST_DATABASE_URL=postgresql://art:art@localhost:5432/art
+export ART_TEST_DATABASE_URL=postgresql://art:art@localhost:5433/art
 python run_tests.py                                              # Postgres leg
 ```
 

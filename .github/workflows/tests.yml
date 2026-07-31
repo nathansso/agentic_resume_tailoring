@@ -32,7 +32,7 @@ jobs:
       matrix:
         include:
           - engine: postgres
-            test_database_url: postgresql://art:art@localhost:5432/art
+            test_database_url: postgresql://art:art@localhost:5433/art
           - engine: sqlite
             # Empty, not absent: conftest coerces "" to None, selecting SQLite.
             test_database_url: ""
@@ -47,7 +47,10 @@ jobs:
           POSTGRES_PASSWORD: art
           POSTGRES_DB: art
         ports:
-          - 5432:5432
+          # 5433 on the host to match docker-compose.yml, so the DSN is the
+          # same string locally and in CI. Nothing contends for 5432 on a
+          # runner; the consistency is the point.
+          - 5433:5432
         options: >-
           --health-cmd "pg_isready -U art -d art"
           --health-interval 5s

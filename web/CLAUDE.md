@@ -124,7 +124,7 @@ brings one up with pgvector and wires `DATABASE_URL` to it automatically:
 
 ```bash
 docker compose up -d postgres
-export DATABASE_URL=postgresql://art:art@localhost:5432/art
+export DATABASE_URL=postgresql://art:art@localhost:5433/art
 ```
 
 SQLite remains the fallback when `DATABASE_URL` is unset, so `cli.py` and the no-Docker path

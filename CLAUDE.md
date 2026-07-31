@@ -193,7 +193,7 @@ for anything touching storage:
 
 ```bash
 docker compose up -d postgres
-ART_TEST_DATABASE_URL=postgresql://art:art@localhost:5432/art python run_tests.py
+ART_TEST_DATABASE_URL=postgresql://art:art@localhost:5433/art python run_tests.py
 ```
 
 `ART_TEST_DATABASE_URL` is deliberately separate from `DATABASE_URL` — the latter may point at
