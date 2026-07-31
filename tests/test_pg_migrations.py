@@ -40,6 +40,25 @@ def _assert_on_a_test_schema(engine):
     )
 
 
+def _make_user_id_legacy_text(session):
+    """Put jobdescription.user_id into the state the old migration left it in.
+
+    Drop and re-add rather than `ALTER COLUMN ... TYPE text`: `create_all` gives
+    the column a foreign key, and Postgres refuses to retype a column under an
+    FK to a type incompatible with its target ("Key columns are of incompatible
+    types: text and uuid").
+
+    That refusal is itself the point. The historical
+    `ALTER TABLE jobdescription ADD COLUMN user_id TEXT` added a **bare column
+    with no constraint**, which is exactly why the bad type was accepted and
+    then sat there unnoticed. Dropping the column first reproduces the real
+    legacy shape; retyping in place would be testing a state that never existed.
+    """
+    session.execute(text("ALTER TABLE jobdescription DROP COLUMN user_id"))
+    session.execute(text("ALTER TABLE jobdescription ADD COLUMN user_id TEXT"))
+    session.commit()
+
+
 def _column_types(session):
     """{(table, column): data_type} for the current schema."""
     rows = session.execute(text(
@@ -96,10 +115,7 @@ def test_pg_uuid_migration_repairs_a_legacy_text_column(isolated_engine):
 
     _assert_on_a_test_schema(isolated_engine)
     with Session(isolated_engine) as session:
-        session.execute(text(
-            "ALTER TABLE jobdescription ALTER COLUMN user_id TYPE text USING user_id::text"
-        ))
-        session.commit()
+        _make_user_id_legacy_text(session)
         assert _column_types(session)[("jobdescription", "user_id")] == "text"
 
     db._migrate_pg_uuid_columns()
@@ -124,10 +140,7 @@ def test_uuid_filtered_query_works_after_repair(isolated_engine):
     seeded = _seed_user_and_skill(isolated_engine)
 
     with Session(isolated_engine) as session:
-        session.execute(text(
-            "ALTER TABLE jobdescription ALTER COLUMN user_id TYPE text USING user_id::text"
-        ))
-        session.commit()
+        _make_user_id_legacy_text(session)
 
     db._migrate_pg_uuid_columns()
 
@@ -164,5 +177,8 @@ def test_vector_columns_exist_after_init_db(isolated_engine):
 
     assert ("skill", "embedding_vec") in live
     assert ("jobdescription", "embedding_vec") in live
-    # The portable JSON column stays the source of truth beside it.
-    assert live[("skill", "embedding")] == "text"
+    # The portable JSON column stays the source of truth beside it. SQLModel
+    # maps Optional[str] to VARCHAR, so this is "character varying" on
+    # Postgres and "text" on SQLite — assert it is a string column, not a
+    # specific spelling of one.
+    assert live[("skill", "embedding")] in ("text", "character varying")
