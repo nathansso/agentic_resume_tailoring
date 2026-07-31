@@ -136,3 +136,94 @@ def test_dependency_files_falls_back_without_tree(monkeypatch):
     assert deps == {}
     dep_urls = [u for u in seen if "/contents/" in u]
     assert len(dep_urls) == len(gh_module.DEPENDENCY_FILES)
+
+
+# ── Contributor / authorship signals (issue #155) ─────────────────────────────
+
+def _contributors_response(payload, status_code=200):
+    def fake_get(url, headers=None, timeout=None):
+        return FakeResponse(status_code, json_data=payload)
+    return fake_get
+
+
+def test_fetch_contributors_counts_author_and_total(monkeypatch):
+    """author_commits is the caller's own contributions; total is everyone's."""
+    monkeypatch.setattr(
+        gh_module.requests, "get",
+        _contributors_response([
+            {"login": "owner", "contributions": 40},
+            {"login": "someone", "contributions": 60},
+        ]),
+    )
+    instance = GitHubIngestor(username="owner", token=None)
+
+    result = instance._fetch_contributors("repo")
+    assert result == {"contributors": 2, "author_commits": 40, "total_commits": 100}
+
+
+def test_fetch_contributors_matches_login_case_insensitively(monkeypatch):
+    """GitHub logins are case-preserving; matching must not be."""
+    monkeypatch.setattr(
+        gh_module.requests, "get",
+        _contributors_response([{"login": "OwNeR", "contributions": 7}]),
+    )
+    instance = GitHubIngestor(username="owner", token=None)
+
+    assert instance._fetch_contributors("repo")["author_commits"] == 7
+
+
+def test_fetch_contributors_returns_none_on_empty_repo(monkeypatch):
+    """An empty repo returns [] — omit the signal rather than score a zero."""
+    monkeypatch.setattr(gh_module.requests, "get", _contributors_response([]))
+    instance = GitHubIngestor(username="owner", token=None)
+
+    assert instance._fetch_contributors("repo") is None
+
+
+def test_fetch_contributors_returns_none_on_error_status(monkeypatch):
+    monkeypatch.setattr(gh_module.requests, "get", _contributors_response(None, status_code=404))
+    instance = GitHubIngestor(username="owner", token=None)
+
+    assert instance._fetch_contributors("repo") is None
+
+
+def test_fetch_contributors_propagates_rate_limit(monkeypatch):
+    """Rate limiting must surface, not be swallowed as a missing signal."""
+    monkeypatch.setattr(
+        gh_module.requests, "get",
+        lambda *a, **kw: FakeResponse(403, headers={"X-RateLimit-Remaining": "0"}),
+    )
+    instance = GitHubIngestor(username="owner", token=None)
+
+    with pytest.raises(GitHubRateLimitError):
+        instance._fetch_contributors("repo")
+
+
+def test_build_repo_metrics_derives_project_type():
+    """>1 contributor means other people worked on it."""
+    from services import _build_repo_metrics
+
+    metrics = _build_repo_metrics([
+        {
+            "name": "collab",
+            "contributions": {"contributors": 3, "author_commits": 10, "total_commits": 50},
+        },
+        {
+            "name": "solo",
+            "contributions": {"contributors": 1, "author_commits": 30, "total_commits": 30},
+        },
+    ])
+    assert metrics["collab"]["project_type"] == "open_source"
+    assert metrics["solo"]["project_type"] == "self_project"
+    assert metrics["collab"]["author_commits"] == 10
+
+
+def test_build_repo_metrics_omits_authorship_when_absent():
+    """Repos skipped by the language gate carry no authorship keys at all."""
+    from services import _build_repo_metrics
+
+    metrics = _build_repo_metrics([{"name": "skipped", "stars": 4, "contributions": None}])
+    entry = metrics["skipped"]
+    assert entry["stars"] == 4
+    assert "project_type" not in entry
+    assert "author_commits" not in entry
