@@ -1,10 +1,15 @@
-"""Dual-path vector-search seam tests (issue #142).
+"""Dual-path vector-search seam tests (issues #142, #149).
 
-The suite runs on SQLite, so it exercises the numpy fallback; the pgvector `<=>`
-branch is validated on staging Postgres, not here. These tests pin the two hard
-backward-compat requirements: the numpy path reproduces the pre-#142
-matcher/scorer math exactly, and SQLite never attempts the Postgres-only vector
-column.
+These pin the two hard backward-compat requirements: the numpy path reproduces
+the pre-#142 matcher/scorer math exactly, and SQLite never attempts the
+Postgres-only vector column.
+
+The SQLite tests below build their engines *explicitly* rather than going
+through `isolated_engine`. That is deliberate and must stay: they assert the
+**absence** of the pgvector path, which is only meaningful on SQLite, so they
+have to stay on SQLite even when the suite is running its Postgres leg
+(#149). The `<=>` branch they decline to cover is now covered for real by
+`test_pgvector_equivalence.py`, which #142 could only defer to staging.
 """
 import numpy as np
 import pytest
@@ -69,6 +74,8 @@ def test_sqlite_model_query_never_touches_vector_column():
     skipped entirely — it returns [] rather than emitting SQL against a column
     that does not exist on SQLite."""
     from database.models import Skill
+    # Explicitly SQLite — see the module docstring. Do not route through
+    # isolated_engine; on the Postgres leg that would invert the assertion.
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False})
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
@@ -80,6 +87,7 @@ def test_sqlite_model_query_never_touches_vector_column():
 def test_pg_vector_migration_is_noop_on_sqlite(monkeypatch):
     """The guarded migration adds no vector column to a SQLite database."""
     import database.db as db
+    # Explicitly SQLite — see the module docstring.
     engine = create_engine("sqlite://")
     SQLModel.metadata.create_all(engine)
     monkeypatch.setattr(db, "engine", engine)
