@@ -218,22 +218,29 @@ def check_expectations(expect: Dict, proposals: List[Dict],
 # ── runner ────────────────────────────────────────────────────────────────────
 
 def _isolated_engine(workdir: Path):
-    """A temp SQLite engine bound into every module that holds an engine ref."""
+    """A temp engine bound into every module that holds an engine ref.
+
+    Postgres when ART_TEST_DATABASE_URL is set, temp-file SQLite otherwise
+    (issue #149). Returns (engine, url) so the caller can drop the throwaway
+    database when the run finishes.
+    """
     from sqlmodel import SQLModel, create_engine
 
     import database.db as db_module
     import knowledge_graph.builder as kg_module
     import services as services_module
+    from eval.eval_db import make_throwaway_db
 
-    engine = create_engine(
-        f"sqlite:///{workdir / 'ku_eval.db'}",
-        connect_args={"check_same_thread": False},
+    url = make_throwaway_db("ku_eval", workdir)
+    connect_args = (
+        {"check_same_thread": False} if url.startswith("sqlite") else {}
     )
+    engine = create_engine(url, connect_args=connect_args)
     SQLModel.metadata.create_all(engine)
     db_module.engine = engine
     kg_module.engine = engine
     services_module.engine = engine
-    return engine
+    return engine, url
 
 
 def run_task(task: Dict, engine, live: bool = False) -> Dict:
@@ -286,11 +293,12 @@ def run_eval(
         raise SystemExit(f"No tasks found in {DATASET_DIR}")
 
     own_tmp = None
+    own_url = None
     if engine is None:
         if workdir is None:
             own_tmp = tempfile.TemporaryDirectory(prefix="art_ku_eval_")
             workdir = Path(own_tmp.name)
-        engine = _isolated_engine(Path(workdir))
+        engine, own_url = _isolated_engine(Path(workdir))
 
     try:
         records = [run_task(task, engine, live=live) for task in tasks]
@@ -310,6 +318,12 @@ def run_eval(
             print(f"\nResults → {path}")
         return results
     finally:
+        if own_url is not None:
+            # No-op on SQLite; drops the throwaway Postgres database (#149).
+            from eval.eval_db import drop_throwaway_db
+
+            engine.dispose()
+            drop_throwaway_db(own_url)
         if own_tmp is not None:
             try:
                 own_tmp.cleanup()
