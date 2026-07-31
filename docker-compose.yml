@@ -1,13 +1,48 @@
 services:
+  # Postgres with pgvector preinstalled (issue #149). Production is Supabase
+  # Postgres; this is the local equivalent so development, the test suite, and
+  # the benchmark all run on the engine we ship on. The `vector` extension ships
+  # in this image but is not created until a database asks for it —
+  # database/db.py::_migrate_pg_vector_columns issues CREATE EXTENSION.
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: art
+      POSTGRES_PASSWORD: art
+      POSTGRES_DB: art
+    ports:
+      # 5433 on the host, not 5432: a developer-installed Postgres commonly
+      # holds 5432, and when it does `localhost` resolves to it instead of this
+      # container — which then fails on an unknown `art` role rather than
+      # anything that points at the real cause. 5432 inside the network is
+      # unchanged, so the `art` service's DSN below still uses it.
+      - "5433:5432"
+    volumes:
+      - art_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # `art` must not start against a Postgres still running its init scripts.
+      test: ["CMD-SHELL", "pg_isready -U art -d art"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   art:
     build: .
     image: art-web
     env_file:
       - .env
+    environment:
+      # Overrides whatever .env carries, so the container never silently falls
+      # back to the SQLite volume when a database service is right there.
+      DATABASE_URL: postgresql://art:art@postgres:5432/art
     ports:
       - "8000:8000"
     volumes:
       - art_data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   art_data:
+  art_pgdata:

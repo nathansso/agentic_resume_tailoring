@@ -54,8 +54,14 @@ def _prepare_environment(workdir: Path) -> None:
     Point every stateful surface at the temp workdir and force the offline
     local-cookie auth mode. config.py reads these at import time, so this must
     run before web.app / database.db are imported.
+
+    The database is Postgres when ART_TEST_DATABASE_URL is set (issue #149) so
+    benchmark numbers are measured on production storage semantics, and a
+    temp-file SQLite database otherwise.
     """
-    os.environ["DATABASE_URL"] = f"sqlite:///{workdir / 'benchmark.db'}"
+    from eval.eval_db import make_throwaway_db
+
+    os.environ["DATABASE_URL"] = make_throwaway_db("benchmark", workdir)
     os.environ["ART_DATA_DIR"] = str(workdir)
     os.environ["AI_DAILY_LIMIT"] = "10000"  # the benchmark legitimately batches AI calls
     for var in ("SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_JWT_SECRET"):
@@ -478,6 +484,10 @@ def run_benchmark(
         print(f"\nResults → {json_path}")
         return results
     finally:
+        # No-op on SQLite; drops the run's throwaway database on Postgres (#149).
+        from eval.eval_db import drop_throwaway_db
+
+        drop_throwaway_db(os.environ.get("DATABASE_URL", ""))
         if own_tmp is not None:
             try:
                 own_tmp.cleanup()

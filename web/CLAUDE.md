@@ -117,6 +117,24 @@ App is at http://localhost:5173.
 
 ---
 
+## Local database
+
+Production is Supabase Postgres. Develop against Postgres, not SQLite — `docker compose up`
+brings one up with pgvector and wires `DATABASE_URL` to it automatically:
+
+```bash
+docker compose up -d postgres
+export DATABASE_URL=postgresql://art:art@localhost:5433/art
+```
+
+SQLite remains the fallback when `DATABASE_URL` is unset, so `cli.py` and the no-Docker path
+keep working. It is a fallback, not the target: dialect differences between the two are real
+and have shipped bugs before (see `_migrate_pg_uuid_columns` in `database/db.py`). Run the
+suite's Postgres leg before merging anything that touches storage — see `ART_TEST_DATABASE_URL`
+in the root `CLAUDE.md`.
+
+---
+
 ## Deployment
 
 ```bash

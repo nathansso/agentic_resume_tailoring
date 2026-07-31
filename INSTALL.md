@@ -19,7 +19,17 @@ docker compose up --build
 
 Open http://localhost:8000.
 
-Your data (database, exports, uploads) is stored in a Docker named volume (`art_data`) and persists across runs.
+`docker compose up` brings up **Postgres with pgvector** alongside the app and points
+`DATABASE_URL` at it, so local development runs on the same engine as production
+(Supabase Postgres). Database contents live in the `art_pgdata` named volume; exports and
+uploads live in `art_data`. Both persist across runs.
+
+To bring up only the database — the usual case when you are running the app from a venv
+(Option B) or running the test suite:
+
+```bash
+docker compose up -d postgres
+```
 
 ### Optional: LinkedIn scraping and semantic skill matching
 
@@ -66,6 +76,34 @@ python cli.py ingest-github [username]
 python cli.py tailor <job_file_or_text>
 python cli.py status
 ```
+
+### Database: Postgres or SQLite
+
+With `DATABASE_URL` unset the app falls back to SQLite at `~/.art/art.db`, which keeps this
+option and the CLI working with no Docker at all. Production is Postgres, so prefer running
+against Postgres when you can:
+
+```bash
+docker compose up -d postgres
+export DATABASE_URL=postgresql://art:art@localhost:5433/art
+```
+
+### Running the test suite
+
+The suite runs on SQLite by default and on Postgres when `ART_TEST_DATABASE_URL` is set:
+
+```bash
+python run_tests.py                                              # SQLite leg
+
+docker compose up -d postgres
+export ART_TEST_DATABASE_URL=postgresql://art:art@localhost:5433/art
+python run_tests.py                                              # Postgres leg
+```
+
+Both legs run in CI, with Postgres as the required job. **`ART_TEST_DATABASE_URL` is
+deliberately separate from `DATABASE_URL`**: your `DATABASE_URL` may point at production
+Supabase, and the suite creates and drops schemas, so the two must never be the same value.
+Each test gets a throwaway schema that is dropped on teardown.
 
 ---
 

@@ -187,6 +187,18 @@ python run_tests.py -k chat  # filter by keyword
 python run_tests.py --integration  # include slow/network tests
 ```
 
+The suite runs on SQLite by default and on Postgres — the engine production runs on — when
+`ART_TEST_DATABASE_URL` is set. Both legs run in CI, Postgres required. Run the Postgres leg
+for anything touching storage:
+
+```bash
+docker compose up -d postgres
+ART_TEST_DATABASE_URL=postgresql://art:art@localhost:5433/art python run_tests.py
+```
+
+`ART_TEST_DATABASE_URL` is deliberately separate from `DATABASE_URL` — the latter may point at
+production Supabase, and the suite creates and drops schemas. Never set them to the same value.
+
 Or directly:
 
 ```bash

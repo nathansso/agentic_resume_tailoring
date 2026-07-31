@@ -479,20 +479,34 @@ def test_format_markdown_emits_deprecation_warning(isolated_engine, monkeypatch)
     assert any(issubclass(w.category, DeprecationWarning) for w in caught)
 
 
-# ── save .tex to Downloads for manual Overleaf verification ──────────────────
+# ── writable .tex artifact for manual Overleaf verification ──────────────────
 
-def test_save_tex_to_downloads(isolated_engine, monkeypatch):
-    """Generate a Jake-layout .tex and save to ~/Downloads for Overleaf inspection."""
+def test_tex_artifact_is_writable_and_substantial(isolated_engine, monkeypatch, tmp_path):
+    """The Jake-layout .tex writes to disk and is a substantial document.
+
+    Dumps to tmp_path. Set ART_TEX_DUMP_DIR to keep a copy somewhere durable —
+    e.g. `ART_TEX_DUMP_DIR=~/Downloads` — for dropping into Overleaf against
+    Jake's template.
+
+    This used to write to ~/Downloads unconditionally, which meant every run of
+    the suite deposited a file in the developer's home directory, and it failed
+    outright the first time CI ran (issue #149): a bare Linux runner has no
+    ~/Downloads, so the open() raised FileNotFoundError. The assertions never
+    depended on the location — only that the file lands and exceeds 1KB.
+    """
     monkeypatch.setattr(fmt_module, "engine", isolated_engine)
     user = _seed_jake_user(isolated_engine)
     tex = ResumeFormatterAgent(user.user_id).format_tex(_JAKE_CONTENT)
 
-    downloads = os.path.join(os.path.expanduser("~"), "Downloads", "jake_resume_art.tex")
-    with open(downloads, "w", encoding="utf-8") as f:
+    dump_dir = os.environ.get("ART_TEX_DUMP_DIR")
+    target_dir = os.path.expanduser(dump_dir) if dump_dir else str(tmp_path)
+    os.makedirs(target_dir, exist_ok=True)
+    target = os.path.join(target_dir, "jake_resume_art.tex")
+    with open(target, "w", encoding="utf-8") as f:
         f.write(tex)
 
-    assert os.path.exists(downloads)
-    assert os.path.getsize(downloads) > 1000
+    assert os.path.exists(target)
+    assert os.path.getsize(target) > 1000
 
 
 # ── integration: full pdflatex compile ───────────────────────────────────────
