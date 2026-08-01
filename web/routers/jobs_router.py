@@ -39,8 +39,9 @@ class TexBody(BaseModel):
     tex: str
 
 
-# At most two concurrent LaTeX compiles — pdflatex spikes memory and the
-# production VM is memory-constrained (issue #71 preview endpoint).
+# At most two concurrent LaTeX compiles — pdflatex spikes memory (issue #71
+# preview endpoint). The cap was chosen for a 512 MB VM; the current host has
+# 8 GB, so this is tunable on measured numbers rather than a hard ceiling.
 _compile_semaphore = asyncio.Semaphore(2)
 
 _MAX_TEX_BYTES = 200_000
