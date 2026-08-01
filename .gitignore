@@ -62,3 +62,9 @@ omnium_interview_prep/
 
 # Tailoring benchmark artifacts (issue #51) - outputs, not source
 eval/results/
+
+# Agent scratch space and captured terminal transcripts. Working files, never
+# source — and `docs/parallel-agents.md` tells you to `git add -A`, so they
+# need to be ignored rather than remembered.
+scratchpad/
+*_cc_evi.txt

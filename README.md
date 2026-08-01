@@ -7,7 +7,7 @@ graph, then uses a pipeline of LLM agents to plan, generate, and score a
 focused, ATS-friendly one-page resume for a specific job — with a chat
 interface for iterative, reviewable revision.
 
-🔗 **Live demo:** https://artie-resume-tailoring.fly.dev/
+🔗 **Live demo:** https://web-production-2ead7.up.railway.app/
 
 ---
 
@@ -68,9 +68,13 @@ web/frontend (React/TS)  ──►  FastAPI routers (web/routers/)
 
 - **Auth:** Supabase Auth (JWT via JWKS) in production, signed-cookie fallback
   locally. Per-request user binding keeps multi-user data isolated.
-- **Database:** SQLModel ORM. Local SQLite by default; Supabase Postgres when
-  `DATABASE_URL` is set. Schema changes ship as idempotent `ALTER TABLE`
-  migrations so existing databases keep loading.
+- **Database:** SQLModel ORM on **Supabase Postgres**. `docker compose up`
+  brings up a local pgvector Postgres and points `DATABASE_URL` at it, so
+  development runs the engine production runs. SQLite is a *fallback* when
+  `DATABASE_URL` is unset — it keeps `cli.py` and the no-Docker path working,
+  but it is not the target: dialect gaps between the two have shipped bugs
+  before. Schema changes ship as idempotent `ALTER TABLE` migrations so
+  existing databases keep loading.
 
 ### Ingestion → knowledge graph
 
@@ -172,11 +176,12 @@ rendered `.tex` artifacts.
 |-----------|------------|
 | Frontend  | React 18, TypeScript, Vite |
 | Backend   | FastAPI (Python 3.11+) |
-| Database  | SQLModel ORM — SQLite locally, Supabase Postgres in production |
+| Database  | SQLModel ORM — Supabase Postgres (pgvector), SQLite fallback |
 | Auth      | Supabase Auth (JWT) with a local signed-cookie fallback |
 | AI        | LangGraph + LangChain, Anthropic / OpenAI |
 | PDF       | LaTeX (tectonic) |
-| Deploy    | Docker → Fly.io |
+| Deploy    | Docker → Railway |
+| CI        | GitHub Actions — the suite on both Postgres and SQLite |
 
 ## Quickstart
 
@@ -189,7 +194,8 @@ cp .env.example .env          # then set ANTHROPIC_API_KEY (or OPENAI_API_KEY)
 docker compose up --build
 ```
 
-Open http://localhost:8000.
+Open http://localhost:8000. This also brings up a pgvector Postgres and points
+the app's `DATABASE_URL` at it, so you get the production engine locally.
 
 ### Option B — Local development
 
@@ -203,6 +209,11 @@ source .venv/Scripts/activate      # bash / Git Bash on Windows
 # .venv\Scripts\Activate.ps1        # PowerShell
 pip install -r requirements-core.txt
 cp .env.example .env               # set your API key + SESSION_SECRET_KEY
+
+# Database — run against Postgres, the engine production uses
+docker compose up -d postgres
+export DATABASE_URL=postgresql://art:art@localhost:5433/art
+
 DEV_MODE=1 uvicorn web.app:app --port 8000 --reload
 
 # Frontend (separate terminal) — proxies /api to :8000
@@ -234,7 +245,8 @@ Copy `.env.example` to `.env` and fill in what you need. The essentials:
 | `LLM_PROVIDER` | `anthropic` (default) or `openai` |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | LLM access |
 | `SESSION_SECRET_KEY` | signs local session cookies (`python -c "import secrets; print(secrets.token_hex(32))"`) |
-| `DATABASE_URL` | unset → local SQLite; set → Supabase Postgres |
+| `DATABASE_URL` | Postgres connection string; unset falls back to local SQLite |
+| `ART_TEST_DATABASE_URL` | Postgres DSN for the test suite's Postgres leg (never the same as `DATABASE_URL`) |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth for repo ingestion (optional) |
 
 Supabase Auth variables are only needed for cloud multi-user deployment — see
@@ -248,6 +260,20 @@ python run_tests.py -k chat       # filter by keyword
 python run_tests.py --integration # include slow / network tests
 ```
 
+That runs the **SQLite leg**. Production is Postgres, so anything touching
+storage must also run the Postgres leg:
+
+```bash
+docker compose up -d postgres
+ART_TEST_DATABASE_URL=postgresql://art:art@localhost:5433/art python run_tests.py
+```
+
+Each test gets a throwaway schema that is dropped on teardown.
+`ART_TEST_DATABASE_URL` is deliberately **separate** from `DATABASE_URL` — the
+latter may point at production Supabase, and the suite creates and drops
+schemas. Both legs run in CI (`.github/workflows/tests.yml`) on every push and
+PR, with Postgres required.
+
 ## Project structure
 
 ```
@@ -258,23 +284,42 @@ graph/          LangGraph tailoring pipeline
 knowledge_graph/ skills-to-evidence graph builder
 ingestion/      resume / GitHub / LinkedIn ingestors
 database/       SQLModel models, engine, migrations, user utilities
-eval/           tailoring benchmark harness + JD dataset + metrics
+eval/           benchmark + regression eval harnesses, datasets, metrics
+supabase/       Supabase schema, RLS policies, migrations
+scripts/        JD scraper, agent-worktree bootstrap
 services.py     shared business logic used by web, agents, and CLI
 cli.py          command-line entry point
 tests/          pytest suite (+ tests/fixtures/ sample data)
-docs/           roadmap and product requirement docs (PRDs)
+docs/           contributor guides (parallel agent worktrees)
 ```
+
+Task specs and roadmaps live in GitHub issues and the **ART Development Plan**
+board, not in checked-in documents.
+
+## Roadmap
+
+Work is sequenced in phases on the board. P0 (research spikes) is closed; the
+current front is P1.
+
+| Phase | Theme | What it delivers |
+|---|---|---|
+| **P1** | Preferences & Knowledge | A structured JD artifact (#121), persisted layout overrides (#118), then a standing user-preference profile arbitrated against JD criticality (#129) and a codified persona tier over it (#133). Sequencing epic: **#140**. |
+| **P2** | Tailoring Policy | Make the objective worth optimizing before optimizing it — separable redundancy metrics (#122), a fabrication gate (#123), entailment-based coverage (#124–#126), and a cost-weighted marginal objective (#127) feeding per-edit reward (#113). |
+| **P3** | Reinforcement Learning | Induce the planner's policy from the logged `(context, action, propensity, reward)` tuples (#51 Phase 2). Exploration already ships (#112). Arc epic: **#114**. |
+| **P4** | UI & Migration | Editable rendered resume view (#87) and the UI restructure (#82). The hosting migration (#48) and teardown of the old deployment (#102) are complete. |
 
 ## Deployment
 
-Detailed Docker, Fly.io, and Render instructions live in
-[`INSTALL.md`](INSTALL.md). In short — from the repo root:
+Deployed on **Railway** — Docker build from the repo root `Dockerfile`
+(Node 24 builds the React app → Python 3.12 serves it), health-checked at
+`/api/health`, configured by `railway.json`.
 
 ```bash
-fly deploy
+railway up
 ```
 
-builds the Docker image (Node 20 → Python 3.12) and pushes to Fly.io.
+Full setup instructions, plus Docker and local Postgres, live in
+[`INSTALL.md`](INSTALL.md).
 
 ---
 

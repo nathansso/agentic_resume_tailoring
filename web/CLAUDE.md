@@ -24,6 +24,8 @@ web/
         LandingPage.tsx        # Public marketing page at `/` for signed-out visitors
         LoginPage.tsx
         RegisterPage.tsx
+        ForgotPasswordPage.tsx # Request a reset link
+        ResetPasswordPage.tsx  # Consume the Supabase recovery tokens
         MainPage.tsx           # Top-level layout: header, JobSidebar, main content area
       components/
         AuthLayout.tsx         # Shared card/brand chrome for the signed-out pages
@@ -33,10 +35,21 @@ web/
         ProfilePanel.tsx       # View/edit user profile fields
         IngestPanel.tsx        # Resume upload, GitHub ingestion
         JobSidebar.tsx         # Job list, create/delete
-        JobDetailPanel.tsx     # Job description, analyze, tailor, export
+        JobWorkspace.tsx       # Overleaf-style job view: description, tailor, editor (#86)
+        ResumeSplit.tsx        # Resizable LaTeX-source / PDF-preview split
+        PdfPreview.tsx         # Compiled PDF viewer
+        PdfDragOverlay.tsx     # Drag-to-reorder bands positioned from PDF text metrics
+        ResizeDivider.tsx      # Shared drag handle for the split panes
+        ProgressBar.tsx
+        ThemeToggle.tsx        # Light/dark switch (landing nav + app header)
+      context/                 # AuthContext, ThemeContext
+      hooks/useAutoCompile.ts  # Debounced LaTeX recompile on edit
+      lib/                     # Pure, unit-tested helpers (theme, paneResize,
+                               # texStructure, pdfOverlay, compileScheduler,
+                               # insightMessages, welcome, utils) — each with a
+                               # co-located *.test.ts
       api/                     # Typed fetch wrappers for all endpoints
       types.ts                 # Shared TypeScript interfaces
-      theme.ts                 # Color/font constants
 ```
 
 ---
@@ -138,17 +151,18 @@ in the root `CLAUDE.md`.
 ## Deployment
 
 ```bash
-fly deploy   # from repo root — builds Docker image, pushes to Fly.io
+railway up   # from repo root — builds the Docker image, pushes to Railway
 ```
 
-- App: `artie-resume-tailoring` on Fly.io, region `iad`
-- URL: https://artie-resume-tailoring.fly.dev/
-- Config: `fly.toml` in repo root
-- Dockerfile: multi-stage — Node 20 builds React (`npm run build` → `web/static/`), Python 3.12 serves it via FastAPI `StaticFiles`
-- Volume: `art_data` mounted at `/data` — SQLite database lives at `/data/art.db`
+- **Railway is the deployment target.** URL: https://web-production-2ead7.up.railway.app/
+- Config: `railway.json` in repo root (Dockerfile builder, `/api/health` healthcheck)
+- Dockerfile: multi-stage — Node 24 builds React (`npm run build` → `web/static/`), Python 3.12 serves it via FastAPI `StaticFiles`. Do not add a `VOLUME` instruction; Railway rejects it.
+- **Database: Supabase Postgres via the `DATABASE_URL` secret.** The `/data` volume holds uploads and generated artifacts (`ART_DATA_DIR`), *not* the database — the SQLite file at `/data/art.db` is only used if `DATABASE_URL` is unset, which is never the case in production.
 - Health check: `GET /api/health`
+- Railway is the only deployment. Do not reintroduce host-specific configuration for any other platform.
 
-Required env vars (set as Fly.io secrets):
+Required env vars (set as Railway variables):
+- `DATABASE_URL` — Supabase Postgres (use the pooler string, port 6543)
 - `SESSION_SECRET_KEY` — signs local session cookies
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET` — Supabase Auth (optional; local fallback used if absent)
 - `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` — LLM access
