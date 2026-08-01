@@ -45,7 +45,7 @@ def normalize_provider(value: str | None) -> str:
 
     Env values reach us quoted more often than you'd think — `set_key()` writes
     `LLM_PROVIDER='anthropic'` to .env, a shell `export LLM_PROVIDER="'x'"`
-    keeps the inner quotes, and hosted secret stores (Fly, Railway) preserve
+    keeps the inner quotes, and hosted secret stores (Railway) preserve
     whatever was pasted in. python-dotenv strips quotes when it parses .env, but
     nothing strips them off a value that was already in the process environment,
     which surfaced as `Unknown LLM_PROVIDER: "'anthropic'"`. Normalising at the

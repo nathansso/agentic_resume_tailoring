@@ -1,7 +1,7 @@
 """Document text extraction with an optional docling backend.
 
 docling's layout-aware conversion depends on PyTorch and loads layout models
-at parse time — far too heavy for low-memory deployments (the 512 MB Fly.io
+at parse time — far too heavy for low-memory deployments (a 512 MB production
 VM gets OOM-killed). docling is therefore a full-only dependency: when it is
 not installed, extraction falls back to pypdf / python-docx plain-text, which
 is sufficient because the extracted text is handed to an LLM parser anyway.

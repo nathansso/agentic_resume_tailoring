@@ -2,7 +2,7 @@
 
 1. Resume ingestion must work without docling installed — the production
    Docker image excludes it because docling pulls in PyTorch and loading its
-   layout models OOM-kills the 512 MB Fly.io VM.
+   layout models OOM-kills a 512 MB production VM.
 2. /api/jobs must resolve with and without a trailing slash — the SPA
    catch-all route swallows FastAPI's automatic slash-redirect, which turned
    the slash-less form into a hard 404 in production.
