@@ -87,8 +87,16 @@ class ATSScoringEngine:
         job_id: UUID,
         session: Session,
         skill_coverage_score: float,
+        keyword_weights: Dict[str, float] | None = None,
     ) -> Dict:
-        """Return full score_breakdown dict with four components."""
+        """Return full score_breakdown dict with four components.
+
+        *keyword_weights* (issue #125) is resolved here when the caller does not
+        supply it, because this method already holds the user, the job and a
+        session — the three things the resolution needs. It is `None` for a job
+        with no #121 profile, in which case `_keyword_coverage` reproduces the
+        pre-#125 uniform score exactly.
+        """
         from database.models import JobDescription
 
         job = session.get(JobDescription, job_id)
@@ -96,7 +104,10 @@ class ATSScoringEngine:
 
         resume_text = self._build_resume_text(user_id, session)
 
-        kd = self._keyword_coverage(resume_text, jd_text)
+        if keyword_weights is None:
+            keyword_weights = _resolve_keyword_weights(job_id, user_id, jd_text)
+
+        kd = self._keyword_coverage(resume_text, jd_text, keyword_weights)
         sp = self._section_presence(user_id, session)
         rl = self._role_level(resume_text, jd_text)
 
@@ -123,6 +134,7 @@ class ATSScoringEngine:
         jd_text: str,
         matched_skills: Dict,
         baseline_breakdown: Dict | None = None,
+        keyword_weights: Dict[str, float] | None = None,
     ) -> Dict:
         """
         Score agentic tailored output with the same algorithmic components as
@@ -131,6 +143,15 @@ class ATSScoringEngine:
 
         Returns the same breakdown shape as score(), plus `baseline_composite`
         and `delta` when a baseline breakdown is supplied.
+
+        *keyword_weights* (issue #125) is **passed in**, not resolved here: this
+        is a classmethod with no session, and the tailoring loop calls it once
+        per attempt, so resolving inside would rebuild the knowledge graph on
+        every retry. `agents/tailor.py::_load_inputs` resolves it once per run
+        and carries it in the pipeline state. Omitted, the score falls back to
+        uniform weighting — which is what keeps `delta` against a baseline that
+        was itself scored without weights honest rather than an artefact of two
+        different scoring rules.
         """
         text = cls.flatten_tailored_text(tailored_content)
         haystack = text.lower()
@@ -142,7 +163,7 @@ class ATSScoringEngine:
         gaps = [s for s in names if s.lower() not in haystack]
         skill_score = (len(covered) / len(names) * 100) if names else 100.0
 
-        kd = cls._keyword_coverage(text, jd_text)
+        kd = cls._keyword_coverage(text, jd_text, keyword_weights)
         sp = cls._tailored_section_presence(tailored_content)
         rl = cls._role_level(text, jd_text)
 
@@ -237,10 +258,36 @@ class ATSScoringEngine:
         return keywords
 
     @staticmethod
-    def _keyword_coverage(resume_text: str, jd_text: str) -> Dict:
+    def _keyword_coverage(
+        resume_text: str, jd_text: str, keyword_weights: Dict[str, float] | None = None,
+    ) -> Dict:
         """
         Port of resume-matcher jd_keywords_present().
         Fraction of JD keywords found via substring match in resume text.
+
+        With *keyword_weights* (issue #125) the fraction becomes a **weighted**
+        fraction: `sum(w of matched) / sum(w of all JD keywords)`, where
+        `w(t) = importance_in_JD(t) x supportability(t)` comes from the #121 JD
+        profile crossed with the candidate's knowledge graph
+        (`agents/keyword_weights.py`). A keyword the candidate has no evidence
+        for weighs **zero**, so the reward never pays for covering something
+        that could only be covered by inventing it.
+
+        Two fallbacks to uniform weighting, both deliberate:
+
+        - **No weights supplied** — every job analyzed before #121 shipped and
+          every job whose extraction failed. The returned dict is then identical
+          to the pre-#125 one, key for key, so the absent-profile path is
+          literally today's behavior.
+        - **Every JD keyword weighs zero** — a candidate with an empty knowledge
+          graph. `0/0` is not a score, and reporting 0.0 would say "this resume
+          covers nothing" when what actually happened is that we have no
+          supportability information at all.
+
+        `matched_keywords` / `missing_keywords` / `total` are unweighted in both
+        modes: they describe which terms are present, which is what
+        `keyword_planner` consumes downstream, and weighting them would silently
+        change the insertion plan from here.
         """
         if not jd_text.strip():
             return {"score": 0.0, "matched_keywords": [], "missing_keywords": [], "total": 0}
@@ -250,16 +297,35 @@ class ATSScoringEngine:
             return {"score": 100.0, "matched_keywords": [], "missing_keywords": [], "total": 0}
 
         haystack = resume_text.lower()
-        matched = [kw for kw in jd_keywords if kw in haystack]
-        missing = [kw for kw in jd_keywords if kw not in haystack]
+        matched = sorted(kw for kw in jd_keywords if kw in haystack)
+        missing = sorted(kw for kw in jd_keywords if kw not in haystack)
 
-        score = len(matched) / len(jd_keywords) * 100
-        return {
-            "score": round(score, 1),
-            "matched_keywords": sorted(matched),
-            "missing_keywords": sorted(missing),
+        out = {
+            "score": round(len(matched) / len(jd_keywords) * 100, 1),
+            "matched_keywords": matched,
+            "missing_keywords": missing,
             "total": len(jd_keywords),
         }
+        if not keyword_weights:
+            return out
+
+        weights = {
+            kw: max(0.0, _as_float(keyword_weights.get(kw))) for kw in jd_keywords
+        }
+        total_weight = sum(weights.values())
+        if total_weight <= 0.0:
+            return out
+
+        matched_weight = sum(weights[kw] for kw in matched)
+        out["score"] = round(matched_weight / total_weight * 100, 1)
+        out["weighted"] = True
+        out["weighted_total"] = round(total_weight, 3)
+        out["weighted_matched"] = round(matched_weight, 3)
+        # The zero bucket, named rather than merely absent: these are the JD
+        # terms covering which would require fabrication, and the planner and
+        # the #51 decision log both want to see them.
+        out["unsupported_keywords"] = sorted(k for k, w in weights.items() if w <= 0.0)
+        return out
 
     @staticmethod
     def _section_presence(user_id: UUID, session: Session) -> Dict:
@@ -371,3 +437,27 @@ def _detect_level(text: str) -> str:
 
 def _weight_meta(weight: float) -> Dict:
     return {"weight": weight}
+
+
+def _resolve_keyword_weights(job_id: UUID, user_id: UUID, jd_text: str) -> Dict | None:
+    """Term -> weight for this (job, candidate), or None. Never raises.
+
+    Imported lazily: `services` imports this module, so a top-level import
+    would close a cycle. A failure here must degrade to uniform weighting, never
+    take down a score the user is waiting on.
+    """
+    try:
+        import services
+
+        return services.resolve_keyword_weights(job_id, user_id, jd_text)
+    except Exception as exc:
+        logger.warning("keyword weight resolution failed for job %s: %s", job_id, exc)
+        return None
+
+
+def _as_float(value) -> float:
+    """Coerce a persisted weight to a float. Unknown/garbage weighs nothing."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0

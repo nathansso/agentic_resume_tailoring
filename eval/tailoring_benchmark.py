@@ -178,6 +178,85 @@ def _stub_extract_jd_skills(jd_text: str) -> List[Dict]:
     return out
 
 
+# Section headings that tell the stub how to type a requirement. Order matters:
+# the first marker found in the current heading wins.
+_STUB_SECTION_TYPES = [
+    (("nice to have", "preferred", "bonus", "plus", "desirable"), "preferred"),
+    (("about", "benefit", "perk", "equal opportunity", "who we are",
+      "compensation", "salary"), "incidental"),
+    (("requirement", "qualification", "must", "you will", "you'll",
+      "responsibilit", "what you", "skill"), "required"),
+]
+_STUB_MAX_REQUIREMENTS = 40
+
+
+def _stub_jd_profile(prompt_text: str) -> Dict:
+    """Deterministic stand-in for the #121 JD-profile extraction.
+
+    Without this the stub returns `{}` for the profile prompt, every posting
+    compiles to zero requirements, and #125's importance half is never
+    exercised by the benchmark — only its supportability half would be
+    measured. Derives requirements from the posting's own bullet lines, in
+    source order, so `type` / `criticality` / `source_section` / `ordinal` all
+    carry real (if simple) structure.
+    """
+    from agents.ats_scorer import ATSScoringEngine
+
+    title = ""
+    body = prompt_text
+    for line in prompt_text.splitlines():
+        if line.startswith("Job title:"):
+            title = line.split(":", 1)[1].strip()
+            break
+    marker = "Job posting:"
+    if marker in prompt_text:
+        body = prompt_text.split(marker, 1)[1]
+
+    vocab = sorted({v.lower() for v in STUB_JD_VOCAB})
+    requirements: List[Dict] = []
+    section = ""
+    for raw in body.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        stripped = line.lstrip("-•*• ").strip()
+        is_bullet = line[0] in "-•*•"
+        if not is_bullet:
+            # Short, unpunctuated lines read as headings.
+            if len(line) < 80 and not line.endswith("."):
+                section = line
+            continue
+        if len(stripped) < 15 or len(requirements) >= _STUB_MAX_REQUIREMENTS:
+            continue
+
+        low_section = section.lower()
+        rtype = "required"
+        for markers, value in _STUB_SECTION_TYPES:
+            if any(m in low_section for m in markers):
+                rtype = value
+                break
+
+        low = stripped.lower()
+        terms = [v for v in vocab if v in low]
+        if not terms:
+            terms = sorted(ATSScoringEngine._extract_keywords(stripped),
+                           key=lambda t: (-len(t), t))[:3]
+        requirements.append({
+            "text": stripped,
+            "type": rtype,
+            # Earlier requirements are more central; saturates at 1.
+            "criticality": max(1, 5 - len(requirements) // 4),
+            "terms": terms,
+            "source_section": section or None,
+            "confidence": 0.9,
+        })
+
+    return {
+        "requirements": requirements,
+        "title_terms": sorted(ATSScoringEngine._extract_keywords(title)),
+    }
+
+
 def _stub_tailored(jd_text: str) -> Dict:
     low = jd_text.lower()
     emphasized = [s["name"] for s in STUB_SKILLS if s["name"].lower() in low]
@@ -207,6 +286,8 @@ def _stub_payload(text: str):
         return {"title": "Benchmark Role", "company": "Benchmark Co"}
     if "job description analyzer" in text:
         return _stub_extract_jd_skills(text)
+    if "decompose job postings" in text:
+        return _stub_jd_profile(text)
     if "resume tailoring assistant" in text:
         return _stub_tailored(text)
     return {}
@@ -278,10 +359,17 @@ def _install_stubs() -> None:
     import agents.matcher as matcher
     import agents.parser as parser
     import agents.tailor as tailor
+    import llm as llm_module
 
     stub = _make_stub_llm()
     for module in (parser, job_analyzer, tailor):
         module.get_llm = stub
+    # agents/jd_profile.py builds its extractor through `llm.get_extractor`
+    # without passing an llm, so it never saw the three module-level patches
+    # above — its extraction failed and every posting silently compiled to no
+    # profile at all. Patching the factory itself covers that path and any
+    # future `get_extractor` caller (issue #125).
+    llm_module.get_llm = stub
     matcher.get_embedding_model = lambda: _StubEmbeddingModel()
     matcher._embedding_model = None
 

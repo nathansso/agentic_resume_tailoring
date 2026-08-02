@@ -678,7 +678,8 @@ def _eval_agent(monkeypatch, score_of):
     import agents.tailor as tm
     monkeypatch.setattr(tm, "get_llm", lambda *a, **k: object())
 
-    def fake_score(content, job_text, matched_skills=None, baseline_breakdown=None):
+    def fake_score(content, job_text, matched_skills=None, baseline_breakdown=None,
+                   keyword_weights=None):
         return _fake_breakdown(score_of(content))
 
     monkeypatch.setattr(tm.ATSScoringEngine, "score_tailored", fake_score)
