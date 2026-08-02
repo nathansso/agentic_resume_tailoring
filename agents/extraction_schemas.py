@@ -297,3 +297,120 @@ class JDProfileExtraction(BaseModel):
         default_factory=list,
         description="Meaningful terms from the job title itself, minus filler",
     )
+
+
+# ── Preference extraction (agents/preferences.py, issue #129) ────────────────
+#
+# The candidate-side mirror of JDProfileExtraction: what the *user* wants,
+# inferred from tailoring chat, against what the *job* wants.
+#
+# `polarity` is a closed enum for the reason #129 finding 1 makes central —
+# suppression is the dominant case and the one every retrieval method fails at
+# (ImplexConv opposed-case F1 14.8%), so negation has to be a typed field the
+# arbitration can branch on, never free text a downstream prompt has to infer.
+#
+# `strength` is a plain int, clamped in the compile rather than constrained
+# here, for the same reason `criticality` is: a range-constrained field turns
+# one sloppy integer into a validation error that the seam retries once and then
+# re-raises, losing every preference in the turn over a single bad number. It is
+# deliberately on the same 1-5 scale as `JDRequirementItem.criticality`, because
+# arbitration compares the two directly.
+
+class PreferencePolarity(str, Enum):
+    """What the user wants done with the target."""
+    SUPPRESS = "suppress"
+    EMPHASIZE = "emphasize"
+    REFRAME = "reframe"
+
+
+class PreferenceTargetType(str, Enum):
+    """What kind of thing the preference is about."""
+    EXPERIENCE = "experience"
+    PROJECT = "project"
+    SKILL = "skill"
+    SECTION = "section"
+    TOPIC = "topic"
+
+
+class PreferenceScopeType(str, Enum):
+    """How far the preference reaches.
+
+    This is what keeps a cross-job profile from becoming global by accident:
+    'I'm targeting infra roles' is a role_family, 'drop this bullet for this
+    job' is a job, and only a genuinely standing constraint is global.
+    """
+    GLOBAL = "global"
+    ROLE_FAMILY = "role_family"
+    JOB = "job"
+
+
+class PreferenceNote(BaseModel):
+    """One standing preference observed in the conversation."""
+    text: Optional[str] = Field(
+        None,
+        description=(
+            "The preference rewritten as a standalone statement about how to "
+            "build this candidate's resume, understandable with no access to "
+            "the conversation (write 'Do not lead with the recipe project, it "
+            "was coursework', not 'that one was just for class')"),
+    )
+    polarity: PreferencePolarity = Field(
+        PreferencePolarity.SUPPRESS,
+        description=(
+            "'suppress' to leave something out or play it down, 'emphasize' to "
+            "lead with it or give it more room, 'reframe' to keep it but "
+            "present it differently"),
+    )
+    target_type: PreferenceTargetType = Field(
+        PreferenceTargetType.TOPIC,
+        description=(
+            "What the preference is about. Use 'topic' only when it refers to "
+            "no specific item on the resume"),
+    )
+    target_label: Optional[str] = Field(
+        None,
+        description=(
+            "The item this is about, quoted verbatim from the supplied list of "
+            "the candidate's known items when it names one of them. Otherwise "
+            "the bare subject as the user described it"),
+    )
+    scope_type: PreferenceScopeType = Field(
+        PreferenceScopeType.JOB,
+        description=(
+            "'job' when the user is talking about this application only, "
+            "'role_family' when they describe the kind of role they are "
+            "targeting, 'global' only for a standing rule about every resume "
+            "they will ever send. Prefer the narrowest scope that fits"),
+    )
+    scope_value: Optional[str] = Field(
+        None,
+        description=(
+            "For scope_type='role_family', the family named — one of: "
+            "software_engineering, machine_learning, data_science, "
+            "data_engineering, research, product_management, design, "
+            "devops_infrastructure, security, hardware. Null otherwise"),
+    )
+    strength: Optional[int] = Field(
+        3,
+        description=(
+            "How firmly the user holds this, 1 (a passing remark) to 5 (an "
+            "absolute rule they stated as non-negotiable). Reserve 5 for "
+            "language like 'never' or 'under no circumstances' — a 5 is "
+            "honored even when the job explicitly asks for the opposite"),
+    )
+    evidence: Optional[str] = Field(
+        None,
+        description=(
+            "Verbatim quote from the conversation stating this preference. "
+            "Required — omit the note entirely rather than inventing a quote"),
+    )
+    confidence: Optional[float] = Field(
+        None,
+        description=(
+            "0.0-1.0 confidence that this is a real standing preference rather "
+            "than a passing comment. Low confidence flags it for review"),
+    )
+
+
+class PreferenceNoteList(BaseModel):
+    notes: List[PreferenceNote] = Field(default_factory=list)

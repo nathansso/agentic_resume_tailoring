@@ -419,3 +419,80 @@ class JDProfile(SQLModel, table=True):
 
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class UserPreference(SQLModel, table=True):
+    """One standing preference the user expressed in chat (issue #129).
+
+    The candidate-side mirror of `JDProfile`. #121 codified what the *job*
+    wants; this codifies what the *user* wants, and tailoring is the arbitration
+    between them. It is deliberately none of its three neighbours: #21 captures
+    *facts* into the knowledge graph, #118 captures *explicit structural*
+    overrides per job, and this captures *implicit standing* preferences across
+    jobs — inferred from language rather than set by a drag.
+
+    **One row per preference, not a `preferences[]` array on a profile row.**
+    The array shape makes superseding one entry a read-modify-write of the whole
+    blob, which races across concurrent chat turns, and forces the edit API to
+    address entries by list index — the exact identity mistake #121 recorded
+    ("identity is text, never ordinal"). A row gives each preference a stable
+    UUID to edit, retract, and supersede against.
+
+    **Nothing is ever deleted.** A contradicted preference is `superseded` and a
+    withdrawn one is `retracted`; both stay on the table. Negation must not
+    expire (#133), and the transition history is the signal #51 Phase 2 learns
+    preference weights from — deleting the row would make the table a lossy view
+    of a trajectory the decision log itself retains.
+
+    A new table, so `SQLModel.metadata.create_all` picks it up and no ALTER is
+    needed. No rows => today's behavior: the arbitration compiles an empty
+    constraint set and the planner payload is unchanged.
+    """
+    preference_id: UUID = Field(default_factory=uuid4, primary_key=True)
+    user_id: UUID = Field(foreign_key="user.user_id", index=True)
+
+    # The preference as a standalone statement, understandable without the
+    # conversation it came from.
+    text: str = Field(default="")
+    # suppress | emphasize | reframe. `suppress` is the opposed case from
+    # ImplexConv finding 1 — the dominant case here and the one every retrieval
+    # method fails at, so it is a typed field rather than free text.
+    polarity: str = Field(default="suppress", index=True)
+
+    # experience | project | skill | section | topic
+    target_type: str = Field(default="topic")
+    # Normalized item key (`exp:<title>|<company>`, `proj:<name>`,
+    # `skill:<name>`) when the preference names something in the knowledge
+    # graph, so arbitration can bind it straight onto a planner item key. Null
+    # when the preference is about a bare topic.
+    target_key: Optional[str] = Field(default=None, index=True)
+    # The subject as stated, kept even when target_key resolved: it is what a
+    # human reads back, and what term-matching against the JD runs on.
+    target_term: Optional[str] = Field(default=None)
+
+    # global | role_family | job, with the family/job id in scope_value. Two
+    # columns rather than a "role_family:<x>" string so the scope filter is a
+    # plain comparison and a malformed prefix cannot silently widen scope.
+    scope_type: str = Field(default="job")
+    scope_value: Optional[str] = Field(default=None)
+
+    # 1-5, deliberately the same scale as JDProfile requirements' `criticality`
+    # so arbitration compares the two directly.
+    strength: int = Field(default=3)
+
+    # active | superseded | retracted
+    status: str = Field(default="active", index=True)
+    # The preference this one replaced, when a later turn contradicted it.
+    supersedes_id: Optional[UUID] = Field(default=None)
+
+    confidence: Optional[float] = Field(default=None)
+    # {"quote": ..., "job_id": ..., "extracted_at": ...} — where this came from.
+    provenance: Dict = Field(default={}, sa_column=Column(JSON))
+    # Set by the edit API and honored by extraction: a hand-corrected preference
+    # is never silently overwritten by a later extraction, same contract as
+    # JDProfile requirements' `edited` flag.
+    edited: bool = Field(default=False)
+    extraction_version: int = Field(default=1)
+
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
