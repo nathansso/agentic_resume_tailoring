@@ -337,9 +337,10 @@ def test_ranked_section_order_differs_by_job():
     order_research = ResumeTailorAgent._ranked_section_order(_REORDER_CONTENT, {}, _RESEARCH_JD)
     order_infra = ResumeTailorAgent._ranked_section_order(_REORDER_CONTENT, {}, _INFRA_JD)
 
-    # Education stays pinned first in both
-    assert order_research[0] == "education"
-    assert order_infra[0] == "education"
+    # Nothing is pinned any more (issue #118) and this content carries no
+    # education rows, so the order is exactly the reorderable sections present.
+    assert "education" not in order_research
+    assert "education" not in order_infra
 
     assert order_research.index("projects") < order_research.index("experience")
     assert order_infra.index("experience") < order_infra.index("projects")
@@ -390,8 +391,7 @@ def test_tailor_persists_section_order(isolated_engine, monkeypatch):
         order = stored.tailored_resume_content.get("_section_order")
 
     assert order is not None
-    assert order[0] == "education"
-    assert set(order) == {"education", "experience", "projects", "skills"}
+    assert set(order) == {"experience", "projects", "skills"}
     # Research JD → projects ahead of experience
     assert order.index("projects") < order.index("experience")
 
@@ -451,7 +451,9 @@ def _retailor_with_prior(isolated_engine, monkeypatch, prior_content,
         return session.get(UserJobResult, result_id).tailored_resume_content
 
 
-_FROZEN_ORDER = ["education", "skills", "experience", "projects"]
+# No education: the seeded user has no Education rows, and since issue #118 a
+# section the user has no rows for is not part of the expected section set.
+_FROZEN_ORDER = ["skills", "experience", "projects"]
 _FROZEN_SKILLS = [{"name": "Rust", "category": "language"}]
 
 
@@ -481,7 +483,6 @@ def test_first_run_still_computes_order_and_skills_from_scratch(
     stored = _retailor_with_prior(isolated_engine, monkeypatch, {})
 
     order = stored["_section_order"]
-    assert order[0] == "education"
     # research JD ranks projects ahead of experience
     assert order.index("projects") < order.index("experience")
     assert order != _FROZEN_ORDER
@@ -514,28 +515,34 @@ def test_a_stale_order_naming_a_missing_section_is_recomputed(
 ):
     """A carried order must never name a section this run does not have —
     achievements here, which the user no longer has."""
-    stale = ["education", "achievements", "skills", "experience", "projects"]
+    stale = ["achievements", "skills", "experience", "projects"]
     stored = _retailor_with_prior(isolated_engine, monkeypatch, {
         **_REORDER_CONTENT,
         "_section_order": stale,
     })
 
     assert "achievements" not in stored["_section_order"]
-    assert set(stored["_section_order"]) == {
-        "education", "experience", "projects", "skills"
-    }
+    assert set(stored["_section_order"]) == {"experience", "projects", "skills"}
 
 
-def test_expected_sections_tracks_achievements():
-    """The membership rule both the freeze check and _ranked_section_order read."""
+def test_expected_sections_tracks_achievements_and_education():
+    """The membership rule both the freeze check and _ranked_section_order read.
+
+    Achievements and education are both content-gated (issue #118): naming a
+    section the user has no rows for would hand the formatter an empty block.
+    """
     from agents.tailor import ResumeTailorAgent
 
     without = ResumeTailorAgent._expected_sections({"experiences": [{}]})
     assert "achievements" not in without
-    assert without[0] == "education"
+    assert "education" not in without
 
     with_ach = ResumeTailorAgent._expected_sections({"achievements": [{"title": "A"}]})
     assert "achievements" in with_ach
+
+    with_edu = ResumeTailorAgent._expected_sections(
+        {"education": [{"degree": "B.S. CS", "institution": "UCSD"}]})
+    assert "education" in with_edu
 
 
 def test_tailor_fits_content_to_one_page(isolated_engine, monkeypatch):

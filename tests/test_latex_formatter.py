@@ -806,6 +806,7 @@ def test_ranked_section_order_defaults_to_ingested_position():
         {"achievements": [{"title": "x"}]}, {}, "",
         ingested_order=["experience", "achievements", "projects", "skills"],
     )
-    # Pinned education first; then the ingested order preserved on the tie.
-    assert order[0] == "education"
+    # Nothing is pinned since issue #118, and this content has no education
+    # rows; the ingested order is preserved on the tie.
+    assert "education" not in order
     assert order.index("achievements") < order.index("projects")

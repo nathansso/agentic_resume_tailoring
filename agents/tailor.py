@@ -23,9 +23,10 @@ from llm import get_llm
 from database.db import engine
 from database.models import (
     User, Experience, Project, ProjectBlurb, Skill, UserSkill,
-    JobDescription, JobSkill, UserJobResult, Achievement,
+    JobDescription, JobSkill, UserJobResult, Achievement, Education,
 )
 from agents.ats_scorer import ATSScoringEngine
+from agents.layout import apply_overrides, resolve_skills
 from agents.skill_selection import skill_names
 from agents.project_scorer import MAX_PROJECTS, score_project, select_top_k
 from agents.skill_scorer import _env_float, _env_int, rank_and_select_skills
@@ -102,10 +103,21 @@ def _as_obj(value, default):
     return value if value is not None else default
 
 # Section ordering (issue #22). The name/contact header is rendered by the
-# formatter above all sections and is never part of section_order; education
-# stays pinned at the top of the reorderable body.
-PINNED_SECTIONS = ["education"]
-REORDERABLE_SECTIONS = ["experience", "projects", "skills", "achievements"]
+# formatter above all sections and is never part of section_order.
+#
+# Nothing is pinned any more (issue #118): education used to be forced to the
+# top, which made it the one section a user could not move and the one section
+# JD relevance could not place. A degree in the field the posting names should
+# be able to lead; a decade-old degree behind three relevant jobs should not.
+# It is now ranked like every other section and, like every other section, an
+# explicit user override outranks the ranker.
+PINNED_SECTIONS: List[str] = []
+REORDERABLE_SECTIONS = [
+    "education", "experience", "projects", "skills", "achievements",
+]
+# Sections that exist only when the user has rows for them. Keyed by the
+# content key that holds those rows, which is also the section key.
+_CONTENT_GATED_SECTIONS = {"education", "achievements"}
 
 
 class TailorState(TypedDict):
@@ -292,6 +304,14 @@ class ResumeTailorAgent:
             if not isinstance(prior_content, dict) or "error" in prior_content:
                 prior_content = {}
 
+            # Explicit user arrangement (issue #118). Read-only here and read-only
+            # for the whole run — the pipeline resolves against it but never
+            # writes it, so the ranker cannot launder its own output into a
+            # counterfeit user override.
+            layout_overrides = _as_obj(result.layout_overrides, {}) if result else {}
+            if not isinstance(layout_overrides, dict):
+                layout_overrides = {}
+
         return {
             "jd_text": jd_text,
             "experiences": exp_dicts,
@@ -300,6 +320,7 @@ class ResumeTailorAgent:
             "priority_keywords": priority_keywords,
             "keyword_assignments": keyword_assignments,
             "prior_content": prior_content,
+            "layout_overrides": layout_overrides,
             "matched_skills": (result.matched_skills if result else None) or {},
             "missing_skills": (result.missing_skills if result else None) or [],
             "baseline_breakdown": ((result.score_breakdown if result else None) or {}),
@@ -493,6 +514,13 @@ class ResumeTailorAgent:
             achievements = self._load_achievements(user_id)
             if achievements:
                 tailored["achievements"] = achievements
+            # Education likewise, and for the same reason: it is reorderable as
+            # of issue #118, so the relevance scorer needs its text. The
+            # formatter still renders education from the database, so this copy
+            # only ever feeds scoring.
+            education = self._load_education(user_id)
+            if education:
+                tailored["education"] = education
             # A carried-forward order may only be reused while it still names
             # exactly the sections this run has; otherwise it could hand the
             # formatter a section a delete/replace emptied.
@@ -505,12 +533,31 @@ class ResumeTailorAgent:
                 and not structural_change
                 and set(prior_order) == set(self._expected_sections(tailored))
             ):
-                tailored["_section_order"] = prior_order
+                fallback_order = prior_order
             else:
-                tailored["_section_order"] = self._ranked_section_order(
+                fallback_order = self._ranked_section_order(
                     tailored, final_state["matched_skills"], final_state["job_text"],
                     self._ingested_section_order(user_id),
                 )
+            # Tier 1 of the arrangement precedence chain (issue #118): an
+            # explicit user override outranks both the carried-forward order
+            # (#115) and a fresh ranking. Everything above resolved what the
+            # pipeline *would* have chosen; this is where the user's choice
+            # supersedes it, for sections, skills, and bullets alike. Absent an
+            # override every call here is an identity function, which is what
+            # makes the no-override path byte-for-byte unchanged.
+            overrides = inputs.get("layout_overrides") or {}
+            # Assigned only when non-empty, matching the branches above: a run
+            # that produced no ranking leaves the key absent rather than
+            # writing an empty list the formatter would read differently.
+            resolved_skills = resolve_skills(
+                overrides.get("skills"), tailored.get("skills_ranked") or [],
+            )
+            if resolved_skills:
+                tailored["skills_ranked"] = resolved_skills
+            tailored = apply_overrides(
+                overrides, tailored, fallback_order, self._expected_sections(tailored),
+            )
             # One-page guarantee at the source (issue #34 follow-up): trim the
             # stored content so the editor .tex, live preview, and exports all
             # fit a single page — not just the PDF export path.
@@ -1259,12 +1306,13 @@ class ResumeTailorAgent:
         `tailor()` (issue #115) — a prior order must not survive into a run
         whose section set has changed under it.
 
-        Achievements is optional: only place it when the user actually has
-        some, so a user without achievements keeps a clean section order.
+        Achievements and education are optional: only place them when the user
+        actually has some, so a user without either keeps a clean section order
+        rather than one naming a section the formatter will render empty.
         """
         seed = [
             k for k in REORDERABLE_SECTIONS
-            if k != "achievements" or tailored_content.get("achievements")
+            if k not in _CONTENT_GATED_SECTIONS or tailored_content.get(k)
         ]
         return PINNED_SECTIONS + seed
 
@@ -1286,6 +1334,31 @@ class ResumeTailorAgent:
                     "date": a.date or "",
                 }
                 for a in rows
+            ]
+
+    @staticmethod
+    def _load_education(user_id: UUID) -> List[Dict]:
+        """This user's education rows, copied into tailored_content for scoring.
+
+        The formatter renders education straight from the database, so this copy
+        never reaches the page — it exists so `_score_section_relevance` has text
+        to score now that education is reorderable (issue #118). That also means
+        a later edit to an Education row leaves this copy stale without
+        consequence: it is only ever read during the run that wrote it.
+        """
+        with Session(engine) as session:
+            rows = session.exec(
+                select(Education).where(Education.user_id == user_id)
+                .order_by(Education.created_at)
+            ).all()
+            return [
+                {
+                    "institution": e.institution,
+                    "degree": e.degree,
+                    "start_date": e.start_date or "",
+                    "end_date": e.end_date or "",
+                }
+                for e in rows
             ]
 
     @staticmethod

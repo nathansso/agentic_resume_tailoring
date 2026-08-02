@@ -239,6 +239,14 @@ class UserJobResult(SQLModel, table=True):
     # exports regenerate from tailored_resume_content. Cleared on re-tailor.
     edited_tex: Optional[str] = None
     edited_tex_updated_at: Optional[datetime] = None
+    # issue 118: explicit user arrangement overrides — {section_order, skills,
+    # bullets}, each key optional. NULL means "no override" and the ranker's
+    # output is used. Set only by user action, never by the pipeline: if
+    # tailoring could write this, the ranker would launder its own output into
+    # a fake user override and the precedence would stop meaning anything.
+    # Unlike edited_tex it encodes arrangement rather than content, so it stays
+    # valid when the content beneath it changes and survives a re-tailor.
+    layout_overrides: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
 
     verification_status: str = "pending" # approved, rejected
     created_at: datetime = Field(default_factory=datetime.utcnow)

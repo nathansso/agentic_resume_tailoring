@@ -202,6 +202,14 @@ class ATSScoringEngine:
             for proj in tailored_content.get("projects") or []:
                 parts.append(proj.get("name", ""))
                 parts.extend(proj.get("bullets") or [])
+        elif section_key == "education":
+            # Education became reorderable in issue #118. Without this branch it
+            # flattens to "" and scores 0.0, which would silently sort it last
+            # for every user rather than ranking it on its own signal — a degree
+            # in the field the JD names is exactly the case that should lead.
+            for edu in tailored_content.get("education") or []:
+                parts.append(edu.get("degree", ""))
+                parts.append(edu.get("institution", ""))
         elif section_key == "achievements":
             for ach in tailored_content.get("achievements") or []:
                 parts.append(ach.get("title", ""))
