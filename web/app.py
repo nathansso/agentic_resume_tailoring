@@ -9,7 +9,10 @@ from fastapi.staticfiles import StaticFiles
 
 from config import ensure_app_dirs
 from database.db import init_db
-from web.routers import auth_router, jobs_router, chat_router, profile_router, ingest_router
+from web.routers import (
+    auth_router, jobs_router, chat_router, profile_router, ingest_router,
+    preferences_router,
+)
 
 
 def create_app() -> FastAPI:
@@ -39,6 +42,7 @@ def create_app() -> FastAPI:
     app.include_router(chat_router.router)
     app.include_router(profile_router.router)
     app.include_router(ingest_router.router)
+    app.include_router(preferences_router.router)
 
     @app.get("/api/health")
     def health() -> dict:

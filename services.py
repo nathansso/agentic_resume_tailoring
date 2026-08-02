@@ -1707,6 +1707,274 @@ def update_jd_profile_requirements(job_id: UUID, edits: list[dict]) -> Optional[
         return None
 
 
+# ── User preferences (issue #129) ───────────────────────────────────────────
+#
+# **The write barrier.** `tailor()` reads preferences and never writes one, and
+# the only function here that writes is reached by an explicit user decision.
+# #118 established the rule for `layout_overrides` — a pipeline that can write
+# the user's tier launders its own output into a counterfeit user choice — and
+# it binds harder here, because these preferences are *inferred*. A pipeline
+# allowed to write this table would suppress an item, observe the suppression,
+# infer a standing preference from it, and then cite that preference back as the
+# user's own instruction. So proposing is separated from persisting the same way
+# #21 separates them, and there is no automatic-write path at all.
+
+def _preference_dict(row) -> dict:
+    provenance = row.provenance
+    if isinstance(provenance, str):
+        try:
+            provenance = json.loads(provenance)
+        except (ValueError, TypeError):
+            provenance = {}
+    return {
+        "preference_id": str(row.preference_id),
+        "text": row.text,
+        "polarity": row.polarity,
+        "target_type": row.target_type,
+        "target_key": row.target_key,
+        "target_term": row.target_term,
+        "scope_type": row.scope_type,
+        "scope_value": row.scope_value,
+        "strength": row.strength,
+        "status": row.status,
+        "supersedes_id": str(row.supersedes_id) if row.supersedes_id else None,
+        "confidence": row.confidence,
+        "provenance": provenance or {},
+        "edited": bool(row.edited),
+        "extraction_version": row.extraction_version,
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+    }
+
+
+def load_preferences(user_id: UUID, include_inactive: bool = False) -> list[dict]:
+    """This user's preferences, newest last. Read-only.
+
+    Returns [] on any failure rather than raising: an unreadable preference
+    table must degrade to pre-#129 tailoring, never break a run.
+    """
+    from datetime import datetime
+
+    from agents.preferences import STATUS_ACTIVE
+    from database.models import UserPreference
+
+    try:
+        with Session(engine) as session:
+            rows = session.exec(
+                select(UserPreference).where(UserPreference.user_id == user_id)
+            ).all()
+            out = [_preference_dict(r) for r in rows]
+    except Exception as exc:
+        logger.warning("load_preferences failed for user %s: %s", user_id, exc)
+        return []
+    if not include_inactive:
+        out = [p for p in out if p["status"] == STATUS_ACTIVE]
+    out.sort(key=lambda p: (p["created_at"] or datetime.min, p["preference_id"]))
+    return out
+
+
+def propose_preferences(
+    user_id: UUID, job_id: Optional[str], messages: list[dict],
+) -> list[dict]:
+    """Preference proposals from this chat. **Writes nothing.**
+
+    Returns each compiled preference plus a `decision` of `add` / `supersede` /
+    `no_op` against what the user already holds. `no_op` proposals are kept in
+    the return value rather than filtered here so the caller can decide whether
+    to show "already recorded" — the router filters them, matching #21.
+    """
+    from agents.preferences import (
+        build_transcript, compile_preferences, extract_preference_notes,
+        resolve_against_existing, target_catalog,
+    )
+
+    try:
+        catalog = target_catalog(user_id)
+        notes = extract_preference_notes(build_transcript(messages), catalog)
+        if not notes:
+            return []
+        compiled = compile_preferences(notes, catalog, provenance={
+            "job_id": str(job_id) if job_id else None,
+            "source": "chat",
+        })
+        return resolve_against_existing(compiled, load_preferences(user_id))
+    except Exception as exc:
+        logger.warning("propose_preferences failed for user %s: %s", user_id, exc)
+        return []
+
+
+def apply_preference_decision(user_id: UUID, proposal: dict) -> str:
+    """Persist one accepted proposal. The **only** write path into this table.
+
+    A `supersede` marks the prior preference `superseded` and links the new row
+    to it — it never deletes, because a contradicted preference must not expire
+    (#133) and the transition is the signal #51 Phase 2 learns from. A `no_op`
+    writes nothing and says so.
+
+    Returns a plain-English result string. Never raises.
+    """
+    from datetime import datetime
+
+    from agents.preferences import (
+        POLARITIES, SCOPE_TYPES, STATUS_ACTIVE, STATUS_SUPERSEDED,
+        TARGET_TYPES, _clamp_confidence, _clamp_strength,
+    )
+    from database.models import UserPreference
+
+    try:
+        text = (proposal.get("text") or "").strip()
+        if not text:
+            return "Nothing to save — the preference has no text."
+        if (proposal.get("decision") or "add") == "no_op":
+            return "Already recorded — nothing changed."
+
+        polarity = proposal.get("polarity") or "suppress"
+        if polarity not in POLARITIES:
+            polarity = "suppress"
+        target_type = proposal.get("target_type") or "topic"
+        if target_type not in TARGET_TYPES:
+            target_type = "topic"
+        scope_type = proposal.get("scope_type") or "job"
+        if scope_type not in SCOPE_TYPES:
+            scope_type = "job"
+
+        with Session(engine) as session:
+            superseded = None
+            raw_prior = proposal.get("supersedes_id")
+            if raw_prior:
+                try:
+                    prior = session.get(UserPreference, UUID(str(raw_prior)))
+                except (ValueError, TypeError):
+                    prior = None
+                # Owner check: a proposal is client-held round-tripped state, so
+                # the id in it is untrusted (issue #73).
+                if prior is not None and prior.user_id == user_id:
+                    prior.status = STATUS_SUPERSEDED
+                    prior.updated_at = datetime.utcnow()
+                    session.add(prior)
+                    superseded = prior.preference_id
+
+            row = UserPreference(
+                user_id=user_id,
+                text=text,
+                polarity=polarity,
+                target_type=target_type,
+                target_key=proposal.get("target_key") or None,
+                target_term=proposal.get("target_term") or None,
+                scope_type=scope_type,
+                scope_value=proposal.get("scope_value") or None,
+                strength=_clamp_strength(proposal.get("strength")),
+                status=STATUS_ACTIVE,
+                supersedes_id=superseded,
+                confidence=_clamp_confidence(proposal.get("confidence")),
+                provenance=proposal.get("provenance") or {},
+                extraction_version=int(proposal.get("extraction_version") or 1),
+            )
+            session.add(row)
+            session.commit()
+
+        if superseded:
+            return f"Updated — this replaces what you told me earlier: {text}"
+        return f"Saved: {text}"
+    except Exception as exc:
+        logger.warning("apply_preference_decision failed for user %s: %s", user_id, exc)
+        return "Could not save that preference."
+
+
+# Fields a human may correct. `polarity` and `strength` are the two that change
+# what the arbitration does, so they are the two that most need fixing when the
+# extraction reads a passing remark as an absolute rule. `target_key` is not
+# editable by hand: it must stay a key the planner can bind, and a free-text
+# correction would produce one that silently matches nothing.
+_EDITABLE_PREFERENCE_FIELDS = {
+    "text", "polarity", "strength", "scope_type", "scope_value", "target_term",
+}
+
+
+def update_preference(
+    user_id: UUID, preference_id: UUID, edits: dict,
+) -> Optional[dict]:
+    """Apply a human correction. Stamps `edited=True`.
+
+    That flag means the same thing it means on a JD requirement: a correction is
+    never silently overwritten by a later extraction. It does not freeze the
+    preference — an explicit later reversal in chat still supersedes it, because
+    the user changing their mind out loud is not an extraction error.
+
+    Returns the updated preference, or None when it does not exist or is not
+    this user's.
+    """
+    from datetime import datetime
+
+    from agents.preferences import (
+        POLARITIES, SCOPE_TYPES, _clamp_strength,
+    )
+    from database.models import UserPreference
+
+    try:
+        with Session(engine) as session:
+            row = session.get(UserPreference, preference_id)
+            if row is None or row.user_id != user_id:
+                return None
+            touched = False
+            for field, value in (edits or {}).items():
+                if field not in _EDITABLE_PREFERENCE_FIELDS:
+                    continue
+                if field == "polarity":
+                    if value not in POLARITIES:
+                        continue
+                elif field == "scope_type":
+                    if value not in SCOPE_TYPES:
+                        continue
+                elif field == "strength":
+                    value = _clamp_strength(value)
+                elif field == "text":
+                    value = str(value or "").strip()
+                    if not value:
+                        continue
+                setattr(row, field, value)
+                touched = True
+            if touched:
+                row.edited = True
+                row.updated_at = datetime.utcnow()
+                session.add(row)
+                session.commit()
+                session.refresh(row)
+            return _preference_dict(row)
+    except Exception as exc:
+        logger.warning("update_preference failed for %s: %s", preference_id, exc)
+        return None
+
+
+def retract_preference(user_id: UUID, preference_id: UUID) -> Optional[dict]:
+    """Withdraw a preference. Sets `status='retracted'`; never deletes the row.
+
+    Retraction is explicit and distinct from supersession: superseded means the
+    user replaced it with a different preference, retracted means they took it
+    back. Both stay on the table, so the profile remains a complete record of
+    what the user asked for and when.
+    """
+    from datetime import datetime
+
+    from agents.preferences import STATUS_RETRACTED
+    from database.models import UserPreference
+
+    try:
+        with Session(engine) as session:
+            row = session.get(UserPreference, preference_id)
+            if row is None or row.user_id != user_id:
+                return None
+            row.status = STATUS_RETRACTED
+            row.updated_at = datetime.utcnow()
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            return _preference_dict(row)
+    except Exception as exc:
+        logger.warning("retract_preference failed for %s: %s", preference_id, exc)
+        return None
+
+
 # ── Keyword weights (issue #125) ────────────────────────────────────────────
 
 def build_support_index(user_id: UUID) -> dict:
