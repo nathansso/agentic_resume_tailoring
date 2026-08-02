@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "../lib/utils";
-import { getTex, saveTex, discardTex } from "../api/jobs";
+import { getTex, saveTex, discardTex, getLayout, saveLayout, clearLayout } from "../api/jobs";
 import { useAutoCompile } from "../hooks/useAutoCompile";
 import { moveBulletTo, moveSectionTo } from "../lib/texStructure";
+import {
+  bulletGroupFromTex,
+  mergeBulletGroup,
+  sectionOrderFromTex,
+  type LayoutOverride,
+} from "../lib/layoutOverride";
 import { clampEditorFraction, editorFractionFromPointer, readStoredNumber, MAX_EDITOR_FRACTION } from "../lib/paneResize";
 import { PdfPreview } from "./PdfPreview";
 import { ResizeDivider } from "./ResizeDivider";
@@ -38,6 +44,10 @@ export function ResumeSplit({ jobId, view, onViewChange, onEditsChanged }: Props
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // The durable arrangement override (issue #118), mirrored client-side so a
+  // second drag merges into the first rather than replacing it.
+  const [layout, setLayout] = useState<LayoutOverride>({});
+  const [layoutActive, setLayoutActive] = useState(false);
   // Out-of-order save protection: only the latest save applies its state.
   const saveGen = useRef(0);
   const sourceRef = useRef(source);
@@ -98,6 +108,26 @@ export function ResumeSplit({ jobId, view, onViewChange, onEditsChanged }: Props
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
+  // Seed the client-side mirror of the stored override so the first drag of a
+  // session merges into what the user already pinned. A failure here is not
+  // worth blocking the editor over: the drag still works, it just starts from
+  // an empty override.
+  useEffect(() => {
+    let stale = false;
+    getLayout(jobId)
+      .then(res => {
+        if (stale) return;
+        setLayout({
+          section_order: res.section_order,
+          skills: res.skills,
+          bullets: res.bullets,
+        });
+        setLayoutActive(res.active);
+      })
+      .catch(() => undefined);
+    return () => { stale = true; };
+  }, [jobId]);
+
   // Clicking into Split expands the editor to fill the width the chat frees up
   // as it condenses (JobWorkspace snaps the chat to its floor). Setting the
   // intent to the max fraction lets clampEditorFraction pin the preview at its
@@ -148,11 +178,44 @@ export function ResumeSplit({ jobId, view, onViewChange, onEditsChanged }: Props
   }, [dirty]);
 
   /** Apply a drag-reorder result: edit the buffer like typing would, then
-   *  compile immediately so the preview (and drag handles) catch up fast. */
-  function applyReorder(next: string | null) {
+   *  compile immediately so the preview (and drag handles) catch up fast.
+   *
+   *  The buffer edit is the optimistic echo — it is what makes the reorder
+   *  visible at once. It is not what makes it last: the buffer is saved as
+   *  `edited_tex`, which a re-tailor clears by design because it encodes
+   *  content. `persist` carries the same drag as structured arrangement to
+   *  the override (issue #118), which survives the re-tailor. */
+  function applyReorder(next: string | null, persist?: (tex: string) => LayoutOverride | null) {
     if (!next || next === tex) return;
     setTex(next);
     compile.compileNow(next);
+    if (!persist) return;
+    const patch = persist(next);
+    if (patch) pushLayout(patch);
+  }
+
+  /** Merge a drag into the stored override and persist it. Failures are
+   *  surfaced but never roll back the buffer — the user's reorder is still on
+   *  screen and still saved as .tex; only its durability across a re-tailor is
+   *  lost, and silently reverting their drag would be the worse outcome. */
+  function pushLayout(patch: LayoutOverride) {
+    const next: LayoutOverride = { ...layout, ...patch };
+    setLayout(next);
+    setLayoutActive(true);
+    saveLayout(jobId, next).catch(e => {
+      setSaveError(e instanceof Error ? e.message : "Could not save the layout");
+    });
+  }
+
+  /** Hand arrangement back to the ranker. Deliberately does not touch the .tex
+   *  buffer: that would discard the user's own text edits along with their
+   *  ordering. The recommended order applies from the next tailor run. */
+  function resetLayout() {
+    setLayout({});
+    setLayoutActive(false);
+    clearLayout(jobId).catch(e => {
+      setSaveError(e instanceof Error ? e.message : "Could not reset the layout");
+    });
   }
 
   /** Double-click on the preview → reveal the source pane (if hidden), scroll
@@ -258,6 +321,17 @@ export function ResumeSplit({ jobId, view, onViewChange, onEditsChanged }: Props
             Discard edits
           </button>
         )}
+        {/* Without this the override is a one-way door: a user who drags into a
+            worse arrangement has no route back to the ranker's (issue #118). */}
+        {layoutActive && (
+          <button
+            className={btn}
+            title="Your drag order is kept across re-tailors. Resetting hands ordering back to the recommended ranking from the next tailor run."
+            onClick={resetLayout}
+          >
+            Using your order — reset
+          </button>
+        )}
         <span className="text-[0.7rem] italic text-muted-foreground">
           {source === "edited" ? "manually edited" : "AI-generated"}
           {saveStatus ? ` · ${saveStatus}` : ""}
@@ -314,8 +388,17 @@ export function ResumeSplit({ jobId, view, onViewChange, onEditsChanged }: Props
               // Drag only when the preview reflects the live buffer — indices
               // computed on a stale render must never touch a diverged buffer.
               enabled: !compile.compiling && compile.compiledTex === tex,
-              onMoveSection: (key, targetIndex) => applyReorder(moveSectionTo(tex, key, targetIndex)),
-              onMoveBullet: (g, from, to) => applyReorder(moveBulletTo(tex, g, from, to)),
+              onMoveSection: (key, targetIndex) => applyReorder(
+                moveSectionTo(tex, key, targetIndex),
+                next => ({ section_order: sectionOrderFromTex(next) }),
+              ),
+              onMoveBullet: (g, from, to) => applyReorder(
+                moveBulletTo(tex, g, from, to),
+                next => {
+                  const group = bulletGroupFromTex(next, g);
+                  return group ? { bullets: mergeBulletGroup(layout.bullets, group) } : null;
+                },
+              ),
               onJumpToLine: jumpToLine,
             }}
           />

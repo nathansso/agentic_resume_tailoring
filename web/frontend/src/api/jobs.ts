@@ -1,4 +1,5 @@
 import type { JobDetail, JobListItem, TailorResult } from "../types";
+import type { BulletGroupOverride, LayoutOverride } from "../lib/layoutOverride";
 import { errorMessage, json } from "./http";
 
 export async function listJobs(): Promise<JobListItem[]> {
@@ -74,6 +75,34 @@ export async function saveTex(jobId: string, tex: string): Promise<{ saved: bool
 
 export async function discardTex(jobId: string): Promise<void> {
   await json(await fetch(`/api/jobs/${jobId}/tex`, { method: "DELETE", credentials: "include" }));
+}
+
+/** Explicit arrangement override (issue #118). Unlike `edited_tex` this encodes
+ *  arrangement rather than content, so it is not cleared by a re-tailor. */
+export interface LayoutResponse {
+  section_order: string[] | null;
+  skills: string[] | null;
+  bullets: BulletGroupOverride[] | null;
+  active: boolean;
+}
+
+export async function getLayout(jobId: string): Promise<LayoutResponse> {
+  return json(await fetch(`/api/jobs/${jobId}/layout`, { credentials: "include" }));
+}
+
+export async function saveLayout(
+  jobId: string, override: LayoutOverride,
+): Promise<{ saved: boolean; active: boolean }> {
+  return json(await fetch(`/api/jobs/${jobId}/layout`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(override),
+    credentials: "include",
+  }));
+}
+
+export async function clearLayout(jobId: string): Promise<void> {
+  await json(await fetch(`/api/jobs/${jobId}/layout`, { method: "DELETE", credentials: "include" }));
 }
 
 /** Error from the preview-compile endpoint, carrying the HTTP status so the
