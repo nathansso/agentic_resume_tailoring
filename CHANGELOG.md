@@ -6,6 +6,37 @@ Entries titled `PRD NN — …` are historical: they predate the move to issue-d
 
 ---
 
+## Issue 118 — Persist explicit user layout overrides for section order, skills, and bullets
+**Status:** complete | **Tests:** 957 pass on Postgres / 949 on SQLite (37 new Python, 8 new frontend)
+
+Stage 4b of the Phase 1 epic (#140), and the last gate before #129/#133. `tailor()` recomputed section order, skill order, and bullet order on every run. #115 added a carry-forward tier so the pipeline stopped clobbering its own prior choice, but carry-forward preserves whatever the *ranker* last picked — there was no representation of an arrangement the **user** chose.
+
+**The drag UI already shipped; its result was being stored in the one place that could not keep it.** `PdfDragOverlay` + `lib/pdfOverlay.ts` map the rendered PDF back onto the `.tex`, and a drop called `moveSectionTo(tex, …)` — a string edit on the LaTeX buffer, autosaved to `edited_tex`. `tailor()` nulls `edited_tex` on every re-tailor by design, because it encodes *content*. So a user could drag Projects above Experience, watch it compile, and lose it at the next tailor run. The fix is not a new UI; it is giving arrangement intent a home of its own, above carry-forward in the precedence chain.
+
+### What shipped
+- **`layout_overrides` on `UserJobResult`**, nullable JSON, `{section_order, skills, bullets}` with every key optional. Encodes arrangement rather than content, so unlike `edited_tex` it stays valid when the content beneath it changes and survives a re-tailor.
+- **`agents/layout.py` (new), pure.** Precedence becomes override → carry-forward (#115) → recompute. The reconciliation rules are identical in all three dimensions: an entry naming something no longer present is dropped, and something present the override does not name is appended in pipeline order. **That second rule is the safety property** — the reconciler only ever permutes, so a stale override can never silently remove content from a resume.
+- **Identity is by text, never by ordinal** — the lesson #121 paid for on the JD-profile side. Because the planner rewrites bullets between runs, exact normalized identity is tried first and a deterministic token-overlap fallback (Jaccard ≥ 0.6) catches the revised-in-place case. The threshold is high on purpose: mis-binding two bullets reorders content the user never touched, which is worse than degrading to pipeline order. Normalization also folds LaTeX escaping, so a bullet round-tripping content → `\%` → editor display text keeps its identity.
+- **The pipeline reads the column and never writes it.** If tailoring could set it, the ranker would eventually launder its own output into a counterfeit user override and the precedence would stop meaning anything. Two tests pin it.
+- **Owner-scoped `GET`/`PUT`/`DELETE /api/jobs/{job_id}/layout`.** Writes are validated against the current tailored content so a client bug fails loudly; the reconciler stays deliberately more forgiving at render time, because content legitimately drifts under a stored override. `DELETE` matters as much as `PUT` — without it the override is a one-way door.
+- **`lib/layoutOverride.ts` (new), pure + unit-tested.** Each drag now dual-writes: the buffer edit stays as the optimistic echo that makes the reorder visible at once, and the same drag is read back out as structured arrangement and persisted. Bullet groups key on the heading the backend already identifies items by — an experience's `title`, a project's `name` — which is exactly what `parseBulletGroups` exposes as `label`, **so no formatter change was needed**.
+
+### Education is now ranked rather than pinned
+Scoped in by the owner during implementation. `PINNED_SECTIONS` was `["education"]`, which made education the one section a user could not move and the one section JD relevance could not place. It now competes like any other and is overridable like any other.
+
+This forced a second change: `ATSScoringEngine.flatten_section_text` had **no education branch**, so education flattened to `""` and scored 0.0 — un-pinning it without that branch would have silently sorted it *last* for every user rather than ranking it. Education rows are copied into `tailored_content` for that scoring only, mirroring the `_load_achievements` precedent; the formatter still renders education from the database, so the copy never reaches the page and going stale has no consequence.
+
+### Deviations from spec
+- **The issue body says "education is not reorderable" and `PINNED_SECTIONS` stay pinned. Both are now false**, by explicit decision during implementation; the issue was amended rather than the code bent to match it.
+- **The no-override path is *not* byte-for-byte unchanged, and the acceptance criterion was amended to say so.** Absent an override every reconciler call is an identity function, so that half holds. But ranking education changes default section order for users who have education rows, which is the point of the change rather than a regression. Seven existing tests asserted the old pinned contract and were updated.
+- **A latent defect fixed in passing:** education and achievements are both content-gated now, so a user with no education rows no longer gets a section order naming a block the formatter renders empty. Previously `PINNED_SECTIONS` claimed `education` for everyone including users who had none.
+- **Bullet-level drags were scoped in**, against the initial recommendation to defer them to #87. They are covered end to end — reconciler, API validation, and the drag translation — and are keyed by item so a bullet override cannot leak across items.
+- **Reset does not rewrite the `.tex` buffer.** Doing so would discard the user's own text edits along with their ordering, so the recommended order applies from the next tailor run and the button's tooltip says exactly that.
+- **A failed override persist never rolls back the buffer.** The reorder is still on screen and still saved as `.tex`; only its durability across a re-tailor is lost, and silently undoing the user's drag would be the worse outcome.
+- **No benchmark delta is reported.** The composite reads `experience`/`projects`/`skills` only (`flatten_tailored_text`), so neither section order nor the new education branch enters it, and an override is user-set so the benchmark never has one. The measurement would be 0.00 by construction and is not informative here.
+
+---
+
 ## Issue 125 — Weighted keyword scoring: importance in the JD x supportability by the candidate
 **Status:** complete | **Tests:** 921 pass on Postgres / 913 on SQLite (30 new)
 
