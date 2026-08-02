@@ -118,6 +118,32 @@ def _strategy_propensity(strategy: str, greedy: str, epsilon: float) -> float:
     return epsilon / n
 
 
+def _refuse_empty_sections(out: Dict[str, Dict], items: List[Dict]) -> None:
+    """Flip the last delete in a section back to keep. Mutates *out* in place.
+
+    Factored out of validate_plan because the preference gate (issue #129) runs
+    *after* validation and can add deletes of its own. A user who says "drop the
+    retail job" when it is their only experience must lose to this invariant:
+    honoring the preference literally would empty a section, and an empty
+    experience section is not a resume. The structural guarantee outranks the
+    preference tier, which is why this runs last in both callers rather than
+    only inside validation.
+    """
+    for section in ("experience", "project"):
+        section_keys = [
+            _norm_key(i.get("key")) for i in items if i.get("section") == section
+        ]
+        if not section_keys or any(k not in out for k in section_keys):
+            continue
+        if all(out[k]["op"] == "delete" for k in section_keys):
+            survivor = out[section_keys[0]]
+            survivor["op"] = "keep"
+            survivor["rationale"] = (
+                "coerced from delete: refusing to remove every "
+                f"{section} from the resume"
+            )
+
+
 def _choose_strategy(
     item: Dict,
     knobs: Dict,
@@ -174,6 +200,7 @@ class TailorPlanner:
         knobs: Optional[Dict] = None,
         allow_explore: bool = True,
         job_cards: Optional[List[Dict]] = None,
+        constraints: Optional[Dict] = None,
     ) -> Dict:
         """Return {"actions": [...], "knobs": {...}, "planner": "llm"|"default"}.
 
@@ -186,6 +213,12 @@ class TailorPlanner:
 
         *job_cards* are the top-N distilled prior jobs selected for this JD
         (issue #137). Empty or absent leaves the planning payload untouched.
+
+        *constraints* is the arbitrated preference set (issue #129). It is
+        applied to **both** the LLM plan and the deterministic fallback: the
+        fallback runs precisely when the model failed, which is no reason for a
+        user's standing preferences to stop binding. An empty set leaves the
+        prompt and the resulting plan byte-for-byte unchanged.
         """
         knobs = {**DEFAULT_KNOBS, **(knobs or {})}
         # Never explore against a user's explicit revision request: sampling
@@ -202,7 +235,7 @@ class TailorPlanner:
         try:
             raw_actions = self._llm_plan(
                 items, pool, jd_text, missing_skills, revision_notes,
-                prior_content, knobs, job_cards,
+                prior_content, knobs, job_cards, constraints,
             )
         except Exception as exc:
             logger.warning("TailorPlanner LLM plan failed, using default: %s", exc)
@@ -211,13 +244,17 @@ class TailorPlanner:
             actions = self.validate_plan(
                 raw_actions, items, pool, knobs, rng=self._rng, explore=explore,
             )
-            return {"actions": actions, "knobs": knobs, "planner": "llm"}
+            source = "llm"
+        else:
+            actions = self.default_plan(
+                items, knobs, rng=self._rng, explore=explore)
+            source = "default"
 
-        return {
-            "actions": self.default_plan(items, knobs, rng=self._rng, explore=explore),
-            "knobs": knobs,
-            "planner": "default",
-        }
+        actions, enforcement = apply_constraints(actions, constraints, items)
+        plan: Dict = {"actions": actions, "knobs": knobs, "planner": source}
+        if enforcement:
+            plan["constraint_enforcement"] = enforcement
+        return plan
 
     # ── deterministic fallback ────────────────────────────────────────────
 
@@ -351,18 +388,7 @@ class TailorPlanner:
         for action in cls.default_plan(missing, knobs, rng=rng, explore=explore):
             out[_norm_key(action["item_key"])] = action
 
-        # Refuse to empty a section: flip the final delete back to keep.
-        for section in ("experience", "project"):
-            section_keys = [
-                _norm_key(i.get("key")) for i in items if i.get("section") == section
-            ]
-            if section_keys and all(out[k]["op"] == "delete" for k in section_keys):
-                survivor = out[section_keys[0]]
-                survivor["op"] = "keep"
-                survivor["rationale"] = (
-                    "coerced from delete: refusing to remove every "
-                    f"{section} from the resume"
-                )
+        _refuse_empty_sections(out, items)
 
         # Preserve the caller's item order.
         return [out[_norm_key(i.get("key"))] for i in items]
@@ -385,6 +411,7 @@ class TailorPlanner:
         prior_content: Optional[Dict],
         knobs: Dict,
         job_cards: Optional[List[Dict]] = None,
+        constraints: Optional[Dict] = None,
     ) -> List[Dict]:
         """One LLM call → raw action list (unvalidated). Raises on failure."""
         def item_line(i: Dict) -> Dict:
@@ -454,6 +481,27 @@ class TailorPlanner:
                     "specifically calls for it."
                 )
 
+        # Standing user preferences, arbitrated against the JD (issue #129).
+        # Pushed, never retrieved: a suppression is semantically distant from
+        # what it suppresses, so similarity search over chat history would miss
+        # exactly the preferences that matter most (ImplexConv opposed-case F1
+        # 14.8%). Built only when the arbitration produced something, so a user
+        # with no preferences gets the byte-for-byte pre-#129 prompt — the same
+        # conditional-inclusion discipline graph_evidence and job_cards use.
+        preference_block = ""
+        if constraints:
+            from agents.arbitration import render_constraints
+            rendered = render_constraints(constraints)
+            if rendered:
+                preference_block = (
+                    "\n\nTHE CANDIDATE'S STANDING PREFERENCES — already weighed "
+                    "against this job's requirements, so treat them as settled:\n"
+                    + rendered
+                    + "\nThese are binding. A plan that ignores one is corrected "
+                    "before execution, so proposing a compliant plan is strictly "
+                    "better than proposing one that has to be overridden."
+                )
+
         allowed_ops = ["keep", "revise"]
         if knobs["allow_delete"]:
             allowed_ops.append("delete")
@@ -482,7 +530,7 @@ class TailorPlanner:
             "- Every action needs a one-sentence rationale.\n\n"
             f"JOB DESCRIPTION:\n{(jd_text or '')[:2000]}\n\n"
             f"PLANNING INPUT:\n{json.dumps(payload, indent=1)}"
-            f"{prior_block}{revision_block}{memory_block}\n\n"
+            f"{prior_block}{revision_block}{memory_block}{preference_block}\n\n"
             'Return: [{"item_key": "...", "op": "...", "strategy": "...", '
             '"keywords": [...], "replacement_key": "...", "rationale": "..."}]'
         )
@@ -498,6 +546,111 @@ class TailorPlanner:
         return parsed
 
 
+# ── preference gate (issue #129) ──────────────────────────────────────────
+
+def apply_constraints(
+    actions: List[Dict],
+    constraints: Optional[Dict],
+    items: List[Dict],
+) -> Tuple[List[Dict], Dict]:
+    """Force a validated plan to obey the arbitrated preference set. Pure.
+
+    This is where a preference stops being a suggestion. `render_constraints`
+    puts the same information in the planning prompt, but ImplexConv finding 2
+    is that a model can retrieve the invalidating fact and still reason past it
+    — the failure is reasoning, not memory — so the prompt is the proposal
+    distribution and this is the guarantee. It is the preference-tier analogue
+    of `_enforce_plan`: the LLM does not get to undo a decision the user made.
+
+    - `suppress` on a bound item forces `op=delete`.
+    - `emphasize` on a bound item forbids `delete`/`replace` — the user asked to
+      lead with it, so it cannot be dropped or swapped out.
+    - `reframe` on a bound item pins the revision strategy to `reframe` when the
+      item is being revised. It never converts `keep` into `revise`: `keep`
+      carries a re-tailor's prior bullets forward verbatim (#115), and a
+      reframe is not a mandate to discard the user's existing tailoring.
+
+    Then `_refuse_empty_sections` runs again, because the deletes added above
+    can empty a section that the validated plan did not.
+
+    Returns `(actions, enforcement)` where enforcement records what changed and,
+    in `unenforced`, every applied constraint that bound to nothing on this
+    resume — a skill-targeted or section-targeted preference has no item action
+    to gate, and a target that has since left the resume has none either.
+    Reporting those is deliberate: an applied preference that quietly did
+    nothing is the silent-symptom failure this tier is supposed to avoid.
+    """
+    from agents.arbitration import applied_by_polarity, is_empty
+
+    if is_empty(constraints) or not actions:
+        return actions, {}
+
+    by_key = {_norm_key(a.get("item_key")): a for a in actions}
+    changed: List[Dict] = []
+    unenforced: List[Dict] = []
+
+    def record(pref: Dict, action: Dict, from_op: str, note: str) -> None:
+        changed.append({
+            "preference_id": pref.get("preference_id"),
+            "item_key": action.get("item_key"),
+            "from_op": from_op,
+            "to_op": action.get("op"),
+            "note": note,
+        })
+        action["rationale"] = f"user preference: {pref.get('text') or note}"[:300]
+        action["preference_id"] = pref.get("preference_id")
+
+    for polarity in ("suppress", "emphasize", "reframe"):
+        for pref in applied_by_polarity(constraints, polarity):
+            action = by_key.get(_norm_key(pref.get("target_key")))
+            if action is None:
+                unenforced.append({
+                    "preference_id": pref.get("preference_id"),
+                    "polarity": polarity,
+                    "target_key": pref.get("target_key"),
+                    "target_term": pref.get("target_term"),
+                })
+                continue
+            before = action.get("op")
+            if polarity == "suppress":
+                if before == "delete":
+                    continue
+                action["op"] = "delete"
+                action.pop("strategy", None)
+                action.pop("keywords", None)
+                record(pref, action, before, "suppressed by preference")
+            elif polarity == "emphasize":
+                if before not in ("delete", "replace"):
+                    continue
+                action["op"] = "revise"
+                action.pop("replacement_key", None)
+                action["strategy"] = "reframe"
+                action["strategy_source"] = "preference"
+                action["keywords"] = list(
+                    next(
+                        (i.get("suggested_keywords") or [] for i in items
+                         if _norm_key(i.get("key")) == _norm_key(action.get("item_key"))),
+                        [],
+                    )
+                )
+                record(pref, action, before, "kept by preference")
+            else:  # reframe
+                if before != "revise" or action.get("strategy") == "reframe":
+                    continue
+                action["strategy"] = "reframe"
+                action["strategy_source"] = "preference"
+                record(pref, action, before, "reframed by preference")
+
+    _refuse_empty_sections(by_key, items)
+
+    enforcement: Dict = {}
+    if changed:
+        enforcement["changed"] = changed
+    if unenforced:
+        enforcement["unenforced"] = unenforced
+    return actions, enforcement
+
+
 # ── decision log ──────────────────────────────────────────────────────────
 
 def decision_log_entry(
@@ -506,6 +659,7 @@ def decision_log_entry(
     evaluation: Dict,
     revision_notes: str = "",
     exploration_mode: bool = False,
+    constraints: Optional[Dict] = None,
 ) -> Dict:
     """One logged (context, actions, reward) tuple for a completed tailoring
     run, appended to UserJobResult.tailoring_decisions. The reward is the
@@ -515,7 +669,16 @@ def decision_log_entry(
     *exploration_mode* and the derived *n_attempts* are recorded explicitly so
     mixed-mode data stays separable: a reward logged under best-of-N is the max
     over a run-dependent number of draws, not a sample of E[reward | plan], and
-    must never be pooled with N=1 exploration data (issue #112)."""
+    must never be pooled with N=1 exploration data (issue #112).
+
+    *constraints* is the arbitrated preference set (issue #129). It is recorded
+    under a `constraints` key **only when non-empty**, so a user with no
+    preferences produces the byte-for-byte pre-#129 log entry. Recording the
+    conflicts is an acceptance criterion, not bookkeeping: a preference that
+    lost to a JD requirement, or one that was refused for want of evidence, is
+    something the user has to be able to see and argue with. It also gives #51
+    Phase 2 the (preference, requirement, outcome) triples it needs to learn
+    preference weights from outcomes rather than from the fixed table here."""
     breakdown = (evaluation or {}).get("ats_breakdown") or {}
     reward = {
         "composite": breakdown.get("composite"),
@@ -526,7 +689,7 @@ def decision_log_entry(
         comp = breakdown.get(component)
         if isinstance(comp, dict) and "score" in comp:
             reward[component] = comp["score"]
-    return {
+    entry = {
         "timestamp": datetime.utcnow().isoformat(),
         "revision_notes": (revision_notes or "").strip(),
         "planner": plan.get("planner"),
@@ -537,3 +700,13 @@ def decision_log_entry(
         "context": context_features,
         "reward": reward,
     }
+    from agents.arbitration import is_empty
+    if not is_empty(constraints):
+        entry["constraints"] = {
+            "applied": (constraints or {}).get("applied") or [],
+            "conflicts": (constraints or {}).get("conflicts") or [],
+            "refused": (constraints or {}).get("refused") or [],
+        }
+        if plan.get("constraint_enforcement"):
+            entry["constraints"]["enforcement"] = plan["constraint_enforcement"]
+    return entry

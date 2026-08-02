@@ -15,6 +15,7 @@ web/
     dependencies.py   # check_ai_quota / increment_ai_usage — per-user daily AI rate limit
     chat_router.py    # /api/chat/ — history, send (SSE streaming)
     ingest_router.py  # /api/ingest/ — resume upload, GitHub ingestion
+    preferences_router.py # /api/preferences/ — standing preferences: propose/decide, inspect, correct, retract
   frontend/
     src/
       App.tsx                  # Router: / (landing or app), /login, /register, /* (RequireAuth → MainPage)

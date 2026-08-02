@@ -312,6 +312,26 @@ class ResumeTailorAgent:
             if not isinstance(layout_overrides, dict):
                 layout_overrides = {}
 
+            # ── Mandatory persona step (issue #129) ──────────────────────────
+            # The preference-side mirror of the KG evidence step above, and it
+            # runs unconditionally for the same reason: a tier that is only
+            # consulted when something upstream decides it is relevant is a tier
+            # that silently stops binding. `compile_constraints` on an empty
+            # profile returns an empty set, every consumer no-ops, and the
+            # planner payload is byte-for-byte what it was before this issue.
+            #
+            # Preferences are **pushed**, not searched. Facts are pulled from the
+            # graph on demand (#138) because a fact is semantically close to the
+            # query that wants it; a suppression is semantically *distant* from
+            # what it suppresses, so similarity retrieval structurally misses the
+            # preferences that matter most (ImplexConv opposed-case F1 14.8%).
+            # What reaches the planner is the small scope-filtered compiled
+            # constraint set — never the leaves, never the transcript.
+            constraints = self._compile_preference_constraints(
+                user_id, job_id, active_role_family,
+                exp_dicts, proj_dicts, proj_pool, skill_terms,
+            )
+
         return {
             "jd_text": jd_text,
             "experiences": exp_dicts,
@@ -340,7 +360,89 @@ class ResumeTailorAgent:
             # with no completed jobs, which makes every consumer a no-op.
             "job_cards": job_cards,
             "role_family": active_role_family,
+            # Arbitrated standing preferences (issue #129): {applied, conflicts,
+            # refused}. Always present, empty for a user with no preferences.
+            "constraints": constraints,
         }
+
+    @classmethod
+    def _compile_preference_constraints(
+        cls,
+        user_id: UUID,
+        job_id: UUID,
+        role_family: Optional[str],
+        exp_dicts: List[Dict],
+        proj_dicts: List[Dict],
+        proj_pool: List[Dict],
+        skill_terms: List[str],
+    ) -> Dict:
+        """Scope-filter this user's preferences and arbitrate them against the JD.
+
+        The supported-key set is what the faithfulness refusal is checked
+        against: every item and skill the knowledge graph actually holds for
+        this run, including the replacement pool, because a pooled project is
+        real content the planner may legitimately swap in.
+
+        Degrades to an empty constraint set on any failure. A preference tier
+        that can fail a tailoring run is worse than one that occasionally does
+        not bind, and the empty set is exactly the pre-#129 behavior.
+        """
+        from agents.arbitration import compile_constraints
+        from agents.preferences import preferences_in_scope
+
+        try:
+            from services import load_jd_profile, load_preferences
+
+            preferences = preferences_in_scope(
+                load_preferences(user_id),
+                job_id=str(job_id),
+                role_family=role_family,
+            )
+            supported = (
+                [cls._exp_key(e) for e in exp_dicts]
+                + [cls._proj_key(p) for p in list(proj_dicts) + list(proj_pool)]
+                + [f"skill:{(s or '').strip().lower()}" for s in skill_terms]
+            )
+            jd_profile = load_jd_profile(job_id) or {}
+            return compile_constraints(
+                preferences, jd_profile.get("payload") or {}, supported)
+        except Exception as exc:
+            logger.warning("preference arbitration failed, ignoring: %s", exc)
+            return {"applied": [], "conflicts": [], "refused": []}
+
+    @staticmethod
+    def _suppress_skills(ranked: List[Dict], constraints: Optional[Dict]) -> List[Dict]:
+        """Drop skills an applied `suppress` preference names (issue #129).
+
+        Matches on `skill:<name>` target keys, which is what
+        `preferences.target_catalog` produces, plus a name match on the stated
+        term so a preference whose target never bound still works.
+
+        Refuses to empty the list, mirroring the planner's empty-section rule: a
+        resume with no skills section is not an improvement over one carrying a
+        skill the user would rather downplay, and a preference set broad enough
+        to erase every skill is far likelier to be an extraction error than an
+        instruction.
+        """
+        from agents.arbitration import applied_by_polarity
+
+        suppressed = applied_by_polarity(constraints, "suppress")
+        if not suppressed or not ranked:
+            return ranked
+        keys = {
+            (s.get("target_key") or "").strip().lower()
+            for s in suppressed if (s.get("target_key") or "").startswith("skill:")
+        }
+        terms = {
+            (s.get("target_term") or "").strip().lower()
+            for s in suppressed if s.get("target_term")
+        }
+        kept = [
+            s for s in ranked
+            if f"skill:{(s.get('name') or '').strip().lower()}" not in keys
+            and (s.get("name") or "").strip().lower() not in terms
+        ]
+        return kept or ranked
 
     @staticmethod
     def _load_keyword_weights(
@@ -384,6 +486,7 @@ class ResumeTailorAgent:
             revision_notes=revision_notes.strip(),
             prior_content=inputs["prior_content"] or None,
             job_cards=inputs.get("job_cards"),
+            constraints=inputs.get("constraints"),
             # A previewed plan goes to a human for approval, which makes it
             # off-policy whatever we sample — don't spend exploration on it.
             allow_explore=False,
@@ -433,6 +536,12 @@ class ResumeTailorAgent:
             # and bias any importance-weighted estimate built on the log (#112).
             for action in approved:
                 action["propensity"] = None
+            # Deliberately NOT gated on the preference constraints (issue #129).
+            # This plan was approved by the same user, in this conversation,
+            # looking at these items — an explicit present decision outranks a
+            # preference inferred from something they said earlier. Overriding
+            # it here would mean the assistant citing the user's own past words
+            # back at them to refuse what they just asked for.
             plan = {
                 "actions": approved,
                 "knobs": {**DEFAULT_KNOBS, **(knobs or {})},
@@ -447,6 +556,7 @@ class ResumeTailorAgent:
                 revision_notes=revision_notes.strip(),
                 prior_content=prior_content or None,
                 job_cards=inputs.get("job_cards"),
+                constraints=inputs.get("constraints"),
             )
         exp_dicts, proj_dicts, keyword_assignments = self._apply_plan_to_inputs(
             plan, exp_dicts, proj_dicts, proj_pool, keyword_assignments, prior_content
@@ -508,6 +618,17 @@ class ResumeTailorAgent:
                 )
                 if ranked_skills:
                     tailored["skills_ranked"] = ranked_skills
+            # Skill-targeted preferences (issue #129). The planner gate works on
+            # experience/project actions and has no action to bind a skill to,
+            # so a suppressed skill is dropped here instead. Applied after the
+            # carry-forward branch above so a preference stated *since* the last
+            # run still takes effect on a re-tailor that reuses the prior order.
+            # Guarded on the key already existing: writing it unconditionally
+            # would add an empty `skills_ranked` where the key was absent.
+            if tailored.get("skills_ranked"):
+                tailored["skills_ranked"] = self._suppress_skills(
+                    tailored["skills_ranked"], inputs.get("constraints"),
+                )
             # Achievements pass through verbatim from the knowledge graph — never
             # LLM-rewritten or fabricated (keep-all). Injected before ranking so
             # the section is scored and placed like any other reorderable section.
@@ -603,6 +724,9 @@ class ResumeTailorAgent:
                     "n_graph_evidence": len(inputs.get("item_evidence") or {}),
                     # How many prior JobCards were injected this run (#137).
                     "n_job_cards": len(inputs.get("job_cards") or []),
+                    # How many standing preferences bound this run (#129).
+                    "n_preferences": len(
+                        (inputs.get("constraints") or {}).get("applied") or []),
                 }
                 log = _as_obj(result.tailoring_decisions, [])
                 # Copy before append: mutating the tracked list in place would
@@ -611,6 +735,7 @@ class ResumeTailorAgent:
                 log.append(decision_log_entry(
                     plan, context_features, evaluation, revision_notes,
                     exploration_mode=exploration_mode(),
+                    constraints=inputs.get("constraints"),
                 ))
                 result.tailoring_decisions = log
                 session.add(result)
