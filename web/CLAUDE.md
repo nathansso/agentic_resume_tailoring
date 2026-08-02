@@ -46,8 +46,8 @@ web/
       hooks/useAutoCompile.ts  # Debounced LaTeX recompile on edit
       lib/                     # Pure, unit-tested helpers (theme, paneResize,
                                # texStructure, pdfOverlay, compileScheduler,
-                               # insightMessages, welcome, utils) — each with a
-                               # co-located *.test.ts
+                               # layoutOverride, insightMessages, welcome,
+                               # utils) — each with a co-located *.test.ts
       api/                     # Typed fetch wrappers for all endpoints
       types.ts                 # Shared TypeScript interfaces
 ```

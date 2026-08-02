@@ -418,3 +418,156 @@ def test_tailor_agent_persists_revision_notes(isolated_engine, monkeypatch):
         assert stored.revision_notes == "make it punchier"
         assert stored.edited_tex is None
         assert stored.edited_tex_updated_at is None
+
+
+# ── Explicit arrangement overrides (issue #118) ────────────────────────────────
+
+_LAYOUT_TAILORED = {
+    "experiences": [{"title": "Software Engineer", "company": "BigCo",
+                     "bullets": ["Led k8s deployments", "Managed terraform"]}],
+    "projects": [{"name": "Research Pipeline", "bullets": ["Published research"]}],
+    "skills_ranked": [{"name": "Python", "score": 0.9},
+                      {"name": "PyTorch", "score": 0.4}],
+    "_section_order": ["projects", "experience", "skills"],
+}
+
+
+def _select_result(job_id):
+    from sqlmodel import select
+    return select(UserJobResult).where(UserJobResult.job_id == job_id)
+
+
+def _tailored_result(engine, user_id, job_id, overrides=None):
+    with Session(engine) as s:
+        result = UserJobResult(
+            user_id=user_id, job_id=job_id,
+            tailored_resume_content=dict(_LAYOUT_TAILORED),
+            layout_overrides=overrides,
+        )
+        s.add(result)
+        s.commit()
+        s.refresh(result)
+        return result
+
+
+def test_save_layout_persists_the_override(isolated_engine, jobs_client):
+    alice = _seed_user(isolated_engine, "Alice")
+    job = _make_job(isolated_engine, alice.user_id, status="tailored")
+    _tailored_result(isolated_engine, alice.user_id, job.job_id)
+
+    resp = jobs_client(alice).put(
+        f"/api/jobs/{job.job_id}/layout",
+        json={"section_order": ["experience", "projects", "skills"]},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["active"] is True
+
+    with Session(isolated_engine) as s:
+        row = s.exec(_select_result(job.job_id)).first()
+        assert row.layout_overrides["section_order"][0] == "experience"
+
+
+def test_save_layout_accepts_bullets_and_skills(isolated_engine, jobs_client):
+    alice = _seed_user(isolated_engine, "Alice")
+    job = _make_job(isolated_engine, alice.user_id, status="tailored")
+    _tailored_result(isolated_engine, alice.user_id, job.job_id)
+
+    resp = jobs_client(alice).put(f"/api/jobs/{job.job_id}/layout", json={
+        "skills": ["PyTorch"],
+        "bullets": [{"section": "experience", "item": "Software Engineer",
+                     "order": ["Managed terraform"]}],
+    })
+    assert resp.status_code == 200
+    with Session(isolated_engine) as s:
+        row = s.exec(_select_result(job.job_id)).first()
+        assert row.layout_overrides["skills"] == ["PyTorch"]
+        assert row.layout_overrides["bullets"][0]["item"] == "Software Engineer"
+
+
+def test_save_layout_rejects_an_unknown_section(isolated_engine, jobs_client):
+    """A client bug should fail loudly rather than write an override that
+    quietly does nothing."""
+    alice = _seed_user(isolated_engine, "Alice")
+    job = _make_job(isolated_engine, alice.user_id, status="tailored")
+    _tailored_result(isolated_engine, alice.user_id, job.job_id)
+
+    resp = jobs_client(alice).put(
+        f"/api/jobs/{job.job_id}/layout", json={"section_order": ["publications"]})
+    assert resp.status_code == 422
+    assert "publications" in resp.json()["detail"]
+
+
+def test_save_layout_rejects_an_unknown_bullet_item(isolated_engine, jobs_client):
+    alice = _seed_user(isolated_engine, "Alice")
+    job = _make_job(isolated_engine, alice.user_id, status="tailored")
+    _tailored_result(isolated_engine, alice.user_id, job.job_id)
+
+    resp = jobs_client(alice).put(f"/api/jobs/{job.job_id}/layout", json={
+        "bullets": [{"section": "experience", "item": "Nonexistent Role",
+                     "order": ["x"]}],
+    })
+    assert resp.status_code == 422
+
+
+def test_save_layout_requires_a_tailored_resume(isolated_engine, jobs_client):
+    alice = _seed_user(isolated_engine, "Alice")
+    job = _make_job(isolated_engine, alice.user_id, status="analyzed")
+    _make_result(isolated_engine, alice.user_id, job.job_id)
+
+    resp = jobs_client(alice).put(
+        f"/api/jobs/{job.job_id}/layout", json={"section_order": ["skills"]})
+    assert resp.status_code == 422
+
+
+def test_get_layout_reports_whether_an_override_is_active(isolated_engine, jobs_client):
+    alice = _seed_user(isolated_engine, "Alice")
+    job = _make_job(isolated_engine, alice.user_id, status="tailored")
+    _tailored_result(isolated_engine, alice.user_id, job.job_id)
+
+    assert jobs_client(alice).get(f"/api/jobs/{job.job_id}/layout").json()["active"] is False
+
+    jobs_client(alice).put(f"/api/jobs/{job.job_id}/layout",
+                           json={"section_order": ["skills"]})
+    body = jobs_client(alice).get(f"/api/jobs/{job.job_id}/layout").json()
+    assert body["active"] is True
+    assert body["section_order"] == ["skills"]
+
+
+def test_clear_layout_returns_control_to_the_ranker(isolated_engine, jobs_client):
+    """Without this the override is a one-way door."""
+    alice = _seed_user(isolated_engine, "Alice")
+    job = _make_job(isolated_engine, alice.user_id, status="tailored")
+    _tailored_result(isolated_engine, alice.user_id, job.job_id,
+                     overrides={"section_order": ["skills"]})
+
+    resp = jobs_client(alice).delete(f"/api/jobs/{job.job_id}/layout")
+    assert resp.status_code == 200
+    with Session(isolated_engine) as s:
+        row = s.exec(_select_result(job.job_id)).first()
+        assert row.layout_overrides is None
+
+
+def test_an_empty_body_clears_rather_than_pinning_nothing(isolated_engine, jobs_client):
+    alice = _seed_user(isolated_engine, "Alice")
+    job = _make_job(isolated_engine, alice.user_id, status="tailored")
+    _tailored_result(isolated_engine, alice.user_id, job.job_id,
+                     overrides={"section_order": ["skills"]})
+
+    jobs_client(alice).put(f"/api/jobs/{job.job_id}/layout", json={})
+    with Session(isolated_engine) as s:
+        row = s.exec(_select_result(job.job_id)).first()
+        assert row.layout_overrides is None
+
+
+def test_layout_is_not_reachable_across_users(isolated_engine, jobs_client):
+    """Per-result and per-owner, same as every other job surface (issue #73)."""
+    alice = _seed_user(isolated_engine, "Alice")
+    bob = _seed_user(isolated_engine, "Bob")
+    job = _make_job(isolated_engine, alice.user_id, status="tailored")
+    _tailored_result(isolated_engine, alice.user_id, job.job_id)
+
+    assert jobs_client(bob).get(f"/api/jobs/{job.job_id}/layout").status_code == 403
+    assert jobs_client(bob).put(
+        f"/api/jobs/{job.job_id}/layout",
+        json={"section_order": ["skills"]}).status_code == 403
+    assert jobs_client(bob).delete(f"/api/jobs/{job.job_id}/layout").status_code == 403

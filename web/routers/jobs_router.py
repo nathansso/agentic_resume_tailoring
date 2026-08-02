@@ -39,6 +39,22 @@ class TexBody(BaseModel):
     tex: str
 
 
+class BulletGroupBody(BaseModel):
+    """One item's bullets in the order the user arranged them (issue #118)."""
+    section: str
+    item: str
+    order: list[str]
+
+
+class LayoutBody(BaseModel):
+    """Explicit arrangement override. Every field is optional, so a user can pin
+    section order without pinning skills, or reorder one item's bullets without
+    touching anything else."""
+    section_order: list[str] | None = None
+    skills: list[str] | None = None
+    bullets: list[BulletGroupBody] | None = None
+
+
 # At most two concurrent LaTeX compiles — pdflatex spikes memory (issue #71
 # preview endpoint). The cap was chosen for a 512 MB VM; the current host has
 # 8 GB, so this is tunable on measured numbers rather than a hard ceiling.
@@ -424,6 +440,125 @@ async def discard_tex(job_id: str, user: User = Depends(get_current_user)):
             session.add(latest)
             session.commit()
         return {"discarded": True}
+
+
+# ── Explicit arrangement overrides (issue #118) ──────────────
+
+def _known_layout_targets(content: dict) -> tuple[set, set, dict]:
+    """Sections, skill names, and item->bullets this content actually has."""
+    from agents.tailor import ResumeTailorAgent
+
+    sections = set(ResumeTailorAgent._expected_sections(content or {}))
+    skills = {
+        (s.get("name") or "").strip().lower()
+        for s in (content or {}).get("skills_ranked") or []
+        if isinstance(s, dict) and s.get("name")
+    }
+    items = {
+        "experience": {
+            (e.get("title") or "").strip().lower()
+            for e in (content or {}).get("experiences") or [] if isinstance(e, dict)
+        },
+        "projects": {
+            (p.get("name") or "").strip().lower()
+            for p in (content or {}).get("projects") or [] if isinstance(p, dict)
+        },
+    }
+    return sections, skills, items
+
+
+@router.get("/{job_id}/layout")
+def get_layout(job_id: str, user: User = Depends(get_current_user)):
+    """This job's explicit arrangement override, or nulls when the ranker decides.
+
+    The frontend reads this to know whether to show the "using your custom
+    order — reset to recommended" affordance.
+    """
+    job, session = _get_owned_job(job_id, user)
+    with session:
+        latest = _latest_result(session, job.job_id)
+        overrides = (latest.layout_overrides if latest else None) or {}
+        return {
+            "section_order": overrides.get("section_order"),
+            "skills": overrides.get("skills"),
+            "bullets": overrides.get("bullets"),
+            "active": bool(overrides),
+        }
+
+
+@router.put("/{job_id}/layout")
+def save_layout(job_id: str, body: LayoutBody, user: User = Depends(get_current_user)):
+    """Persist an arrangement the user chose. Outranks the ranker from here on.
+
+    Entries are validated against the current tailored content, so a client bug
+    fails loudly instead of writing an override that quietly does nothing. The
+    *reconciler* is deliberately more forgiving at render time — content
+    legitimately drifts under a stored override, and dropping a stale entry then
+    is correct where rejecting the write now is not.
+    """
+    job, session = _get_owned_job(job_id, user)
+    with session:
+        latest = _latest_result(session, job.job_id)
+        if not latest or not latest.tailored_resume_content:
+            raise HTTPException(
+                status_code=422,
+                detail="No tailored resume to arrange — run Tailor first.")
+        content = latest.tailored_resume_content
+        sections, skills, items = _known_layout_targets(content)
+
+        overrides: dict = {}
+        if body.section_order is not None:
+            unknown = [s for s in body.section_order if s not in sections]
+            if unknown:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Unknown section(s): {', '.join(sorted(unknown))}")
+            overrides["section_order"] = body.section_order
+        if body.skills is not None:
+            unknown = [s for s in body.skills if s.strip().lower() not in skills]
+            if unknown:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Unknown skill(s): {', '.join(sorted(unknown))}")
+            overrides["skills"] = body.skills
+        if body.bullets is not None:
+            groups = []
+            for group in body.bullets:
+                if group.section not in items:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"Section '{group.section}' has no reorderable bullets.")
+                if group.item.strip().lower() not in items[group.section]:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"Unknown {group.section} item: {group.item}")
+                groups.append(group.model_dump())
+            overrides["bullets"] = groups
+
+        # An empty body is a reset, not an override that pins nothing.
+        latest.layout_overrides = overrides or None
+        latest.updated_at = datetime.utcnow()
+        session.add(latest)
+        session.commit()
+        return {"saved": True, "active": bool(overrides)}
+
+
+@router.delete("/{job_id}/layout")
+def clear_layout(job_id: str, user: User = Depends(get_current_user)):
+    """Hand arrangement back to the ranker.
+
+    Without this the override is a one-way door: a user who reorders into a
+    worse arrangement has no way back to the recommended one.
+    """
+    job, session = _get_owned_job(job_id, user)
+    with session:
+        latest = _latest_result(session, job.job_id)
+        if latest and latest.layout_overrides is not None:
+            latest.layout_overrides = None
+            latest.updated_at = datetime.utcnow()
+            session.add(latest)
+            session.commit()
+        return {"cleared": True}
 
 
 @router.post("/{job_id}/preview")

@@ -107,6 +107,10 @@ def _migrate_db() -> None:
         "ALTER TABLE userskill ADD COLUMN source_context TEXT",
         "ALTER TABLE project ADD COLUMN source_context TEXT",
         "ALTER TABLE experience ADD COLUMN source_context TEXT",
+        # issue 118: explicit user arrangement overrides. Nullable with no
+        # default — NULL is the "ranker decides" case, so existing rows keep
+        # behaving exactly as they did.
+        "ALTER TABLE userjobresult ADD COLUMN layout_overrides TEXT",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
