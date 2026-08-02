@@ -122,6 +122,7 @@ class TailorState(TypedDict):
     keyword_assignments: Dict     # {item_key: [keyword,...]} contextual placement (issue #72)
     plan: Dict                # Typed per-item action plan from TailorPlanner (issues #91/#51)
     baseline_breakdown: Dict  # Pre-tailor score_breakdown for delta comparison (issue #12)
+    keyword_weights: Dict     # JD term -> importance x supportability (issue #125)
     experiences: List[Dict]
     projects: List[Dict]
     tailored_content: Dict    # The most recent generated tailored resume sections
@@ -302,6 +303,14 @@ class ResumeTailorAgent:
             "matched_skills": (result.matched_skills if result else None) or {},
             "missing_skills": (result.missing_skills if result else None) or [],
             "baseline_breakdown": ((result.score_breakdown if result else None) or {}),
+            # Weighted keyword scoring (issue #125): term -> importance x
+            # supportability, resolved once per run rather than per attempt so
+            # the retry loop does not rebuild the knowledge graph each time.
+            # None for a job with no #121 profile, which scores exactly as before.
+            # persist is gated on allow_classify because that flag is what marks
+            # the plan_preview path, and a preview writes nothing (issue #91).
+            "keyword_weights": self._load_keyword_weights(
+                job_id, user_id, jd_text, persist=allow_classify),
             # KG-derived evidence (issue #138): item_key -> [JD skills the graph
             # ties this candidate to]. Empty when the graph is sparse.
             "item_evidence": item_evidence,
@@ -311,6 +320,24 @@ class ResumeTailorAgent:
             "job_cards": job_cards,
             "role_family": active_role_family,
         }
+
+    @staticmethod
+    def _load_keyword_weights(
+        job_id: UUID, user_id: UUID, jd_text: str, persist: bool = True,
+    ) -> Optional[Dict]:
+        """Term -> weight for this (job, candidate), or None (issue #125).
+
+        Degrades to None on any failure, which the scorer reads as "weigh every
+        keyword uniformly" — the pre-#125 behavior.
+        """
+        try:
+            import services
+
+            return services.resolve_keyword_weights(
+                job_id, user_id, jd_text, persist=persist)
+        except Exception as exc:
+            logger.warning(f"Keyword weight resolution failed: {exc}")
+            return None
 
     def plan_preview(
         self,
@@ -417,6 +444,7 @@ class ResumeTailorAgent:
             "keyword_assignments": keyword_assignments,
             "plan": plan,
             "baseline_breakdown": inputs["baseline_breakdown"],
+            "keyword_weights": inputs.get("keyword_weights") or {},
             "experiences": exp_dicts,
             "projects": proj_dicts,
             "tailored_content": {},
@@ -733,6 +761,7 @@ class ResumeTailorAgent:
             state["job_text"],
             matched_skills=state["matched_skills"],
             baseline_breakdown=state.get("baseline_breakdown") or None,
+            keyword_weights=state.get("keyword_weights") or None,
         )
 
         skill = breakdown["skill_coverage"]

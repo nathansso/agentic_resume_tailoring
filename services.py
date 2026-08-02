@@ -1707,6 +1707,147 @@ def update_jd_profile_requirements(job_id: UUID, edits: list[dict]) -> Optional[
         return None
 
 
+# ── Keyword weights (issue #125) ────────────────────────────────────────────
+
+def build_support_index(user_id: UUID) -> dict:
+    """The candidate's supportability evidence, as two token lists.
+
+        {"strong": [...], "claimed": [...]}
+
+    **strong** — tokens the candidate can point at logged work for: every token
+    of a skill name the knowledge graph ties to a project or an experience, plus
+    every token of the projects' and experiences' own text (names, titles,
+    companies, descriptions, bullets). Those are the words already in their
+    history, so covering them in a resume is restating, not inventing.
+
+    **claimed** — tokens of a skill on the profile that *no* project or
+    experience backs. The user says they have it and there is no logged work
+    behind it, which is exactly the partial-credit case: reframing can earn it,
+    asserting it outright cannot.
+
+    Both lists are sorted, so the persisted weights blob is byte-stable for a
+    fixed graph. Returns empty lists on any failure — the scorer reads that as
+    "no supportability information" and falls back to uniform weighting rather
+    than scoring every term zero.
+    """
+    from agents.keyword_weights import _tokens
+    from knowledge_graph.builder import SkillGraphBuilder
+
+    strong: set = set()
+    claimed: set = set()
+    try:
+        builder = SkillGraphBuilder(user_id)
+        builder.build_graph()
+
+        with Session(engine) as session:
+            skill_rows = session.exec(
+                select(Skill.name)
+                .join(UserSkill, UserSkill.skill_id == Skill.skill_id)
+                .where(UserSkill.user_id == user_id)
+            ).all()
+            projects = session.exec(
+                select(Project).where(Project.user_id == user_id)
+            ).all()
+            experiences = session.exec(
+                select(Experience).where(Experience.user_id == user_id)
+            ).all()
+
+            for name in skill_rows:
+                if not name:
+                    continue
+                backed = bool(
+                    builder.get_projects_using_skill(name)
+                    or builder.get_experiences_using_skill(name)
+                )
+                (strong if backed else claimed).update(_tokens(name))
+
+            for proj in projects:
+                strong |= _tokens(f"{proj.name or ''} {proj.description or ''}")
+            for exp in experiences:
+                bullets = " ".join(str(b) for b in (exp.bullets or []))
+                strong |= _tokens(
+                    f"{exp.title or ''} {exp.company or ''} "
+                    f"{exp.description or ''} {bullets}"
+                )
+    except Exception as exc:
+        logger.warning("support index build failed for user %s: %s", user_id, exc)
+        return {"strong": [], "claimed": []}
+
+    # A token with logged work behind it is never demoted to the partial tier.
+    claimed -= strong
+    return {"strong": sorted(strong), "claimed": sorted(claimed)}
+
+
+def resolve_keyword_weights(
+    job_id: UUID,
+    user_id: Optional[UUID] = None,
+    jd_text: Optional[str] = None,
+    persist: bool = True,
+) -> Optional[dict]:
+    """Term -> weight for this job and candidate, persisting the map. Never raises.
+
+    Returns `None` when the job has no #121 profile — every job analyzed before
+    #121 shipped and every job whose extraction failed — which is what makes the
+    scorer's uniform fallback the exact pre-#125 behavior rather than an
+    approximation of it.
+
+    **Recomputed on every call, then persisted.** The weights are a pure
+    function of the profile payload, the JD text and the candidate's graph, and
+    computing them costs three small queries and no model call, so caching them
+    would buy nothing and would go stale the moment the user ingests another
+    project — silently, and in the direction that matters (a term that just
+    became supportable would keep weighing zero). Persistence exists so the map
+    is inspectable and so #51 Phase 2 can replay the exact reward a run was
+    scored against, not as a cache.
+
+    *persist* False returns the same map without writing, for read-only callers
+    — `plan_preview` (issue #91) guarantees a preview performs no DB writes.
+    """
+    from datetime import datetime
+
+    from agents.keyword_weights import compute_weights, weights_digest
+    from database.models import JDProfile
+
+    try:
+        with Session(engine) as session:
+            profile = session.exec(
+                select(JDProfile).where(JDProfile.job_id == job_id)
+            ).first()
+            if profile is None:
+                return None
+
+            if jd_text is None:
+                job = session.get(JobDescription, job_id)
+                jd_text = (job.description if job else "") or ""
+
+            payload = profile.payload
+            if isinstance(payload, str):
+                try:
+                    payload = json.loads(payload)
+                except (ValueError, TypeError):
+                    payload = {}
+
+            support = build_support_index(user_id or profile.user_id)
+            blob = compute_weights(payload or {}, jd_text, support)
+
+            stored = profile.weights
+            if isinstance(stored, str):
+                try:
+                    stored = json.loads(stored)
+                except (ValueError, TypeError):
+                    stored = None
+            if persist and weights_digest(stored) != weights_digest(blob):
+                profile.weights = blob
+                profile.updated_at = datetime.utcnow()
+                session.add(profile)
+                session.commit()
+
+            return blob.get("terms") or {}
+    except Exception as exc:
+        logger.warning("keyword weight resolution failed for job %s: %s", job_id, exc)
+        return None
+
+
 def delete_resume(user_id: UUID) -> None:
     """Clear resume_path on the User row. Does not delete the file or any ingested data."""
     with Session(engine) as session:
