@@ -218,3 +218,82 @@ class RoleFamilyClassification(BaseModel):
     )
     rationale: Optional[str] = Field(
         None, description="One short sentence justifying the classification")
+
+
+# ── JD profile extraction (agents/jd_profile.py, issue #121) ─────────────────
+# The JD decomposed into atomic requirement statements, extracted **once** per
+# job description and persisted. A closed enum for `type` for the same reason
+# `RoleFamily` is closed: `type` is a downstream selection key (#125 weights by
+# it, #151 splits skill coverage on it), and two spellings of "required" would
+# silently never match.
+#
+# `criticality` is deliberately a plain int rather than a `conint(ge=1, le=5)`.
+# A range-constrained field turns an out-of-range model answer into a validation
+# error, which the extraction seam retries once and then re-raises — losing the
+# whole profile over one bad integer. `jd_profile.compile_profile_payload`
+# clamps instead, matching this module's existing tolerance for sloppy output.
+
+class RequirementType(str, Enum):
+    """How binding a requirement is, per the JD's own framing."""
+    REQUIRED = "required"
+    PREFERRED = "preferred"
+    INCIDENTAL = "incidental"
+
+
+class JDRequirementItem(BaseModel):
+    text: Optional[str] = Field(
+        None,
+        description=(
+            "The requirement rewritten as a standalone sentence, understandable "
+            "without the surrounding JD. Downstream this is used verbatim as an "
+            "NLI hypothesis, so it must not contain pronouns referring out of "
+            "itself (write 'The candidate has 5 years of Python experience', "
+            "not 'You have 5 years of it')"),
+    )
+    type: RequirementType = Field(
+        RequirementType.REQUIRED,
+        description=(
+            "'required' if the JD frames it as a must-have, 'preferred' if it is "
+            "a nice-to-have or bonus, 'incidental' if it is mentioned in passing "
+            "and is not a qualification at all"),
+    )
+    criticality: Optional[int] = Field(
+        3,
+        description=(
+            "How central this requirement is to the role, 1 (barely matters) to "
+            "5 (the job is about this). Judge from section placement, repetition "
+            "in the posting, and whether the job title names it"),
+    )
+    terms: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Concrete keywords from this requirement — technologies, tools, "
+            "languages, methods. Not the full sentence, and not generic filler "
+            "like 'experience' or 'team'"),
+    )
+    source_section: Optional[str] = Field(
+        None,
+        description=(
+            "The posting's own heading this requirement came from, verbatim "
+            "(e.g. 'Required Qualifications', 'Nice to Have'). Null when the "
+            "requirement came from unheaded body prose"),
+    )
+    confidence: Optional[float] = Field(
+        None,
+        description=(
+            "0.0-1.0 confidence in this requirement's type and criticality. Low "
+            "confidence flags it for human review rather than discarding it"),
+    )
+
+
+class JDProfileExtraction(BaseModel):
+    requirements: List[JDRequirementItem] = Field(
+        default_factory=list,
+        description=(
+            "Every requirement in the posting, in the order it appears. Source "
+            "order is load-bearing downstream — do not group or sort them"),
+    )
+    title_terms: List[str] = Field(
+        default_factory=list,
+        description="Meaningful terms from the job title itself, minus filler",
+    )

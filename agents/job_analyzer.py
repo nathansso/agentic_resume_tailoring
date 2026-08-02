@@ -42,6 +42,15 @@ class JobAnalyzerAgent:
         #    (web flow), else as a new JobDescription (CLI/pipeline flow)
         job = self._save_job(metadata, skills, raw_text, source, job_id=job_id)
 
+        # 4. Extract the structured JD profile (issue #121), once per posting.
+        #    Event-driven here rather than lazily at tailoring time: analysis is
+        #    already an LLM-latency operation the user is waiting on, so the
+        #    extraction is amortized away from every later run instead of being
+        #    paid inline by the first one. Cached on the JD text, so re-analysis
+        #    of an unchanged posting costs nothing. Never raises.
+        import services
+        services.rebuild_jd_profile(job.job_id, user_id=job.user_id)
+
         logger.info(f"Job analysis complete: {metadata.get('title', 'Unknown')} at {metadata.get('company', 'Unknown')}")
         return job
 

@@ -790,6 +790,15 @@ class ChatAgent:
                 job_db.updated_at = datetime.utcnow()
                 session.add(job_db)
                 session.commit()
+                # Read before the session closes: a committed instance is
+                # expired, so touching it afterwards would raise.
+                job_owner_id = job_db.user_id
+
+            # This path calls _extract_skills directly and never reaches
+            # analyze_and_save, so it needs its own JD-profile hook (issue #121)
+            # or a job analyzed from chat would silently never gain a profile.
+            import services
+            services.rebuild_jd_profile(job.job_id, user_id=job_owner_id)
 
             required = [s for s in skills if s.get("required", True)]
             preferred = [s for s in skills if not s.get("required", True)]

@@ -214,6 +214,84 @@ async def analyze_job(job_id: str, user: User = Depends(get_current_user)):
             return _job_detail(refreshed, latest)
 
 
+# ── JD profile (issue #121) ──────────────────────────────────
+# The inspection and correction surface. The profile is LLM-extracted, so a
+# "preferred" mis-parsed as "required" biases every downstream decision for that
+# job with no visible symptom — the same failure mode as #69/#96 on the
+# ingestion side. Extraction does not ship without a path to see and fix it.
+
+
+class RequirementEdit(BaseModel):
+    ordinal: int
+    text: str | None = None
+    type: str | None = None
+    criticality: int | None = None
+    terms: list[str] | None = None
+    source_section: str | None = None
+    confidence: float | None = None
+
+
+class ProfileEditBody(BaseModel):
+    requirements: list[RequirementEdit] = []
+
+
+@router.get("/{job_id}/profile")
+def get_jd_profile(job_id: str, user: User = Depends(get_current_user)):
+    """This job's extracted JD profile. 404 when it has none."""
+    job, session = _get_owned_job(job_id, user)
+    with session:
+        jid = job.job_id
+    import services
+    profile = services.load_jd_profile(jid)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="No JD profile for this job yet.")
+    return profile
+
+
+@router.put("/{job_id}/profile")
+def edit_jd_profile(
+    job_id: str, body: ProfileEditBody, user: User = Depends(get_current_user),
+):
+    """Correct extracted requirements. Touched ones are marked `edited`.
+
+    The mark is what makes a later re-extraction preserve the correction rather
+    than silently overwrite it.
+    """
+    job, session = _get_owned_job(job_id, user)
+    with session:
+        jid = job.job_id
+    import services
+    edits = [e.model_dump(exclude_none=True) for e in body.requirements]
+    profile = services.update_jd_profile_requirements(jid, edits)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="No JD profile for this job yet.")
+    return profile
+
+
+@router.post("/{job_id}/profile/reextract")
+async def reextract_jd_profile(
+    job_id: str,
+    user: User = Depends(get_current_user),
+    _quota: None = Depends(check_ai_quota),
+):
+    """Re-run extraction for this job. Explicit and versioned, never automatic.
+
+    Hand-edited requirements are carried through the merge, so re-extracting
+    after a JD text change does not cost the user their corrections.
+    """
+    job, session = _get_owned_job(job_id, user)
+    with session:
+        jid, uid = job.job_id, job.user_id
+    import services
+    profile_id = await asyncio.to_thread(
+        services.rebuild_jd_profile, jid, uid, True)
+    if profile_id is None:
+        raise HTTPException(status_code=422, detail="Could not extract a profile for this job.")
+    with Session(engine) as s:
+        increment_ai_usage(user.user_id, s)
+    return services.load_jd_profile(jid)
+
+
 # ── Tailor job ───────────────────────────────────────────────
 
 @router.post("/{job_id}/tailor")
