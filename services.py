@@ -1482,6 +1482,231 @@ def load_job_cards(user_id: UUID, exclude_job_id: Optional[UUID] = None) -> list
         return []
 
 
+# ── JD profile (issue #121) ─────────────────────────────────────────────────
+
+def rebuild_jd_profile(
+    job_id: UUID, user_id: Optional[UUID] = None, force: bool = False,
+) -> Optional[UUID]:
+    """Extract and persist this job's JDProfile. Never raises.
+
+    **The cache check is the feature.** When the stored `extraction_key` already
+    matches the current JD text this returns immediately without reaching a
+    model, which is what makes "a second tailoring run performs no
+    re-extraction" true by construction rather than by hoping an LLM is
+    deterministic. Everything downstream — a stationary reward for #51 Phase 2,
+    #113 scoring ~6 prefixes off one extraction — rests on that short-circuit.
+
+    *force* re-extracts even on a key hit. It is how the explicit, versioned
+    re-extraction path the issue requires is expressed; nothing calls it
+    implicitly. A forced re-extraction still runs `merge_edits`, so hand-
+    corrected requirements survive it.
+
+    Returns the profile id, or None when there is nothing to extract (no job, no
+    description) or the extraction failed — in which case no row is written and
+    the absent profile reproduces today's behavior exactly.
+    """
+    from datetime import datetime
+
+    from agents.jd_profile import (
+        PROFILE_VERSION, compile_profile_payload, extract_profile,
+        extraction_key, merge_edits, payload_digest,
+    )
+    from database.models import JDProfile
+
+    try:
+        with Session(engine) as session:
+            job = session.get(JobDescription, job_id)
+            if not job or not (job.description or "").strip():
+                return None
+
+            profile = session.exec(
+                select(JDProfile).where(JDProfile.job_id == job_id)
+            ).first()
+
+            key = extraction_key(job.description)
+            if (not force and profile is not None
+                    and profile.extraction_key == key
+                    and profile.extraction_version == PROFILE_VERSION):
+                # The stored profile already describes this exact posting.
+                return profile.profile_id
+
+            extraction = extract_profile(
+                job.title or "", job.company or "", job.description)
+            if extraction is None:
+                return profile.profile_id if profile else None
+
+            payload = compile_profile_payload(
+                job.title or "", job.description, extraction)
+            payload = merge_edits(profile.payload if profile else None, payload)
+            digest = payload_digest(payload)
+            now = datetime.utcnow()
+
+            if profile is None:
+                profile = JDProfile(job_id=job_id, user_id=user_id or job.user_id)
+            profile.payload = payload
+            profile.payload_hash = digest
+            profile.extraction_key = key
+            profile.extraction_version = PROFILE_VERSION
+            profile.role_level = payload.get("role_level")
+            profile.updated_at = now
+            session.add(profile)
+            session.commit()
+            session.refresh(profile)
+            return profile.profile_id
+    except Exception as exc:
+        logger.warning("JD profile rebuild failed for job %s: %s", job_id, exc)
+        return None
+
+
+def load_jd_profile(job_id: UUID, backfill: bool = False) -> Optional[dict]:
+    """This job's JD profile as a plain dict, or None when it has none.
+
+    The read path for downstream consumers (#125 weighting, #126 semantic
+    coverage, #151 skill decomposition). Returns None rather than raising or
+    synthesizing an empty profile, so every consumer's absent-profile branch is
+    the pre-#121 behavior.
+
+    *backfill* extracts on miss, for jobs analyzed before this shipped — those
+    have no profile and would otherwise never gain one. It is off by default
+    because it can spend an LLM call, so a caller opts in knowingly.
+    """
+    from database.models import JDProfile
+
+    try:
+        with Session(engine) as session:
+            profile = session.exec(
+                select(JDProfile).where(JDProfile.job_id == job_id)
+            ).first()
+            if profile is None and backfill:
+                session.close()
+                if rebuild_jd_profile(job_id) is None:
+                    return None
+                with Session(engine) as s2:
+                    profile = s2.exec(
+                        select(JDProfile).where(JDProfile.job_id == job_id)
+                    ).first()
+                    return _jd_profile_dict(profile) if profile else None
+            return _jd_profile_dict(profile) if profile else None
+    except Exception as exc:
+        logger.warning("load_jd_profile failed for job %s: %s", job_id, exc)
+        return None
+
+
+def _jd_profile_dict(profile) -> dict:
+    payload = profile.payload
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except (ValueError, TypeError):
+            payload = {}
+    weights = profile.weights
+    if isinstance(weights, str):
+        try:
+            weights = json.loads(weights)
+        except (ValueError, TypeError):
+            weights = {}
+    return {
+        "profile_id": profile.profile_id,
+        "job_id": profile.job_id,
+        "payload": payload or {},
+        "payload_hash": profile.payload_hash,
+        "extraction_version": profile.extraction_version,
+        "role_level": profile.role_level,
+        "weights": weights or {},
+        "updated_at": profile.updated_at,
+    }
+
+
+# Fields a human is allowed to correct. `terms` and `text` are included because
+# a mis-split requirement is one of the failure modes worth fixing by hand;
+# `ordinal` is not, because reordering would destroy the source-order signal
+# #125 reads, and `edited` is set by this function rather than supplied.
+_EDITABLE_REQUIREMENT_FIELDS = {
+    "text", "type", "criticality", "terms", "source_section", "confidence",
+}
+
+
+def update_jd_profile_requirements(job_id: UUID, edits: list[dict]) -> Optional[dict]:
+    """Apply human corrections to requirements, keyed by `ordinal`.
+
+    Each edit is `{"ordinal": N, <field>: <value>, ...}`. A touched requirement
+    is stamped `edited=True`, which is what makes `merge_edits` carry it through
+    a later re-extraction instead of silently overwriting the correction — the
+    mitigation the issue requires for LLM-extracted structure that has no
+    visible failure symptom.
+
+    Returns the updated profile dict, or None if the job has no profile.
+    Unknown fields and unknown ordinals are ignored rather than erroring: a
+    partial correction is better than a rejected one.
+    """
+    from datetime import datetime
+
+    from agents.jd_profile import (
+        _clamp_confidence, _clamp_criticality, _clean_terms, payload_digest,
+    )
+    from agents.extraction_schemas import RequirementType
+    from database.models import JDProfile
+
+    valid_types = {t.value for t in RequirementType}
+    try:
+        with Session(engine) as session:
+            profile = session.exec(
+                select(JDProfile).where(JDProfile.job_id == job_id)
+            ).first()
+            if profile is None:
+                return None
+
+            payload = profile.payload
+            if isinstance(payload, str):
+                payload = json.loads(payload)
+            payload = dict(payload or {})
+            requirements = [dict(r) for r in (payload.get("requirements") or [])]
+            by_ordinal = {r.get("ordinal"): r for r in requirements}
+
+            for edit in edits or []:
+                target = by_ordinal.get(edit.get("ordinal"))
+                if target is None:
+                    continue
+                touched = False
+                for field, value in edit.items():
+                    if field not in _EDITABLE_REQUIREMENT_FIELDS:
+                        continue
+                    if field == "criticality":
+                        value = _clamp_criticality(value)
+                    elif field == "confidence":
+                        value = _clamp_confidence(value)
+                    elif field == "terms":
+                        value = _clean_terms(value)
+                    elif field == "type":
+                        if value not in valid_types:
+                            continue
+                    elif field == "text":
+                        value = str(value or "").strip()
+                        if not value or value == target.get("text"):
+                            continue
+                        # Stash the text as extracted, once, so `merge_edits`
+                        # can still recognize this requirement after a human
+                        # rewrites it — identity across a re-extraction is the
+                        # extracted text, not the corrected one.
+                        target.setdefault("original_text", target.get("text"))
+                    target[field] = value
+                    touched = True
+                if touched:
+                    target["edited"] = True
+
+            payload["requirements"] = requirements
+            profile.payload = payload
+            profile.payload_hash = payload_digest(payload)
+            profile.updated_at = datetime.utcnow()
+            session.add(profile)
+            session.commit()
+            session.refresh(profile)
+            return _jd_profile_dict(profile)
+    except Exception as exc:
+        logger.warning("JD profile edit failed for job %s: %s", job_id, exc)
+        return None
+
+
 def delete_resume(user_id: UUID) -> None:
     """Clear resume_path on the User row. Does not delete the file or any ingested data."""
     with Session(engine) as session:
@@ -1493,15 +1718,24 @@ def delete_resume(user_id: UUID) -> None:
 
 
 def delete_job(job_uuid: str) -> str:
-    """Delete a JobDescription and all dependent rows (UserJobResult, JobSkill, ChatMessage).
-    Returns plain-English result. Never raises."""
+    """Delete a JobDescription and all dependent rows (UserJobResult, JobSkill,
+    ChatMessage, JobCard, JDProfile).
+    Returns plain-English result. Never raises.
+
+    JobCard and JDProfile both carry a real FK to `jobdescription.job_id`, which
+    Postgres enforces and SQLite does not (foreign_keys is off by default). Left
+    out, deleting an analyzed job succeeds locally and fails in production.
+    """
     try:
         from uuid import UUID as _UUID
+        from database.models import JDProfile, JobCard
         jid = _UUID(job_uuid)
         with Session(engine) as session:
             session.exec(delete(UserJobResult).where(UserJobResult.job_id == jid))
             session.exec(delete(JobSkill).where(JobSkill.job_id == jid))
             session.exec(delete(ChatMessage).where(ChatMessage.job_id == jid))
+            session.exec(delete(JobCard).where(JobCard.job_id == jid))
+            session.exec(delete(JDProfile).where(JDProfile.job_id == jid))
             session.commit()
             job = session.get(JobDescription, jid)
             if job:

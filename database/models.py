@@ -357,3 +357,57 @@ class JobCard(SQLModel, table=True):
     source_updated_at: Optional[datetime] = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class JDProfile(SQLModel, table=True):
+    """Structured, persisted decomposition of one job description (issue #121).
+
+    The system has a codified, editable profile of the *candidate* (the
+    knowledge graph) and had nothing equivalent for the *job*: every JD-derived
+    quantity was recomputed inline from raw text on every run, in
+    `ats_scorer._keyword_coverage`, `ats_scorer._role_level` and
+    `keyword_planner._jd_token_counts`. Extracting once and persisting buys two
+    things the inline path cannot:
+
+    1. **A stationary reward.** Re-parsing the JD per run lets the reward
+       function itself drift between runs, which is fatal for learning a policy
+       against it (#51 Phase 2).
+    2. **Amortization.** #113's controller scores ~6 prefixes per run, so
+       anything JD-derived is otherwise paid 6x for the same answer.
+
+    Determinism here comes from *persistence*, not from the model: an LLM call
+    is not byte-stable, so "two runs produce the same profile" is enforced by
+    `extraction_key` short-circuiting the second run, never by re-rolling the
+    extraction and hoping. Re-extraction is explicit and versioned; it never
+    happens silently, and it preserves requirements the user has edited.
+
+    A new table, so `SQLModel.metadata.create_all` picks it up and no ALTER is
+    needed. Absent profile => today's behavior: nothing reads a row that does
+    not exist.
+    """
+    profile_id: UUID = Field(default_factory=uuid4, primary_key=True)
+    job_id: UUID = Field(foreign_key="jobdescription.job_id", index=True)
+    # Scoped to the owner as well as the job (issue #73): a profile is derived
+    # from user-supplied JD text and is read back through a user-scoped API.
+    user_id: Optional[UUID] = Field(default=None, foreign_key="user.user_id", index=True)
+
+    # The decomposed profile: requirements[] (in source order) + title_terms[].
+    payload: Dict = Field(default={}, sa_column=Column(JSON))
+    payload_hash: Optional[str] = Field(default=None)
+
+    # Digest of (description, PROFILE_VERSION). Equal key => the stored profile
+    # already describes this exact JD text, so extraction is skipped entirely.
+    # This is what makes "a second tailoring run performs no re-extraction" a
+    # property of the code rather than a hope about model temperature.
+    extraction_key: Optional[str] = Field(default=None, index=True)
+    extraction_version: int = Field(default=1)
+
+    # Seniority tier, from the existing ats_scorer._detect_level - deterministic
+    # and already tested, so it is not worth an LLM field.
+    role_level: Optional[str] = Field(default=None)
+
+    # The computed w(t) map. This issue owns the slot only; #125 populates it.
+    weights: Dict = Field(default={}, sa_column=Column(JSON))
+
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
