@@ -6,6 +6,44 @@ Entries titled `PRD NN — …` are historical: they predate the move to issue-d
 
 ---
 
+## Issue 129 — User preference profile: persist standing preferences and arbitrate them against the JD
+**Status:** complete | **Tests:** 1039 pass on Postgres / 1031 on SQLite (82 new)
+
+Stage 5 of the Phase 1 epic (#140), unblocked by #121 and #118 landing. Tailoring is the arbitration between what the job wants and what the candidate wants; after #121 only the job side existed as an artifact. The candidate side was scattered across three places that each lost it: `revision_notes` (consumed by one run), `layout_overrides` (durable but purely structural — it knows *where* things go, never *whether*), and the decision log.
+
+**A partial version already shipped, and knowing which part mattered kept this chunk small.** `job_card.extract_rejected_items` already mines the decision log for dropped items, already tracks reversal as supersession, already tags user-vs-planner provenance, and `tailor_planner` already pushes them at the model with "treat anything under 'User removed' as a standing preference." Three things it cannot do: it infers from **actions** rather than language, so "that was just a class project" moves nothing and is invisible to it; it has one polarity, no strength, and no scope beyond a single job; and it reaches the planner as **prose in a prompt**. That last one is the load-bearing gap — ImplexConv finding 2 measures retrieval of the invalidating fact succeeding while the model still answers wrong, because the failure is reasoning, not memory. So the preference has to gate the action space, not decorate the prompt.
+
+This is #118's lesson in a different costume: there, the drag UI existed and was wired to the wrong persistence layer; here, the negation push existed and was wired to the wrong *source* and the wrong *enforcement*.
+
+### What shipped
+- **`UserPreference` (new table), one row per preference.** Deliberately not the issue body's `preferences[]` array on a profile row: the array shape makes superseding one entry a read-modify-write of the whole blob (racy across concurrent chat turns) and forces the edit API to address entries **by list index** — the exact identity mistake #121 recorded. A row gives each preference a stable UUID to edit, retract, and supersede against. New table, so `create_all` picks it up and no ALTER was needed.
+- **Nothing is ever deleted.** A contradicted preference is `superseded`, a withdrawn one `retracted`; both stay on the table. Negation must not expire (#133), and the transitions are what #51 Phase 2 learns preference weights from — deleting the row would make the table a lossy view of a trajectory the decision log itself retains.
+- **`agents/preferences.py` (new), pure.** One LLM pass on the #142 `get_extractor` seam, then a deterministic compile, then deterministic supersession. **Chain-of-Note's second pass was not needed and was not built:** #21 needs a reason pass because a rename changes the very name its equality check keys on ("Senior Engineer" → "Staff Engineer"), and that has no analogue here — a preference's identity is its *target*, which the extraction resolves against a supplied catalog, so two preferences about `proj:recipe-app` are about the same thing however differently they are worded.
+- **`agents/arbitration.py` (new), pure and deterministic by construction** — no LLM, no database, no clock. That is what makes "two runs over the same `(PreferenceProfile, JDProfile, KG)` produce an identical constraint set" a one-line assertion rather than a hope about temperature. Precedence: truthfulness first → hard preferences (strength 5) always win with the blocked requirement *reported* → soft preferences lose when `criticality >= strength` → ties to the JD.
+- **A mandatory persona node in `_load_inputs`**, beside the #138 KG evidence step whose own comment already called itself "the facts-side mirror of the mandatory persona node (#129/#133)". It runs unconditionally, empty profile included: a tier consulted only when something upstream decides it is relevant is a tier that silently stops binding.
+- **Prompt block *and* deterministic gate, because neither is sufficient.** `render_constraints` is the proposal distribution; `apply_constraints` is the guarantee. The gate runs on the deterministic fallback plan too — that path runs precisely when the model failed, which is no reason for a user's standing preferences to stop binding.
+- **Conflict surfacing**, an acceptance criterion rather than polish. Conflicts, refusals, and gate enforcement land in `tailoring_decisions` under a key added only when non-empty. A preference tier that silently suppresses a critical requirement is #121's failure mode ("a preferred mis-parsed as required biases every decision with no visible symptom") reproduced on the candidate side.
+- **`/api/preferences/` — propose, decide, list, PATCH, DELETE.** `DELETE` retracts. Ownership is re-checked in `services` on both id-bearing routes, and `apply_preference_decision` verifies `supersedes_id` too, because a proposal is client-held round-tripped state and the ids inside it are untrusted (#73).
+
+### Two things it deliberately loses to
+- **The empty-section invariant outranks the preference tier.** `validate_plan`'s empty-section coercion was factored out and is re-run after the gate, so "drop the retail job" when it is the user's only experience is coerced back to `keep`. Same rule on skills: a suppression set broad enough to erase every skill is far likelier to be an extraction error than an instruction.
+- **A chat-approved plan is not gated at all.** It was approved by the same user, in that conversation, looking at those items — an explicit present decision outranks a preference inferred from something they said earlier. Gating it would mean the assistant citing the user's own past words back at them to refuse what they just asked for.
+
+### The write barrier
+#118 established that a pipeline able to write the user's tier launders its own output into a counterfeit user choice. It binds harder here because these preferences are **inferred**: a pipeline allowed to write this table would suppress an item, observe the suppression, infer a standing preference from it, and cite that back as the user's own instruction. `tailor()` only reads; proposing never writes; `/decide` is the only path in. Pinned by a test.
+
+### Measured cost
+`ATSScoringEngine` composite on a controlled resume: baseline **42.5**, suppressing content the JD never asked for **42.5** (free — the case the arbitration is designed to produce), suppressing a term the JD requires **35.0** (**−7.5**). The composite is 0.75 coverage and coverage is monotone non-decreasing in text (#127), so this metric *structurally cannot* reward honoring a user — any suppression scores as a loss. The number is the price of the tier, not a regression, and it re-baselines once #125–#127 land.
+
+### Deviations from spec
+- **Split into 5a (this PR, headless) and 5b.** The React surface is folded into **#147**, which is already open and unbuilt over #21's artifact endpoints — the same "here's what I inferred from chat, accept or dismiss" component with a different payload. The issue's inspect/edit/retract "non-negotiable" is met at exactly the bar #121 met it: an API, not a React view.
+- **Storage shape changed** from the body's `preferences[]` array to one row per preference (reasons above).
+- **Only `suppress` is arbitrated against requirements.** `emphasize` and `reframe` cannot remove a requirement's evidence from the resume — they promote or rewrite content that stays — so there is nothing for a requirement to contest. Narrowing arbitration to the polarity that can actually cost the match keeps the conflict report meaningful instead of filling it with pairs no human would call a conflict. `emphasize` still faces the faithfulness refusal.
+- **"Absent profile reproduces current output byte-for-byte" is stated as a claim about the planner payload, prompt, and plan** — all three assertable — not about the pipeline's generated text, which an LLM makes unassertable. Written that way from the start per the note #118 left on the epic.
+- **A substring-matching bug was caught by its own test and fixed before it shipped:** a raw `term in subject` check matched `"ml"` inside `"html"`, which would have suppressed the wrong resume item with no visible symptom. Matching is token-level in both directions now.
+
+---
+
 ## Issue 118 — Persist explicit user layout overrides for section order, skills, and bullets
 **Status:** complete | **Tests:** 957 pass on Postgres / 949 on SQLite (37 new Python, 8 new frontend)
 
