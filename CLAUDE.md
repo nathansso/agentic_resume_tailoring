@@ -3,24 +3,24 @@
 ## Project overview
 ART is a resume-tailoring platform that ingests resume, GitHub, and LinkedIn data into a knowledge graph, then tailors resumes to job descriptions through chat and workflow tools. The **web app** is the primary and only actively maintained implementation.
 
-**Web app (primary):** https://artie-resume-tailoring.fly.dev/  
-Deployed on Fly.io. React + TypeScript frontend served as static files by a FastAPI backend. Supabase Postgres in production (via `DATABASE_URL` Fly.io secret); falls back to SQLite locally. Supabase Auth used for JWT session tokens when env vars are present; falls back to local signed cookies.
+**Web app (primary):** https://web-production-2ead7.up.railway.app/  
+Deployed on Railway. React + TypeScript frontend served as static files by a FastAPI backend. Supabase Postgres in production (via the `DATABASE_URL` secret); falls back to SQLite locally. Supabase Auth used for JWT session tokens when env vars are present; falls back to local signed cookies.
 
 A `cli.py` command surface mirrors the core ingestion/tailoring pipeline for scripting and tests. The web app is the only user-facing product; a Textual TUI existed previously and was removed — its shared service layer now lives in `services.py`.
 
 **Stack:**
 - Frontend: React 18, TypeScript, Vite — lives in `web/frontend/`
 - Backend API: FastAPI (Python), routers in `web/routers/`
-- Database: SQLModel ORM — Supabase Postgres in production (via `DATABASE_URL` Fly.io secret); falls back to SQLite locally when `DATABASE_URL` is unset
+- Database: SQLModel ORM — Supabase Postgres in production (via the `DATABASE_URL` secret); falls back to SQLite locally when `DATABASE_URL` is unset
 - Auth: Supabase Auth (JWT) with local `itsdangerous` cookie fallback
 - AI: LangGraph, LangChain, OpenAI / Anthropic
 
 **Entry points:**
-- `uvicorn web.app:app --port 8000` — web server (production uses Fly.io Docker deploy)
+- `uvicorn web.app:app --port 8000` — web server (production uses the Railway Docker deploy)
 - `npm run dev` (in `web/frontend/`) — Vite dev server on port 5173, proxies `/api` to port 8000
 - `python cli.py <command>` — CLI surface
 
-**Deploy:** `fly deploy` from repo root — builds Docker image (Node 20 → Python 3.12), pushes to Fly.io.
+**Deploy:** `railway up` from repo root — builds the Docker image (Node 24 → Python 3.12), pushes to Railway.
 
 **Environment:**
 ```bash
@@ -49,13 +49,15 @@ Use the repo guidance in this order:
 1. The active GitHub issue and its ART Development Plan board card define task scope, sequencing, and acceptance criteria.
 2. This root `CLAUDE.md` defines stable repo-wide workflow, testing, and architecture rules.
 3. Local `CLAUDE.md` files add folder-specific implementation constraints without replacing the root rules.
-4. `.github/` Copilot instruction files are thin planning aids and should not become a second policy system.
 
 Keep these roles separate:
 - GitHub issues / board cards are task specs.
 - Root `CLAUDE.md` is the repo policy surface.
 - Local `CLAUDE.md` files are implementation-local supplements.
-- `.github/` instruction files mirror the essentials for VS Code tooling.
+
+There is deliberately no second policy system. Issue-resolution steps live in
+the `/start`, `/work`, and `/done` slash commands, not in a checked-in workflow
+document.
 
 ---
 
@@ -67,7 +69,8 @@ Keep these roles separate:
   - Include a `**Status:** complete | **Tests:** N pass (M new)` line, a short summary, a `### What shipped` list, and a `### Deviations from spec` section.
   - The entry must reflect shipped (merged) state. When a PR carries the entry, the entry only reaches `main` on merge, so it may describe everything in that PR.
 - Keep one logical unit of work per commit.
-- For issue resolution, follow the workflow in `ISSUE_WORKFLOW.md`.
+- For issue resolution, use `/start N` → work → PR → `/done N`. Worktree-isolated sessions: `/work N` (see `docs/parallel-agents.md`).
+- **Before starting an issue, read the `CHANGELOG.md` entries for every issue named in its `## Dependencies` section, plus the preceding stage in its epic** (e.g. #140 for Phase 1, #114 for the policy arc). Read `### Deviations from spec` first: that section records what the previous chunk decided against, discovered mid-flight, or deliberately deferred, and it is written nowhere else — not in the diff, not in the issue body. It is the most common source of work that gets redone or contradicted.
 
 **Commit format:** `type(scope): short description`
 
@@ -206,16 +209,14 @@ python -m pytest tests/ -q
 ```
 
 Test layout:
-- All tests live under `tests/` — one file per concern.
+- All tests live under `tests/`, flat — **one file per concern**, named
+  `test_<concern>.py`. Find the right file with `ls tests/` rather than from a
+  list here; enumerating ~55 files in this document only guarantees it goes
+  stale. Add a new file when the concern is genuinely new, not per issue.
 - `tests/conftest.py` — shared `isolated_engine` fixture and `_seed_user_and_skill` helper.
-- `tests/test_chat.py` — chat routing, fast-path, trace tests.
-- `tests/test_services.py` — services, ingestion diff, profile.
-- `tests/test_db.py` — DB and user-utils tests.
-- `tests/test_llm.py` — LLM factory tests.
-- `tests/test_eval.py` — PRD 06 eval harness tests.
-- `tests/test_prd04.py` — PRD 04 job lifecycle and tailoring tests.
-- `tests/test_tailoring_benchmark.py` — #51 benchmark metrics, stub, and end-to-end smoke.
 - `tests/test_integration.py` — full pipeline (marked `@pytest.mark.integration`).
+- `tests/memory_evals/` — YAML scenarios for the chat-memory eval harness.
+- Frontend unit tests are co-located as `web/frontend/src/lib/*.test.ts`.
 
 Testing conventions:
 - Use the `isolated_engine` fixture for DB-related tests.

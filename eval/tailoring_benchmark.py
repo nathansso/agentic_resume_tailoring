@@ -130,7 +130,7 @@ STUB_PROJECTS = [
     {"name": "StreamBoard", "description": "Real-time analytics dashboard",
      "bullets": ["Real-time analytics dashboard with Kafka, ClickHouse, and a React frontend; processes 10k events/second."]},
     {"name": "LLM Resume Coach", "description": "Resume critique app",
-     "bullets": ["LangChain + OpenAI application that critiques resumes against job descriptions; deployed on Fly.io with Docker."]},
+     "bullets": ["LangChain + OpenAI application that critiques resumes against job descriptions; deployed on Railway with Docker."]},
     {"name": "Pixel Adventure", "description": "2D platformer game",
      "bullets": ["2D platformer game in C# and Unity published on itch.io."]},
 ]

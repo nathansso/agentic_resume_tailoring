@@ -1,8 +1,10 @@
 """Document text extraction with an optional docling backend.
 
 docling's layout-aware conversion depends on PyTorch and loads layout models
-at parse time — far too heavy for low-memory deployments (the 512 MB Fly.io
-VM gets OOM-killed). docling is therefore a full-only dependency: when it is
+at parse time. This was gated when production ran on a 512 MB VM, which the
+layout models OOM-killed (#67). The current Railway service has an 8 GB limit
+and idles at ~120 MB, so the constraint no longer binds — re-enabling docling
+is tracked separately; do not assume it is still impossible. docling is therefore a full-only dependency: when it is
 not installed, extraction falls back to pypdf / python-docx plain-text, which
 is sufficient because the extracted text is handed to an LLM parser anyway.
 """

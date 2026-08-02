@@ -109,49 +109,45 @@ Each test gets a throwaway schema that is dropped on teardown.
 
 ## Option C — Cloud deploy
 
-### Fly.io
+### Railway (current target)
 
-> **Pre-requisites:** [flyctl installed](https://fly.io/docs/hands-on/install-flyctl/),
-> a Fly.io account, and a Supabase project with auth enabled.
+> **Pre-requisites:** [Railway CLI installed](https://docs.railway.com/guides/cli),
+> a Railway account, and a Supabase project with auth enabled.
+
+Railway builds the repo-root `Dockerfile` (Node 24 → Python 3.12) using the
+committed `railway.json`, which also wires the `/api/health` healthcheck and the
+restart policy.
 
 ```bash
-# 1. Clone the repo (fly.toml is already included)
+# 1. Clone and link the project
 git clone https://github.com/nathansso/agentic_resume_tailoring.git
 cd agentic_resume_tailoring
+railway link
 
-# 2. Create the app (keeps the committed fly.toml, skips overwriting it)
-fly launch --no-deploy
+# 2. Set variables (dashboard → Variables, or via CLI)
+railway variables \
+  --set ANTHROPIC_API_KEY=sk-ant-... \
+  --set SESSION_SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))") \
+  --set DATABASE_URL=postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres \
+  --set SUPABASE_URL=https://[PROJECT-REF].supabase.co \
+  --set SUPABASE_ANON_KEY=eyJ... \
+  --set SUPABASE_SERVICE_ROLE_KEY=eyJ...
 
-# 3. Create the persistent volume
-fly volumes create art_data --size 1 --region iad
-
-# 4. Set required secrets
-fly secrets set \
-  ANTHROPIC_API_KEY=sk-ant-... \
-  DATABASE_URL=postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres \
-  SUPABASE_URL=https://[PROJECT-REF].supabase.co \
-  SUPABASE_ANON_KEY=eyJ... \
-  SUPABASE_SERVICE_ROLE_KEY=eyJ...
-
-# 5. Deploy
-fly deploy
-
-# 6. Apply Supabase schema + RLS policies (first deploy only)
-fly ssh console -C "python cli.py supabase-setup"
+# 3. Deploy
+railway up
 ```
 
-After deploy, visit `https://<your-app>.fly.dev` — users see the login screen with no local install needed.
+**Notes:**
+- Attach a **volume mounted at `/data`** if you want the SQLite fallback or
+  generated artifacts to survive redeploys. The Dockerfile deliberately declares
+  no `VOLUME` instruction — Railway rejects it.
+- Apply the Supabase schema and RLS policies once, from any machine with
+  `DATABASE_URL` set: `python cli.py supabase-setup`.
+- The container currently listens on the fixed port `8000` rather than Railway's
+  injected `$PORT`; binding to `$PORT` is tracked in #48.
 
 **Notes:**
 - Use the Supabase **pooler** connection string (port 6543) for production, not the direct connection (port 5432).
 - `SUPABASE_SERVICE_ROLE_KEY` is backend-only — never expose it to clients.
 - Supabase RLS enforces per-user data isolation automatically for every request.
 - To verify RLS isolation: log in as two different users and confirm each can only see their own jobs and resume data.
-
-### Cloud deploy — Render
-
-1. Create a new **Web Service** pointing at this repo.
-2. Set **Environment** → **Docker** (Render detects the Dockerfile automatically).
-3. Add environment variable `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY`).
-4. Set the port to `8000` in Render's service settings.
-5. Click **Deploy**.

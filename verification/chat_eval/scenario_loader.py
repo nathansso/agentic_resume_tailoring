@@ -32,7 +32,7 @@ def load_all_scenarios() -> List[dict]:
 
 
 def seed_profile(profile_fixture: dict) -> object:
-    """Create a profile for eval runs using the same pattern as test_smoke_formal.py.
+    """Create a profile for eval runs using the same pattern as tests/conftest.py.
 
     Returns the created User object. Respects whatever engine is active (real or patched).
     """

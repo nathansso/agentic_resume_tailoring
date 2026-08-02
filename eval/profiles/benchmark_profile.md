@@ -40,7 +40,7 @@ deployed service.
 - Real-time analytics dashboard with Kafka, ClickHouse, and a React frontend; processes 10k events/second.
 
 **LLM Resume Coach**
-- LangChain + OpenAI application that critiques resumes against job descriptions; deployed on Fly.io with Docker.
+- LangChain + OpenAI application that critiques resumes against job descriptions; deployed on Railway with Docker.
 
 **Pixel Adventure**
 - 2D platformer game in C# and Unity published on itch.io.
