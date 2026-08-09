@@ -337,15 +337,27 @@ def _make_stub_llm():
 
 
 class _StubEmbeddingModel:
-    """Deterministic hash-based embedder — no model download, stable vectors."""
+    """Deterministic hash-based embedder — no model download, stable vectors.
+
+    The seed must come from a *stable* digest. Python randomizes `hash()` on
+    str per process (PEP 456), so seeding from it gave every run a different
+    vector for the same skill name. Since 'semantic' carries the largest single
+    weight in skill_scorer.WEIGHTS (0.30), that made the rendered skills section
+    unreproducible run to run while every lexical metric stayed bit-identical —
+    the headline symptom of issue #158. blake2b is stable across processes,
+    machines and Python versions, so this docstring's "stable vectors" claim is
+    finally true without needing PYTHONHASHSEED=0.
+    """
 
     def encode(self, texts, normalize_embeddings=True, **kwargs):
+        import hashlib
         import numpy as np
         single = isinstance(texts, str)
         items = [texts] if single else list(texts)
         vecs = []
         for t in items:
-            rng = np.random.default_rng(abs(hash(t.lower())) % (2**32))
+            digest = hashlib.blake2b(t.lower().encode("utf-8"), digest_size=4).digest()
+            rng = np.random.default_rng(int.from_bytes(digest, "big"))
             v = rng.standard_normal(32)
             v /= np.linalg.norm(v)
             vecs.append(v)

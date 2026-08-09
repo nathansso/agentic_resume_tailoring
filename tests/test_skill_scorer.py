@@ -146,3 +146,159 @@ def test_build_tex_skills_renders_ranked_section():
     tex = agent._build_tex_skills(ranked)
     assert "Technical Skills" in tex
     assert "Kubernetes" in tex
+
+
+# ── Determinism of the DB-backed merge (issue #158) ────────────────────────────
+#
+# `_rank_skills` loads UserSkill rows with an unordered query and merges rows
+# that share a canonical name. `category` and the skill_id feeding the cached
+# embedding were both first-wins, so row order picked the winner and moved the
+# ranking. These tests shuffle insertion order and demand an identical result.
+
+import numpy as np
+from sqlmodel import Session
+
+import agents.matcher as matcher_module
+from database.models import JobDescription, Skill, User, UserSkill
+
+
+class _DistinctVectorModel:
+    """Deterministic per-text vectors, distinct for aliases of one canonical name.
+
+    `Postgres` and `PostgreSQL` must encode *differently*, otherwise the test
+    cannot observe which row `id_by_name` chose.
+
+    Vectors live in the positive orthant on purpose: `_semantic_similarity`
+    clamps negative cosines to 0.0, so two distinct-but-negatively-aligned
+    vectors would both score 0.0 and hide the very difference under test.
+    """
+
+    def encode(self, texts, normalize_embeddings=True):
+        vecs = []
+        for t in texts:
+            seed = sum((i + 1) * ord(c) for i, c in enumerate(t.lower())) or 1
+            rng = np.random.default_rng(seed % (2**32))
+            vecs.append(np.abs(rng.standard_normal(8)) + 0.1)
+        arr = np.asarray(vecs, dtype=float)
+        norms = np.linalg.norm(arr, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        return arr / norms
+
+
+# (raw name, category, proficiency, confidence). Three canonical names are
+# reached by two different raw names each — the shape that makes first-wins
+# observable, since aliases carry different categories *and* different vectors.
+_ALIASED_SKILLS = [
+    ("Python", "Languages", 5, 0.90),
+    ("python", "Programming", 3, 0.60),      # -> Python
+    ("Postgres", "Data", 3, 0.50),           # -> PostgreSQL
+    ("PostgreSQL", "Databases", 4, 0.85),    # -> PostgreSQL
+    ("sklearn", "ML", 3, 0.55),              # -> scikit-learn
+    ("scikit-learn", "Libraries", 4, 0.70),  # -> scikit-learn
+    ("FastAPI", "Frameworks", 4, 0.80),
+    ("Docker", "Tooling", 3, 0.70),
+    ("Redis", "Databases", 2, 0.50),
+    ("TypeScript", "Languages", 4, 0.75),
+]
+
+_JD_TEXT = (
+    "Backend engineer: strong Python and FastAPI, PostgreSQL schema design, "
+    "Docker containers, Redis caching, TypeScript on the frontend, and some "
+    "scikit-learn modelling."
+)
+
+_MATCHED = {
+    "Python": {"weight": 1.0, "required": True, "match_type": "direct"},
+    "FastAPI": {"weight": 0.9, "required": True, "match_type": "direct"},
+    "PostgreSQL": {"weight": 0.8, "required": True, "match_type": "name_match"},
+    "Docker": {"weight": 0.6, "required": False, "match_type": "semantic"},
+}
+
+
+def _rank_with_insertion_order(engine, job_id, order):
+    """Seed a fresh user whose UserSkill rows are written in `order`, then rank."""
+    import agents.tailor as tailor_module
+
+    with Session(engine) as session:
+        user = User(name="Order Probe", email=f"probe-{uuid4().hex[:10]}@example.com")
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        uid = user.user_id
+
+        for name, category, prof, conf in order:
+            skill = Skill(name=name, category=category)
+            session.add(skill)
+            session.commit()
+            session.refresh(skill)
+            session.add(UserSkill(
+                user_id=uid, skill_id=skill.skill_id,
+                proficiency=prof, confidence_score=conf, is_core=False,
+            ))
+            session.commit()
+
+    return tailor_module.ResumeTailorAgent._rank_skills(uid, job_id, _JD_TEXT, _MATCHED)
+
+
+@pytest.fixture()
+def _ranking_env(isolated_engine, monkeypatch):
+    """Bind tailor's module-level engine and a network-free embedding model."""
+    import agents.tailor as tailor_module
+
+    monkeypatch.setattr(tailor_module, "engine", isolated_engine)
+    monkeypatch.setattr(matcher_module, "get_embedding_model", lambda: _DistinctVectorModel())
+
+    with Session(isolated_engine) as session:
+        job = JobDescription(title="Backend Engineer", company="Acme", description=_JD_TEXT)
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.job_id
+    return isolated_engine, job_id
+
+
+def test_rank_skills_is_independent_of_userskill_insertion_order(_ranking_env):
+    """The acceptance criterion: shuffling insertion order must not move selection."""
+    engine, job_id = _ranking_env
+
+    baseline = _rank_with_insertion_order(engine, job_id, _ALIASED_SKILLS)
+    assert baseline, "expected a non-empty ranking"
+
+    import random
+    for seed in range(6):
+        shuffled = list(_ALIASED_SKILLS)
+        random.Random(seed).shuffle(shuffled)
+        got = _rank_with_insertion_order(engine, job_id, shuffled)
+        assert got == baseline, (
+            f"insertion order (seed={seed}) changed the ranking:\n"
+            f"  baseline={[(s['name'], s['category'], s['score']) for s in baseline]}\n"
+            f"  got     ={[(s['name'], s['category'], s['score']) for s in got]}"
+        )
+
+
+def test_rank_skills_category_does_not_depend_on_row_order(_ranking_env):
+    """`category` was first-wins — the visible `category_count` fingerprint (#158)."""
+    engine, job_id = _ranking_env
+
+    forward = _rank_with_insertion_order(engine, job_id, _ALIASED_SKILLS)
+    reverse = _rank_with_insertion_order(engine, job_id, list(reversed(_ALIASED_SKILLS)))
+
+    assert {s["name"]: s["category"] for s in forward} == \
+           {s["name"]: s["category"] for s in reverse}
+    # And the merge resolves to the content-chosen representative, not whichever
+    # row happened to arrive first: min() over (raw name, category). The sort is
+    # plain codepoint order, so "PostgreSQL" precedes "Postgres" ('S' < 's').
+    cats = {s["name"]: s["category"] for s in forward}
+    assert cats["PostgreSQL"] == "Databases"    # from raw "PostgreSQL"
+    assert cats["scikit-learn"] == "Libraries"  # "scikit-learn" < "sklearn"
+
+
+def test_rank_skills_scores_do_not_depend_on_row_order(_ranking_env):
+    """`id_by_name` picked which cached embedding fed the semantic component."""
+    engine, job_id = _ranking_env
+
+    forward = _rank_with_insertion_order(engine, job_id, _ALIASED_SKILLS)
+    reverse = _rank_with_insertion_order(engine, job_id, list(reversed(_ALIASED_SKILLS)))
+
+    assert {s["name"]: s["score"] for s in forward} == \
+           {s["name"]: s["score"] for s in reverse}

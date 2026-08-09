@@ -7,6 +7,7 @@ the real web API in a subprocess (its own isolated temp DB + env, so it can
 never touch the developer's ~/.art data or this process's engine).
 """
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -157,6 +158,36 @@ def test_stub_jd_skill_extraction_is_deterministic_and_jd_sensitive():
     names = {s["name"] for s in a}
     assert {"Python", "Kubernetes", "TensorFlow"} <= names
     assert "Unity" not in names
+
+
+def test_stub_embedding_model_is_stable_across_processes():
+    """The stub embedder must not depend on Python's per-process hash seed.
+
+    It seeded numpy from `hash(text)`, which PEP 456 randomizes per process, so
+    every benchmark run drew different "embeddings" for the same skill name.
+    Since 'semantic' carries the largest single weight in skill_scorer.WEIGHTS,
+    that alone made `skills_rendered` unreproducible while every lexical metric
+    stayed bit-identical — the headline symptom of issue #158.
+
+    Forcing three *different* PYTHONHASHSEED values makes this decisive rather
+    than probabilistic: under the old code the three outputs always differ.
+    """
+    code = (
+        "import numpy as np;"
+        "from eval.tailoring_benchmark import _StubEmbeddingModel;"
+        "v = _StubEmbeddingModel().encode(['Python', 'FastAPI', 'PostgreSQL']);"
+        "print(np.asarray(v).round(10).tolist())"
+    )
+    outs = set()
+    for seed in ("0", "1", "2"):
+        env = {**os.environ, "PYTHONHASHSEED": seed}
+        proc = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=ROOT, capture_output=True, text=True, timeout=120, env=env,
+        )
+        assert proc.returncode == 0, proc.stderr[-2000:]
+        outs.add(proc.stdout.strip())
+    assert len(outs) == 1, f"stub embeddings vary with PYTHONHASHSEED: {len(outs)} distinct"
 
 
 def test_stub_llm_round_trips_through_langchain_chain():

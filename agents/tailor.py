@@ -1332,8 +1332,20 @@ class ResumeTailorAgent:
             # Dedup by canonical name — a skill may have several UserSkill rows
             # (one per evidence source). Merge: keep the strongest proficiency /
             # confidence and treat the skill as pinned if any row is pinned.
+            #
+            # Determinism (issue #158): `rows` comes back unordered, so nothing
+            # here may depend on which row arrives first. The numeric merges are
+            # already order-independent (max / logical-or), but `category` and
+            # the embedding's `skill_id` used to be first-wins, which let row
+            # order pick the winner and move the ranking. Both are now resolved
+            # from a representative chosen by *content* after the loop. Ordering
+            # the query instead would not be enough: `Skill.name` ties across the
+            # aliases that collapse to one canonical name (`Postgres` and
+            # `PostgreSQL`), and a `skill_id` / `created_at` tiebreak is unstable
+            # across databases and within a transaction respectively.
             by_name: Dict[str, Dict] = {}
             id_by_name: Dict[str, UUID] = {}
+            candidates: Dict[str, List[Skill]] = {}
             for us in rows:
                 skill = session.exec(
                     select(Skill).where(Skill.skill_id == us.skill_id)
@@ -1341,6 +1353,7 @@ class ResumeTailorAgent:
                 if not skill or should_reject_skill(skill.name):
                     continue
                 cname = normalize_skill_name(skill.name)
+                candidates.setdefault(cname, []).append(skill)
                 entry = by_name.get(cname)
                 if entry is None:
                     by_name[cname] = {
@@ -1350,14 +1363,24 @@ class ResumeTailorAgent:
                         "confidence": us.confidence_score,
                         "is_core": bool(us.is_core),
                     }
-                    id_by_name[cname] = skill.skill_id
                 else:
                     if (us.proficiency or 0) > (entry["proficiency"] or 0):
                         entry["proficiency"] = us.proficiency
                     if (us.confidence_score or 0) > (entry["confidence"] or 0):
                         entry["confidence"] = us.confidence_score
                     entry["is_core"] = entry["is_core"] or bool(us.is_core)
-            skills: List[Dict] = list(by_name.values())
+            # Representative per canonical name, by content. Rows that tie on
+            # (name, category) are interchangeable here: the cached embedding is
+            # computed from `Skill.name`, so equal names carry equal vectors and
+            # only the opaque skill_id differs.
+            for cname, cands in candidates.items():
+                rep = min(cands, key=lambda s: (s.name, s.category or ""))
+                by_name[cname]["category"] = rep.category or "Other"
+                id_by_name[cname] = rep.skill_id
+            # Sort by canonical name so the list handed to the scorer does not
+            # carry row order. The scorer's sort key is already a total order,
+            # so this is belt-and-braces rather than load-bearing.
+            skills: List[Dict] = [by_name[k] for k in sorted(by_name)]
             # JD corpus for IDF: every stored job description (term-rarity signal).
             corpus = [
                 d for d in session.exec(select(JobDescription.description)).all() if d

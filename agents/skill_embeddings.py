@@ -74,6 +74,14 @@ def ensure_skill_embeddings(
     if not stale:
         return 0
 
+    # Determinism (issue #158): `skills` comes back unordered, and sentence-
+    # transformers batches by input order, so batch composition — and with it
+    # the padding each text is encoded against — varied run to run. Sorting by
+    # name pins the batches for a given stale set. Keyed on the text alone, not
+    # on skill_id: equal names produce equal vectors, so rows tying on name are
+    # interchangeable, and a uuid tiebreak would differ in every fresh database.
+    stale.sort(key=lambda s: s.name or "")
+
     vecs = _encode([s.name for s in stale])
     if vecs is None:
         return 0
@@ -127,6 +135,12 @@ def ensure_job_embedding(session: Session, job: JobDescription) -> Optional[np.n
         phrases = [job.description[:2000]] if job.description else []
     if not phrases:
         return None
+
+    # Determinism (issue #158): the JobSkill query is unordered, and this vector
+    # feeds *every* skill's semantic score, so an unstable centroid moves the
+    # whole ranking. Sorting fixes both the encode batch composition and the
+    # float summation order of the mean below.
+    phrases.sort()
 
     vecs = _encode(phrases)
     if vecs is None:
