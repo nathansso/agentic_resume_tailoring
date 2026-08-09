@@ -33,6 +33,10 @@ Thumbs.db
 # LinkedIn session (contains auth cookies)
 .linkedin_session/
 
+# Codex CLI local config — holds MCP server credentials in plaintext
+# (SUPABASE_ACCESS_TOKEN and friends). Per-machine setup, never source.
+.codex/
+
 # GitHub scan cache
 .github_cache.json
 
