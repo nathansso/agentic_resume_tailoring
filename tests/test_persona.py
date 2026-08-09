@@ -478,6 +478,50 @@ def test_a_corrected_trait_label_survives_a_recompile(isolated_engine):
         "Plays down student projects")
 
 
+def test_a_corrected_label_is_what_the_planner_reads(isolated_engine):
+    """Criterion 9 has to bite where the label is actually used, and there is
+    exactly one such place: `render_constraints` heads the prompt block with it.
+    A correction that stopped at the inspect surface would leave the planner
+    reading the template phrasing the user had just rejected — the edit surface
+    would be decorative."""
+    user = _user(isolated_engine)
+    _save(user.user_id)
+    trait_id = services.load_persona_traits(user.user_id)[0]["trait_id"]
+    services.update_persona_trait(
+        user.user_id, UUID(trait_id), "Plays down student coursework")
+
+    persona = services.get_active_persona(user.user_id, job_id="job-1")
+    assert [t["label"] for t in persona["traits"]] == ["Plays down student coursework"]
+
+    constraints = compile_constraints(
+        persona["constraints"], {}, ["proj:recipe app"])
+    assert render_constraints(constraints, persona["traits"]).startswith(
+        "Plays down student coursework:")
+
+
+def test_a_corrected_label_does_not_leak_into_the_compiled_persona(isolated_engine):
+    """The other half: criterion 5 says `compiled` is a pure function of the
+    active leaves, so the correction is overlaid at read time and never folded
+    into the artifact. Two users who said the same things still compile to the
+    same bytes, whatever either of them renamed."""
+    user = _user(isolated_engine)
+    _save(user.user_id)
+    with Session(isolated_engine) as session:
+        before = session.exec(
+            select(Persona).where(Persona.user_id == user.user_id)).first().compiled_hash
+
+    trait_id = services.load_persona_traits(user.user_id)[0]["trait_id"]
+    services.update_persona_trait(user.user_id, UUID(trait_id), "Renamed")
+    services.rebuild_persona(user.user_id)
+
+    with Session(isolated_engine) as session:
+        row = session.exec(
+            select(Persona).where(Persona.user_id == user.user_id)).first()
+        assert row.compiled_hash == before
+        assert [t["label"] for t in row.compiled["traits"]] == [
+            "Downplays projects on every resume"]
+
+
 def test_a_trait_belonging_to_another_user_cannot_be_edited(isolated_engine):
     """Issue #73: every id-bearing path re-checks ownership."""
     victim = _user(isolated_engine)

@@ -2149,20 +2149,43 @@ def get_active_persona(
 
     Empty in, empty out — a user with no preferences gets empty lists, which
     every consumer already treats as pre-#129 behavior.
+
+    **A corrected label is overlaid here rather than compiled in.** The label is
+    the one part of a trait that does anything — `arbitration.render_constraints`
+    heads the prompt block with it — so a correction that stopped at the inspect
+    surface would leave criterion 9 satisfied only cosmetically, while the
+    planner kept reading the template phrasing the user had just rejected.
+    Folding the edit into `compiled` instead would break criterion 5, since the
+    compiled persona has to stay a pure function of the active leaves. Overlaying
+    at read time keeps both: the artifact stays pure and derived, and the user's
+    words are what reaches the model. Keyed on `group_key`, which is stable
+    across recomputes, so the overlay survives a rebuild and applies equally to
+    the in-memory recompile above.
     """
     from agents.persona import (
         compile_persona, leaf_digest, persona_in_scope, traits_for,
     )
     from agents.preferences import STATUS_ACTIVE
-    from database.models import Persona
+    from database.models import Persona, PersonaTrait
 
     leaves = load_preferences(user_id, include_inactive=True)
     compiled = None
+    edited_labels: dict = {}
     try:
         with Session(engine) as session:
             row = session.exec(
                 select(Persona).where(Persona.user_id == user_id)
             ).first()
+            edited_labels = {
+                t.group_key: t.label
+                for t in session.exec(
+                    select(PersonaTrait).where(
+                        PersonaTrait.user_id == user_id,
+                        PersonaTrait.edited == True,  # noqa: E712 — SQL, not Python
+                    )
+                ).all()
+                if t.group_key and t.label
+            }
         if row is not None and row.leaf_digest == leaf_digest(leaves):
             compiled = row.compiled
     except Exception as exc:
@@ -2173,7 +2196,12 @@ def get_active_persona(
             [p for p in leaves if p.get("status") == STATUS_ACTIVE])
 
     constraints = persona_in_scope(compiled, job_id=job_id, role_family=role_family)
-    return {"traits": traits_for(compiled, constraints), "constraints": constraints}
+    traits = traits_for(compiled, constraints)
+    for trait in traits:
+        label = edited_labels.get(trait.get("group_key"))
+        if label:
+            trait["label"] = label
+    return {"traits": traits, "constraints": constraints}
 
 
 def load_persona_traits(user_id: UUID, include_inactive: bool = False) -> list[dict]:
