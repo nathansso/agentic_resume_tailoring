@@ -6,6 +6,45 @@ Entries titled `PRD NN — …` are historical: they predate the move to issue-d
 
 ---
 
+## Issue 122 — Redundancy metric suite: semantic duplication, stuffing, monotony and dilution as separable modes
+**Status:** complete | **Tests:** 1117 pass on Postgres / 1109 on SQLite (24 new)
+
+`redundancy_metrics` counted skill-term occurrences and computed a type-token ratio. That is one and a half of the four ways a tailored resume becomes redundant. The largest gap — **semantic duplication** ("Led a team of 5" / "Managed 5 engineers") — shares no tokens with its twin, so no amount of counting can find it, and it is the mode a human reader punishes hardest.
+
+This is the entry point to the metrics arc, not a reporting improvement. #127 consumes it as the `Δcost` of `net(a) = ΔATS − λ·Δcost`, which exists because the ATS composite **cannot detect over-tailoring**: 0.75 of it is coverage and coverage is monotone non-decreasing in edits, so the optimal policy is "edit maximally" — degenerate, and trivially saturated by anything #51 Phase 2 learns. The penalty is what makes the objective peaked. Chain: **#122 → #127 → #113 (Stage 2) → #51 Phase 2**.
+
+### What shipped
+- **`agents/redundancy.py` (new), pure.** stdlib + numpy, no DB and no LLM. It is in `agents/` rather than `eval/` because #127 evaluates `Δcost` *inside the tailoring controller, per prefix* — that makes it runtime scoring, not reporting, and `agents/` importing from `eval/` would invert a dependency the repo has nowhere. Same reasoning that produced `agents/skill_selection.py` in #150.
+- **The embedding model is injected, never imported.** Semantic duplication is the only metric with a model dependency, and an injected encoder keeps it visible at the call site. Absent an encoder the semantic keys are **omitted, not zeroed** — matching how `agents/skill_embeddings.py` degrades, and for the reason #158 made expensive: a fake-but-stable signal is worse than a missing one.
+- **Term stuffing is now bullet-level document frequency.** "Python" three times in one bullet is a badly written bullet; "Python" once in each of eight bullets is stuffing. Raw counts conflate them; document frequency separates them and is what reads as spam. The pre-existing boundary-aware regex is reused, so `sql` still does not match inside `mysql`.
+- **Semantic duplication — `max_pairwise_cosine`, `mean_pairwise_cosine`, `duplicate_pair_count`.** Computed as a gram matrix over normalized vectors, not an O(n²) Python loop, and clamped to [-1, 1] so float error cannot report a cosine above 1.0 and make a downstream threshold look broken. Returns `{}` below two bullets: one bullet cannot duplicate anything, and 0.0 would read as "verified clean".
+- **Lexical monotony — leading-verb entropy and MTLD.** Entropy over each bullet's opening token (resume bullets open with a verb by convention, so no POS tagger), normalized by `log(n)` so 1.0 is all-distinct and 0.0 all-identical. This catches the machine cadence — "Developed…", "Developed…", "Developed…" — that a type-token ratio cannot see, because those bullets may be lexically varied everywhere after word one.
+- **Dilution — new-information ratio.** Per bullet, the fraction of content tokens absent from *earlier bullets of the same item*, reusing `ATSScoringEngine._extract_keywords`. Operationalizes "bullets grow longer, say no more": length alone is not the fault, restatement is. Scoped per item on purpose — two roles may legitimately share a technology, a role repeating itself may not.
+- **`BulletSimilarityCache` — the incremental path, built for #127 rather than retrofitted.** Keyed on bullet *text*, not index: an edit changes one bullet while the rest keep their vectors, and a reverted or reordered bullet is already warm. The encode is the dominant cost, not the matmul (n≈30, d=384 is ~350k flops), so caching by text is where the O(n)-not-O(n²) win actually lives. New texts are encoded in **sorted order** so batch composition does not follow document order (#158).
+- **Tests (24 new).** 22 in `tests/test_redundancy.py` — a new file because the module is a genuinely new concern with no existing home, not a per-issue file — plus 2 pinning the wrapper's backward compatibility in `tests/test_tailoring_benchmark.py`. The headline case asserts two paraphrases score `max_pairwise_cosine > 0.95` *while* term counting stays clean, which is the whole point of the addition.
+
+### Verification
+`python eval/tailoring_benchmark.py --stub --limit 3`, run twice. Every pre-existing metric is byte-identical to the #158 baseline — `ats`, `skills`, and all six original redundancy keys — confirming the merge is genuinely additive. The two runs are identical to each other, so #158's determinism survives.
+
+| new metric | mean | median | min | max |
+|---|---|---|---|---|
+| `max_bullet_df` | 0.123 | 0.125 | 0.118 | 0.125 |
+| `leading_verb_entropy` | 0.970 | 0.969 | 0.969 | 0.971 |
+| `mtld` | 241.3 | 237.8 | 237.8 | 248.3 |
+| `mean_new_information` | 0.998 | 1.0 | 0.993 | 1.0 |
+| `max_pairwise_cosine` | — | — | — | — (no encoder in stub mode) |
+
+### Deviations from spec
+- **MTLD is added beside TTR, not in place of it.** The issue says "replace TTR with MTLD"; the acceptance criteria say existing consumers keep working via additive keys. Those conflict, and `bullet_type_token_ratio` has live consumers — `eval/tailoring_benchmark.ipynb:116` and `_aggregate` — so removing it is a breaking change that belongs in its own issue. It stays, with its docstring now stating the length bias and naming `mtld` as its successor.
+- **MTLD is not as stable as the issue implies, and the test says so.** The acceptance criterion asks that "MTLD is stable across bullet-length changes where TTR is not." Measured on synthetic constant-diversity text, TTR falls monotonically (0.667 → 0.203 over an 8x length span) while MTLD shows **no trend** but does wander in a band (~62–94). MTLD is only reliable from ~100 tokens and a resume runs ~100–300 across all bullets. So the test asserts trend and relative spread rather than stability, because asserting a stability it does not have would be a worse test than none. It removes TTR's *systematic* bias; it is not a precision instrument at this scale.
+- **The stub benchmark cannot exercise any of the four modes, and this is the most important caveat here.** On the fixture the suite reports clean across the board: `max_bullet_df` 0.12 against a 0.5 stuffing threshold, entropy 0.97 of 1.0, `mean_new_information` 0.998 of 1.0. Either the stub tailoring is genuinely clean or it is too simple to generate redundancy — this run cannot distinguish those. **Semantic duplication is not measured in stub mode at all**, by design. The consequence for #127 is concrete: `Δcost` would be near-constant on this fixture, so **λ cannot be calibrated on a stub run** and its sweep needs a real-LLM run. A redundancy-bearing fixture is the missing capability.
+- **Dilution's metric was designed here, not specified.** The issue's failure-mode table lists dilution as the fourth mode, but its "Proposed metric set" section gives it no metric while the acceptance criteria require all four to have one. New-information ratio was chosen over content-word density because it matches the stated failure ("say no more") rather than merely detecting filler.
+- **The semantic tests assert the metric, not the model.** The fast suite uses a lookup encoder returning chosen vectors, so it asks "given an encoder that says these are near-identical, does the suite surface them?" Asserting real MiniLM behavior in the fast suite would make it network-dependent, so the true paraphrase claim lives in one `@pytest.mark.integration` test — verified passing against the real model (paraphrase cosine strictly greater than unrelated).
+- **One residual carried forward from #158, not fixed.** `BulletSimilarityCache` sorts new texts before encoding, so batch composition is fixed for a given set of new bullets, but it still depends on *which* texts are already cached. It cannot make one process disagree with itself, which is what a per-prefix controller needs; bit-exactness across differently-warmed caches was not chased.
+- **No consumer of `Δcost` ships here.** λ calibration and the net objective (#127), the per-prefix controller (#113), and any change to which edits ship are all out of scope. #122 supplies the measurement only, so no tailoring output moves — which is what the additive-only benchmark check above confirms.
+
+---
+
 ## Issue 158 — Deterministic skill selection: the same profile + JD now renders the same skills section
 **Status:** complete | **Tests:** 1093 pass on Postgres / 1085 on SQLite (6 new)
 
