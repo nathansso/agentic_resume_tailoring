@@ -259,9 +259,12 @@ def test_the_node_runs_and_returns_an_empty_set_for_a_user_with_no_preferences(
     even when the profile is empty. A tier only consulted when something
     upstream decides it is relevant is a tier that silently stops binding."""
     user = _user(isolated_engine)
-    constraints = ResumeTailorAgent._compile_preference_constraints(
+    # The node returns (constraints, traits) since #133; the traits are prompt
+    # grouping only and are empty for the same reason the constraints are.
+    constraints, traits = ResumeTailorAgent._compile_preference_constraints(
         user.user_id, uuid4(), None, [], [], [], [])
     assert constraints == {"applied": [], "conflicts": [], "refused": []}
+    assert traits == []
 
 
 def test_the_node_binds_a_stored_preference(isolated_engine):
@@ -278,11 +281,13 @@ def test_the_node_binds_a_stored_preference(isolated_engine):
           "target_type": "project"}])[0]
     services.apply_preference_decision(user.user_id, proposal)
 
-    constraints = ResumeTailorAgent._compile_preference_constraints(
+    constraints, traits = ResumeTailorAgent._compile_preference_constraints(
         user.user_id, uuid4(), None,
         [], [{"name": "Recipe App"}], [], [],
     )
     assert [a["target_key"] for a in constraints["applied"]] == ["proj:recipe app"]
+    # The #133 trait covering it comes back alongside, for prompt grouping.
+    assert [t["group_key"] for t in traits] == ["suppress|project|global"]
 
 
 def test_the_pipeline_never_writes_a_preference(isolated_engine):
@@ -294,6 +299,10 @@ def test_the_pipeline_never_writes_a_preference(isolated_engine):
     ResumeTailorAgent._compile_preference_constraints(
         user.user_id, uuid4(), None, [], [], [], [])
     assert services.load_preferences(user.user_id, include_inactive=True) == []
+    # And it writes no *derived* tier either (issue #133): the node reads the
+    # compiled persona and recompiles in memory when the stored copy is stale,
+    # so the whole tailoring path cannot create a row in either tier.
+    assert services.load_persona_traits(user.user_id, include_inactive=True) == []
 
 
 # ── the cost of honoring a preference ────────────────────────────────────────
@@ -351,6 +360,7 @@ def test_arbitration_failure_degrades_to_no_constraints(isolated_engine, monkeyp
     monkeypatch.setattr(
         services, "load_preferences",
         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("db down")))
-    constraints = ResumeTailorAgent._compile_preference_constraints(
+    constraints, traits = ResumeTailorAgent._compile_preference_constraints(
         user.user_id, uuid4(), None, [], [], [], [])
     assert constraints == {"applied": [], "conflicts": [], "refused": []}
+    assert traits == []

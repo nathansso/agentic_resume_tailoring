@@ -1873,6 +1873,12 @@ def apply_preference_decision(user_id: UUID, proposal: dict) -> str:
             session.add(row)
             session.commit()
 
+        # Event-driven persona recompile (issue #133): the leaf set just
+        # changed. Never fatal — a stale persona is caught by the leaf-digest
+        # check in `get_active_persona`, so a failed rebuild costs a recompile
+        # at read time and nothing else.
+        rebuild_persona(user_id)
+
         if superseded:
             return f"Updated — this replaces what you told me earlier: {text}"
         return f"Saved: {text}"
@@ -1940,7 +1946,12 @@ def update_preference(
                 session.add(row)
                 session.commit()
                 session.refresh(row)
-            return _preference_dict(row)
+            updated = _preference_dict(row)
+        if touched:
+            # A correction can move a leaf between traits — editing `polarity`
+            # or `scope_type` changes its group key (issue #133).
+            rebuild_persona(user_id)
+        return updated
     except Exception as exc:
         logger.warning("update_preference failed for %s: %s", preference_id, exc)
         return None
@@ -1969,9 +1980,281 @@ def retract_preference(user_id: UUID, preference_id: UUID) -> Optional[dict]:
             session.add(row)
             session.commit()
             session.refresh(row)
-            return _preference_dict(row)
+            retracted = _preference_dict(row)
+        # The leaf leaves `active` but stays linked to its trait as a
+        # `superseded_leaf_id` — negation must not expire (issue #133).
+        rebuild_persona(user_id)
+        return retracted
     except Exception as exc:
         logger.warning("retract_preference failed for %s: %s", preference_id, exc)
+        return None
+
+
+# ── Persona semantic tier (issue #133) ──────────────────────────────────────
+#
+# **The write barrier applies here too, and harder.** The rule from #118 is that
+# a pipeline able to write the user's tier launders its own output into a
+# counterfeit user choice, and #129 noted it binds harder for *inferred*
+# preferences. It binds harder again for a *derived* tier: `rebuild_persona` is
+# called only from the three functions above, each of which is already reached
+# only by an explicit user decision. `tailor()` reads the persona and never
+# rebuilds it — see `get_active_persona`, which degrades rather than writing.
+
+def _persona_trait_dict(row) -> dict:
+    return {
+        "trait_id": str(row.trait_id),
+        "group_key": row.group_key,
+        "label": row.label,
+        "polarity": row.polarity,
+        "target_type": row.target_type,
+        "scope_type": row.scope_type,
+        "scope_value": row.scope_value,
+        "leaf_ids": list(row.leaf_ids or []),
+        "superseded_leaf_ids": list(row.superseded_leaf_ids or []),
+        "status": row.status,
+        "edited": bool(row.edited),
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+    }
+
+
+def rebuild_persona(user_id: UUID, leaves: Optional[list[dict]] = None) -> Optional[UUID]:
+    """Recompile this user's persona from their preference leaves. Never raises.
+
+    Event-driven, mirroring `rebuild_job_card`: called when a leaf changes, so
+    the compile is paid off the next turn's critical path rather than inline at
+    tailoring time.
+
+    *leaves* lets a caller hand back rows it has already loaded (see
+    `get_active_persona`), so the staleness check does not pay for a second read
+    of the same table.
+
+    Trait rows are reconciled **by `group_key`**, never recreated. That is what
+    keeps `trait_id` stable across recomputes, which in turn is what keeps #119's
+    RL context buckets stationary — the whole reason the grouping is
+    deterministic instead of emergent. A trait that loses every active leaf is
+    marked `inactive` and keeps its links; nothing in this tier is ever deleted.
+
+    Returns the persona id, or None on failure. Failure is silent-with-a-log for
+    the reason a card rebuild is: the persona is derived state, and losing a
+    recompile must never take down the user action that triggered it.
+    """
+    from datetime import datetime
+
+    from agents.persona import (
+        PERSONA_VERSION, TRAIT_ACTIVE, TRAIT_INACTIVE, compile_persona,
+        leaf_digest, persona_digest, superseded_links, trait_label,
+    )
+    from agents.preferences import STATUS_ACTIVE
+    from database.models import Persona, PersonaTrait
+
+    try:
+        if leaves is None:
+            leaves = load_preferences(user_id, include_inactive=True)
+        active = [p for p in leaves if p.get("status") == STATUS_ACTIVE]
+        compiled = compile_persona(active)
+        compiled_hash = persona_digest(compiled)
+        digest = leaf_digest(leaves)
+        superseded = superseded_links(leaves)
+        now = datetime.utcnow()
+
+        with Session(engine) as session:
+            row = session.exec(
+                select(Persona).where(Persona.user_id == user_id)
+            ).first()
+            if row is None:
+                row = Persona(user_id=user_id)
+                session.add(row)
+            elif row.compiled_hash == compiled_hash and row.leaf_digest == digest:
+                # Nothing moved. Skipping the write keeps `updated_at` honest as
+                # "when the persona last changed" (the `payload_hash` precedent).
+                return row.persona_id
+            row.compiled = compiled
+            row.compiled_hash = compiled_hash
+            row.compile_version = PERSONA_VERSION
+            row.leaf_digest = digest
+            row.updated_at = now
+
+            existing = {
+                t.group_key: t for t in session.exec(
+                    select(PersonaTrait).where(PersonaTrait.user_id == user_id)
+                ).all()
+            }
+            by_key = {t["group_key"]: t for t in compiled["traits"]}
+            for key in sorted(set(by_key) | set(superseded) | set(existing)):
+                trait = by_key.get(key)
+                keep = existing.get(key)
+                if keep is None:
+                    if trait is None and not superseded.get(key):
+                        continue
+                    parts = trait or _persona_key_parts(key)
+                    keep = PersonaTrait(
+                        user_id=user_id,
+                        group_key=key,
+                        label=trait_label(key),
+                        polarity=parts["polarity"],
+                        target_type=parts["target_type"],
+                        scope_type=parts["scope_type"],
+                        scope_value=parts["scope_value"],
+                        created_at=now,
+                    )
+                # A hand-corrected label is never overwritten by a recompile —
+                # the same contract `UserPreference.edited` carries.
+                if not keep.edited:
+                    keep.label = trait_label(key)
+                keep.leaf_ids = list(trait["leaf_ids"]) if trait else []
+                keep.superseded_leaf_ids = list(superseded.get(key) or [])
+                keep.status = TRAIT_ACTIVE if trait else TRAIT_INACTIVE
+                keep.updated_at = now
+                session.add(keep)
+
+            session.commit()
+            session.refresh(row)
+            return row.persona_id
+    except Exception as exc:
+        logger.warning("rebuild_persona failed for user %s: %s", user_id, exc)
+        return None
+
+
+def _persona_key_parts(key: str) -> dict:
+    from agents.persona import parse_group_key
+    return parse_group_key(key)
+
+
+def get_active_persona(
+    user_id: UUID,
+    job_id: Optional[str] = None,
+    role_family: Optional[str] = None,
+) -> dict:
+    """This user's compiled persona, scope-filtered. `{traits, constraints}`.
+
+    The read path the tailoring pipeline uses in place of #129's
+    `preferences_in_scope(load_preferences(...))`. It returns the same constraint
+    dicts that function returned, plus `trait_key`, so `compile_constraints` is
+    fed rather than bypassed.
+
+    **This function never writes**, and that is the write barrier in its
+    strongest available form: the whole tailoring path can be run and it cannot
+    create or mutate a row in either tier. `rebuild_persona` is reached only from
+    the three functions above, each already gated behind an explicit user
+    decision.
+
+    Which forces the other half: **the stored persona is a cache, never the
+    authority — the leaves are.** A leaf-digest mismatch means the stored row is
+    stale, so it is ignored and the persona is recompiled in memory for this
+    call. A missed rebuild therefore costs inspectability until the next write,
+    and can never cost a preference. That is the failure mode this tier exists to
+    prevent, and making the read path authoritative is what removes it rather
+    than merely making it unlikely.
+
+    Empty in, empty out — a user with no preferences gets empty lists, which
+    every consumer already treats as pre-#129 behavior.
+
+    **A corrected label is overlaid here rather than compiled in.** The label is
+    the one part of a trait that does anything — `arbitration.render_constraints`
+    heads the prompt block with it — so a correction that stopped at the inspect
+    surface would leave criterion 9 satisfied only cosmetically, while the
+    planner kept reading the template phrasing the user had just rejected.
+    Folding the edit into `compiled` instead would break criterion 5, since the
+    compiled persona has to stay a pure function of the active leaves. Overlaying
+    at read time keeps both: the artifact stays pure and derived, and the user's
+    words are what reaches the model. Keyed on `group_key`, which is stable
+    across recomputes, so the overlay survives a rebuild and applies equally to
+    the in-memory recompile above.
+    """
+    from agents.persona import (
+        compile_persona, leaf_digest, persona_in_scope, traits_for,
+    )
+    from agents.preferences import STATUS_ACTIVE
+    from database.models import Persona, PersonaTrait
+
+    leaves = load_preferences(user_id, include_inactive=True)
+    compiled = None
+    edited_labels: dict = {}
+    try:
+        with Session(engine) as session:
+            row = session.exec(
+                select(Persona).where(Persona.user_id == user_id)
+            ).first()
+            edited_labels = {
+                t.group_key: t.label
+                for t in session.exec(
+                    select(PersonaTrait).where(
+                        PersonaTrait.user_id == user_id,
+                        PersonaTrait.edited == True,  # noqa: E712 — SQL, not Python
+                    )
+                ).all()
+                if t.group_key and t.label
+            }
+        if row is not None and row.leaf_digest == leaf_digest(leaves):
+            compiled = row.compiled
+    except Exception as exc:
+        logger.warning("get_active_persona read failed for %s: %s", user_id, exc)
+
+    if not isinstance(compiled, dict) or "constraints" not in compiled:
+        compiled = compile_persona(
+            [p for p in leaves if p.get("status") == STATUS_ACTIVE])
+
+    constraints = persona_in_scope(compiled, job_id=job_id, role_family=role_family)
+    traits = traits_for(compiled, constraints)
+    for trait in traits:
+        label = edited_labels.get(trait.get("group_key"))
+        if label:
+            trait["label"] = label
+    return {"traits": traits, "constraints": constraints}
+
+
+def load_persona_traits(user_id: UUID, include_inactive: bool = False) -> list[dict]:
+    """This user's traits, each with its leaf links. Read-only, [] on failure."""
+    from agents.persona import TRAIT_ACTIVE
+    from database.models import PersonaTrait
+
+    try:
+        with Session(engine) as session:
+            rows = session.exec(
+                select(PersonaTrait).where(PersonaTrait.user_id == user_id)
+            ).all()
+            out = [_persona_trait_dict(r) for r in rows]
+    except Exception as exc:
+        logger.warning("load_persona_traits failed for user %s: %s", user_id, exc)
+        return []
+    if not include_inactive:
+        out = [t for t in out if t["status"] == TRAIT_ACTIVE]
+    out.sort(key=lambda t: t["group_key"])
+    return out
+
+
+def update_persona_trait(
+    user_id: UUID, trait_id: UUID, label: str,
+) -> Optional[dict]:
+    """Correct a trait's label. Stamps `edited` so a rebuild will not undo it.
+
+    Label only. A trait's *membership* is derived from its leaves and correcting
+    it here would let the two tiers drift apart — the leaf is where a wrong
+    grouping is actually fixed, by editing its polarity or scope. This keeps the
+    derived tier from becoming independently authored state.
+    """
+    from datetime import datetime
+
+    from database.models import PersonaTrait
+
+    try:
+        label = str(label or "").strip()
+        if not label:
+            return None
+        with Session(engine) as session:
+            row = session.get(PersonaTrait, trait_id)
+            if row is None or row.user_id != user_id:
+                return None
+            row.label = label
+            row.edited = True
+            row.updated_at = datetime.utcnow()
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            return _persona_trait_dict(row)
+    except Exception as exc:
+        logger.warning("update_persona_trait failed for %s: %s", trait_id, exc)
         return None
 
 

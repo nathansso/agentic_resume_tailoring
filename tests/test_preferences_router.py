@@ -174,3 +174,81 @@ def test_another_users_preference_is_not_reachable(isolated_engine, pref_client)
 def test_a_malformed_preference_id_is_a_404_not_a_500(isolated_engine, pref_client):
     user = _seed_user(isolated_engine)
     assert pref_client(user).delete("/api/preferences/not-a-uuid").status_code == 404
+
+
+# ── persona semantic tier (issue #133) ───────────────────────────────────────
+
+def test_the_persona_endpoint_resolves_every_leaf_link(isolated_engine, pref_client):
+    """What makes the lossless index *visible* rather than merely true: the user
+    sees the disposition ARTie inferred next to the exact things they said."""
+    user = _seed_user(isolated_engine)
+    client = pref_client(user)
+    client.post("/api/preferences/decide",
+                json={"action": "accept", "proposal": _PROPOSAL})
+
+    body = client.get("/api/preferences/persona").json()
+    assert [c["trait_key"] for c in body["constraints"]] == [
+        "suppress|project|global"]
+    trait = body["traits"][0]
+    assert trait["label"] == "Downplays projects on every resume"
+    assert [leaf["text"] for leaf in trait["leaves"]] == [_PROPOSAL["text"]]
+    assert trait["superseded_leaves"] == []
+
+
+def test_a_retracted_leaf_stays_visible_under_its_trait(isolated_engine, pref_client):
+    """Negation must not expire: a preference the user reversed is still part of
+    how the disposition formed, so the link is kept and shown."""
+    user = _seed_user(isolated_engine)
+    client = pref_client(user)
+    client.post("/api/preferences/decide",
+                json={"action": "accept", "proposal": _PROPOSAL})
+    pid = services.load_preferences(user.user_id)[0]["preference_id"]
+    client.delete(f"/api/preferences/{pid}")
+
+    traits = client.get("/api/preferences/persona").json()["traits"]
+    assert traits[0]["status"] == "inactive"
+    assert [leaf["preference_id"] for leaf in traits[0]["superseded_leaves"]] == [pid]
+
+
+def test_a_trait_label_is_correctable(isolated_engine, pref_client):
+    user = _seed_user(isolated_engine)
+    client = pref_client(user)
+    client.post("/api/preferences/decide",
+                json={"action": "accept", "proposal": _PROPOSAL})
+    trait_id = services.load_persona_traits(user.user_id)[0]["trait_id"]
+
+    res = client.patch(f"/api/preferences/traits/{trait_id}",
+                       json={"label": "Plays down student projects"})
+    assert res.status_code == 200
+    assert res.json()["edited"] is True
+    assert services.load_persona_traits(user.user_id)[0]["label"] == (
+        "Plays down student projects")
+
+
+def test_another_users_trait_is_not_reachable(isolated_engine, pref_client):
+    victim, attacker = _seed_user(isolated_engine, "TVictim"), _seed_user(
+        isolated_engine, "TAttacker")
+    pref_client(victim).post("/api/preferences/decide",
+                             json={"action": "accept", "proposal": _PROPOSAL})
+    trait_id = services.load_persona_traits(victim.user_id)[0]["trait_id"]
+
+    client = pref_client(attacker)
+    assert client.get("/api/preferences/persona").json()["traits"] == []
+    assert client.patch(f"/api/preferences/traits/{trait_id}",
+                        json={"label": "hijacked"}).status_code == 404
+    assert services.load_persona_traits(victim.user_id)[0]["label"] == (
+        "Downplays projects on every resume")
+
+
+def test_a_malformed_trait_id_is_a_404_not_a_500(isolated_engine, pref_client):
+    user = _seed_user(isolated_engine)
+    res = pref_client(user).patch("/api/preferences/traits/not-a-uuid",
+                                  json={"label": "x"})
+    assert res.status_code == 404
+
+
+def test_the_persona_endpoint_is_empty_for_a_user_with_no_preferences(
+        isolated_engine, pref_client):
+    user = _seed_user(isolated_engine)
+    body = pref_client(user).get("/api/preferences/persona").json()
+    assert body == {"constraints": [], "traits": []}

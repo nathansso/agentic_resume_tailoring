@@ -201,6 +201,7 @@ class TailorPlanner:
         allow_explore: bool = True,
         job_cards: Optional[List[Dict]] = None,
         constraints: Optional[Dict] = None,
+        persona_traits: Optional[List[Dict]] = None,
     ) -> Dict:
         """Return {"actions": [...], "knobs": {...}, "planner": "llm"|"default"}.
 
@@ -219,6 +220,11 @@ class TailorPlanner:
         fallback runs precisely when the model failed, which is no reason for a
         user's standing preferences to stop binding. An empty set leaves the
         prompt and the resulting plan byte-for-byte unchanged.
+
+        *persona_traits* is the #133 semantic tier covering those constraints.
+        It groups the prompt block under each standing disposition and nothing
+        else — the gate below reads leaves, so the resulting plan is provably
+        unaffected by the grouping. Absent traits render the pre-#133 flat block.
         """
         knobs = {**DEFAULT_KNOBS, **(knobs or {})}
         # Never explore against a user's explicit revision request: sampling
@@ -235,7 +241,7 @@ class TailorPlanner:
         try:
             raw_actions = self._llm_plan(
                 items, pool, jd_text, missing_skills, revision_notes,
-                prior_content, knobs, job_cards, constraints,
+                prior_content, knobs, job_cards, constraints, persona_traits,
             )
         except Exception as exc:
             logger.warning("TailorPlanner LLM plan failed, using default: %s", exc)
@@ -412,6 +418,7 @@ class TailorPlanner:
         knobs: Dict,
         job_cards: Optional[List[Dict]] = None,
         constraints: Optional[Dict] = None,
+        persona_traits: Optional[List[Dict]] = None,
     ) -> List[Dict]:
         """One LLM call → raw action list (unvalidated). Raises on failure."""
         def item_line(i: Dict) -> Dict:
@@ -488,10 +495,13 @@ class TailorPlanner:
         # 14.8%). Built only when the arbitration produced something, so a user
         # with no preferences gets the byte-for-byte pre-#129 prompt — the same
         # conditional-inclusion discipline graph_evidence and job_cards use.
+        # Grouped under the #133 trait labels when the semantic tier supplied
+        # them, so the model reads a standing disposition with its evidence
+        # beneath it rather than a flat list of unrelated-looking lines.
         preference_block = ""
         if constraints:
             from agents.arbitration import render_constraints
-            rendered = render_constraints(constraints)
+            rendered = render_constraints(constraints, persona_traits)
             if rendered:
                 preference_block = (
                     "\n\nTHE CANDIDATE'S STANDING PREFERENCES — already weighed "
@@ -579,6 +589,12 @@ def apply_constraints(
     to gate, and a target that has since left the resume has none either.
     Reporting those is deliberate: an applied preference that quietly did
     nothing is the silent-symptom failure this tier is supposed to avoid.
+
+    Each action also picks up a `persona` block — the #133 per-item context
+    features #119 needs (#119's finding is that strategies are sampled per
+    *item* while `context_features` is per *run*, so an induced rule's
+    predicates have nothing to range over). Data only: it is written after the
+    gating decisions above and never read by them.
     """
     from agents.arbitration import applied_by_polarity, is_empty
 
@@ -642,6 +658,16 @@ def apply_constraints(
                 record(pref, action, before, "reframed by preference")
 
     _refuse_empty_sections(by_key, items)
+
+    # Per-item persona context for the RL work (#119/#133). Stamped on every
+    # action, not only gated ones: "no preference bound to this item" is exactly
+    # as informative to a learner as "one did", and a feature present only on
+    # the positive cases cannot be conditioned on.
+    from agents.persona import persona_features
+    applied_constraints = (constraints or {}).get("applied") or []
+    for action in actions:
+        action["persona"] = persona_features(
+            applied_constraints, action.get("item_key"))
 
     enforcement: Dict = {}
     if changed:

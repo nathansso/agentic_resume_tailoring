@@ -12,7 +12,7 @@ Flow:
 import logging
 import json
 import re
-from typing import Dict, Any, List, Optional, TypedDict, Annotated
+from typing import Dict, Any, List, Optional, Tuple, TypedDict, Annotated
 from uuid import UUID
 from sqlmodel import Session, select
 from langchain_core.prompts import ChatPromptTemplate
@@ -327,7 +327,7 @@ class ResumeTailorAgent:
             # preferences that matter most (ImplexConv opposed-case F1 14.8%).
             # What reaches the planner is the small scope-filtered compiled
             # constraint set — never the leaves, never the transcript.
-            constraints = self._compile_preference_constraints(
+            constraints, persona_traits = self._compile_preference_constraints(
                 user_id, job_id, active_role_family,
                 exp_dicts, proj_dicts, proj_pool, skill_terms,
             )
@@ -363,6 +363,10 @@ class ResumeTailorAgent:
             # Arbitrated standing preferences (issue #129): {applied, conflicts,
             # refused}. Always present, empty for a user with no preferences.
             "constraints": constraints,
+            # The #133 traits covering those constraints. Prompt grouping only —
+            # arbitration and the gate both read leaves, so these cannot change
+            # what is planned.
+            "persona_traits": persona_traits,
         }
 
     @classmethod
@@ -375,8 +379,20 @@ class ResumeTailorAgent:
         proj_dicts: List[Dict],
         proj_pool: List[Dict],
         skill_terms: List[str],
-    ) -> Dict:
-        """Scope-filter this user's preferences and arbitrate them against the JD.
+    ) -> Tuple[Dict, List[Dict]]:
+        """Read the compiled persona and arbitrate it against the JD.
+
+        Returns `(constraints, traits)`. The constraints are #129's
+        `{applied, conflicts, refused}`, unchanged; the traits are the #133
+        semantic tier covering them, used for prompt grouping only.
+
+        **The persona is read, never rebuilt here.** `get_active_persona`
+        recompiles when its leaf digest is stale, but only through the same
+        service that every explicit user action goes through — the pipeline has
+        no write path into either tier. #118 established why: a pipeline able to
+        write the user's tier launders its own output into a counterfeit user
+        choice, and for an *inferred* tier that means suppressing an item,
+        observing the suppression, and citing it back as the user's instruction.
 
         The supported-key set is what the faithfulness refusal is checked
         against: every item and skill the knowledge graph actually holds for
@@ -388,27 +404,24 @@ class ResumeTailorAgent:
         not bind, and the empty set is exactly the pre-#129 behavior.
         """
         from agents.arbitration import compile_constraints
-        from agents.preferences import preferences_in_scope
 
         try:
-            from services import load_jd_profile, load_preferences
+            from services import get_active_persona, load_jd_profile
 
-            preferences = preferences_in_scope(
-                load_preferences(user_id),
-                job_id=str(job_id),
-                role_family=role_family,
-            )
+            persona = get_active_persona(
+                user_id, job_id=str(job_id), role_family=role_family)
             supported = (
                 [cls._exp_key(e) for e in exp_dicts]
                 + [cls._proj_key(p) for p in list(proj_dicts) + list(proj_pool)]
                 + [f"skill:{(s or '').strip().lower()}" for s in skill_terms]
             )
             jd_profile = load_jd_profile(job_id) or {}
-            return compile_constraints(
-                preferences, jd_profile.get("payload") or {}, supported)
+            constraints = compile_constraints(
+                persona["constraints"], jd_profile.get("payload") or {}, supported)
+            return constraints, list(persona["traits"])
         except Exception as exc:
             logger.warning("preference arbitration failed, ignoring: %s", exc)
-            return {"applied": [], "conflicts": [], "refused": []}
+            return {"applied": [], "conflicts": [], "refused": []}, []
 
     @staticmethod
     def _suppress_skills(ranked: List[Dict], constraints: Optional[Dict]) -> List[Dict]:
@@ -487,6 +500,7 @@ class ResumeTailorAgent:
             prior_content=inputs["prior_content"] or None,
             job_cards=inputs.get("job_cards"),
             constraints=inputs.get("constraints"),
+            persona_traits=inputs.get("persona_traits"),
             # A previewed plan goes to a human for approval, which makes it
             # off-policy whatever we sample — don't spend exploration on it.
             allow_explore=False,
@@ -557,6 +571,7 @@ class ResumeTailorAgent:
                 prior_content=prior_content or None,
                 job_cards=inputs.get("job_cards"),
                 constraints=inputs.get("constraints"),
+                persona_traits=inputs.get("persona_traits"),
             )
         exp_dicts, proj_dicts, keyword_assignments = self._apply_plan_to_inputs(
             plan, exp_dicts, proj_dicts, proj_pool, keyword_assignments, prior_content

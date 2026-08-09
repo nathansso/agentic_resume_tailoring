@@ -173,6 +173,13 @@ def compile_constraints(
             "target_term": pref.get("target_term"),
             "strength": strength,
         }
+        # The semantic-tier trait this preference belongs to (issue #133).
+        # Carried through so it reaches the decision log, where #119 conditions
+        # on it as a context bucket. Absent for a caller that supplied raw
+        # leaves rather than a compiled persona, which keeps this module usable
+        # on its own and keeps the empty-constraint path untouched.
+        if pref.get("trait_key"):
+            entry["trait_key"] = pref["trait_key"]
 
         # 1. Truthfulness first — refused outright, never arbitrated.
         if polarity == "emphasize" and not _is_supported(pref, supported_keys or []):
@@ -238,7 +245,22 @@ def applied_by_polarity(constraints: Optional[Dict], polarity: str) -> List[Dict
     ]
 
 
-def render_constraints(constraints: Optional[Dict]) -> str:
+_VERBS = (
+    ("suppress", "LEAVE OUT"),
+    ("emphasize", "LEAD WITH"),
+    ("reframe", "REFRAME"),
+)
+
+
+def _constraint_line(item: Dict, verb: str) -> str:
+    subject = item.get("target_term") or item.get("target_key") or ""
+    suffix = f" [{subject}]" if subject else ""
+    return f"- {verb}{suffix}: {item.get('text')}"
+
+
+def render_constraints(
+    constraints: Optional[Dict], traits: Optional[Sequence[Dict]] = None,
+) -> str:
     """The constraint set as planner prompt text. Empty set → empty string.
 
     This is the *proposal*-side half only. The prompt makes the planner likelier
@@ -246,17 +268,54 @@ def render_constraints(constraints: Optional[Dict]) -> str:
     non-compliance impossible. ImplexConv finding 2 is why both exist and why
     neither is sufficient alone: retrieval of the invalidating fact succeeds and
     the model still reasons past it, so a prompt cannot be the enforcement.
+
+    *traits* is the #133 semantic tier. When supplied, the applied constraints
+    are grouped under their trait label, so the planner reads a standing
+    disposition ("Downplays projects when targeting ML roles") with its evidence
+    beneath it rather than three unrelated-looking lines. This is the only place
+    traits affect anything the planner sees: arbitration still reads leaves, and
+    `apply_constraints` gates on leaves, so the plan is provably unchanged by
+    the grouping — only the proposal distribution moves.
+
+    **Omitting *traits* renders byte-identically to pre-#133**, which is what
+    keeps this module independently testable and every existing caller correct.
     """
     if is_empty(constraints):
         return ""
-    lines: List[str] = []
-    for polarity, verb in (
-        ("suppress", "LEAVE OUT"),
-        ("emphasize", "LEAD WITH"),
-        ("reframe", "REFRAME"),
-    ):
+    if not traits:
+        lines: List[str] = []
+        for polarity, verb in _VERBS:
+            for item in applied_by_polarity(constraints, polarity):
+                lines.append(_constraint_line(item, verb))
+        return "\n".join(lines)
+
+    verb_of = dict(_VERBS)
+    applied = {
+        str(a.get("preference_id") or ""): a
+        for a in (constraints or {}).get("applied") or []
+    }
+    grouped: List[str] = []
+    claimed: set = set()
+    for trait in traits:
+        block: List[str] = []
+        for leaf_id in trait.get("leaf_ids") or []:
+            item = applied.get(str(leaf_id))
+            if item is None:
+                continue
+            verb = verb_of.get(_norm(item.get("polarity")))
+            if verb is None:
+                continue
+            block.append(_constraint_line(item, verb))
+            claimed.add(str(leaf_id))
+        if block:
+            grouped.append(f"{trait.get('label') or 'Standing preference'}:")
+            grouped.extend(block)
+
+    # Anything the traits did not cover still has to reach the prompt. A
+    # constraint silently dropped because its trait link went missing is the
+    # failure mode this tier is supposed to remove, not introduce.
+    for polarity, verb in _VERBS:
         for item in applied_by_polarity(constraints, polarity):
-            subject = item.get("target_term") or item.get("target_key") or ""
-            suffix = f" [{subject}]" if subject else ""
-            lines.append(f"- {verb}{suffix}: {item.get('text')}")
-    return "\n".join(lines)
+            if str(item.get("preference_id") or "") not in claimed:
+                grouped.append(_constraint_line(item, verb))
+    return "\n".join(grouped)

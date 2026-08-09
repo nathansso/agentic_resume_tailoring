@@ -60,6 +60,12 @@ class PreferenceEditBody(BaseModel):
     target_term: Optional[str] = None
 
 
+class TraitEditBody(BaseModel):
+    """Label only — see `services.update_persona_trait` for why membership is not
+    editable here."""
+    label: str
+
+
 def _parse_id(preference_id: str) -> UUID:
     try:
         return UUID(preference_id)
@@ -123,6 +129,83 @@ async def decide_preference(
     message = await asyncio.to_thread(
         services.apply_preference_decision, user.user_id, body.proposal)
     return {"saved": True, "message": message}
+
+
+# ── persona semantic tier (issue #133) ───────────────────────────────────────
+
+@router.get("/persona")
+async def get_persona(user: User = Depends(get_current_user)):
+    """The compiled persona and its traits, with every leaf link resolved.
+
+    What makes the lossless index *visible* rather than merely true: each trait
+    carries the preferences it groups, so the user can see the disposition ARTie
+    inferred alongside the exact things they said that produced it. An
+    inspectable persona is the point of codifying it rather than leaving it in a
+    prompt — under a no-fabrication trust constraint, "here is what I believe
+    and here is why" is the only version a user can argue with.
+
+    Unscoped on purpose: this is the whole persona, not the slice binding on one
+    job. Scope filtering is the planner's concern (`get_active_persona`).
+    """
+    set_request_user(user.user_id)
+    # Repair a stale artifact here rather than on the tailoring path: a GET on
+    # the inspect surface is an explicit user action, which is the only kind of
+    # thing allowed to write either tier (see `services.get_active_persona`).
+    # Without this the traits below could disagree with the constraints, which
+    # are always recompiled from the leaves.
+    services.rebuild_persona(user.user_id)
+    persona = services.get_active_persona(user.user_id)
+    by_id = {
+        p["preference_id"]: p
+        for p in services.load_preferences(user.user_id, include_inactive=True)
+    }
+
+    def leaves(ids):
+        return [
+            {
+                "preference_id": pid,
+                "text": (by_id.get(pid) or {}).get("text") or "",
+                "status": (by_id.get(pid) or {}).get("status"),
+                "polarity": (by_id.get(pid) or {}).get("polarity"),
+                "strength": (by_id.get(pid) or {}).get("strength"),
+            }
+            for pid in ids or []
+        ]
+
+    traits = []
+    for trait in services.load_persona_traits(user.user_id, include_inactive=True):
+        traits.append({
+            **trait,
+            "leaves": leaves(trait["leaf_ids"]),
+            # Retained links to leaves that were superseded or retracted. Kept
+            # visible because negation must not expire (#133) — a preference the
+            # user reversed is still part of how this disposition formed.
+            "superseded_leaves": leaves(trait["superseded_leaf_ids"]),
+        })
+    return {"constraints": persona["constraints"], "traits": traits}
+
+
+@router.patch("/traits/{trait_id}")
+async def edit_trait(
+    trait_id: str,
+    body: TraitEditBody,
+    user: User = Depends(get_current_user),
+):
+    """Correct a trait's label. Stamps `edited` so a recompile will not undo it.
+
+    There is deliberately no DELETE: a trait is *derived* from its leaves, so
+    removing one means retracting the preferences beneath it. Letting the
+    derived tier be independently authored is how two tiers drift apart.
+    """
+    set_request_user(user.user_id)
+    try:
+        parsed = UUID(trait_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=404, detail="Trait not found")
+    updated = services.update_persona_trait(user.user_id, parsed, body.label)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Trait not found")
+    return updated
 
 
 @router.patch("/{preference_id}")

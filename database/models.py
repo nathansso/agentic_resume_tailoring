@@ -496,3 +496,106 @@ class UserPreference(SQLModel, table=True):
 
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class PersonaTrait(SQLModel, table=True):
+    """One deterministic group of `UserPreference` leaves (issue #133).
+
+    The semantic tier over #129's episodic leaves, and deliberately the smallest
+    abstraction that works: **one level, and it links down rather than
+    summarizing up.** A trait holds `leaf_ids` and no preference content of its
+    own, so the index can never disagree with what it indexes — which is the
+    lossless stance ImplexConv/TaciTree's opposed-case numbers force here.
+    Negation is the dominant signal in this data (14.8% retrieval F1 opposed vs
+    55.2% supportive), so a fixed-size summary would drop exactly the
+    suppressions that matter most. `agents/arbitration.py` still reads leaves.
+
+    **Identity is `group_key`, never a cluster index.** The key is a pure
+    function of typed leaf fields (`agents/persona.py::group_key`), so the same
+    leaves always produce the same trait and a new leaf never re-shuffles the
+    others. That stability is load-bearing downstream: trait membership is a
+    #119 RL *context feature*, and emergent clustering over a small,
+    incrementally-growing set would churn assignments on nearly every insert and
+    make the policy's context buckets non-stationary.
+
+    **`superseded_leaf_ids` is the half #129 could not do.** #129 keeps the
+    superseded row; this keeps the *link*, so a trait records the whole
+    trajectory of a disposition rather than only its current state. A trait whose
+    leaves all leave `active` goes `inactive` — never deleted, for the same
+    reason the leaves are not.
+
+    A new table, so `SQLModel.metadata.create_all` picks it up and no ALTER is
+    needed. No rows => today's behavior: the persona compiles empty and the
+    planner payload is unchanged.
+    """
+    trait_id: UUID = Field(default_factory=uuid4, primary_key=True)
+    user_id: UUID = Field(foreign_key="user.user_id", index=True)
+
+    # `polarity|target_type|scope_type[:scope_value]` — trait identity, stable
+    # across recomputes. Indexed because reconciliation looks rows up by it.
+    group_key: str = Field(default="", index=True)
+    # Human-readable statement of the disposition, templated from group_key.
+    label: str = Field(default="")
+
+    # The key decomposed, so a query filters without parsing the string. Derived
+    # from group_key by `persona.parse_group_key`, so the two cannot disagree.
+    polarity: str = Field(default="suppress", index=True)
+    target_type: str = Field(default="topic")
+    scope_type: str = Field(default="job")
+    scope_value: Optional[str] = Field(default=None)
+
+    # Links DOWN to `UserPreference.preference_id` — the lossless index itself.
+    leaf_ids: List = Field(default=[], sa_column=Column(JSON))
+    # Leaves that left `active` (superseded or retracted) but stay linked here.
+    superseded_leaf_ids: List = Field(default=[], sa_column=Column(JSON))
+
+    # active | inactive. Inactive means every leaf left `active`; the row stays.
+    status: str = Field(default="active", index=True)
+    # Set by the label-correction API and honored by rebuild: a hand-corrected
+    # label is never overwritten by a recompile, the same contract
+    # `UserPreference.edited` and `JDProfile` requirements carry.
+    edited: bool = Field(default=False)
+
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Persona(SQLModel, table=True):
+    """The compiled, codified persona for one user (issue #133).
+
+    The **JD-independent** half of the constraint story: framing and selection
+    constraints derived from the active leaves, with their trait grouping, and
+    nothing that could be mistaken for a fact. `arbitration.compile_constraints`
+    remains the JD-dependent half and is *fed* by this row rather than replaced
+    by it, so there is still exactly one place where a preference becomes a
+    constraint.
+
+    Persisted rather than recomputed inline for the reason `JDProfile` is:
+    an artifact can be inspected, diffed and argued with, and a flat list
+    recomputed inside each run cannot. Under a no-fabrication trust constraint an
+    inspectable persona beats an opaque system prompt.
+
+    `compiled` is a pure function of the active leaves
+    (`persona.compile_persona`), so `compiled_hash` is directly assertable and an
+    unchanged rebuild skips the write. `leaf_digest` is the staleness check:
+    rebuild is event-driven on leaf change, and this is what makes a *missed*
+    rebuild recoverable at read time rather than silently serving a persona that
+    has dropped a preference.
+
+    One row per user. A new table, so `create_all` picks it up and no ALTER is
+    needed; absent row => today's behavior.
+    """
+    persona_id: UUID = Field(default_factory=uuid4, primary_key=True)
+    user_id: UUID = Field(foreign_key="user.user_id", index=True)
+
+    # {version, traits[], constraints[]} — deterministic, plus its digest.
+    compiled: Dict = Field(default={}, sa_column=Column(JSON))
+    compiled_hash: Optional[str] = Field(default=None)
+    compile_version: int = Field(default=1)
+
+    # Digest of (leaf id, status, updated_at) over every leaf this was compiled
+    # from. Unequal => the persona is stale and is rebuilt before it is served.
+    leaf_digest: Optional[str] = Field(default=None)
+
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
