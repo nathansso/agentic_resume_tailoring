@@ -145,3 +145,75 @@ def test_semantic_absent_without_vectors():
     skills = [{"name": "Python", "category": "Other", "proficiency": 3, "confidence": 0.5}]
     ranked = score_skills(skills, "Python role", matched_skills={})
     assert "semantic" not in ranked[0]["components"]
+
+
+# ── Determinism: encode order must not depend on row order (issue #158) ────────
+
+class _RecordingModel(_FakeModel):
+    """_FakeModel that records the exact batches it was asked to encode."""
+
+    def __init__(self):
+        self.batches = []
+
+    def encode(self, texts, normalize_embeddings=True):
+        self.batches.append(list(texts))
+        return super().encode(texts, normalize_embeddings=normalize_embeddings)
+
+
+def test_ensure_skill_embeddings_encodes_in_a_fixed_order(isolated_engine, monkeypatch):
+    """Batch composition is content-ordered, not row-ordered.
+
+    `select(Skill)` is unordered, and sentence-transformers batches by input
+    order, so an unstable batch changed the padding a text was encoded against
+    and could flip near-ties in the semantic component (issue #158).
+    """
+    names = ["Redis", "Ansible", "Kubernetes", "Docker", "Terraform"]
+    # Insert in an order that is deliberately not sorted.
+    for n in names:
+        _add_skill(isolated_engine, n)
+
+    recorder = _RecordingModel()
+    monkeypatch.setattr(matcher_module, "get_embedding_model", lambda: recorder)
+
+    with Session(isolated_engine) as s:
+        ensure_skill_embeddings(s)
+
+    assert recorder.batches, "expected at least one encode call"
+    encoded = recorder.batches[0]
+    assert encoded == sorted(names), f"encode order not content-sorted: {encoded}"
+
+
+def test_job_embedding_is_independent_of_jobskill_row_order(isolated_engine, fake_model, monkeypatch):
+    """The JD centroid feeds *every* skill's semantic score, so it must not move.
+
+    Sorting the phrases pins both the encode batch and the float summation order
+    of the mean (issue #158).
+    """
+    monkeypatch.setattr(matcher_module, "get_embedding_model", lambda: fake_model)
+    phrase_names = ["Python", "FastAPI", "PostgreSQL", "Docker"]
+
+    def _centroid_for(order):
+        with Session(isolated_engine) as s:
+            job = JobDescription(
+                title="Backend", company="Acme",
+                description="Backend role using Python and FastAPI.",
+            )
+            s.add(job)
+            s.commit()
+            s.refresh(job)
+            for n in order:
+                skill = Skill(name=n, category="Other")
+                s.add(skill)
+                s.commit()
+                s.refresh(skill)
+                s.add(JobSkill(job_id=job.job_id, skill_id=skill.skill_id))
+            s.commit()
+            return ensure_job_embedding(s, job)
+
+    forward = _centroid_for(phrase_names)
+    reverse = _centroid_for(list(reversed(phrase_names)))
+
+    assert forward is not None and reverse is not None
+    # Bit-identical, not merely close: the serialized vector is what gets cached
+    # and compared across runs.
+    assert np.array_equal(forward, reverse)

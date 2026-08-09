@@ -6,6 +6,54 @@ Entries titled `PRD NN — …` are historical: they predate the move to issue-d
 
 ---
 
+## Issue 158 — Deterministic skill selection: the same profile + JD now renders the same skills section
+**Status:** complete | **Tests:** 1093 pass on Postgres / 1085 on SQLite (6 new)
+
+`skills_rendered` was not reproducible run to run on either engine. The same profile against the same JD in `--stub` mode rendered a different skills section each time (SQLite `[11,11,13]` then `[8,10,9]`), while every lexical metric — `ats_delta`, `baseline_composite`, `tailored_composite`, `matched_recall` — stayed bit-identical. #149 surfaced it; #51 Phase 2 cannot tune against a metric that moves on its own, and users re-tailoring one job saw the section change with no input change, quietly undercutting #115's faithful-keep promise.
+
+The issue named one confirmed contributor and recorded that ordering it by `Skill.name` was **not sufficient**. That was correct, and the reason is that the dominant source was in a different file entirely.
+
+### What shipped
+- **The dominant source was the benchmark's own stub embedder (`eval/tailoring_benchmark.py`).** `_StubEmbeddingModel.encode` seeded numpy from `abs(hash(t.lower()))`, and PEP 456 randomizes `str` hashing per process — so every run drew *completely different* vectors for the same skill name. `semantic` carries the largest single weight in `skill_scorer.WEIGHTS` (0.30), which is exactly why the skills section moved while every lexical metric held still. Now seeded from `blake2b`, stable across processes, machines and Python versions. This is why `ORDER BY Skill.name` didn't help: it fixed a real but secondary source while the noise floor stayed.
+- **First-wins merges in `ResumeTailorAgent._rank_skills` (`agents/tailor.py`), the production bug.** `select(UserSkill)` is unordered and several `UserSkill` rows share a canonical name (one per evidence source), so `by_name[cname]["category"]` and `id_by_name[cname]` were decided by whichever row arrived first. `id_by_name` picks which cached embedding feeds the semantic score, so row order moved the ranking. Both are now resolved **after** the loop from a representative chosen by content: `min(candidates, key=(Skill.name, category))`. The numeric merges were already order-independent (max / logical-or) and are unchanged.
+- **Encode batch composition (`agents/skill_embeddings.py`).** `ensure_skill_embeddings` selected stale skills unordered and handed them to sentence-transformers, which batches by input order — so the padding a text was encoded against varied per run. `stale` is now sorted by name. Keyed on the text alone, deliberately not on `skill_id`: equal names produce equal vectors, so tying rows are interchangeable, and a uuid tiebreak differs in every fresh database.
+- **The JD centroid (`agents/skill_embeddings.py`).** `ensure_job_embedding` built its phrase list from an unordered `JobSkill` query, then took a float mean over it. That vector feeds *every* skill's semantic score, so an unstable centroid moved the whole ranking. `phrases.sort()` pins both the batch composition and the summation order of the mean.
+- **Tests (6 new).** Three in `test_skill_scorer.py` shuffle `UserSkill` insertion order across six seeds and assert the full ranking, the category map, and the score map are unchanged; two in `test_skill_embeddings.py` pin encode order and assert the JD centroid is bit-identical under reversed row order; one in `test_tailoring_benchmark.py` runs the stub embedder under three *different* `PYTHONHASHSEED` values in subprocesses, which is the only way to catch hash randomization (within one process `hash()` is stable). Every one of the six was confirmed to fail with its fix reverted.
+
+### Verification
+Two consecutive `python eval/tailoring_benchmark.py --stub --limit 3` runs, on each engine, with the rendered `.tex` and `.json` artifacts diffed:
+
+| engine | run 1 | run 2 | renders |
+|---|---|---|---|
+| SQLite | `[9, 11, 13]` | `[9, 11, 13]` | byte-identical |
+| Postgres | `[9, 11, 13]` | `[9, 11, 13]` | byte-identical |
+
+The two engines also agree with **each other**, which the issue did not require. The only field that differs between runs is `job_id`, a fresh `uuid4` primary key, not a metric.
+
+### Benchmark re-baseline
+Stub configuration, `--limit 3`. The previous figures were sampled from a distribution and are not comparable point-to-point; these are the first reproducible ones.
+
+| metric | value |
+|---|---|
+| `skills_rendered` | mean 11.0, median 11.0, min 9.0, max 13.0 |
+| `skills_selection_ratio` | mean 0.367, median 0.367, min 0.3, max 0.433 |
+| `skills_matched_recall` | 1.0 |
+| `ats_delta` | mean 28.367, median 31.0, min 22.5, max 31.6 |
+| `total_profile_skills` | 30 (every task) |
+
+### Deviations from spec
+- **The issue's cited location does not exist.** It points at `agents/tailor.py::_load_skill_rows` ~line 1112. There is no such function; the real site is `ResumeTailorAgent._rank_skills`, and the merge loop it describes is accurate apart from the name. Recorded because the issue text will outlive this entry.
+- **The dominant source was in the eval harness, not the product.** Everything the issue and its predecessors examined was production code, and the largest contributor by far was `hash()` in a test double. Both classes were real and both are fixed, but they have different blast radii and should not be conflated: the harness bug made the **benchmark** unreadable and could never affect a user; the `_rank_skills` bug is the one users saw. If only the production merges had been fixed, the acceptance criterion would still have failed.
+- **`PYTHONHASHSEED=0` in the earlier entries was this fix's shadow.** `CHANGELOG.md` records benchmark runs pinned to `PYTHONHASHSEED=0` for #150, #115 and #155, and the #155 entry notes two runs of one tree giving 9.625 and 12.375 with the cause guessed as "set/dict iteration order somewhere in skill selection." The observation was right and the diagnosis was wrong — it is a single `hash()` call, not set iteration. Those runs remain valid (pinning the seed did make them comparable); the pin is no longer needed.
+- **The IDF corpus is ruled out with evidence, not by inspection.** `select(JobDescription.description)` is unordered, but `compute_idf` accumulates integer document frequencies and `N = len(docs)`, both order-independent. Verified over 200 shuffles of a fixed corpus producing an identical table. Deliberately left unordered: an `ORDER BY` on a large text column would cost real work to defend a property the arithmetic already guarantees.
+- **Sorting by raw name is plain codepoint order, so `PostgreSQL` beats `Postgres` (`'S'` < `'s'`).** Deterministic, which is the whole requirement, but it is *not* a quality judgement about which alias should win — that belongs to #54. The tests assert the actual behavior rather than an intuition about it. Rows tying on `(name, category)` are left to arbitrary order on purpose: the cached embedding is computed from `Skill.name`, so equal names carry equal vectors and only the opaque `skill_id` differs.
+- **The pre-authorized escape hatch was not needed.** Float-level batch nondeterminism inside the transformer never became the residual — sorting the inputs was sufficient, so no fixed-order or batch-of-one encode was required and no throughput was traded. One residual is named rather than fixed: batch composition still depends on *which* skills are already cached, so a partially-warm cache can encode a given name in a different batch than a cold one would. It cannot affect a single database's stability (vectors are persisted on first write and reused), and it did not move any measured metric.
+- **The skills-cap saturation finding no longer holds, and is retired.** `CHANGELOG.md` recorded "the skills cap saturates at `MAX_SKILLS` (18) on every task — drop-off rule never fires for a 37-skill profile." On the now-stable baseline the drop-off rule fires on every task: 9, 11 and 13 rendered against a cap of 18, `within_cap_bounds: true` throughout. This is not a like-for-like refutation — the original was a real-LLM run over a 37-skill profile and this is the stub configuration over 30 — so the honest statement is that **the finding is unconfirmed on the only reproducible baseline that now exists**, and #51 Phase 2 should not plan around a saturated cap without re-measuring on a real-LLM run.
+- **`_lookup_match` in `skill_scorer.py` retains a first-wins scan** over `matched_skills` for its case-insensitive fallback. Left alone: it fires only when two keys differ solely by case, which the matcher does not produce today, and it was never observed to move a result. Named here so the next person does not have to rediscover it.
+- **No schema change and no behavior change beyond determinism.** Which skills get selected is not re-tuned here; that is #51 / #54. Scores do shift slightly against pre-fix output because the JD centroid's summation order changed, which is a re-baseline, not a regression.
+
+---
+
 ## Issue 133 — Persona semantic tier: lossless 1-level preference index + codified persona
 **Status:** complete | **Tests:** 1087 pass on Postgres / 1079 on SQLite (48 new)
 
