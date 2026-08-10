@@ -49,6 +49,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from langchain_core.runnables import Runnable
+
 CASSETTE_VERSION = 1
 CASSETTE_DIR = Path(__file__).resolve().parent / "cassettes"
 
@@ -140,6 +142,10 @@ class Cassette:
 
     def get(self, key: str) -> Optional[Dict]:
         return self._by_key.get(key)
+
+    def entries(self) -> List[Dict]:
+        """Every interaction, in recorded order."""
+        return list(self._order)
 
     def scopes(self) -> List[str]:
         seen = []
@@ -274,14 +280,13 @@ class CassetteSession:
         )
 
 
-class _CassetteLLM:
+class _CassetteLLM(Runnable):
     """The object `get_llm` returns under record/replay.
 
-    Not a `langchain_core.runnables.Runnable` subclass on purpose: the app only
-    ever uses `.invoke` and `.with_structured_output` on the result of
-    `get_llm`, and staying a plain object keeps the recorded surface exactly the
-    surface the app exercises — anything else fails loudly here rather than
-    quietly reaching a provider in replay.
+    A `Runnable` because `agents/tailor.py` composes the model into an LCEL
+    pipe (`prompt | llm | JsonOutputParser`); a plain object is rejected there
+    with "Expected a Runnable, callable or dict". Same reason the plumbing stub
+    is one.
     """
 
     def __init__(self, session: CassetteSession, role: str, temperature: float):

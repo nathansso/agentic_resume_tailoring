@@ -401,6 +401,76 @@ def test_run_prints_its_execution_mode(plumbing_run):
     assert "NOT tailoring quality" in plumbing_run["stdout"]
 
 
+# ── replay mode against the committed cassette ────────────────────────────────
+
+def test_committed_cassette_is_well_formed_and_covers_every_task():
+    """Cheap structural check of the recording the replay leg depends on.
+
+    Deliberately not a replay run: replay needs the real sentence-transformers
+    model, so it belongs in the integration leg below rather than in the fast
+    suite. This still catches a truncated, re-keyed or partially-recorded
+    cassette landing in the repo.
+    """
+    from eval.cassettes import Cassette, SETUP_SCOPE, interaction_key
+    from eval.tailoring_benchmark import DEFAULT_PROFILE, default_cassette_path
+
+    path = default_cassette_path(DEFAULT_PROFILE.stem, 3, None)
+    cassette = Cassette.load(path)
+    assert len(cassette) > 0
+    # The register/ingest phase plus one scope per recorded task.
+    scopes = cassette.scopes()
+    assert scopes[0] == SETUP_SCOPE
+    assert set(scopes[1:]) == set(cassette.meta["tasks"])
+    # Every entry is addressable by the key its fields imply, and occurrences
+    # within a (scope, role, prompt) run 0..n-1 with no gaps.
+    seen = {}
+    for entry in cassette.entries():
+        key = interaction_key(entry["scope"], entry["role"],
+                              entry["prompt_sha256"], entry["occurrence"])
+        assert cassette.get(key) is entry
+        counter = (entry["scope"], entry["role"], entry["prompt_sha256"])
+        seen.setdefault(counter, []).append(entry["occurrence"])
+        assert entry["surface"] in ("invoke", "structured")
+    for counter, occurrences in seen.items():
+        assert sorted(occurrences) == list(range(len(occurrences))), counter
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+def test_two_replays_are_byte_identical(tmp_path):
+    """#158's determinism property, carried into the new mode.
+
+    Runs the committed cassette twice and diffs the metrics and the rendered
+    artifacts. Integration-marked because replay uses the *real* embedding
+    model — semantic redundancy is not stubbed out in replay, by design.
+    """
+    runs = []
+    for i in (1, 2):
+        out = tmp_path / f"run{i}"
+        proc = subprocess.run(
+            [sys.executable, str(ROOT / "eval" / "tailoring_benchmark.py"),
+             "--mode", "replay", "--limit", "3", "--out", str(out)],
+            cwd=ROOT, capture_output=True, text=True, timeout=1800,
+        )
+        assert proc.returncode == 0, f"replay {i} failed:\n{proc.stderr[-3000:]}"
+        assert "CASSETTE MISS" not in proc.stderr
+        results = json.loads(
+            sorted(out.glob("tailoring_benchmark_*.json"))[-1].read_text(
+                encoding="utf-8"))
+        results.pop("timestamp")
+        for task in results["task_results"]:
+            task.pop("job_id", None)  # a fresh uuid4 PK, not a metric
+        renders = {p.name: p.read_bytes()
+                   for p in sorted((out / "renders").rglob("*.tex"))}
+        runs.append((results, renders))
+
+    assert runs[0][0] == runs[1][0], "replayed metrics are not reproducible"
+    assert runs[0][1] == runs[1][1], "replayed renders are not byte-identical"
+    # Replay must actually measure semantic duplication — the metric plumbing
+    # mode structurally cannot report (issue #122's headline gap).
+    assert runs[0][0]["aggregate"]["max_pairwise_cosine"] is not None
+
+
 # ── LLM-as-judge quality scoring (issue #27's aim, applied to tailoring) ──────
 
 def _fake_judge_llm(payload):

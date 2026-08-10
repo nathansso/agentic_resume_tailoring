@@ -29,11 +29,6 @@ class _Schema(BaseModel):
     note: str = ""
 
 
-class _FakeMessage:
-    def __init__(self, content):
-        self.content = content
-
-
 class _FakeStructured:
     def __init__(self, results):
         # Shares the caller's list on purpose: a retry builds a fresh runnable
@@ -56,11 +51,15 @@ class _FakeLLM:
         self.calls = 0
 
     def invoke(self, _input, config=None, **kwargs):
+        from langchain_core.messages import AIMessage
+
         self.calls += 1
         value = self._responses.pop(0)
         if isinstance(value, Exception):
             raise value
-        return _FakeMessage(value)
+        # A real chat model returns an AIMessage, and record mode passes the
+        # provider's own object straight through to the caller's chain.
+        return AIMessage(content=value)
 
     def with_structured_output(self, schema, **kwargs):
         self.calls += 1
@@ -110,6 +109,28 @@ def test_invoke_round_trips_through_the_cassette():
     assert replay.misses == []
 
 
+def test_cassette_llm_composes_into_an_lcel_chain():
+    """`agents/tailor.py` builds `prompt | llm | JsonOutputParser`.
+
+    A plain object is rejected there with "Expected a Runnable, callable or
+    dict", which is exactly how the first product-mode recording failed — after
+    nine interactions had already been captured, so the seam looked healthy
+    right up to the tailor call.
+    """
+    from langchain_core.output_parsers import JsonOutputParser
+    from langchain_core.prompts import ChatPromptTemplate
+
+    prompt = ChatPromptTemplate.from_messages([("user", "tailor {text}")])
+    llm = _FakeLLM(responses=['{"experiences": []}'])
+    session = _record_session(llm)
+    chain = prompt | session.llm_factory()(role="tailor") | JsonOutputParser()
+    assert chain.invoke({"text": "this"}) == {"experiences": []}
+
+    replay = _replay_session(session.cassette)
+    replayed = prompt | replay.llm_factory()(role="tailor") | JsonOutputParser()
+    assert replayed.invoke({"text": "this"}) == {"experiences": []}
+
+
 def test_same_prompt_twice_replays_both_samples_in_order():
     """The occurrence counter, not the prompt hash, is what makes this work.
 
@@ -123,7 +144,7 @@ def test_same_prompt_twice_replays_both_samples_in_order():
     model = session.llm_factory()(role="tailor", temperature=0.3)
     assert model.invoke("same prompt").content == "first sample"
     assert model.invoke("same prompt").content == "second sample"
-    assert [e["occurrence"] for e in session.cassette._order] == [0, 1]
+    assert [e["occurrence"] for e in session.cassette.entries()] == [0, 1]
 
     replay = _replay_session(session.cassette)
     played = replay.llm_factory()(role="tailor", temperature=0.3)
@@ -152,9 +173,9 @@ def test_both_surfaces_are_recorded_distinguishably():
     model = session.llm_factory()(role="extract")
     model.invoke("p1")
     model.with_structured_output(_Schema).invoke("p2")
-    surfaces = {e["surface"] for e in session.cassette._order}
+    surfaces = {e["surface"] for e in session.cassette.entries()}
     assert surfaces == {"invoke", "structured"}
-    assert {e["schema"] for e in session.cassette._order} == {None, "_Schema"}
+    assert {e["schema"] for e in session.cassette.entries()} == {None, "_Schema"}
 
 
 def test_replaying_a_different_schema_is_a_miss_not_a_coercion():
@@ -185,7 +206,7 @@ def test_a_failed_provider_call_records_nothing_and_advances_nothing():
     with pytest.raises(RuntimeError):
         runnable.invoke("p")
     assert runnable.invoke("p").note == "ok"
-    assert [e["occurrence"] for e in session.cassette._order] == [0]
+    assert [e["occurrence"] for e in session.cassette.entries()] == [0]
 
     replay = _replay_session(session.cassette)
     assert replay.llm_factory()().with_structured_output(_Schema).invoke(
@@ -235,10 +256,10 @@ def test_scopes_keep_per_task_counters_independent():
         model.invoke("identical prompt")
     with session.scope("task_b"):
         model.invoke("identical prompt")
-    assert [e["scope"] for e in session.cassette._order] == ["task_a", "task_b"]
+    assert [e["scope"] for e in session.cassette.entries()] == ["task_a", "task_b"]
     # Both are occurrence 0: the counter is per scope, so replaying task_b
     # alone does not depend on task_a's call count.
-    assert [e["occurrence"] for e in session.cassette._order] == [0, 0]
+    assert [e["occurrence"] for e in session.cassette.entries()] == [0, 0]
 
     replay = _replay_session(session.cassette)
     played = replay.llm_factory()()
