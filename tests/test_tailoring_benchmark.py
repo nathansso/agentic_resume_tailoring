@@ -248,23 +248,69 @@ def test_jd_dataset_is_present_and_well_formed():
         assert len(task["description"]) > 500
 
 
+# ── plumbing mode never rewrites a bullet (issue #171) ────────────────────────
+
+def test_plumbing_mode_returns_source_bullets_verbatim():
+    """The canned payload passes every source bullet through unchanged.
+
+    This is the defect #171 exists to name: `--stub` numbers measure the harness
+    and the deterministic post-processing, never the rewrite. The property is
+    pinned here so it can never again be mistaken for tailoring — and so that a
+    later change which makes the stub *simulate* rewriting fails loudly rather
+    than quietly restoring a plausible number that measures nothing.
+    """
+    from eval.tailoring_benchmark import STUB_EXPERIENCES, STUB_PROJECTS, _stub_tailored
+
+    out = _stub_tailored("Senior Python engineer: FastAPI, PyTorch, Kafka, AWS.")
+    assert [e["bullets"] for e in out["experiences"]] == \
+           [e["bullets"] for e in STUB_EXPERIENCES]
+    assert [p["bullets"] for p in out["projects"]] == \
+           [p["bullets"] for p in STUB_PROJECTS]
+
+
+def test_plumbing_mode_is_labelled_as_not_measuring_quality():
+    """The mode label must state the limitation, not just name the mode."""
+    from eval.tailoring_benchmark import MODE_CLAIMS, MODE_PLUMBING, MODE_PRODUCT
+
+    plumbing = MODE_CLAIMS[MODE_PLUMBING].lower()
+    assert "not tailoring quality" in plumbing
+    assert "verbatim" in plumbing
+    assert "tailoring quality" in MODE_CLAIMS[MODE_PRODUCT].lower()
+
+
 # ── end-to-end smoke (real web API, stub LLM, subprocess isolation) ────────────
 
-def test_benchmark_end_to_end_stub_smoke(tmp_path):
-    """One task through register→ingest→analyze→tailor→export via the API."""
+@pytest.fixture(scope="module")
+def plumbing_run(tmp_path_factory):
+    """One `--stub --limit 1` benchmark run, shared by the tests below.
+
+    Module-scoped because it drives the whole web API in a subprocess; the
+    render-level assertions below would otherwise pay for a second full run.
+    """
+    out_dir = tmp_path_factory.mktemp("plumbing_run")
     proc = subprocess.run(
         [sys.executable, str(ROOT / "eval" / "tailoring_benchmark.py"),
-         "--stub", "--limit", "1", "--out", str(tmp_path)],
+         "--stub", "--limit", "1", "--out", str(out_dir)],
         cwd=ROOT, capture_output=True, text=True, timeout=600,
     )
     assert proc.returncode == 0, f"benchmark failed:\n{proc.stdout[-2000:]}\n{proc.stderr[-2000:]}"
-
-    results_files = list(tmp_path.glob("tailoring_benchmark_*.json"))
+    results_files = list(out_dir.glob("tailoring_benchmark_*.json"))
     assert len(results_files) == 1
-    results = json.loads(results_files[0].read_text(encoding="utf-8"))
-    assert results["mode"] == "stub"
+    return {
+        "out_dir": out_dir,
+        "stdout": proc.stdout,
+        "results": json.loads(results_files[0].read_text(encoding="utf-8")),
+    }
+
+
+def test_benchmark_end_to_end_stub_smoke(plumbing_run):
+    """One task through register→ingest→analyze→tailor→export via the API."""
+    tmp_path = plumbing_run["out_dir"]
+    results = plumbing_run["results"]
+    assert results["mode"] == "plumbing"
     assert results["failed"] == []
     task = results["task_results"][0]
+    assert task["mode"] == "plumbing"
     m = task["metrics"]
     # The tailored composite must exist and beat (or match) baseline in stub mode.
     assert m["ats"]["tailored_composite"] is not None
@@ -278,6 +324,40 @@ def test_benchmark_end_to_end_stub_smoke(tmp_path):
     # Rendered .tex + raw content written for the notebook's resume viewer.
     renders = list((tmp_path / "renders").rglob("*.tex"))
     assert renders and renders[0].read_text(encoding="utf-8").startswith("%----")
+
+
+def test_plumbing_run_renders_only_verbatim_source_bullets(plumbing_run):
+    """End-to-end proof of the same property, at the artifact the metrics read.
+
+    Post-processing legitimately *drops* bullets (bullet budget, one-page
+    fitting), so this asserts containment rather than equality — but every
+    surviving bullet must be byte-identical to one in the ingested fixture. If
+    a single rendered bullet is not, plumbing mode has started rewriting and
+    every claim made about the mode needs re-reading.
+    """
+    from eval.tailoring_benchmark import STUB_EXPERIENCES, STUB_PROJECTS
+
+    source = {b for item in (*STUB_EXPERIENCES, *STUB_PROJECTS) for b in item["bullets"]}
+    renders = list((plumbing_run["out_dir"] / "renders").rglob("*.json"))
+    assert renders, "no rendered content written"
+
+    rendered_total = 0
+    for path in renders:
+        content = json.loads(path.read_text(encoding="utf-8"))
+        for item in (*content.get("experiences", []), *content.get("projects", [])):
+            for bullet in item.get("bullets", []):
+                rendered_total += 1
+                assert bullet in source, (
+                    f"{path.name}: rendered bullet is not verbatim from the "
+                    f"fixture — plumbing mode is rewriting: {bullet!r}"
+                )
+    assert rendered_total > 0, "no bullets rendered at all"
+
+
+def test_run_prints_its_execution_mode(plumbing_run):
+    """The console output a developer actually reads carries the caveat."""
+    assert "EXECUTION MODE: PLUMBING" in plumbing_run["stdout"]
+    assert "NOT tailoring quality" in plumbing_run["stdout"]
 
 
 # ── LLM-as-judge quality scoring (issue #27's aim, applied to tailoring) ──────

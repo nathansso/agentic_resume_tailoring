@@ -16,9 +16,9 @@ redundancy) and writes:
     eval/results/tailoring_benchmark_<ts>.csv    # flat per-task table
     eval/results/renders/<ts>/<task>.tex|.json   # rendered resume + raw content
 
-Modes:
-    python eval/tailoring_benchmark.py            # real LLM (needs API keys)
-    python eval/tailoring_benchmark.py --stub     # deterministic fake LLM, offline
+Execution modes (issue #171) — see MODE_CLAIMS for what each may claim:
+    python eval/tailoring_benchmark.py            # product: real LLM (needs API keys)
+    python eval/tailoring_benchmark.py --stub     # plumbing: canned payloads, offline
     python eval/tailoring_benchmark.py --tasks stripe_ai_engineer duolingo_software_engineer_i
     python eval/tailoring_benchmark.py --limit 3
 
@@ -45,6 +45,29 @@ DEFAULT_PROFILE = ROOT / "eval" / "profiles" / "benchmark_profile.md"
 
 BENCH_EMAIL = "benchmark@example.com"
 BENCH_PASSWORD = "benchmark-pass-123"
+
+
+# ── execution modes (issue #171) ───────────────────────────────────────────────
+#
+# One harness, three modes with different evidentiary weight. The mode travels
+# with every number this file emits — the run banner, the console summary, the
+# per-task rows, and the persisted JSON/CSV — because the defect #171 exists to
+# remove was not a wrong number, it was a correct number read as a claim it
+# could not support.
+
+MODE_PRODUCT = "product"
+MODE_PLUMBING = "plumbing"
+
+MODE_CLAIMS = {
+    MODE_PRODUCT:
+        "Real LLM + real embeddings, the deployed path. Tailoring quality — "
+        "the only mode whose numbers describe the product.",
+    MODE_PLUMBING:
+        "Canned payloads, no model. Wiring, schemas and determinism ONLY — "
+        "explicitly NOT tailoring quality: the stub returns every source bullet "
+        "verbatim, so no bullet is ever rewritten and no metric here can move "
+        "with the quality of a rewrite.",
+}
 
 
 # ── environment isolation (must run before any project import) ────────────────
@@ -258,6 +281,20 @@ def _stub_jd_profile(prompt_text: str) -> Dict:
 
 
 def _stub_tailored(jd_text: str) -> Dict:
+    """Canned "tailoring": source bullets, unchanged, plus a substring-matched
+    skills list.
+
+    **This never rewrites a bullet, and that is deliberate** (issue #171). Every
+    experience and project bullet is returned byte-identical to the ingested
+    fixture, so a plumbing run measures the harness and the deterministic
+    post-processing — bullet budget, one-page fitting, ordering, skill selection
+    — and nothing about the rewrite the product's LLM actually performs. The
+    property is pinned by tests so it can never again be mistaken for tailoring.
+
+    Making the stub *simulate* rewriting would reintroduce exactly the defect
+    #171 removes: a plausible number measuring nothing. It stays honest and
+    narrow; `--mode product` and `--mode replay` are where tailoring is measured.
+    """
     low = jd_text.lower()
     emphasized = [s["name"] for s in STUB_SKILLS if s["name"].lower() in low]
     return {
@@ -432,7 +469,7 @@ def _semantic_encoder(stub: bool):
 
 def _run_task(client, task: Dict, renders_dir: Path,
               judge: bool = False, profile_text: str = "",
-              encoder=None) -> Dict:
+              encoder=None, mode: str = MODE_PRODUCT) -> Dict:
     """Drive one JD through the exact user flow and compute its metrics."""
     from sqlmodel import Session, select
 
@@ -487,12 +524,32 @@ def _run_task(client, task: Dict, renders_dir: Path,
 
     return {
         "task_id": task["id"],
+        # Carried per task, not only on the run: a task row read on its own —
+        # in the CSV, in a notebook cell, pasted into an issue — must still say
+        # which mode produced it (issue #171).
+        "mode": mode,
         "company": task["company"],
         "title": task["title"],
         "job_id": job_id,
         "ats_score": detail.get("ats_score"),
         "metrics": metrics,
     }
+
+
+def _mode_banner(mode: str) -> str:
+    """Framed, unmissable statement of what this run's numbers may claim."""
+    rule = "─" * 78
+    lines = [rule, f"  EXECUTION MODE: {mode.upper()}"]
+    claim = MODE_CLAIMS[mode]
+    line = "  "
+    for word in claim.split():
+        if len(line) + len(word) + 1 > 78:
+            lines.append(line)
+            line = "  "
+        line += word + " "
+    lines.append(line.rstrip())
+    lines.append(rule)
+    return "\n".join(lines)
 
 
 def _aggregate(task_results: List[Dict]) -> Dict:
@@ -550,6 +607,9 @@ def run_benchmark(
     if not tasks:
         raise SystemExit(f"No tasks found in {DATASET_DIR} — run scripts/scrape_job_descriptions.py")
 
+    mode = MODE_PLUMBING if stub else MODE_PRODUCT
+    print(_mode_banner(mode), flush=True)
+
     own_tmp = None
     if workdir is None:
         own_tmp = tempfile.TemporaryDirectory(prefix="art_benchmark_")
@@ -593,7 +653,7 @@ def run_benchmark(
                 task_results.append(
                     _run_task(client, task, renders_dir,
                               judge=judge and not stub, profile_text=profile_text,
-                              encoder=encoder)
+                              encoder=encoder, mode=mode)
                 )
             except Exception as e:
                 print(f"  FAILED: {e}", file=sys.stderr)
@@ -602,7 +662,10 @@ def run_benchmark(
         ok = [t for t in task_results if "error" not in t]
         results = {
             "timestamp": ts,
-            "mode": "stub" if stub else "llm",
+            "mode": mode,
+            # Travels with the numbers into every consumer that reads the
+            # artifact without reading this file (issue #171).
+            "mode_claim": MODE_CLAIMS[mode],
             "profile": str(profile_path.relative_to(ROOT)),
             "dataset_size": len(tasks),
             "failed": [t["task_id"] for t in task_results if "error" in t],
@@ -630,6 +693,9 @@ def run_benchmark(
 
 _CSV_COLUMNS = [
     ("task_id", ["task_id"]),
+    # First-class column, not metadata: a CSV row loaded into pandas is where a
+    # plumbing number most easily loses the context that it is one (issue #171).
+    ("mode", ["mode"]),
     ("company", ["company"]),
     ("baseline_composite", ["metrics", "ats", "baseline_composite"]),
     ("tailored_composite", ["metrics", "ats", "tailored_composite"]),
@@ -679,6 +745,9 @@ def main() -> int:
     )
     agg = results["aggregate"]
     print(json.dumps(agg, indent=2))
+    # Repeated after the numbers as well as before them: the summary is what
+    # gets copied into a changelog or an issue, and it must not travel alone.
+    print(_mode_banner(results["mode"]))
     return 1 if results["failed"] else 0
 
 
