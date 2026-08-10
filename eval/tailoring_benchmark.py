@@ -411,8 +411,28 @@ def _api(client, method: str, url: str, **kwargs):
     return resp
 
 
+def _semantic_encoder(stub: bool):
+    """Encoder for the redundancy suite's semantic metrics, or None (issue #122).
+
+    Deliberately keyed on `stub`, not on whether `matcher.get_embedding_model()`
+    returns something: in stub mode it returns `_StubEmbeddingModel`, whose
+    hash-derived vectors are deterministic but carry no semantic relation, so
+    paraphrases look no more similar than unrelated sentences. Reporting a
+    `max_pairwise_cosine` from those would be a stable, meaningless number
+    dressed as a redundancy score — the failure mode #158 just cleaned up.
+    """
+    if stub:
+        return None
+    from agents.matcher import get_embedding_model
+    model = get_embedding_model()
+    if model is None:
+        return None
+    return lambda texts: model.encode(texts, normalize_embeddings=True)
+
+
 def _run_task(client, task: Dict, renders_dir: Path,
-              judge: bool = False, profile_text: str = "") -> Dict:
+              judge: bool = False, profile_text: str = "",
+              encoder=None) -> Dict:
     """Drive one JD through the exact user flow and compute its metrics."""
     from sqlmodel import Session, select
 
@@ -450,6 +470,7 @@ def _run_task(client, task: Dict, renders_dir: Path,
     metrics = compute_task_metrics(
         tailored_content, task["description"], matched_skills,
         total_profile_skills, baseline_breakdown, tailored_breakdown,
+        encoder=encoder,
     )
     if judge:
         # LLM-as-judge quality axes (issue #27's aim, applied to tailoring):
@@ -503,6 +524,14 @@ def _aggregate(task_results: List[Dict]) -> Dict:
         "max_term_repetition": stats(collect(["redundancy", "max_term_repetition"])),
         "over_repeated_count": stats(collect(["redundancy", "over_repeated_count"])),
         "bullet_type_token_ratio": stats(collect(["redundancy", "bullet_type_token_ratio"])),
+        # Issue #122's suite. `max_pairwise_cosine` is None on stub runs, where
+        # no encoder is supplied; `stats` already returns None for an empty
+        # collection, so the key is present-but-null rather than missing.
+        "max_bullet_df": stats(collect(["redundancy", "max_bullet_df"])),
+        "leading_verb_entropy": stats(collect(["redundancy", "leading_verb_entropy"])),
+        "mtld": stats(collect(["redundancy", "mtld"])),
+        "mean_new_information": stats(collect(["redundancy", "mean_new_information"])),
+        "max_pairwise_cosine": stats(collect(["redundancy", "max_pairwise_cosine"])),
         "judge_mean_score": stats(collect(["llm_judge", "mean_score"])),
     }
 
@@ -554,13 +583,17 @@ def run_benchmark(
         renders_dir.mkdir(parents=True, exist_ok=True)
 
         profile_text = profile_path.read_text(encoding="utf-8")
+        # Resolved once: the model load is cached in matcher, but the redundancy
+        # suite's encoder is a per-run property, not a per-task one (issue #122).
+        encoder = _semantic_encoder(stub)
         task_results = []
         for i, task in enumerate(tasks, 1):
             print(f"[{i}/{len(tasks)}] {task['id']} ...", flush=True)
             try:
                 task_results.append(
                     _run_task(client, task, renders_dir,
-                              judge=judge and not stub, profile_text=profile_text)
+                              judge=judge and not stub, profile_text=profile_text,
+                              encoder=encoder)
                 )
             except Exception as e:
                 print(f"  FAILED: {e}", file=sys.stderr)

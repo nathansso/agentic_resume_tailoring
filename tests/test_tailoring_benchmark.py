@@ -127,6 +127,37 @@ def test_redundancy_falls_back_to_skills_emphasized():
     assert out["term_counts"]["python"] == 2  # bullet + emphasized list rendered as skills
 
 
+def test_redundancy_suite_is_additive_over_the_original_keys():
+    """#122 merges four new modes in; every pre-existing key keeps its meaning.
+
+    The notebook (`tailoring_benchmark.ipynb`) and `_aggregate` both read
+    `over_repeated_count` and `bullet_type_token_ratio`, so this is a contract
+    with live consumers, not just a naming convention.
+    """
+    bullets = [f"Improved Python service number {i} with Python" for i in range(3)]
+    exps = [{"title": "Eng", "company": "A", "bullets": bullets}]
+    ranked = [{"name": "Python", "category": "Language", "score": 1.0}]
+    out = redundancy_metrics(_content(experiences=exps, skills_ranked=ranked))
+
+    for key in ("term_counts", "max_term_repetition", "mean_term_repetition",
+                "over_repeated", "over_repeated_count", "bullet_type_token_ratio"):
+        assert key in out, f"pre-#122 key {key} disappeared"
+    # The new modes are present alongside them.
+    for key in ("bullet_df", "max_bullet_df", "leading_verb_entropy", "mtld",
+                "mean_new_information", "bullet_count"):
+        assert key in out, f"#122 key {key} missing"
+    # Semantic keys stay out unless an encoder is supplied (stub runs pass none).
+    assert "max_pairwise_cosine" not in out
+
+
+def test_benchmark_supplies_no_encoder_in_stub_mode():
+    """Stub vectors are hash-derived and carry no semantic relation, so a
+    cosine computed from them would be stable and meaningless (#122/#158)."""
+    from eval.tailoring_benchmark import _semantic_encoder
+
+    assert _semantic_encoder(stub=True) is None
+
+
 # ── ATS summary ────────────────────────────────────────────────────────────────
 
 def test_ats_summary_deltas():

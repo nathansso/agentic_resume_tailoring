@@ -16,6 +16,7 @@ import re
 from typing import Dict, List, Optional
 
 from agents.ats_scorer import ATSScoringEngine
+from agents.redundancy import redundancy_report
 from agents.skill_selection import skill_names
 from agents.skill_scorer import MAX_SKILLS, MIN_SKILLS
 
@@ -151,7 +152,7 @@ def skills_metrics(
 
 # ── redundancy ─────────────────────────────────────────────────────────────────
 
-def redundancy_metrics(tailored_content: Dict) -> Dict:
+def redundancy_metrics(tailored_content: Dict, encoder=None) -> Dict:
     """
     Over-repetition of skill terms across the whole rendered resume (bullets +
     skills section). A term named in the skills section that also appears in
@@ -160,7 +161,19 @@ def redundancy_metrics(tailored_content: Dict) -> Dict:
     - max_term_repetition / mean_term_repetition : occurrences per skill term
     - over_repeated : terms appearing more than OVER_REPEAT_THRESHOLD times
     - bullet_type_token_ratio : lexical variety across all bullets (lower =
-      more repetitive writing overall)
+      more repetitive writing overall). **Length-biased** — `bullet_budget`
+      varies bullet length, so this partly measures the budget. Superseded by
+      `mtld` below; kept because the notebook and `_aggregate` consume it.
+
+    Issue #122 folds in `agents/redundancy.py`, which covers the three modes
+    counting cannot see (semantic duplication, lexical monotony, dilution). Its
+    keys are merged in **additively** — every key above keeps its meaning and
+    value, so existing consumers are untouched.
+
+    `encoder` is a `.encode`-shaped callable. Without one the semantic keys are
+    omitted rather than zeroed; the benchmark passes it only on real-model runs,
+    since the stub embedder gives paraphrases unrelated vectors and a stable but
+    meaningless cosine is worse than an absent one.
     """
     ranked = tailored_content.get("skills_ranked") or []
     terms = [s.get("name", "").lower() for s in ranked if s.get("name")]
@@ -190,6 +203,7 @@ def redundancy_metrics(tailored_content: Dict) -> Dict:
         "over_repeated": dict(sorted(over.items(), key=lambda kv: -kv[1])),
         "over_repeated_count": len(over),
         "bullet_type_token_ratio": ttr,
+        **redundancy_report(tailored_content, encoder=encoder),
     }
 
 
@@ -231,11 +245,16 @@ def compute_task_metrics(
     total_profile_skills: int,
     baseline_breakdown: Dict,
     tailored_breakdown: Dict,
+    encoder=None,
 ) -> Dict:
-    """All metric families for one benchmark task, as one JSON-serializable dict."""
+    """All metric families for one benchmark task, as one JSON-serializable dict.
+
+    `encoder` reaches only the redundancy family, which is the sole family with
+    a model dependency (issue #122). None on stub runs.
+    """
     return {
         "ats": ats_summary(baseline_breakdown, tailored_breakdown),
         "experience_allocation": experience_allocation(tailored_content, jd_text),
         "skills": skills_metrics(tailored_content, matched_skills, total_profile_skills),
-        "redundancy": redundancy_metrics(tailored_content),
+        "redundancy": redundancy_metrics(tailored_content, encoder=encoder),
     }
