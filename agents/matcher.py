@@ -90,10 +90,36 @@ class SkillMatcherAgent:
             except Exception as e:
                 logger.warning(f"Semantic embedding failed, falling back to exact match: {e}")
 
-            # Load job skills
+            # Load job skills. The SELECT is unordered, and the two engines
+            # disagree: the same profile + JD produced a different
+            # `missing_skills` order on Postgres than on SQLite, and that order
+            # is rendered verbatim into the planner prompt — so the model saw a
+            # different prompt per engine (found by replaying a recorded
+            # product run on both engines, issue #171; the same class #158
+            # fixed and #149 predicted would surface once rows were updated).
+            #
+            # Sorted by descending weight, then required-first, then name: the
+            # analyzer's weight is its prominence proxy, so this pins the order
+            # without inventing one — most important first, ties broken by
+            # content rather than by storage order. Deliberately not by
+            # skill_id: a uuid differs in every fresh database (#158).
             job_skills = session.exec(
                 select(JobSkill).where(JobSkill.job_id == job_id)
             ).all()
+            _names = {
+                s.skill_id: s.name
+                for s in session.exec(
+                    select(Skill).where(
+                        Skill.skill_id.in_([js.skill_id for js in job_skills])
+                    )
+                ).all()
+            } if job_skills else {}
+            job_skills = sorted(
+                job_skills,
+                key=lambda js: (-(js.weight or 0.0), not js.required,
+                                (_names.get(js.skill_id) or "").lower(),
+                                _names.get(js.skill_id) or ""),
+            )
 
             matched_skills = {}
             missing_skills = []
