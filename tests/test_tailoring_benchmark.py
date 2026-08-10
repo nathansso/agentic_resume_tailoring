@@ -259,13 +259,14 @@ def test_plumbing_mode_returns_source_bullets_verbatim():
     later change which makes the stub *simulate* rewriting fails loudly rather
     than quietly restoring a plausible number that measures nothing.
     """
-    from eval.tailoring_benchmark import STUB_EXPERIENCES, STUB_PROJECTS, _stub_tailored
+    from eval.tailoring_benchmark import _stub_tailored, fixture
 
+    profile = fixture()
     out = _stub_tailored("Senior Python engineer: FastAPI, PyTorch, Kafka, AWS.")
     assert [e["bullets"] for e in out["experiences"]] == \
-           [e["bullets"] for e in STUB_EXPERIENCES]
+           [e["bullets"] for e in profile.experiences]
     assert [p["bullets"] for p in out["projects"]] == \
-           [p["bullets"] for p in STUB_PROJECTS]
+           [p["bullets"] for p in profile.projects]
 
 
 def test_plumbing_mode_is_labelled_as_not_measuring_quality():
@@ -335,9 +336,9 @@ def test_plumbing_run_renders_only_verbatim_source_bullets(plumbing_run):
     a single rendered bullet is not, plumbing mode has started rewriting and
     every claim made about the mode needs re-reading.
     """
-    from eval.tailoring_benchmark import STUB_EXPERIENCES, STUB_PROJECTS
+    from eval.tailoring_benchmark import fixture
 
-    source = {b for item in (*STUB_EXPERIENCES, *STUB_PROJECTS) for b in item["bullets"]}
+    source = set(fixture().bullets)
     renders = list((plumbing_run["out_dir"] / "renders").rglob("*.json"))
     assert renders, "no rendered content written"
 
@@ -403,11 +404,12 @@ def test_llm_judge_rejects_malformed_output(payload):
 def test_llm_judge_scores_real_resume():
     """End-to-end judge call against the real eval model (needs API keys)."""
     from eval.llm_judge import judge_resume_quality
-    from eval.tailoring_benchmark import DEFAULT_PROFILE, STUB_EXPERIENCES, STUB_PROJECTS
+    from eval.tailoring_benchmark import DEFAULT_PROFILE, fixture
 
+    profile = fixture()
     content = {
-        "experiences": STUB_EXPERIENCES,
-        "projects": [{"name": p["name"], "bullets": p["bullets"]} for p in STUB_PROJECTS],
+        "experiences": profile.experiences,
+        "projects": [{"name": p["name"], "bullets": p["bullets"]} for p in profile.projects],
         "skills_emphasized": ["Python", "PyTorch", "FastAPI"],
     }
     jd = "Machine Learning Engineer role: PyTorch, model serving, feature stores, AWS."

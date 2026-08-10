@@ -9,40 +9,40 @@ deployed service.
 
 ## Experience
 
-**Nimbus Analytics** — Machine Learning Engineer (2024–Present)
+**Nimbus Analytics** — Machine Learning Engineer (Jan 2024 – Present)
 - Built and deployed gradient-boosted and transformer ranking models serving 2M daily predictions with PyTorch and XGBoost.
 - Designed a feature store on Postgres and Redis, cutting feature backfill time from hours to minutes.
 - Set up model monitoring with drift detection, alerting, and automated retraining on Airflow.
 - Fine-tuned sentence-transformer embedding models for semantic product search, lifting recall@10 by 18%.
 
-**Bluefin Software** — Backend Software Engineer (2022–2024)
+**Bluefin Software** — Backend Software Engineer (Mar 2022 – Jan 2024)
 - Developed FastAPI and Flask microservices handling 40k requests/minute behind an Nginx gateway.
 - Modeled billing and subscription data in Postgres with SQLAlchemy; wrote migrations with Alembic.
 - Containerized services with Docker and deployed to AWS ECS through GitHub Actions CI/CD.
 - Led the migration from a monolith to event-driven services using Kafka.
 
-**Harbor Labs** — Software Engineer (2021–2022)
+**Harbor Labs** — Software Engineer (Jun 2021 – Mar 2022)
 - Built React and TypeScript dashboards visualizing pipeline health for internal teams.
 - Wrote Python ETL jobs with pandas processing 50GB of daily event data into Snowflake.
 - Added integration tests with pytest and cut flaky-test rate by half.
 
-**City University IT Department** — Student Developer (2020–2021)
+**City University IT Department** — Student Developer (Sep 2020 – Jun 2021)
 - Maintained PHP and MySQL tooling for course registration workflows.
 - Automated report generation with Python scripts, saving staff ten hours weekly.
 
 ## Projects
 
-**SemanticSearch-Lite** (github.com/alexrivera/semsearch)
+**SemanticSearch-Lite** (github.com/alexrivera/semsearch) — Semantic search library
 - Open-source semantic search library using sentence-transformers, FAISS, and a FastAPI serving layer; 400+ GitHub stars.
 - Implemented hybrid BM25 + dense retrieval with reciprocal rank fusion.
 
-**StreamBoard**
+**StreamBoard** — Real-time analytics dashboard
 - Real-time analytics dashboard with Kafka, ClickHouse, and a React frontend; processes 10k events/second.
 
-**LLM Resume Coach**
+**LLM Resume Coach** — Resume critique app
 - LangChain + OpenAI application that critiques resumes against job descriptions; deployed on Railway with Docker.
 
-**Pixel Adventure**
+**Pixel Adventure** — 2D platformer game
 - 2D platformer game in C# and Unity published on itch.io.
 
 ## Skills

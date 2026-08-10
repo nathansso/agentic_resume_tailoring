@@ -39,6 +39,8 @@ from typing import Dict, List, Optional
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from eval.profile_fixture import ProfileFixture, load_profile  # noqa: E402
+
 DATASET_DIR = ROOT / "eval" / "jd_dataset"
 RESULTS_DIR = ROOT / "eval" / "results"
 DEFAULT_PROFILE = ROOT / "eval" / "profiles" / "benchmark_profile.md"
@@ -104,90 +106,56 @@ def _patch_profile_pointer(workdir: Path) -> None:
 
 
 # ── deterministic stub LLM (offline mode) ──────────────────────────────────────
+#
+# The canned parse is *derived from the profile fixture* (issue #171), not
+# hand-copied from it. It used to be three module-level constants whose own
+# comment said they were "kept aligned with the fixture" — a duplicate of the
+# one profile that exists, which had already drifted (30 skills against the
+# fixture's 32) and which made a second profile impossible without a second
+# hand-written parse. eval/profile_fixture.py parses the markdown instead, so
+# any fixture in the same shape works with no Python change. See #172.
 
-# Canned parse of eval/profiles/benchmark_profile.md — what the parser stub
-# "extracts". Kept aligned with the fixture so rendered resumes read sensibly.
-STUB_EXPERIENCES = [
-    {"title": "Machine Learning Engineer", "company": "Nimbus Analytics",
-     "start_date": "2024-01", "end_date": "Present",
-     "description": "ML systems and ranking models",
-     "bullets": [
-         "Built and deployed gradient-boosted and transformer ranking models serving 2M daily predictions with PyTorch and XGBoost.",
-         "Designed a feature store on Postgres and Redis, cutting feature backfill time from hours to minutes.",
-         "Set up model monitoring with drift detection, alerting, and automated retraining on Airflow.",
-         "Fine-tuned sentence-transformer embedding models for semantic product search, lifting recall@10 by 18%.",
-     ]},
-    {"title": "Backend Software Engineer", "company": "Bluefin Software",
-     "start_date": "2022-03", "end_date": "2024-01",
-     "description": "Backend microservices",
-     "bullets": [
-         "Developed FastAPI and Flask microservices handling 40k requests/minute behind an Nginx gateway.",
-         "Modeled billing and subscription data in Postgres with SQLAlchemy; wrote migrations with Alembic.",
-         "Containerized services with Docker and deployed to AWS ECS through GitHub Actions CI/CD.",
-         "Led the migration from a monolith to event-driven services using Kafka.",
-     ]},
-    {"title": "Software Engineer", "company": "Harbor Labs",
-     "start_date": "2021-06", "end_date": "2022-03",
-     "description": "Dashboards and ETL",
-     "bullets": [
-         "Built React and TypeScript dashboards visualizing pipeline health for internal teams.",
-         "Wrote Python ETL jobs with pandas processing 50GB of daily event data into Snowflake.",
-         "Added integration tests with pytest and cut flaky-test rate by half.",
-     ]},
-    {"title": "Student Developer", "company": "City University IT Department",
-     "start_date": "2020-09", "end_date": "2021-06",
-     "description": "Internal tooling",
-     "bullets": [
-         "Maintained PHP and MySQL tooling for course registration workflows.",
-         "Automated report generation with Python scripts, saving staff ten hours weekly.",
-     ]},
-]
+_FIXTURE: Optional["ProfileFixture"] = None
 
-STUB_PROJECTS = [
-    {"name": "SemanticSearch-Lite", "description": "Semantic search library",
-     "repo_url": "https://github.com/alexrivera/semsearch",
-     "bullets": [
-         "Open-source semantic search library using sentence-transformers, FAISS, and a FastAPI serving layer; 400+ GitHub stars.",
-         "Implemented hybrid BM25 + dense retrieval with reciprocal rank fusion.",
-     ]},
-    {"name": "StreamBoard", "description": "Real-time analytics dashboard",
-     "bullets": ["Real-time analytics dashboard with Kafka, ClickHouse, and a React frontend; processes 10k events/second."]},
-    {"name": "LLM Resume Coach", "description": "Resume critique app",
-     "bullets": ["LangChain + OpenAI application that critiques resumes against job descriptions; deployed on Railway with Docker."]},
-    {"name": "Pixel Adventure", "description": "2D platformer game",
-     "bullets": ["2D platformer game in C# and Unity published on itch.io."]},
-]
 
-STUB_SKILLS = [
-    {"name": n, "category": c, "proficiency": p}
-    for n, c, p in [
-        ("Python", "Language", 5), ("TypeScript", "Language", 4), ("C#", "Language", 3),
-        ("SQL", "Language", 4), ("PyTorch", "Library", 4), ("XGBoost", "Library", 4),
-        ("scikit-learn", "Library", 4), ("sentence-transformers", "Library", 4),
-        ("LangChain", "Framework", 3), ("pandas", "Library", 4), ("NumPy", "Library", 4),
-        ("Airflow", "Tool", 3), ("Kafka", "Tool", 4), ("ClickHouse", "Database", 3),
-        ("Snowflake", "Database", 3), ("FAISS", "Library", 3), ("FastAPI", "Framework", 5),
-        ("Flask", "Framework", 4), ("React", "Framework", 4), ("Node.js", "Framework", 3),
-        ("Postgres", "Database", 4), ("MySQL", "Database", 3), ("Redis", "Database", 3),
-        ("Docker", "Tool", 4), ("Kubernetes", "Tool", 3), ("AWS", "Cloud", 4),
-        ("GitHub Actions", "Tool", 4), ("Nginx", "Tool", 3), ("Unity", "Tool", 2),
-        ("Git", "Tool", 5),
-    ]
-]
+def fixture() -> "ProfileFixture":
+    """The parsed profile the canned payloads are derived from.
 
-# JD-skill vocabulary the stub "analyzer" scans job text against: the profile's
-# skills plus common terms the profile lacks, so missing_skills is non-empty.
-STUB_JD_VOCAB = [s["name"] for s in STUB_SKILLS] + [
+    Defaults to DEFAULT_PROFILE so importing this module (tests, the notebook)
+    needs no run in progress; `bind_fixture` rebinds it per benchmark run.
+    """
+    global _FIXTURE
+    if _FIXTURE is None:
+        _FIXTURE = load_profile(DEFAULT_PROFILE)
+    return _FIXTURE
+
+
+def bind_fixture(profile_path: Path) -> "ProfileFixture":
+    """Point the canned payloads at the profile this run actually ingests."""
+    global _FIXTURE
+    _FIXTURE = load_profile(profile_path)
+    return _FIXTURE
+
+
+# Terms the JD-skill "analyzer" scans for beyond the profile's own skills, so
+# that missing_skills is non-empty on a realistic posting.
+_EXTRA_JD_TERMS = [
     "Java", "Go", "Rust", "Scala", "GraphQL", "Spark", "TensorFlow", "Terraform",
     "GCP", "Azure", "MongoDB", "Elasticsearch", "machine learning", "deep learning",
     "LLM", "microservices", "REST", "CI/CD",
 ]
 
 
+def stub_jd_vocab() -> List[str]:
+    """Vocabulary the stub analyzer scans job text against: this profile's
+    skills plus common terms it lacks."""
+    return [s["name"] for s in fixture().skills] + _EXTRA_JD_TERMS
+
+
 def _stub_extract_jd_skills(jd_text: str) -> List[Dict]:
     low = jd_text.lower()
     out = []
-    for name in STUB_JD_VOCAB:
+    for name in stub_jd_vocab():
         idx = low.find(name.lower())
         if idx == -1:
             continue
@@ -235,7 +203,7 @@ def _stub_jd_profile(prompt_text: str) -> Dict:
     if marker in prompt_text:
         body = prompt_text.split(marker, 1)[1]
 
-    vocab = sorted({v.lower() for v in STUB_JD_VOCAB})
+    vocab = sorted({v.lower() for v in stub_jd_vocab()})
     requirements: List[Dict] = []
     section = ""
     for raw in body.splitlines():
@@ -295,30 +263,39 @@ def _stub_tailored(jd_text: str) -> Dict:
     #171 removes: a plausible number measuring nothing. It stays honest and
     narrow; `--mode product` and `--mode replay` are where tailoring is measured.
     """
+    profile = fixture()
     low = jd_text.lower()
-    emphasized = [s["name"] for s in STUB_SKILLS if s["name"].lower() in low]
+    emphasized = [s["name"] for s in profile.skills if s["name"].lower() in low]
     return {
         "experiences": [
             {k: e[k] for k in ("title", "company", "start_date", "end_date", "bullets")}
-            for e in STUB_EXPERIENCES
+            for e in profile.experiences
         ],
         "projects": [
             {"name": p["name"], "selected_style": "technical", "bullets": p["bullets"]}
-            for p in STUB_PROJECTS
+            for p in profile.projects
         ],
-        "skills_emphasized": emphasized or [s["name"] for s in STUB_SKILLS[:8]],
+        "skills_emphasized": emphasized or [s["name"] for s in profile.skills[:8]],
     }
 
 
 def _stub_payload(text: str):
-    """Route a formatted prompt to its canned/deterministic payload (dict/list)."""
+    """Route a formatted prompt to its canned/deterministic payload (dict/list).
+
+    Anything with no branch here (education, achievements) returns `{}` and so
+    compiles to an empty list — the same surface the constants covered before
+    #171 derived them, deliberately unchanged so this stays a source swap rather
+    than a re-baseline of what plumbing mode measures.
+    """
+    profile = fixture()
     if "Extract work experiences" in text:
-        return STUB_EXPERIENCES
+        return profile.experiences
     if "Extract projects" in text:
         return [{k: p[k] for k in ("name", "description")} | (
-            {"repo_url": p["repo_url"]} if "repo_url" in p else {}) for p in STUB_PROJECTS]
+            {"repo_url": p["repo_url"]} if "repo_url" in p else {})
+            for p in profile.projects]
     if "Extract technical skills" in text:
-        return STUB_SKILLS
+        return profile.skills
     if "Extract the job title" in text:
         return {"title": "Benchmark Role", "company": "Benchmark Co"}
     if "job description analyzer" in text:
@@ -402,8 +379,13 @@ class _StubEmbeddingModel:
         return arr[0] if single else arr
 
 
-def _install_stubs() -> None:
-    """Patch the LLM factory and the embedding model everywhere they were bound."""
+def _install_stubs(profile_path: Path = DEFAULT_PROFILE) -> None:
+    """Patch the LLM factory and the embedding model everywhere they were bound.
+
+    Binds the canned payloads to the profile this run ingests, so the stub
+    "parse" is always a parse of the fixture actually on disk (issue #171).
+    """
+    bind_fixture(profile_path)
     import agents.job_analyzer as job_analyzer
     import agents.matcher as matcher
     import agents.parser as parser
@@ -624,7 +606,7 @@ def run_benchmark(
 
         _patch_profile_pointer(workdir)
         if stub:
-            _install_stubs()
+            _install_stubs(profile_path)
         init_db()
 
         client = TestClient(create_app())
