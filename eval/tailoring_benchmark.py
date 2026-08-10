@@ -17,10 +17,21 @@ redundancy) and writes:
     eval/results/renders/<ts>/<task>.tex|.json   # rendered resume + raw content
 
 Execution modes (issue #171) — see MODE_CLAIMS for what each may claim:
-    python eval/tailoring_benchmark.py            # product: real LLM (needs API keys)
-    python eval/tailoring_benchmark.py --stub     # plumbing: canned payloads, offline
+
+    --mode product    real LLM + real embeddings, the deployed path. The only
+                      mode whose numbers describe tailoring quality.
+    --mode replay     recorded model responses, everything else real. What the
+                      recording covered, deterministically, at ~zero cost.
+    --mode plumbing   canned payloads (the old --stub). Wiring, schemas and
+                      determinism only — never tailoring quality.
+
+    python eval/tailoring_benchmark.py --mode plumbing --limit 3
+    python eval/tailoring_benchmark.py --mode product --record --limit 3
+    python eval/tailoring_benchmark.py --mode replay --limit 3
     python eval/tailoring_benchmark.py --tasks stripe_ai_engineer duolingo_software_engineer_i
-    python eval/tailoring_benchmark.py --limit 3
+
+Replay contract (what a replay run does and does not reproduce) is documented
+in eval/README.md.
 
 The notebook eval/tailoring_benchmark.ipynb drives this module and visualizes
 the artifacts.
@@ -31,6 +42,7 @@ import json
 import os
 import sys
 import tempfile
+from contextlib import nullcontext
 from datetime import datetime
 from pathlib import Path
 from statistics import mean, median
@@ -39,6 +51,15 @@ from typing import Dict, List, Optional
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from eval.cassettes import (  # noqa: E402
+    MODE_RECORD as CASSETTE_RECORD,
+    MODE_REPLAY as CASSETTE_REPLAY,
+    Cassette,
+    CassetteSession,
+    default_cassette_path,
+    recording_meta,
+    render_prompt,
+)
 from eval.profile_fixture import ProfileFixture, load_profile  # noqa: E402
 
 DATASET_DIR = ROOT / "eval" / "jd_dataset"
@@ -58,12 +79,18 @@ BENCH_PASSWORD = "benchmark-pass-123"
 # could not support.
 
 MODE_PRODUCT = "product"
+MODE_REPLAY = "replay"
 MODE_PLUMBING = "plumbing"
+MODES = (MODE_PRODUCT, MODE_REPLAY, MODE_PLUMBING)
 
 MODE_CLAIMS = {
     MODE_PRODUCT:
         "Real LLM + real embeddings, the deployed path. Tailoring quality — "
         "the only mode whose numbers describe the product.",
+    MODE_REPLAY:
+        "Recorded LLM responses, real embeddings, every deterministic line of "
+        "the pipeline executing for real. Everything the recording covered, "
+        "deterministically, at near-zero marginal cost.",
     MODE_PLUMBING:
         "Canned payloads, no model. Wiring, schemas and determinism ONLY — "
         "explicitly NOT tailoring quality: the stub returns every source bullet "
@@ -307,13 +334,10 @@ def _stub_payload(text: str):
     return {}
 
 
-def _prompt_text(prompt_value) -> str:
-    """Text of a PromptValue or a list of formatted messages."""
-    if hasattr(prompt_value, "to_string"):
-        return prompt_value.to_string()
-    if isinstance(prompt_value, (list, tuple)):
-        return "\n".join(str(getattr(m, "content", m)) for m in prompt_value)
-    return str(prompt_value)
+# The stub routes on prompt text and the cassette layer keys on it, so they must
+# render a prompt the same way or a recording could not be matched to the run
+# that produced it. One implementation, in eval/cassettes.py.
+_prompt_text = render_prompt
 
 
 def _make_stub_llm():
@@ -379,30 +403,50 @@ class _StubEmbeddingModel:
         return arr[0] if single else arr
 
 
+def _install_llm_factory(factory) -> None:
+    """Patch the `get_llm` seam everywhere it was bound.
+
+    Every model call resolves through `llm.get_llm`, so this one patch serves
+    all three execution modes: the canned stub, a cassette recorder, and a
+    cassette player (issue #171).
+
+    agents/jd_profile.py builds its extractor through `llm.get_extractor`
+    without passing an llm, so it never saw the module-level patches — its
+    extraction failed and every posting silently compiled to no profile at all.
+    Patching the factory itself covers that path and any future `get_extractor`
+    caller (issue #125). agents/chat.py and agents/enhancer.py are patched
+    despite the benchmark never driving chat: in replay mode an unpatched seam
+    is a live provider call, and that must not be possible by accident.
+    """
+    import agents.chat as chat
+    import agents.enhancer as enhancer
+    import agents.job_analyzer as job_analyzer
+    import agents.parser as parser
+    import agents.tailor as tailor
+    import llm as llm_module
+
+    for module in (parser, job_analyzer, tailor, chat, enhancer):
+        module.get_llm = factory
+    llm_module.get_llm = factory
+
+
+def _install_stub_embeddings() -> None:
+    """Plumbing mode only: hash-derived vectors, no model download."""
+    import agents.matcher as matcher
+
+    matcher.get_embedding_model = lambda: _StubEmbeddingModel()
+    matcher._embedding_model = None
+
+
 def _install_stubs(profile_path: Path = DEFAULT_PROFILE) -> None:
-    """Patch the LLM factory and the embedding model everywhere they were bound.
+    """Plumbing mode: canned payloads plus the hash embedder.
 
     Binds the canned payloads to the profile this run ingests, so the stub
     "parse" is always a parse of the fixture actually on disk (issue #171).
     """
     bind_fixture(profile_path)
-    import agents.job_analyzer as job_analyzer
-    import agents.matcher as matcher
-    import agents.parser as parser
-    import agents.tailor as tailor
-    import llm as llm_module
-
-    stub = _make_stub_llm()
-    for module in (parser, job_analyzer, tailor):
-        module.get_llm = stub
-    # agents/jd_profile.py builds its extractor through `llm.get_extractor`
-    # without passing an llm, so it never saw the three module-level patches
-    # above — its extraction failed and every posting silently compiled to no
-    # profile at all. Patching the factory itself covers that path and any
-    # future `get_extractor` caller (issue #125).
-    llm_module.get_llm = stub
-    matcher.get_embedding_model = lambda: _StubEmbeddingModel()
-    matcher._embedding_model = None
+    _install_llm_factory(_make_stub_llm())
+    _install_stub_embeddings()
 
 
 # ── dataset ────────────────────────────────────────────────────────────────────
@@ -430,22 +474,42 @@ def _api(client, method: str, url: str, **kwargs):
     return resp
 
 
-def _semantic_encoder(stub: bool):
-    """Encoder for the redundancy suite's semantic metrics, or None (issue #122).
+def _semantic_encoder(mode: str):
+    """Encoder for the redundancy suite's semantic metrics (issue #122/#171).
 
-    Deliberately keyed on `stub`, not on whether `matcher.get_embedding_model()`
-    returns something: in stub mode it returns `_StubEmbeddingModel`, whose
-    hash-derived vectors are deterministic but carry no semantic relation, so
-    paraphrases look no more similar than unrelated sentences. Reporting a
-    `max_pairwise_cosine` from those would be a stable, meaningless number
-    dressed as a redundancy score — the failure mode #158 just cleaned up.
+    Keyed on the execution *mode*, not on a `stub` boolean and not on whether
+    `matcher.get_embedding_model()` happens to return something:
+
+    * **plumbing** → None. The stub embedder's hash-derived vectors are
+      deterministic but carry no semantic relation, so paraphrases look no more
+      similar than unrelated sentences; a `max_pairwise_cosine` computed from
+      them would be a stable, meaningless number dressed as a redundancy score
+      — the failure mode #158 cleaned up.
+    * **product / replay** → the real encoder, or a hard failure. Replay claims
+      to run "every deterministic line of the pipeline for real", and semantic
+      duplication is the one redundancy mode with a model dependency. Degrading
+      to None here would silently disable it and quietly re-create #122's
+      symptom (all four modes reporting clean) inside the new mode.
     """
-    if stub:
+    if mode == MODE_PLUMBING:
         return None
-    from agents.matcher import get_embedding_model
-    model = get_embedding_model()
+    try:
+        from agents.matcher import get_embedding_model
+        model = get_embedding_model()
+    except Exception as exc:  # not installed / offline / OOM
+        model = None
+        reason = f"{type(exc).__name__}: {exc}"
+    else:
+        reason = "get_embedding_model() returned None"
     if model is None:
-        return None
+        raise SystemExit(
+            f"--mode {mode} needs the real embedding model, and it is "
+            f"unavailable ({reason}).\n"
+            "Semantic duplication is the one redundancy metric with a model "
+            "dependency; running without it would report the other three as "
+            "clean and omit the fourth silently (issue #122/#171).\n"
+            "Install it with: pip install -r requirements.txt"
+        )
     return lambda texts: model.encode(texts, normalize_embeddings=True)
 
 
@@ -518,6 +582,34 @@ def _run_task(client, task: Dict, renders_dir: Path,
     }
 
 
+def _install_mode(mode: str, profile_path: Path, cassette_path: Optional[Path],
+                  record: bool, task_ids: List[str]):
+    """Bind the `get_llm` seam for this mode. Returns the CassetteSession, if any.
+
+    Product mode without `--record` patches nothing: it *is* the deployed path.
+    """
+    if mode == MODE_PLUMBING:
+        _install_stubs(profile_path)
+        return None
+    if mode == MODE_REPLAY:
+        session = CassetteSession(Cassette.load(cassette_path), CASSETTE_REPLAY)
+        _install_llm_factory(session.llm_factory())
+        return session
+    if record:
+        import llm as llm_module
+
+        # Captured before the patch: the recorder must call the real factory,
+        # not itself.
+        session = CassetteSession(
+            Cassette(meta=recording_meta(
+                str(profile_path.relative_to(ROOT)), task_ids)),
+            CASSETTE_RECORD, factory=llm_module.get_llm,
+        )
+        _install_llm_factory(session.llm_factory())
+        return session
+    return None
+
+
 def _mode_banner(mode: str) -> str:
     """Framed, unmissable statement of what this run's numbers may claim."""
     rule = "─" * 78
@@ -578,19 +670,35 @@ def _aggregate(task_results: List[Dict]) -> Dict:
 def run_benchmark(
     task_ids: Optional[List[str]] = None,
     profile_path: Path = DEFAULT_PROFILE,
-    stub: bool = False,
+    mode: str = MODE_PRODUCT,
     limit: int = 0,
     out_dir: Path = RESULTS_DIR,
     workdir: Optional[Path] = None,
     judge: bool = False,
+    cassette_path: Optional[Path] = None,
+    record: bool = False,
 ) -> Dict:
-    """Full benchmark run. Returns the results dict (also persisted to out_dir)."""
+    """Full benchmark run. Returns the results dict (also persisted to out_dir).
+
+    `mode` is one of MODES. It is a mode, not a boolean, precisely because a
+    third mode existed and the old `stub` flag had no room for it (issue #171).
+    `record` snapshots a product run into `cassette_path` for later replay.
+    """
+    if mode not in MODES:
+        raise SystemExit(f"unknown mode {mode!r}; expected one of {', '.join(MODES)}")
+    if record and mode != MODE_PRODUCT:
+        raise SystemExit("--record only applies to --mode product: a recording "
+                         "must capture real model responses")
     tasks = load_tasks(task_ids, limit)
     if not tasks:
         raise SystemExit(f"No tasks found in {DATASET_DIR} — run scripts/scrape_job_descriptions.py")
 
-    mode = MODE_PLUMBING if stub else MODE_PRODUCT
+    if mode == MODE_REPLAY or record:
+        cassette_path = Path(cassette_path or default_cassette_path(
+            profile_path.stem, limit, task_ids))
     print(_mode_banner(mode), flush=True)
+    if cassette_path:
+        print(f"  cassette: {cassette_path}", flush=True)
 
     own_tmp = None
     if workdir is None:
@@ -605,8 +713,8 @@ def run_benchmark(
         from web.app import create_app
 
         _patch_profile_pointer(workdir)
-        if stub:
-            _install_stubs(profile_path)
+        session = _install_mode(mode, profile_path, cassette_path, record,
+                                [t["id"] for t in tasks])
         init_db()
 
         client = TestClient(create_app())
@@ -627,19 +735,34 @@ def run_benchmark(
         profile_text = profile_path.read_text(encoding="utf-8")
         # Resolved once: the model load is cached in matcher, but the redundancy
         # suite's encoder is a per-run property, not a per-task one (issue #122).
-        encoder = _semantic_encoder(stub)
+        encoder = _semantic_encoder(mode)
         task_results = []
         for i, task in enumerate(tasks, 1):
             print(f"[{i}/{len(tasks)}] {task['id']} ...", flush=True)
+            # Cassette counters are per task, so a task's recorded calls do not
+            # depend on how many calls the tasks before it made (issue #171).
+            scope = session.scope(task["id"]) if session else nullcontext()
             try:
-                task_results.append(
-                    _run_task(client, task, renders_dir,
-                              judge=judge and not stub, profile_text=profile_text,
-                              encoder=encoder, mode=mode)
-                )
+                with scope:
+                    task_results.append(
+                        _run_task(client, task, renders_dir,
+                                  judge=judge and mode == MODE_PRODUCT,
+                                  profile_text=profile_text,
+                                  encoder=encoder, mode=mode)
+                    )
             except Exception as e:
                 print(f"  FAILED: {e}", file=sys.stderr)
                 task_results.append({"task_id": task["id"], "error": str(e)})
+
+        if session is not None:
+            if mode == MODE_REPLAY:
+                # Fatal even though every miss already raised: the degrade-
+                # gracefully call sites catch everything, so a miss can reach
+                # the metrics as an empty parse instead of as an error.
+                session.assert_no_misses()
+            if record:
+                saved = session.cassette.save(cassette_path)
+                print(f"Cassette → {saved} ({len(session.cassette)} interactions)")
 
         ok = [t for t in task_results if "error" not in t]
         results = {
@@ -648,6 +771,7 @@ def run_benchmark(
             # Travels with the numbers into every consumer that reads the
             # artifact without reading this file (issue #171).
             "mode_claim": MODE_CLAIMS[mode],
+            "cassette": str(cassette_path) if cassette_path else None,
             "profile": str(profile_path.relative_to(ROOT)),
             "dataset_size": len(tasks),
             "failed": [t["task_id"] for t in task_results if "error" in t],
@@ -712,18 +836,32 @@ def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--stub", action="store_true", help="deterministic fake LLM (offline)")
+    ap.add_argument("--mode", choices=MODES, default=MODE_PRODUCT,
+                    help="execution mode (default: product)")
+    ap.add_argument("--stub", action="store_true",
+                    help="alias for --mode plumbing (kept for existing scripts)")
+    ap.add_argument("--cassette", type=Path, default=None,
+                    help="cassette file to record into or replay from")
+    ap.add_argument("--record", action="store_true",
+                    help="product mode: snapshot every model response for replay")
     ap.add_argument("--tasks", nargs="*", default=None, help="task ids to run (default: all)")
     ap.add_argument("--limit", type=int, default=0, help="run only the first N tasks")
     ap.add_argument("--profile", type=Path, default=DEFAULT_PROFILE, help="resume fixture to ingest")
     ap.add_argument("--out", type=Path, default=RESULTS_DIR, help="results directory")
     ap.add_argument("--judge", action="store_true",
-                    help="add LLM-as-judge quality scores (real-LLM mode only)")
+                    help="add LLM-as-judge quality scores (product mode only)")
     args = ap.parse_args()
 
+    mode = args.mode
+    if args.stub:
+        if args.mode != MODE_PRODUCT:
+            raise SystemExit("--stub and --mode are exclusive; --stub means --mode plumbing")
+        mode = MODE_PLUMBING
+
     results = run_benchmark(
-        task_ids=args.tasks, profile_path=args.profile, stub=args.stub,
+        task_ids=args.tasks, profile_path=args.profile, mode=mode,
         limit=args.limit, out_dir=args.out, judge=args.judge,
+        cassette_path=args.cassette, record=args.record,
     )
     agg = results["aggregate"]
     print(json.dumps(agg, indent=2))

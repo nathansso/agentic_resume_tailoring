@@ -150,12 +150,30 @@ def test_redundancy_suite_is_additive_over_the_original_keys():
     assert "max_pairwise_cosine" not in out
 
 
-def test_benchmark_supplies_no_encoder_in_stub_mode():
+def test_benchmark_supplies_no_encoder_in_plumbing_mode():
     """Stub vectors are hash-derived and carry no semantic relation, so a
     cosine computed from them would be stable and meaningless (#122/#158)."""
+    from eval.tailoring_benchmark import MODE_PLUMBING, _semantic_encoder
+
+    assert _semantic_encoder(MODE_PLUMBING) is None
+
+
+@pytest.mark.parametrize("mode", ["product", "replay"])
+def test_a_missing_encoder_fails_the_run_rather_than_disabling_semantics(mode, monkeypatch):
+    """`_semantic_encoder` is keyed on the mode, not on encoder availability.
+
+    Returning None here would leave semantic duplication silently unmeasured in
+    replay — quietly re-creating #122's symptom (all four redundancy modes
+    reporting clean) inside the mode built to fix it.
+    """
+    import agents.matcher as matcher
+
     from eval.tailoring_benchmark import _semantic_encoder
 
-    assert _semantic_encoder(stub=True) is None
+    monkeypatch.setattr(matcher, "get_embedding_model",
+                        lambda: (_ for _ in ()).throw(ImportError("no model")))
+    with pytest.raises(SystemExit, match="needs the real embedding model"):
+        _semantic_encoder(mode)
 
 
 # ── ATS summary ────────────────────────────────────────────────────────────────
@@ -267,6 +285,28 @@ def test_plumbing_mode_returns_source_bullets_verbatim():
            [e["bullets"] for e in profile.experiences]
     assert [p["bullets"] for p in out["projects"]] == \
            [p["bullets"] for p in profile.projects]
+
+
+def test_every_mode_declares_what_it_may_claim():
+    from eval.tailoring_benchmark import MODE_CLAIMS, MODES
+
+    assert set(MODES) == set(MODE_CLAIMS)
+    assert len(MODES) == 3
+
+
+def test_an_unknown_mode_is_rejected_before_anything_runs():
+    from eval.tailoring_benchmark import run_benchmark
+
+    with pytest.raises(SystemExit, match="unknown mode"):
+        run_benchmark(mode="stub")  # the boolean's old name is not a mode
+
+
+def test_recording_is_refused_outside_product_mode():
+    """A cassette recorded from canned payloads would replay the stub."""
+    from eval.tailoring_benchmark import MODE_PLUMBING, run_benchmark
+
+    with pytest.raises(SystemExit, match="only applies to --mode product"):
+        run_benchmark(mode=MODE_PLUMBING, record=True)
 
 
 def test_plumbing_mode_is_labelled_as_not_measuring_quality():
