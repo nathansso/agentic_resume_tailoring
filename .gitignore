@@ -72,3 +72,6 @@ eval/results/
 # need to be ignored rather than remembered.
 scratchpad/
 *_cc_evi.txt
+
+# Claude Code personal/machine-local config (never commit - may hold credentials)
+.claude/settings.local.json
