@@ -150,12 +150,30 @@ def test_redundancy_suite_is_additive_over_the_original_keys():
     assert "max_pairwise_cosine" not in out
 
 
-def test_benchmark_supplies_no_encoder_in_stub_mode():
+def test_benchmark_supplies_no_encoder_in_plumbing_mode():
     """Stub vectors are hash-derived and carry no semantic relation, so a
     cosine computed from them would be stable and meaningless (#122/#158)."""
+    from eval.tailoring_benchmark import MODE_PLUMBING, _semantic_encoder
+
+    assert _semantic_encoder(MODE_PLUMBING) is None
+
+
+@pytest.mark.parametrize("mode", ["product", "replay"])
+def test_a_missing_encoder_fails_the_run_rather_than_disabling_semantics(mode, monkeypatch):
+    """`_semantic_encoder` is keyed on the mode, not on encoder availability.
+
+    Returning None here would leave semantic duplication silently unmeasured in
+    replay — quietly re-creating #122's symptom (all four redundancy modes
+    reporting clean) inside the mode built to fix it.
+    """
+    import agents.matcher as matcher
+
     from eval.tailoring_benchmark import _semantic_encoder
 
-    assert _semantic_encoder(stub=True) is None
+    monkeypatch.setattr(matcher, "get_embedding_model",
+                        lambda: (_ for _ in ()).throw(ImportError("no model")))
+    with pytest.raises(SystemExit, match="needs the real embedding model"):
+        _semantic_encoder(mode)
 
 
 # ── ATS summary ────────────────────────────────────────────────────────────────
@@ -248,23 +266,92 @@ def test_jd_dataset_is_present_and_well_formed():
         assert len(task["description"]) > 500
 
 
+# ── plumbing mode never rewrites a bullet (issue #171) ────────────────────────
+
+def test_plumbing_mode_returns_source_bullets_verbatim():
+    """The canned payload passes every source bullet through unchanged.
+
+    This is the defect #171 exists to name: `--stub` numbers measure the harness
+    and the deterministic post-processing, never the rewrite. The property is
+    pinned here so it can never again be mistaken for tailoring — and so that a
+    later change which makes the stub *simulate* rewriting fails loudly rather
+    than quietly restoring a plausible number that measures nothing.
+    """
+    from eval.tailoring_benchmark import _stub_tailored, fixture
+
+    profile = fixture()
+    out = _stub_tailored("Senior Python engineer: FastAPI, PyTorch, Kafka, AWS.")
+    assert [e["bullets"] for e in out["experiences"]] == \
+           [e["bullets"] for e in profile.experiences]
+    assert [p["bullets"] for p in out["projects"]] == \
+           [p["bullets"] for p in profile.projects]
+
+
+def test_every_mode_declares_what_it_may_claim():
+    from eval.tailoring_benchmark import MODE_CLAIMS, MODES
+
+    assert set(MODES) == set(MODE_CLAIMS)
+    assert len(MODES) == 3
+
+
+def test_an_unknown_mode_is_rejected_before_anything_runs():
+    from eval.tailoring_benchmark import run_benchmark
+
+    with pytest.raises(SystemExit, match="unknown mode"):
+        run_benchmark(mode="stub")  # the boolean's old name is not a mode
+
+
+def test_recording_is_refused_outside_product_mode():
+    """A cassette recorded from canned payloads would replay the stub."""
+    from eval.tailoring_benchmark import MODE_PLUMBING, run_benchmark
+
+    with pytest.raises(SystemExit, match="only applies to --mode product"):
+        run_benchmark(mode=MODE_PLUMBING, record=True)
+
+
+def test_plumbing_mode_is_labelled_as_not_measuring_quality():
+    """The mode label must state the limitation, not just name the mode."""
+    from eval.tailoring_benchmark import MODE_CLAIMS, MODE_PLUMBING, MODE_PRODUCT
+
+    plumbing = MODE_CLAIMS[MODE_PLUMBING].lower()
+    assert "not tailoring quality" in plumbing
+    assert "verbatim" in plumbing
+    assert "tailoring quality" in MODE_CLAIMS[MODE_PRODUCT].lower()
+
+
 # ── end-to-end smoke (real web API, stub LLM, subprocess isolation) ────────────
 
-def test_benchmark_end_to_end_stub_smoke(tmp_path):
-    """One task through register→ingest→analyze→tailor→export via the API."""
+@pytest.fixture(scope="module")
+def plumbing_run(tmp_path_factory):
+    """One `--stub --limit 1` benchmark run, shared by the tests below.
+
+    Module-scoped because it drives the whole web API in a subprocess; the
+    render-level assertions below would otherwise pay for a second full run.
+    """
+    out_dir = tmp_path_factory.mktemp("plumbing_run")
     proc = subprocess.run(
         [sys.executable, str(ROOT / "eval" / "tailoring_benchmark.py"),
-         "--stub", "--limit", "1", "--out", str(tmp_path)],
+         "--stub", "--limit", "1", "--out", str(out_dir)],
         cwd=ROOT, capture_output=True, text=True, timeout=600,
     )
     assert proc.returncode == 0, f"benchmark failed:\n{proc.stdout[-2000:]}\n{proc.stderr[-2000:]}"
-
-    results_files = list(tmp_path.glob("tailoring_benchmark_*.json"))
+    results_files = list(out_dir.glob("tailoring_benchmark_*.json"))
     assert len(results_files) == 1
-    results = json.loads(results_files[0].read_text(encoding="utf-8"))
-    assert results["mode"] == "stub"
+    return {
+        "out_dir": out_dir,
+        "stdout": proc.stdout,
+        "results": json.loads(results_files[0].read_text(encoding="utf-8")),
+    }
+
+
+def test_benchmark_end_to_end_stub_smoke(plumbing_run):
+    """One task through register→ingest→analyze→tailor→export via the API."""
+    tmp_path = plumbing_run["out_dir"]
+    results = plumbing_run["results"]
+    assert results["mode"] == "plumbing"
     assert results["failed"] == []
     task = results["task_results"][0]
+    assert task["mode"] == "plumbing"
     m = task["metrics"]
     # The tailored composite must exist and beat (or match) baseline in stub mode.
     assert m["ats"]["tailored_composite"] is not None
@@ -278,6 +365,110 @@ def test_benchmark_end_to_end_stub_smoke(tmp_path):
     # Rendered .tex + raw content written for the notebook's resume viewer.
     renders = list((tmp_path / "renders").rglob("*.tex"))
     assert renders and renders[0].read_text(encoding="utf-8").startswith("%----")
+
+
+def test_plumbing_run_renders_only_verbatim_source_bullets(plumbing_run):
+    """End-to-end proof of the same property, at the artifact the metrics read.
+
+    Post-processing legitimately *drops* bullets (bullet budget, one-page
+    fitting), so this asserts containment rather than equality — but every
+    surviving bullet must be byte-identical to one in the ingested fixture. If
+    a single rendered bullet is not, plumbing mode has started rewriting and
+    every claim made about the mode needs re-reading.
+    """
+    from eval.tailoring_benchmark import fixture
+
+    source = set(fixture().bullets)
+    renders = list((plumbing_run["out_dir"] / "renders").rglob("*.json"))
+    assert renders, "no rendered content written"
+
+    rendered_total = 0
+    for path in renders:
+        content = json.loads(path.read_text(encoding="utf-8"))
+        for item in (*content.get("experiences", []), *content.get("projects", [])):
+            for bullet in item.get("bullets", []):
+                rendered_total += 1
+                assert bullet in source, (
+                    f"{path.name}: rendered bullet is not verbatim from the "
+                    f"fixture — plumbing mode is rewriting: {bullet!r}"
+                )
+    assert rendered_total > 0, "no bullets rendered at all"
+
+
+def test_run_prints_its_execution_mode(plumbing_run):
+    """The console output a developer actually reads carries the caveat."""
+    assert "EXECUTION MODE: PLUMBING" in plumbing_run["stdout"]
+    assert "NOT tailoring quality" in plumbing_run["stdout"]
+
+
+# ── replay mode against the committed cassette ────────────────────────────────
+
+def test_committed_cassette_is_well_formed_and_covers_every_task():
+    """Cheap structural check of the recording the replay leg depends on.
+
+    Deliberately not a replay run: replay needs the real sentence-transformers
+    model, so it belongs in the integration leg below rather than in the fast
+    suite. This still catches a truncated, re-keyed or partially-recorded
+    cassette landing in the repo.
+    """
+    from eval.cassettes import Cassette, SETUP_SCOPE, interaction_key
+    from eval.tailoring_benchmark import DEFAULT_PROFILE, default_cassette_path
+
+    path = default_cassette_path(DEFAULT_PROFILE.stem, 3, None)
+    cassette = Cassette.load(path)
+    assert len(cassette) > 0
+    # The register/ingest phase plus one scope per recorded task.
+    scopes = cassette.scopes()
+    assert scopes[0] == SETUP_SCOPE
+    assert set(scopes[1:]) == set(cassette.meta["tasks"])
+    # Every entry is addressable by the key its fields imply, and occurrences
+    # within a (scope, role, prompt) run 0..n-1 with no gaps.
+    seen = {}
+    for entry in cassette.entries():
+        key = interaction_key(entry["scope"], entry["role"],
+                              entry["prompt_sha256"], entry["occurrence"])
+        assert cassette.get(key) is entry
+        counter = (entry["scope"], entry["role"], entry["prompt_sha256"])
+        seen.setdefault(counter, []).append(entry["occurrence"])
+        assert entry["surface"] in ("invoke", "structured")
+    for counter, occurrences in seen.items():
+        assert sorted(occurrences) == list(range(len(occurrences))), counter
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+def test_two_replays_are_byte_identical(tmp_path):
+    """#158's determinism property, carried into the new mode.
+
+    Runs the committed cassette twice and diffs the metrics and the rendered
+    artifacts. Integration-marked because replay uses the *real* embedding
+    model — semantic redundancy is not stubbed out in replay, by design.
+    """
+    runs = []
+    for i in (1, 2):
+        out = tmp_path / f"run{i}"
+        proc = subprocess.run(
+            [sys.executable, str(ROOT / "eval" / "tailoring_benchmark.py"),
+             "--mode", "replay", "--limit", "3", "--out", str(out)],
+            cwd=ROOT, capture_output=True, text=True, timeout=1800,
+        )
+        assert proc.returncode == 0, f"replay {i} failed:\n{proc.stderr[-3000:]}"
+        assert "CASSETTE MISS" not in proc.stderr
+        results = json.loads(
+            sorted(out.glob("tailoring_benchmark_*.json"))[-1].read_text(
+                encoding="utf-8"))
+        results.pop("timestamp")
+        for task in results["task_results"]:
+            task.pop("job_id", None)  # a fresh uuid4 PK, not a metric
+        renders = {p.name: p.read_bytes()
+                   for p in sorted((out / "renders").rglob("*.tex"))}
+        runs.append((results, renders))
+
+    assert runs[0][0] == runs[1][0], "replayed metrics are not reproducible"
+    assert runs[0][1] == runs[1][1], "replayed renders are not byte-identical"
+    # Replay must actually measure semantic duplication — the metric plumbing
+    # mode structurally cannot report (issue #122's headline gap).
+    assert runs[0][0]["aggregate"]["max_pairwise_cosine"] is not None
 
 
 # ── LLM-as-judge quality scoring (issue #27's aim, applied to tailoring) ──────
@@ -323,11 +514,12 @@ def test_llm_judge_rejects_malformed_output(payload):
 def test_llm_judge_scores_real_resume():
     """End-to-end judge call against the real eval model (needs API keys)."""
     from eval.llm_judge import judge_resume_quality
-    from eval.tailoring_benchmark import DEFAULT_PROFILE, STUB_EXPERIENCES, STUB_PROJECTS
+    from eval.tailoring_benchmark import DEFAULT_PROFILE, fixture
 
+    profile = fixture()
     content = {
-        "experiences": STUB_EXPERIENCES,
-        "projects": [{"name": p["name"], "bullets": p["bullets"]} for p in STUB_PROJECTS],
+        "experiences": profile.experiences,
+        "projects": [{"name": p["name"], "bullets": p["bullets"]} for p in profile.projects],
         "skills_emphasized": ["Python", "PyTorch", "FastAPI"],
     }
     jd = "Machine Learning Engineer role: PyTorch, model serving, feature stores, AWS."

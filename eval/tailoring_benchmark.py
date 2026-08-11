@@ -16,11 +16,22 @@ redundancy) and writes:
     eval/results/tailoring_benchmark_<ts>.csv    # flat per-task table
     eval/results/renders/<ts>/<task>.tex|.json   # rendered resume + raw content
 
-Modes:
-    python eval/tailoring_benchmark.py            # real LLM (needs API keys)
-    python eval/tailoring_benchmark.py --stub     # deterministic fake LLM, offline
+Execution modes (issue #171) — see MODE_CLAIMS for what each may claim:
+
+    --mode product    real LLM + real embeddings, the deployed path. The only
+                      mode whose numbers describe tailoring quality.
+    --mode replay     recorded model responses, everything else real. What the
+                      recording covered, deterministically, at ~zero cost.
+    --mode plumbing   canned payloads (the old --stub). Wiring, schemas and
+                      determinism only — never tailoring quality.
+
+    python eval/tailoring_benchmark.py --mode plumbing --limit 3
+    python eval/tailoring_benchmark.py --mode product --record --limit 3
+    python eval/tailoring_benchmark.py --mode replay --limit 3
     python eval/tailoring_benchmark.py --tasks stripe_ai_engineer duolingo_software_engineer_i
-    python eval/tailoring_benchmark.py --limit 3
+
+Replay contract (what a replay run does and does not reproduce) is documented
+in eval/README.md.
 
 The notebook eval/tailoring_benchmark.ipynb drives this module and visualizes
 the artifacts.
@@ -31,6 +42,7 @@ import json
 import os
 import sys
 import tempfile
+from contextlib import nullcontext
 from datetime import datetime
 from pathlib import Path
 from statistics import mean, median
@@ -39,12 +51,52 @@ from typing import Dict, List, Optional
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from eval.cassettes import (  # noqa: E402
+    MODE_RECORD as CASSETTE_RECORD,
+    MODE_REPLAY as CASSETTE_REPLAY,
+    Cassette,
+    CassetteSession,
+    default_cassette_path,
+    recording_meta,
+    render_prompt,
+)
+from eval.profile_fixture import ProfileFixture, load_profile  # noqa: E402
+
 DATASET_DIR = ROOT / "eval" / "jd_dataset"
 RESULTS_DIR = ROOT / "eval" / "results"
 DEFAULT_PROFILE = ROOT / "eval" / "profiles" / "benchmark_profile.md"
 
 BENCH_EMAIL = "benchmark@example.com"
 BENCH_PASSWORD = "benchmark-pass-123"
+
+
+# ── execution modes (issue #171) ───────────────────────────────────────────────
+#
+# One harness, three modes with different evidentiary weight. The mode travels
+# with every number this file emits — the run banner, the console summary, the
+# per-task rows, and the persisted JSON/CSV — because the defect #171 exists to
+# remove was not a wrong number, it was a correct number read as a claim it
+# could not support.
+
+MODE_PRODUCT = "product"
+MODE_REPLAY = "replay"
+MODE_PLUMBING = "plumbing"
+MODES = (MODE_PRODUCT, MODE_REPLAY, MODE_PLUMBING)
+
+MODE_CLAIMS = {
+    MODE_PRODUCT:
+        "Real LLM + real embeddings, the deployed path. Tailoring quality — "
+        "the only mode whose numbers describe the product.",
+    MODE_REPLAY:
+        "Recorded LLM responses, real embeddings, every deterministic line of "
+        "the pipeline executing for real. Everything the recording covered, "
+        "deterministically, at near-zero marginal cost.",
+    MODE_PLUMBING:
+        "Canned payloads, no model. Wiring, schemas and determinism ONLY — "
+        "explicitly NOT tailoring quality: the stub returns every source bullet "
+        "verbatim, so no bullet is ever rewritten and no metric here can move "
+        "with the quality of a rewrite.",
+}
 
 
 # ── environment isolation (must run before any project import) ────────────────
@@ -81,90 +133,56 @@ def _patch_profile_pointer(workdir: Path) -> None:
 
 
 # ── deterministic stub LLM (offline mode) ──────────────────────────────────────
+#
+# The canned parse is *derived from the profile fixture* (issue #171), not
+# hand-copied from it. It used to be three module-level constants whose own
+# comment said they were "kept aligned with the fixture" — a duplicate of the
+# one profile that exists, which had already drifted (30 skills against the
+# fixture's 32) and which made a second profile impossible without a second
+# hand-written parse. eval/profile_fixture.py parses the markdown instead, so
+# any fixture in the same shape works with no Python change. See #172.
 
-# Canned parse of eval/profiles/benchmark_profile.md — what the parser stub
-# "extracts". Kept aligned with the fixture so rendered resumes read sensibly.
-STUB_EXPERIENCES = [
-    {"title": "Machine Learning Engineer", "company": "Nimbus Analytics",
-     "start_date": "2024-01", "end_date": "Present",
-     "description": "ML systems and ranking models",
-     "bullets": [
-         "Built and deployed gradient-boosted and transformer ranking models serving 2M daily predictions with PyTorch and XGBoost.",
-         "Designed a feature store on Postgres and Redis, cutting feature backfill time from hours to minutes.",
-         "Set up model monitoring with drift detection, alerting, and automated retraining on Airflow.",
-         "Fine-tuned sentence-transformer embedding models for semantic product search, lifting recall@10 by 18%.",
-     ]},
-    {"title": "Backend Software Engineer", "company": "Bluefin Software",
-     "start_date": "2022-03", "end_date": "2024-01",
-     "description": "Backend microservices",
-     "bullets": [
-         "Developed FastAPI and Flask microservices handling 40k requests/minute behind an Nginx gateway.",
-         "Modeled billing and subscription data in Postgres with SQLAlchemy; wrote migrations with Alembic.",
-         "Containerized services with Docker and deployed to AWS ECS through GitHub Actions CI/CD.",
-         "Led the migration from a monolith to event-driven services using Kafka.",
-     ]},
-    {"title": "Software Engineer", "company": "Harbor Labs",
-     "start_date": "2021-06", "end_date": "2022-03",
-     "description": "Dashboards and ETL",
-     "bullets": [
-         "Built React and TypeScript dashboards visualizing pipeline health for internal teams.",
-         "Wrote Python ETL jobs with pandas processing 50GB of daily event data into Snowflake.",
-         "Added integration tests with pytest and cut flaky-test rate by half.",
-     ]},
-    {"title": "Student Developer", "company": "City University IT Department",
-     "start_date": "2020-09", "end_date": "2021-06",
-     "description": "Internal tooling",
-     "bullets": [
-         "Maintained PHP and MySQL tooling for course registration workflows.",
-         "Automated report generation with Python scripts, saving staff ten hours weekly.",
-     ]},
-]
+_FIXTURE: Optional["ProfileFixture"] = None
 
-STUB_PROJECTS = [
-    {"name": "SemanticSearch-Lite", "description": "Semantic search library",
-     "repo_url": "https://github.com/alexrivera/semsearch",
-     "bullets": [
-         "Open-source semantic search library using sentence-transformers, FAISS, and a FastAPI serving layer; 400+ GitHub stars.",
-         "Implemented hybrid BM25 + dense retrieval with reciprocal rank fusion.",
-     ]},
-    {"name": "StreamBoard", "description": "Real-time analytics dashboard",
-     "bullets": ["Real-time analytics dashboard with Kafka, ClickHouse, and a React frontend; processes 10k events/second."]},
-    {"name": "LLM Resume Coach", "description": "Resume critique app",
-     "bullets": ["LangChain + OpenAI application that critiques resumes against job descriptions; deployed on Railway with Docker."]},
-    {"name": "Pixel Adventure", "description": "2D platformer game",
-     "bullets": ["2D platformer game in C# and Unity published on itch.io."]},
-]
 
-STUB_SKILLS = [
-    {"name": n, "category": c, "proficiency": p}
-    for n, c, p in [
-        ("Python", "Language", 5), ("TypeScript", "Language", 4), ("C#", "Language", 3),
-        ("SQL", "Language", 4), ("PyTorch", "Library", 4), ("XGBoost", "Library", 4),
-        ("scikit-learn", "Library", 4), ("sentence-transformers", "Library", 4),
-        ("LangChain", "Framework", 3), ("pandas", "Library", 4), ("NumPy", "Library", 4),
-        ("Airflow", "Tool", 3), ("Kafka", "Tool", 4), ("ClickHouse", "Database", 3),
-        ("Snowflake", "Database", 3), ("FAISS", "Library", 3), ("FastAPI", "Framework", 5),
-        ("Flask", "Framework", 4), ("React", "Framework", 4), ("Node.js", "Framework", 3),
-        ("Postgres", "Database", 4), ("MySQL", "Database", 3), ("Redis", "Database", 3),
-        ("Docker", "Tool", 4), ("Kubernetes", "Tool", 3), ("AWS", "Cloud", 4),
-        ("GitHub Actions", "Tool", 4), ("Nginx", "Tool", 3), ("Unity", "Tool", 2),
-        ("Git", "Tool", 5),
-    ]
-]
+def fixture() -> "ProfileFixture":
+    """The parsed profile the canned payloads are derived from.
 
-# JD-skill vocabulary the stub "analyzer" scans job text against: the profile's
-# skills plus common terms the profile lacks, so missing_skills is non-empty.
-STUB_JD_VOCAB = [s["name"] for s in STUB_SKILLS] + [
+    Defaults to DEFAULT_PROFILE so importing this module (tests, the notebook)
+    needs no run in progress; `bind_fixture` rebinds it per benchmark run.
+    """
+    global _FIXTURE
+    if _FIXTURE is None:
+        _FIXTURE = load_profile(DEFAULT_PROFILE)
+    return _FIXTURE
+
+
+def bind_fixture(profile_path: Path) -> "ProfileFixture":
+    """Point the canned payloads at the profile this run actually ingests."""
+    global _FIXTURE
+    _FIXTURE = load_profile(profile_path)
+    return _FIXTURE
+
+
+# Terms the JD-skill "analyzer" scans for beyond the profile's own skills, so
+# that missing_skills is non-empty on a realistic posting.
+_EXTRA_JD_TERMS = [
     "Java", "Go", "Rust", "Scala", "GraphQL", "Spark", "TensorFlow", "Terraform",
     "GCP", "Azure", "MongoDB", "Elasticsearch", "machine learning", "deep learning",
     "LLM", "microservices", "REST", "CI/CD",
 ]
 
 
+def stub_jd_vocab() -> List[str]:
+    """Vocabulary the stub analyzer scans job text against: this profile's
+    skills plus common terms it lacks."""
+    return [s["name"] for s in fixture().skills] + _EXTRA_JD_TERMS
+
+
 def _stub_extract_jd_skills(jd_text: str) -> List[Dict]:
     low = jd_text.lower()
     out = []
-    for name in STUB_JD_VOCAB:
+    for name in stub_jd_vocab():
         idx = low.find(name.lower())
         if idx == -1:
             continue
@@ -212,7 +230,7 @@ def _stub_jd_profile(prompt_text: str) -> Dict:
     if marker in prompt_text:
         body = prompt_text.split(marker, 1)[1]
 
-    vocab = sorted({v.lower() for v in STUB_JD_VOCAB})
+    vocab = sorted({v.lower() for v in stub_jd_vocab()})
     requirements: List[Dict] = []
     section = ""
     for raw in body.splitlines():
@@ -258,30 +276,53 @@ def _stub_jd_profile(prompt_text: str) -> Dict:
 
 
 def _stub_tailored(jd_text: str) -> Dict:
+    """Canned "tailoring": source bullets, unchanged, plus a substring-matched
+    skills list.
+
+    **This never rewrites a bullet, and that is deliberate** (issue #171). Every
+    experience and project bullet is returned byte-identical to the ingested
+    fixture, so a plumbing run measures the harness and the deterministic
+    post-processing — bullet budget, one-page fitting, ordering, skill selection
+    — and nothing about the rewrite the product's LLM actually performs. The
+    property is pinned by tests so it can never again be mistaken for tailoring.
+
+    Making the stub *simulate* rewriting would reintroduce exactly the defect
+    #171 removes: a plausible number measuring nothing. It stays honest and
+    narrow; `--mode product` and `--mode replay` are where tailoring is measured.
+    """
+    profile = fixture()
     low = jd_text.lower()
-    emphasized = [s["name"] for s in STUB_SKILLS if s["name"].lower() in low]
+    emphasized = [s["name"] for s in profile.skills if s["name"].lower() in low]
     return {
         "experiences": [
             {k: e[k] for k in ("title", "company", "start_date", "end_date", "bullets")}
-            for e in STUB_EXPERIENCES
+            for e in profile.experiences
         ],
         "projects": [
             {"name": p["name"], "selected_style": "technical", "bullets": p["bullets"]}
-            for p in STUB_PROJECTS
+            for p in profile.projects
         ],
-        "skills_emphasized": emphasized or [s["name"] for s in STUB_SKILLS[:8]],
+        "skills_emphasized": emphasized or [s["name"] for s in profile.skills[:8]],
     }
 
 
 def _stub_payload(text: str):
-    """Route a formatted prompt to its canned/deterministic payload (dict/list)."""
+    """Route a formatted prompt to its canned/deterministic payload (dict/list).
+
+    Anything with no branch here (education, achievements) returns `{}` and so
+    compiles to an empty list — the same surface the constants covered before
+    #171 derived them, deliberately unchanged so this stays a source swap rather
+    than a re-baseline of what plumbing mode measures.
+    """
+    profile = fixture()
     if "Extract work experiences" in text:
-        return STUB_EXPERIENCES
+        return profile.experiences
     if "Extract projects" in text:
         return [{k: p[k] for k in ("name", "description")} | (
-            {"repo_url": p["repo_url"]} if "repo_url" in p else {}) for p in STUB_PROJECTS]
+            {"repo_url": p["repo_url"]} if "repo_url" in p else {})
+            for p in profile.projects]
     if "Extract technical skills" in text:
-        return STUB_SKILLS
+        return profile.skills
     if "Extract the job title" in text:
         return {"title": "Benchmark Role", "company": "Benchmark Co"}
     if "job description analyzer" in text:
@@ -293,13 +334,10 @@ def _stub_payload(text: str):
     return {}
 
 
-def _prompt_text(prompt_value) -> str:
-    """Text of a PromptValue or a list of formatted messages."""
-    if hasattr(prompt_value, "to_string"):
-        return prompt_value.to_string()
-    if isinstance(prompt_value, (list, tuple)):
-        return "\n".join(str(getattr(m, "content", m)) for m in prompt_value)
-    return str(prompt_value)
+# The stub routes on prompt text and the cassette layer keys on it, so they must
+# render a prompt the same way or a recording could not be matched to the run
+# that produced it. One implementation, in eval/cassettes.py.
+_prompt_text = render_prompt
 
 
 def _make_stub_llm():
@@ -365,25 +403,50 @@ class _StubEmbeddingModel:
         return arr[0] if single else arr
 
 
-def _install_stubs() -> None:
-    """Patch the LLM factory and the embedding model everywhere they were bound."""
+def _install_llm_factory(factory) -> None:
+    """Patch the `get_llm` seam everywhere it was bound.
+
+    Every model call resolves through `llm.get_llm`, so this one patch serves
+    all three execution modes: the canned stub, a cassette recorder, and a
+    cassette player (issue #171).
+
+    agents/jd_profile.py builds its extractor through `llm.get_extractor`
+    without passing an llm, so it never saw the module-level patches — its
+    extraction failed and every posting silently compiled to no profile at all.
+    Patching the factory itself covers that path and any future `get_extractor`
+    caller (issue #125). agents/chat.py and agents/enhancer.py are patched
+    despite the benchmark never driving chat: in replay mode an unpatched seam
+    is a live provider call, and that must not be possible by accident.
+    """
+    import agents.chat as chat
+    import agents.enhancer as enhancer
     import agents.job_analyzer as job_analyzer
-    import agents.matcher as matcher
     import agents.parser as parser
     import agents.tailor as tailor
     import llm as llm_module
 
-    stub = _make_stub_llm()
-    for module in (parser, job_analyzer, tailor):
-        module.get_llm = stub
-    # agents/jd_profile.py builds its extractor through `llm.get_extractor`
-    # without passing an llm, so it never saw the three module-level patches
-    # above — its extraction failed and every posting silently compiled to no
-    # profile at all. Patching the factory itself covers that path and any
-    # future `get_extractor` caller (issue #125).
-    llm_module.get_llm = stub
+    for module in (parser, job_analyzer, tailor, chat, enhancer):
+        module.get_llm = factory
+    llm_module.get_llm = factory
+
+
+def _install_stub_embeddings() -> None:
+    """Plumbing mode only: hash-derived vectors, no model download."""
+    import agents.matcher as matcher
+
     matcher.get_embedding_model = lambda: _StubEmbeddingModel()
     matcher._embedding_model = None
+
+
+def _install_stubs(profile_path: Path = DEFAULT_PROFILE) -> None:
+    """Plumbing mode: canned payloads plus the hash embedder.
+
+    Binds the canned payloads to the profile this run ingests, so the stub
+    "parse" is always a parse of the fixture actually on disk (issue #171).
+    """
+    bind_fixture(profile_path)
+    _install_llm_factory(_make_stub_llm())
+    _install_stub_embeddings()
 
 
 # ── dataset ────────────────────────────────────────────────────────────────────
@@ -411,28 +474,48 @@ def _api(client, method: str, url: str, **kwargs):
     return resp
 
 
-def _semantic_encoder(stub: bool):
-    """Encoder for the redundancy suite's semantic metrics, or None (issue #122).
+def _semantic_encoder(mode: str):
+    """Encoder for the redundancy suite's semantic metrics (issue #122/#171).
 
-    Deliberately keyed on `stub`, not on whether `matcher.get_embedding_model()`
-    returns something: in stub mode it returns `_StubEmbeddingModel`, whose
-    hash-derived vectors are deterministic but carry no semantic relation, so
-    paraphrases look no more similar than unrelated sentences. Reporting a
-    `max_pairwise_cosine` from those would be a stable, meaningless number
-    dressed as a redundancy score — the failure mode #158 just cleaned up.
+    Keyed on the execution *mode*, not on a `stub` boolean and not on whether
+    `matcher.get_embedding_model()` happens to return something:
+
+    * **plumbing** → None. The stub embedder's hash-derived vectors are
+      deterministic but carry no semantic relation, so paraphrases look no more
+      similar than unrelated sentences; a `max_pairwise_cosine` computed from
+      them would be a stable, meaningless number dressed as a redundancy score
+      — the failure mode #158 cleaned up.
+    * **product / replay** → the real encoder, or a hard failure. Replay claims
+      to run "every deterministic line of the pipeline for real", and semantic
+      duplication is the one redundancy mode with a model dependency. Degrading
+      to None here would silently disable it and quietly re-create #122's
+      symptom (all four modes reporting clean) inside the new mode.
     """
-    if stub:
+    if mode == MODE_PLUMBING:
         return None
-    from agents.matcher import get_embedding_model
-    model = get_embedding_model()
+    try:
+        from agents.matcher import get_embedding_model
+        model = get_embedding_model()
+    except Exception as exc:  # not installed / offline / OOM
+        model = None
+        reason = f"{type(exc).__name__}: {exc}"
+    else:
+        reason = "get_embedding_model() returned None"
     if model is None:
-        return None
+        raise SystemExit(
+            f"--mode {mode} needs the real embedding model, and it is "
+            f"unavailable ({reason}).\n"
+            "Semantic duplication is the one redundancy metric with a model "
+            "dependency; running without it would report the other three as "
+            "clean and omit the fourth silently (issue #122/#171).\n"
+            "Install it with: pip install -r requirements.txt"
+        )
     return lambda texts: model.encode(texts, normalize_embeddings=True)
 
 
 def _run_task(client, task: Dict, renders_dir: Path,
               judge: bool = False, profile_text: str = "",
-              encoder=None) -> Dict:
+              encoder=None, mode: str = MODE_PRODUCT) -> Dict:
     """Drive one JD through the exact user flow and compute its metrics."""
     from sqlmodel import Session, select
 
@@ -487,12 +570,60 @@ def _run_task(client, task: Dict, renders_dir: Path,
 
     return {
         "task_id": task["id"],
+        # Carried per task, not only on the run: a task row read on its own —
+        # in the CSV, in a notebook cell, pasted into an issue — must still say
+        # which mode produced it (issue #171).
+        "mode": mode,
         "company": task["company"],
         "title": task["title"],
         "job_id": job_id,
         "ats_score": detail.get("ats_score"),
         "metrics": metrics,
     }
+
+
+def _install_mode(mode: str, profile_path: Path, cassette_path: Optional[Path],
+                  record: bool, task_ids: List[str]):
+    """Bind the `get_llm` seam for this mode. Returns the CassetteSession, if any.
+
+    Product mode without `--record` patches nothing: it *is* the deployed path.
+    """
+    if mode == MODE_PLUMBING:
+        _install_stubs(profile_path)
+        return None
+    if mode == MODE_REPLAY:
+        session = CassetteSession(Cassette.load(cassette_path), CASSETTE_REPLAY)
+        _install_llm_factory(session.llm_factory())
+        return session
+    if record:
+        import llm as llm_module
+
+        # Captured before the patch: the recorder must call the real factory,
+        # not itself.
+        session = CassetteSession(
+            Cassette(meta=recording_meta(
+                str(profile_path.relative_to(ROOT)), task_ids)),
+            CASSETTE_RECORD, factory=llm_module.get_llm,
+        )
+        _install_llm_factory(session.llm_factory())
+        return session
+    return None
+
+
+def _mode_banner(mode: str) -> str:
+    """Framed, unmissable statement of what this run's numbers may claim."""
+    rule = "─" * 78
+    lines = [rule, f"  EXECUTION MODE: {mode.upper()}"]
+    claim = MODE_CLAIMS[mode]
+    line = "  "
+    for word in claim.split():
+        if len(line) + len(word) + 1 > 78:
+            lines.append(line)
+            line = "  "
+        line += word + " "
+    lines.append(line.rstrip())
+    lines.append(rule)
+    return "\n".join(lines)
 
 
 def _aggregate(task_results: List[Dict]) -> Dict:
@@ -539,16 +670,35 @@ def _aggregate(task_results: List[Dict]) -> Dict:
 def run_benchmark(
     task_ids: Optional[List[str]] = None,
     profile_path: Path = DEFAULT_PROFILE,
-    stub: bool = False,
+    mode: str = MODE_PRODUCT,
     limit: int = 0,
     out_dir: Path = RESULTS_DIR,
     workdir: Optional[Path] = None,
     judge: bool = False,
+    cassette_path: Optional[Path] = None,
+    record: bool = False,
 ) -> Dict:
-    """Full benchmark run. Returns the results dict (also persisted to out_dir)."""
+    """Full benchmark run. Returns the results dict (also persisted to out_dir).
+
+    `mode` is one of MODES. It is a mode, not a boolean, precisely because a
+    third mode existed and the old `stub` flag had no room for it (issue #171).
+    `record` snapshots a product run into `cassette_path` for later replay.
+    """
+    if mode not in MODES:
+        raise SystemExit(f"unknown mode {mode!r}; expected one of {', '.join(MODES)}")
+    if record and mode != MODE_PRODUCT:
+        raise SystemExit("--record only applies to --mode product: a recording "
+                         "must capture real model responses")
     tasks = load_tasks(task_ids, limit)
     if not tasks:
         raise SystemExit(f"No tasks found in {DATASET_DIR} — run scripts/scrape_job_descriptions.py")
+
+    if mode == MODE_REPLAY or record:
+        cassette_path = Path(cassette_path or default_cassette_path(
+            profile_path.stem, limit, task_ids))
+    print(_mode_banner(mode), flush=True)
+    if cassette_path:
+        print(f"  cassette: {cassette_path}", flush=True)
 
     own_tmp = None
     if workdir is None:
@@ -563,8 +713,8 @@ def run_benchmark(
         from web.app import create_app
 
         _patch_profile_pointer(workdir)
-        if stub:
-            _install_stubs()
+        session = _install_mode(mode, profile_path, cassette_path, record,
+                                [t["id"] for t in tasks])
         init_db()
 
         client = TestClient(create_app())
@@ -585,24 +735,43 @@ def run_benchmark(
         profile_text = profile_path.read_text(encoding="utf-8")
         # Resolved once: the model load is cached in matcher, but the redundancy
         # suite's encoder is a per-run property, not a per-task one (issue #122).
-        encoder = _semantic_encoder(stub)
+        encoder = _semantic_encoder(mode)
         task_results = []
         for i, task in enumerate(tasks, 1):
             print(f"[{i}/{len(tasks)}] {task['id']} ...", flush=True)
+            # Cassette counters are per task, so a task's recorded calls do not
+            # depend on how many calls the tasks before it made (issue #171).
+            scope = session.scope(task["id"]) if session else nullcontext()
             try:
-                task_results.append(
-                    _run_task(client, task, renders_dir,
-                              judge=judge and not stub, profile_text=profile_text,
-                              encoder=encoder)
-                )
+                with scope:
+                    task_results.append(
+                        _run_task(client, task, renders_dir,
+                                  judge=judge and mode == MODE_PRODUCT,
+                                  profile_text=profile_text,
+                                  encoder=encoder, mode=mode)
+                    )
             except Exception as e:
                 print(f"  FAILED: {e}", file=sys.stderr)
                 task_results.append({"task_id": task["id"], "error": str(e)})
 
+        if session is not None:
+            if mode == MODE_REPLAY:
+                # Fatal even though every miss already raised: the degrade-
+                # gracefully call sites catch everything, so a miss can reach
+                # the metrics as an empty parse instead of as an error.
+                session.assert_no_misses()
+            if record:
+                saved = session.cassette.save(cassette_path)
+                print(f"Cassette → {saved} ({len(session.cassette)} interactions)")
+
         ok = [t for t in task_results if "error" not in t]
         results = {
             "timestamp": ts,
-            "mode": "stub" if stub else "llm",
+            "mode": mode,
+            # Travels with the numbers into every consumer that reads the
+            # artifact without reading this file (issue #171).
+            "mode_claim": MODE_CLAIMS[mode],
+            "cassette": str(cassette_path) if cassette_path else None,
             "profile": str(profile_path.relative_to(ROOT)),
             "dataset_size": len(tasks),
             "failed": [t["task_id"] for t in task_results if "error" in t],
@@ -630,6 +799,9 @@ def run_benchmark(
 
 _CSV_COLUMNS = [
     ("task_id", ["task_id"]),
+    # First-class column, not metadata: a CSV row loaded into pandas is where a
+    # plumbing number most easily loses the context that it is one (issue #171).
+    ("mode", ["mode"]),
     ("company", ["company"]),
     ("baseline_composite", ["metrics", "ats", "baseline_composite"]),
     ("tailored_composite", ["metrics", "ats", "tailored_composite"]),
@@ -664,21 +836,38 @@ def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--stub", action="store_true", help="deterministic fake LLM (offline)")
+    ap.add_argument("--mode", choices=MODES, default=MODE_PRODUCT,
+                    help="execution mode (default: product)")
+    ap.add_argument("--stub", action="store_true",
+                    help="alias for --mode plumbing (kept for existing scripts)")
+    ap.add_argument("--cassette", type=Path, default=None,
+                    help="cassette file to record into or replay from")
+    ap.add_argument("--record", action="store_true",
+                    help="product mode: snapshot every model response for replay")
     ap.add_argument("--tasks", nargs="*", default=None, help="task ids to run (default: all)")
     ap.add_argument("--limit", type=int, default=0, help="run only the first N tasks")
     ap.add_argument("--profile", type=Path, default=DEFAULT_PROFILE, help="resume fixture to ingest")
     ap.add_argument("--out", type=Path, default=RESULTS_DIR, help="results directory")
     ap.add_argument("--judge", action="store_true",
-                    help="add LLM-as-judge quality scores (real-LLM mode only)")
+                    help="add LLM-as-judge quality scores (product mode only)")
     args = ap.parse_args()
 
+    mode = args.mode
+    if args.stub:
+        if args.mode != MODE_PRODUCT:
+            raise SystemExit("--stub and --mode are exclusive; --stub means --mode plumbing")
+        mode = MODE_PLUMBING
+
     results = run_benchmark(
-        task_ids=args.tasks, profile_path=args.profile, stub=args.stub,
+        task_ids=args.tasks, profile_path=args.profile, mode=mode,
         limit=args.limit, out_dir=args.out, judge=args.judge,
+        cassette_path=args.cassette, record=args.record,
     )
     agg = results["aggregate"]
     print(json.dumps(agg, indent=2))
+    # Repeated after the numbers as well as before them: the summary is what
+    # gets copied into a changelog or an issue, and it must not travel alone.
+    print(_mode_banner(results["mode"]))
     return 1 if results["failed"] else 0
 
 

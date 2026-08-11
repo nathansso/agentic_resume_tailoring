@@ -4,6 +4,70 @@ All completed deliveries are recorded here. Forward-looking specs live in GitHub
 
 Entries titled `PRD NN — …` are historical: they predate the move to issue-driven planning, and the PRD documents they reference were removed from the repo. They are kept as an accurate record of past work.
 
+Benchmark figures below are labelled with the **execution mode** that produced them (issue #171). Entries written before #171 have been retro-labelled in place: `--stub` runs are **plumbing** mode and describe the harness, not tailoring quality. Nothing was deleted.
+
+---
+
+## Issue 171 — Benchmark execution modes: product, replay, plumbing
+**Status:** complete | **Tests:** 1157 pass on Postgres / 1149 on SQLite (37 new)
+
+`--stub` mode never rewrote a bullet. `_stub_tailored` returned each experience's and project's *source* bullets unchanged, so every rendered "tailored" bullet was byte-identical to the ingested fixture. Every benchmark number in this file — `ats_delta`, `baseline_composite`, `tailored_composite`, the #122 redundancy metrics — was therefore a property of the harness and the deterministic post-processing (bullet budget, one-page fitting, ordering, skill selection), **not of the tailoring the product performs**. The stub was not buggy; it did exactly what it was written to do. The defect was that its output was reported as an efficacy claim, and decisions had been made against it.
+
+One mode called "the benchmark" is now three modes with different evidentiary weight, and the mode travels with every number.
+
+### What shipped
+- **The defect is pinned, not just fixed around.** Two tests assert plumbing mode returns source bullets verbatim — one on the canned payload, one over the rendered artifacts the metrics are actually computed from (containment, not equality: post-processing legitimately *drops* bullets, 18 source → 16–17 rendered, but never rewrites one). A stub that later learned to fake rewriting would fail loudly rather than quietly restoring a plausible number that measures nothing.
+- **The mode is part of the number.** `product` / `replay` / `plumbing`, each with a `MODE_CLAIMS` string stating what it may and may not claim, printed in a framed banner **before and after** every run, and recorded in the results JSON (`mode` + `mode_claim`), in each per-task row, and as a CSV column — because a CSV row loaded into pandas is where a plumbing number most easily loses the context that it is one. `--stub` survives as an alias for `--mode plumbing`.
+- **The canned parse is derived from the profile, not hand-copied.** `STUB_EXPERIENCES` / `STUB_PROJECTS` / `STUB_SKILLS` were module constants whose own comment called them "kept aligned with the fixture" — and which had already drifted (30 skills against the fixture's 32; PHP and the OpenAI API were missing). New `eval/profile_fixture.py` parses the markdown, so any profile in the same shape works with no Python change. **This was the hard prerequisite for #172**, whose dataset foundation is a set of additional profiles: a second profile was impossible while every fixture needed a second hand-written parse.
+- **Cassette record/replay at the `llm.get_llm` seam (`eval/cassettes.py`).** Keyed on `(scope, role, sha256(rendered_prompt), occurrence)`. The prompt hash alone is insufficient — the tailor runs at `temperature=0.3` with `MAX_RETRIES = 2`, so one rendered prompt can legitimately be invoked twice and return two different samples. Scope is the task id, so a task replays without depending on its predecessors' call counts. Covers both surfaces: `.invoke → AIMessage` and `.with_structured_output(schema)` (the #142 extraction seam, which `agents/jd_profile.py` reaches without passing an `llm` at all). Occurrences are assigned **on success**, so a failed call or a validation retry records nothing and advances nothing.
+- **A replay session holds no provider factory at all**, so it cannot reach an API even with keys present. A miss prints immediately, raises, *and* is tallied on the session, because `agents/parser.py` and `agents/jd_profile.py` catch every exception and degrade to an empty result — without the tally a miss would reach the metrics as a silently empty parse rather than as an error. The run fails at the end on any non-zero count.
+- **`_semantic_encoder` takes a real mode, and refuses to degrade.** It was keyed on the `stub` boolean *by design*, so a third mode would have silently inherited "no encoder" and left semantic duplication unmeasured in replay — quietly re-creating #122's symptom inside the mode built to fix it. It now returns `None` only for plumbing; in product and replay a missing encoder is a hard error naming the install command.
+- **A cross-engine determinism bug in the product path, found by replay (`agents/matcher.py`).** See the deviation below — it is the most consequential thing this issue turned up.
+- **Tests (37 new).** `tests/test_profile_fixture.py` (12, including a second profile parsing with no code change — the #172 prerequisite made executable), `tests/test_cassettes.py` (17), `tests/test_matcher.py` (2), and 6 in `tests/test_tailoring_benchmark.py` including one `@pytest.mark.integration` that replays the committed cassette twice and diffs both metrics and rendered `.tex`.
+
+### Verification
+
+Recorded one product run (`--limit 3`, 24 interactions: 5 setup + 6–7 per task), committed as `eval/cassettes/benchmark_profile_limit3.json`.
+
+| run | engine | result |
+|---|---|---|
+| replay ×2 | SQLite | byte-identical metrics **and** renders |
+| replay ×2 | Postgres | byte-identical metrics **and** renders |
+| replay | SQLite vs Postgres | identical to each other |
+| replay | vs the product run it recorded | aggregate identical |
+
+#158's determinism property survives into the new mode, and the cross-engine agreement was not required by the issue.
+
+**The gap between the modes, same three tasks** — the number this issue exists to make sayable:
+
+| metric | plumbing | product |
+|---|---|---|
+| `ats_delta` | 28.6 (22.9–31.6) | **37.0** (33.4–42.0) |
+| `baseline_composite` | 58.0 | 48.5 |
+| `tailored_composite` | 86.6 | 85.5 |
+| `allocation_correlation` | 0.20 | 0.57 |
+| `skills_rendered` | 9.3 (8–10) | **18.0 (18–18)** |
+| `skills_selection_ratio` | 0.291 | 0.500 |
+| `leading_verb_entropy` | 0.970 | 0.871 |
+| `mean_new_information` | 0.998 | 0.951 |
+| `mtld` | 241.3 | 276.3 |
+| `max_pairwise_cosine` | — (no encoder) | 0.551 (0.523–0.595) |
+
+### Deviations from spec
+- **A product-path determinism bug was found and fixed here, which is scope the issue did not ask for.** Replaying a SQLite recording on Postgres missed on the third task's planner prompt. The only difference between the two rendered prompts was the order of `missing_skills`: `SkillMatcherAgent.match` loaded job skills with an unordered `select(JobSkill)`, and that order is rendered verbatim into the planner prompt — so the same profile against the same JD sent the model **a different prompt per engine**, and the float summation order of `total_weight` / `matched_weight` moved with it. Rows are now sorted by descending weight, then required-first, then name (weight is the analyzer's prominence proxy, so the order stays meaningful; ties break on content, not on storage order or a per-database uuid — #158's reason for not keying on `skill_id`). After the fix all 20 rendered prompts of a 3-task run are byte-identical across engines. It was fixed rather than filed because the acceptance criterion "byte-identical on both engines" is unreachable without it. **Same class as #158, and exactly what #149's deviations predicted** ("an unordered query can pass here and diverge in production after an UPDATE or VACUUM").
+- **The plumbing stub is structurally blind to that entire class of bug, and always was.** `_stub_payload` routes on prompt *markers* and never reads prompt content, so no plumbing run — however deterministic, on however many engines — can observe a prompt changing. This is a second, independent reason the harness could not see what it claimed to measure, and it is not fixed by anything in #171 except by replay mode existing.
+- **Recording had to be paid for twice, on purpose.** The matcher fix changed the prompts and invalidated the first cassette. That is the contract working as designed — a prompt change makes every edit an explicitly re-measured event — but it means a prompt or ordering change is a real (small) API cost, not a free refactor. Budget for it.
+- **The skills-cap saturation finding is now confirmed, and #158's retirement of it is itself retired.** #158 recorded the finding as "unconfirmed on the only reproducible baseline that now exists" and told #51 Phase 2 not to plan around a saturated cap "without re-measuring on a real-LLM run". This is that run: product mode renders **18 of 18 on every task**, `selection_ratio` exactly 0.500, while plumbing renders 9.3. The original finding was right and the stub configuration is what refuted it. #51 Phase 2 should plan around a saturated cap.
+- **#122's central caveat is now quantified rather than merely stated.** It recorded that "the stub benchmark cannot exercise any of the four modes" and could not distinguish "genuinely clean" from "too simple to generate redundancy". Under real tailoring three of the four move meaningfully — `leading_verb_entropy` 0.970 → 0.871, `mean_new_information` 0.998 → 0.951, `mtld` 241 → 276 — and semantic duplication is measurable *at all* only in product/replay (0.551). The stub was too simple; the metrics were fine. **#127's λ sweep now has range**, and can be calibrated on a replay run at near-zero marginal cost instead of needing repeated live spend. λ was not calibrated here.
+- **Product mode could not run at all on a `requirements-core` install, and that was invisible.** `_semantic_encoder` called `get_embedding_model()` with no guard, so a missing `sentence-transformers` raised an uncaught `ImportError` before the first task. It is now a hard error naming the fix. Consequence for CI: **replay mode uses real embeddings and therefore needs the model**, which is why the two-replay test is `@pytest.mark.integration` rather than part of the fast suite. Cheap structural validation of the committed cassette runs in the fast suite instead.
+- **Deriving the fixture re-baselined plumbing mode, and the two modes disagree about the profile itself.** `total_profile_skills` 30 → 32 (the drift the constants had accumulated), `skills_rendered` 11.0 → 9.3, `selection_ratio` 0.367 → 0.291, `ats_delta` 28.367 → 28.600. Separately, the *real* parser extracts **36** profile skills from the same markdown against the derived parse's 32 — it picks skills out of bullet text, not just the explicit Skills line. So plumbing and product are not measuring the same candidate, and never were; the derived parse narrows that gap without closing it.
+- **The fixture markdown was edited, which the issue did not mention.** Date ranges gained months (`(2024–Present)` → `(Jan 2024 – Present)`) and projects gained one-line descriptors, so the parse is lossless rather than guessing at values the constants had hard-coded. Both are ordinary résumé conventions, so this does not make the fixture less realistic.
+- **Chunks 1.3 and 1.4 split differently than planned.** 1.3 shipped `eval/cassettes.py` as a pure, separately-tested module with no benchmark wiring; all mode wiring — `--mode`, replay installation, `_semantic_encoder(mode)` — landed together in 1.4, because "a replay mode exists" and "the boolean is dead" are one change to `run_benchmark`, not two.
+- **`_CassetteLLM` had to become a `Runnable`, discovered by spending money.** `agents/tailor.py` composes the model into `prompt | llm | JsonOutputParser`, which rejects a plain object. The first product recording failed there *after nine interactions had already been captured*, so the seam looked healthy right up to the tailor call. A one-task smoke recording before the real one is worth its cost; there is now a regression test driving the same LCEL chain in both directions.
+- **Education and achievements still have no canned payload.** `_stub_payload` returns `{}` for them, as before, so plumbing renders no education section. Deliberately unchanged: chunk 1.2 is a source swap, not a re-baseline of what plumbing measures. A profile-derived parse of those sections is a small, obvious follow-on for #172.
+- **The fourth "missing capability" is filed, not just recorded — #175.** `conftest`'s `isolated_engine` docstring claims it patches "all module-level engine refs"; it patches 5 of the 16 modules that bind `engine` at import. A test touching an unpatched module (hit here with `agents/matcher.py`) silently reads the wrong database and asserts against empty results rather than failing. Worked around locally with a `matcher_engine` fixture rather than editing a shared fixture inside this issue.
+- **Not done, and deliberately: the re-tailor gap (#150/#115/#173).** `_run_task` still tailors once per task and never re-tailors, so re-tailor-only fixes remain unobservable. That is a second, independent limitation from the one #171 removes, and conflating them would leave #173 chunk 1 looking done when it is not.
+
 ---
 
 ## Issue 122 — Redundancy metric suite: semantic duplication, stuffing, monotony and dilution as separable modes
@@ -24,7 +88,7 @@ This is the entry point to the metrics arc, not a reporting improvement. #127 co
 - **Tests (24 new).** 22 in `tests/test_redundancy.py` — a new file because the module is a genuinely new concern with no existing home, not a per-issue file — plus 2 pinning the wrapper's backward compatibility in `tests/test_tailoring_benchmark.py`. The headline case asserts two paraphrases score `max_pairwise_cosine > 0.95` *while* term counting stays clean, which is the whole point of the addition.
 
 ### Verification
-`python eval/tailoring_benchmark.py --stub --limit 3`, run twice. Every pre-existing metric is byte-identical to the #158 baseline — `ats`, `skills`, and all six original redundancy keys — confirming the merge is genuinely additive. The two runs are identical to each other, so #158's determinism survives.
+**Mode: plumbing** (issue #171 retro-label — `--stub`; canned payloads return every source bullet verbatim, so these numbers describe the harness and the deterministic post-processing, not tailoring quality). `python eval/tailoring_benchmark.py --stub --limit 3`, run twice. Every pre-existing metric is byte-identical to the #158 baseline — `ats`, `skills`, and all six original redundancy keys — confirming the merge is genuinely additive. The two runs are identical to each other, so #158's determinism survives.
 
 | new metric | mean | median | min | max |
 |---|---|---|---|---|
@@ -60,7 +124,7 @@ The issue named one confirmed contributor and recorded that ordering it by `Skil
 - **Tests (6 new).** Three in `test_skill_scorer.py` shuffle `UserSkill` insertion order across six seeds and assert the full ranking, the category map, and the score map are unchanged; two in `test_skill_embeddings.py` pin encode order and assert the JD centroid is bit-identical under reversed row order; one in `test_tailoring_benchmark.py` runs the stub embedder under three *different* `PYTHONHASHSEED` values in subprocesses, which is the only way to catch hash randomization (within one process `hash()` is stable). Every one of the six was confirmed to fail with its fix reverted.
 
 ### Verification
-Two consecutive `python eval/tailoring_benchmark.py --stub --limit 3` runs, on each engine, with the rendered `.tex` and `.json` artifacts diffed:
+**Mode: plumbing** (issue #171 retro-label — `--stub`; canned payloads return every source bullet verbatim, so these numbers describe the harness and the deterministic post-processing, not tailoring quality). Two consecutive `python eval/tailoring_benchmark.py --stub --limit 3` runs, on each engine, with the rendered `.tex` and `.json` artifacts diffed:
 
 | engine | run 1 | run 2 | renders |
 |---|---|---|---|
@@ -70,7 +134,7 @@ Two consecutive `python eval/tailoring_benchmark.py --stub --limit 3` runs, on e
 The two engines also agree with **each other**, which the issue did not require. The only field that differs between runs is `job_id`, a fresh `uuid4` primary key, not a metric.
 
 ### Benchmark re-baseline
-Stub configuration, `--limit 3`. The previous figures were sampled from a distribution and are not comparable point-to-point; these are the first reproducible ones.
+**Mode: plumbing** (#171 retro-label). Stub configuration, `--limit 3`. The previous figures were sampled from a distribution and are not comparable point-to-point; these are the first reproducible ones.
 
 | metric | value |
 |---|---|
@@ -308,7 +372,7 @@ What did survive the review is **one objective signal they collect and we didn't
 - **Tests (14 new).** 7 on the ingestion side (author/total arithmetic, case-insensitive login match, empty-repo and error-status `None` paths, rate-limit propagation, `project_type` derivation, authorship omitted when absent) and 7 on scoring (no metrics → `None` not zero, legacy metrics still score, an authored repo beats a drive-by contribution, `commit_share` rewards solo authorship, authorship outweighs stars, `total_commits: 0` doesn't divide by zero, and a guard that `_GITHUB_WEIGHTS` covers every signal `_github_signal` can emit).
 
 ### Benchmark
-`PYTHONHASHSEED=0 python eval/tailoring_benchmark.py --stub`, before (`6720660`) → after — every metric identical (`ats_delta` +21.925, `baseline_composite` 49.525, `tailored_composite` 71.45, `skills_matched_recall` 1.0, `skills_rendered` 12.125). Expected: the harness profile carries no ingested GitHub metrics, so `_github_signal()` returns `None` for every fixture project and the component is omitted from `_complexity()` exactly as before. The harness cannot observe this change — a fixture with GitHub metrics is the missing capability.
+**Mode: plumbing** (issue #171 retro-label — `--stub`; canned payloads return every source bullet verbatim, so these numbers describe the harness and the deterministic post-processing, not tailoring quality). `PYTHONHASHSEED=0 python eval/tailoring_benchmark.py --stub`, before (`6720660`) → after — every metric identical (`ats_delta` +21.925, `baseline_composite` 49.525, `tailored_composite` 71.45, `skills_matched_recall` 1.0, `skills_rendered` 12.125). Expected: the harness profile carries no ingested GitHub metrics, so `_github_signal()` returns `None` for every fixture project and the component is omitted from `_complexity()` exactly as before. The harness cannot observe this change — a fixture with GitHub metrics is the missing capability.
 
 Verified live against real repos instead: `nathansso/agentic_resume_tailoring` → `{contributors: 1, author_commits: 188, total_commits: 188}` → `self_project`; `nathansso/RollAway` → `{contributors: 3, author_commits: 55, total_commits: 170}` → `open_source`.
 
@@ -336,7 +400,7 @@ This is Stage 0.5 of the #114 policy arc — a correctness floor, not a polish i
 - **Tests (9 new).** The regression test runs `_apply_plan_to_inputs` → `_enforce_plan` together, because each half looked correct in isolation and the bug lived in the seam. Plus: the first-run fallback to source bullets still holds, `bullet_budget` still trims carried-forward bullets, order and skills survive an all-`keep` re-tailor byte-identical, a structural action forces a recompute, a stale order naming a departed section is recomputed, and `_expected_sections` tracks achievements.
 
 ### Benchmark re-baseline
-`python eval/tailoring_benchmark.py --stub` with `PYTHONHASHSEED=0`, before (`2a04d63`) → after — every metric identical:
+**Mode: plumbing** (issue #171 retro-label — `--stub`; canned payloads return every source bullet verbatim, so these numbers describe the harness and the deterministic post-processing, not tailoring quality). `python eval/tailoring_benchmark.py --stub` with `PYTHONHASHSEED=0`, before (`2a04d63`) → after — every metric identical:
 
 | metric | before | after |
 |---|---|---|
@@ -371,7 +435,7 @@ The reason this rated a fix ahead of the policy arc rather than beside it: the m
 - **Tests (9 new).** The acceptance test asserts the *entire* breakdown — not just `skill_coverage` — is identical with and without the key; plus metadata-is-never-a-gap, a metadata-only dict scoring as empty (100.0, not 0.0) rather than dividing by zero, `delta` no longer one-sidedly biased, and unit coverage of the three helpers including non-mutation of the caller's dict.
 
 ### Benchmark re-baseline
-`python eval/tailoring_benchmark.py --stub`, before → after, on `167f0e9`:
+**Mode: plumbing** (issue #171 retro-label — `--stub`; canned payloads return every source bullet verbatim, so these numbers describe the harness and the deterministic post-processing, not tailoring quality). `python eval/tailoring_benchmark.py --stub`, before → after, on `167f0e9`:
 
 | metric | before | after |
 |---|---|---|
@@ -809,7 +873,7 @@ Built the standing apparatus for measuring and improving tailoring quality, and 
 - **feat(tailor): relevance-based bullet budgets.** Experiences are JD-relevance ranked with per-experience `bullet_budget` (up to `TAILOR_MAX_EXP_BULLETS` for the most relevant, down to `TAILOR_MIN_EXP_BULLETS`), injected into the prompt **and enforced deterministically** post-generation.
 - **feat(tailor): anti-redundancy.** Prompt rule against term stuffing; evaluator flags terms mentioned more than `TAILOR_MAX_TERM_MENTIONS` times (boundary-aware) into retry feedback.
 - **Tests (25 new).** `tests/test_tailoring_benchmark.py` (metrics units, stub determinism, dataset sanity, subprocess end-to-end smoke, judge parsing/rejection + integration-gated real call) and `tests/test_prd04.py` additions (analyzer job_id regression ×3, budgets/enforcement/redundancy ×6).
-- **Baseline measurement (real-LLM run, 8/8 tasks):** composite 33.0 → 75.4 (mean delta **+42.4**); allocation correlation mean 0.55/median 0.6; over-repeated terms ≤ 1 per task (mean 0.25); matched-skill recall mean 0.90.
+- **Baseline measurement (mode: product — real-LLM run, 8/8 tasks; #171 retro-label):** composite 33.0 → 75.4 (mean delta **+42.4**); allocation correlation mean 0.55/median 0.6; over-repeated terms ≤ 1 per task (mean 0.25); matched-skill recall mean 0.90.
 
 ### Issue reconciliation
 - **#54, #58** — already shipped on `main`; closed and moved to Done (they were missing from the project board entirely; added).

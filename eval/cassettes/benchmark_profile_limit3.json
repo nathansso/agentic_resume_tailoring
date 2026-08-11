@@ -1,0 +1,2256 @@
+{
+  "version": 1,
+  "recorded_at": "20260810T122825",
+  "provider": "anthropic",
+  "models": {
+    "extract": "claude-haiku-4-5-20251001",
+    "tailor": "claude-sonnet-4-6"
+  },
+  "profile": "eval\\profiles\\benchmark_profile.md",
+  "tasks": [
+    "datadog_ai_research_engineer_datadog_ai_research_dair",
+    "datadog_senior_ai_engineer",
+    "duolingo_software_engineer_i"
+  ],
+  "interaction_count": 24,
+  "interactions": [
+    {
+      "scope": "__setup__",
+      "role": "extract",
+      "prompt_sha256": "59775a4443cda7e356045fa4706c284624078aef23dd930a5da3b2e8666aa8b1",
+      "occurrence": 0,
+      "surface": "structured",
+      "schema": "ExperienceList",
+      "temperature": 0.0,
+      "prompt_preview": "You are an expert resume parser. Extract work experiences from the text.\nText:\n# Alex Rivera\n\nalex.rivera@example.com | linkedin.com/in/alex-rivera | github.com/alexrivera\n\n## Summary\nSoftware engineer with four years across backend service",
+      "response": {
+        "experiences": [
+          {
+            "title": "Machine Learning Engineer",
+            "company": "Nimbus Analytics",
+            "start_date": "2024-01",
+            "end_date": "Present",
+            "description": "Built and deployed ML models for ranking and semantic search, designed feature infrastructure, and set up model monitoring.",
+            "bullets": [
+              "Built and deployed gradient-boosted and transformer ranking models serving 2M daily predictions with PyTorch and XGBoost.",
+              "Designed a feature store on Postgres and Redis, cutting feature backfill time from hours to minutes.",
+              "Set up model monitoring with drift detection, alerting, and automated retraining on Airflow.",
+              "Fine-tuned sentence-transformer embedding models for semantic product search, lifting recall@10 by 18%."
+            ]
+          },
+          {
+            "title": "Backend Software Engineer",
+            "company": "Bluefin Software",
+            "start_date": "2022-03",
+            "end_date": "2024-01",
+            "description": "Developed microservices, managed billing infrastructure, and led migration to event-driven architecture.",
+            "bullets": [
+              "Developed FastAPI and Flask microservices handling 40k requests/minute behind an Nginx gateway.",
+              "Modeled billing and subscription data in Postgres with SQLAlchemy; wrote migrations with Alembic.",
+              "Containerized services with Docker and deployed to AWS ECS through GitHub Actions CI/CD.",
+              "Led the migration from a monolith to event-driven services using Kafka."
+            ]
+          },
+          {
+            "title": "Software Engineer",
+            "company": "Harbor Labs",
+            "start_date": "2021-06",
+            "end_date": "2022-03",
+            "description": "Built dashboards and ETL pipelines for data processing and visualization.",
+            "bullets": [
+              "Built React and TypeScript dashboards visualizing pipeline health for internal teams.",
+              "Wrote Python ETL jobs with pandas processing 50GB of daily event data into Snowflake.",
+              "Added integration tests with pytest and cut flaky-test rate by half."
+            ]
+          },
+          {
+            "title": "Student Developer",
+            "company": "City University IT Department",
+            "start_date": "2020-09",
+            "end_date": "2021-06",
+            "description": "Maintained course registration systems and automated administrative workflows.",
+            "bullets": [
+              "Maintained PHP and MySQL tooling for course registration workflows.",
+              "Automated report generation with Python scripts, saving staff ten hours weekly."
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "scope": "__setup__",
+      "role": "extract",
+      "prompt_sha256": "ebd356c930febbeac88e6e69220ff28407eb00e59189c20d263c48cf7ac2ddf6",
+      "occurrence": 0,
+      "surface": "structured",
+      "schema": "EducationList",
+      "temperature": 0.0,
+      "prompt_preview": "You are an expert resume parser. Extract education entries from the text.\nText:\n# Alex Rivera\n\nalex.rivera@example.com | linkedin.com/in/alex-rivera | github.com/alexrivera\n\n## Summary\nSoftware engineer with four years across backend servic",
+      "response": {
+        "education": [
+          {
+            "institution": "City University",
+            "degree": "B.S. Computer Science",
+            "location": null,
+            "start_date": null,
+            "end_date": "2021",
+            "gpa": null
+          }
+        ]
+      }
+    },
+    {
+      "scope": "__setup__",
+      "role": "extract",
+      "prompt_sha256": "6f1d340f5785381879fbe74ddad3f0078695b4522df2117b85ab43a3702c7722",
+      "occurrence": 0,
+      "surface": "structured",
+      "schema": "AchievementList",
+      "temperature": 0.0,
+      "prompt_preview": "You are an expert resume parser. Extract achievements, honors, and awards from the text.\nText:\n# Alex Rivera\n\nalex.rivera@example.com | linkedin.com/in/alex-rivera | github.com/alexrivera\n\n## Summary\nSoftware engineer with four years across",
+      "response": {
+        "achievements": [
+          {
+            "title": "SemanticSearch-Lite GitHub Stars",
+            "description": "Open-source semantic search library using sentence-transformers, FAISS, and a FastAPI serving layer; 400+ GitHub stars",
+            "issuer": "GitHub",
+            "date": null
+          }
+        ]
+      }
+    },
+    {
+      "scope": "__setup__",
+      "role": "extract",
+      "prompt_sha256": "01aa8e32899043143a099f2d2f170a810959b0e181500d359b089a067ba8936e",
+      "occurrence": 0,
+      "surface": "structured",
+      "schema": "ProjectList",
+      "temperature": 0.0,
+      "prompt_preview": "You are an expert resume parser. Extract projects.\nText:\n# Alex Rivera\n\nalex.rivera@example.com | linkedin.com/in/alex-rivera | github.com/alexrivera\n\n## Summary\nSoftware engineer with four years across backend services, ML systems, and dat",
+      "response": {
+        "projects": [
+          {
+            "name": "SemanticSearch-Lite",
+            "description": "Open-source semantic search library using sentence-transformers, FAISS, and a FastAPI serving layer; 400+ GitHub stars. Implemented hybrid BM25 + dense retrieval with reciprocal rank fusion.",
+            "start_date": null,
+            "end_date": null,
+            "repo_url": "github.com/alexrivera/semsearch",
+            "demo_url": null
+          },
+          {
+            "name": "StreamBoard",
+            "description": "Real-time analytics dashboard with Kafka, ClickHouse, and a React frontend; processes 10k events/second.",
+            "start_date": null,
+            "end_date": null,
+            "repo_url": null,
+            "demo_url": null
+          },
+          {
+            "name": "LLM Resume Coach",
+            "description": "LangChain + OpenAI application that critiques resumes against job descriptions; deployed on Railway with Docker.",
+            "start_date": null,
+            "end_date": null,
+            "repo_url": null,
+            "demo_url": null
+          },
+          {
+            "name": "Pixel Adventure",
+            "description": "2D platformer game in C# and Unity published on itch.io.",
+            "start_date": null,
+            "end_date": null,
+            "repo_url": null,
+            "demo_url": "itch.io"
+          }
+        ]
+      }
+    },
+    {
+      "scope": "__setup__",
+      "role": "extract",
+      "prompt_sha256": "8de148bcd799834c95fed086206f053751b1092a934ff4fedf857bf1586f627d",
+      "occurrence": 0,
+      "surface": "structured",
+      "schema": "SkillList",
+      "temperature": 0.0,
+      "prompt_preview": "You are an expert resume parser. Extract technical skills, tools, and languages.\nText:\n# Alex Rivera\n\nalex.rivera@example.com | linkedin.com/in/alex-rivera | github.com/alexrivera\n\n## Summary\nSoftware engineer with four years across backend",
+      "response": {
+        "skills": [
+          {
+            "name": "Python",
+            "category": "Language",
+            "proficiency": 5
+          },
+          {
+            "name": "TypeScript",
+            "category": "Language",
+            "proficiency": 4
+          },
+          {
+            "name": "C#",
+            "category": "Language",
+            "proficiency": 3
+          },
+          {
+            "name": "SQL",
+            "category": "Language",
+            "proficiency": 4
+          },
+          {
+            "name": "PHP",
+            "category": "Language",
+            "proficiency": 2
+          },
+          {
+            "name": "PyTorch",
+            "category": "Library",
+            "proficiency": 4
+          },
+          {
+            "name": "XGBoost",
+            "category": "Library",
+            "proficiency": 4
+          },
+          {
+            "name": "scikit-learn",
+            "category": "Library",
+            "proficiency": 4
+          },
+          {
+            "name": "sentence-transformers",
+            "category": "Library",
+            "proficiency": 4
+          },
+          {
+            "name": "LangChain",
+            "category": "Library",
+            "proficiency": 3
+          },
+          {
+            "name": "pandas",
+            "category": "Library",
+            "proficiency": 4
+          },
+          {
+            "name": "NumPy",
+            "category": "Library",
+            "proficiency": 4
+          },
+          {
+            "name": "FAISS",
+            "category": "Library",
+            "proficiency": 3
+          },
+          {
+            "name": "FastAPI",
+            "category": "Framework",
+            "proficiency": 4
+          },
+          {
+            "name": "Flask",
+            "category": "Framework",
+            "proficiency": 4
+          },
+          {
+            "name": "React",
+            "category": "Framework",
+            "proficiency": 4
+          },
+          {
+            "name": "Node.js",
+            "category": "Framework",
+            "proficiency": 3
+          },
+          {
+            "name": "Unity",
+            "category": "Framework",
+            "proficiency": 2
+          },
+          {
+            "name": "Airflow",
+            "category": "Tool",
+            "proficiency": 4
+          },
+          {
+            "name": "Kafka",
+            "category": "Tool",
+            "proficiency": 4
+          },
+          {
+            "name": "Docker",
+            "category": "Tool",
+            "proficiency": 4
+          },
+          {
+            "name": "Kubernetes",
+            "category": "Tool",
+            "proficiency": 3
+          },
+          {
+            "name": "GitHub Actions",
+            "category": "Tool",
+            "proficiency": 4
+          },
+          {
+            "name": "Nginx",
+            "category": "Tool",
+            "proficiency": 3
+          },
+          {
+            "name": "Git",
+            "category": "Tool",
+            "proficiency": 4
+          },
+          {
+            "name": "Postgres",
+            "category": "Database",
+            "proficiency": 4
+          },
+          {
+            "name": "MySQL",
+            "category": "Database",
+            "proficiency": 3
+          },
+          {
+            "name": "Redis",
+            "category": "Database",
+            "proficiency": 3
+          },
+          {
+            "name": "Snowflake",
+            "category": "Database",
+            "proficiency": 3
+          },
+          {
+            "name": "ClickHouse",
+            "category": "Database",
+            "proficiency": 3
+          },
+          {
+            "name": "AWS",
+            "category": "Cloud",
+            "proficiency": 4
+          },
+          {
+            "name": "OpenAI API",
+            "category": "Library",
+            "proficiency": 3
+          },
+          {
+            "name": "SQLAlchemy",
+            "category": "Library",
+            "proficiency": 3
+          },
+          {
+            "name": "Alembic",
+            "category": "Tool",
+            "proficiency": 3
+          },
+          {
+            "name": "pytest",
+            "category": "Tool",
+            "proficiency": 3
+          },
+          {
+            "name": "Railway",
+            "category": "Cloud",
+            "proficiency": 2
+          }
+        ]
+      }
+    },
+    {
+      "scope": "datadog_ai_research_engineer_datadog_ai_research_dair",
+      "role": "extract",
+      "prompt_sha256": "76dd0115f03435d54d7362cfd1c4117bec2b7ad3f563ef1bc91efea49b461bc6",
+      "occurrence": 0,
+      "surface": "structured",
+      "schema": "JobMetadata",
+      "temperature": 0.0,
+      "prompt_preview": "You are a job description parser. Extract the job title and company name from the text.\nText:\nAs a Research Engineer on our team, you will partner with Research Scientists to turn research ideas into working systems, building the data, tool",
+      "response": {
+        "title": "Research Engineer",
+        "company": "Datadog"
+      }
+    },
+    {
+      "scope": "datadog_ai_research_engineer_datadog_ai_research_dair",
+      "role": "extract",
+      "prompt_sha256": "84a686668b180e52d75e2eb6f092edb2dfe6d66bd1cbdc7407ce25eff85d8825",
+      "occurrence": 0,
+      "surface": "structured",
+      "schema": "JobSkillList",
+      "temperature": 0.0,
+      "prompt_preview": "You are an expert job description analyzer. Extract all technical skills, tools, languages, and frameworks mentioned in the job posting. Classify each as required or preferred. Assign a weight from 0.1 to 1.0 based on how prominently it app",
+      "response": {
+        "skills": [
+          {
+            "name": "Python",
+            "category": "Language",
+            "required": true,
+            "weight": 0.95
+          },
+          {
+            "name": "Rust",
+            "category": "Language",
+            "required": false,
+            "weight": 0.7
+          },
+          {
+            "name": "C++",
+            "category": "Language",
+            "required": false,
+            "weight": 0.7
+          },
+          {
+            "name": "Go",
+            "category": "Language",
+            "required": false,
+            "weight": 0.7
+          },
+          {
+            "name": "PyTorch",
+            "category": "Framework",
+            "required": true,
+            "weight": 0.85
+          },
+          {
+            "name": "JAX",
+            "category": "Framework",
+            "required": false,
+            "weight": 0.75
+          },
+          {
+            "name": "Ray",
+            "category": "Tool",
+            "required": true,
+            "weight": 0.85
+          },
+          {
+            "name": "Slurm",
+            "category": "Tool",
+            "required": false,
+            "weight": 0.7
+          },
+          {
+            "name": "Megatron-LM",
+            "category": "Framework",
+            "required": false,
+            "weight": 0.75
+          },
+          {
+            "name": "DeepSpeed",
+            "category": "Framework",
+            "required": false,
+            "weight": 0.75
+          },
+          {
+            "name": "SkyRL",
+            "category": "Framework",
+            "required": false,
+            "weight": 0.7
+          },
+          {
+            "name": "VeRL",
+            "category": "Framework",
+            "required": false,
+            "weight": 0.7
+          },
+          {
+            "name": "TorchTitan",
+            "category": "Framework",
+            "required": false,
+            "weight": 0.7
+          },
+          {
+            "name": "Distributed Computing",
+            "category": "Skill",
+            "required": true,
+            "weight": 0.9
+          },
+          {
+            "name": "Reinforcement Learning Infrastructure",
+            "category": "Skill",
+            "required": true,
+            "weight": 0.9
+          },
+          {
+            "name": "ML Systems",
+            "category": "Skill",
+            "required": true,
+            "weight": 0.9
+          },
+          {
+            "name": "GPU Acceleration",
+            "category": "Skill",
+            "required": true,
+            "weight": 0.8
+          },
+          {
+            "name": "CUDA",
+            "category": "Tool",
+            "required": false,
+            "weight": 0.75
+          },
+          {
+            "name": "Containerization",
+            "category": "Skill",
+            "required": true,
+            "weight": 0.8
+          },
+          {
+            "name": "Orchestration",
+            "category": "Skill",
+            "required": true,
+            "weight": 0.8
+          },
+          {
+            "name": "Model Training",
+            "category": "Skill",
+            "required": true,
+            "weight": 0.9
+          },
+          {
+            "name": "Model Fine-tuning",
+            "category": "Skill",
+            "required": true,
+            "weight": 0.85
+          },
+          {
+            "name": "Supervised Fine-Tuning (SFT)",
+            "category": "Skill",
+            "required": false,
+            "weight": 0.8
+          },
+          {
+            "name": "Reinforcement Learning from Human Feedback (RLHF)",
+            "category": "Skill",
+            "required": false,
+            "weight": 0.8
+          },
+          {
+            "name": "Quantization",
+            "category": "Skill",
+            "required": false,
+            "weight": 0.75
+          },
+          {
+            "name": "Speculative Decoding",
+            "category": "Skill",
+            "required": false,
+            "weight": 0.7
+          },
+          {
+            "name": "Data Pipelines",
+            "category": "Skill",
+            "required": true,
+            "weight": 0.85
+          },
+          {
+            "name": "Cloud Infrastructure",
+            "category": "Skill",
+            "required": true,
+            "weight": 0.8
+          },
+          {
+            "name": "Benchmarking",
+            "category": "Skill",
+            "required": true,
+            "weight": 0.8
+          },
+          {
+            "name": "Simulation Environments",
+            "category": "Skill",
+            "required": false,
+            "weight": 0.8
+          },
+          {
+            "name": "Observability",
+            "category": "Domain",
+            "required": false,
+            "weight": 0.75
+          },
+          {
+            "name": "Site Reliability Engineering (SRE)",
+            "category": "Domain",
+            "required": false,
+            "weight": 0.75
+          },
+          {
+            "name": "Security",
+            "category": "Domain",
+            "required": false,
+            "weight": 0.7
+          },
+          {
+            "name": "Foundation Models",
+            "category": "Skill",
+            "required": false,
+            "weight": 0.8
+          },
+          {
+            "name": "World Models",
+            "category": "Skill",
+            "required": false,
+            "weight": 0.8
+          },
+          {
+            "name": "Multimodal Models",
+            "category": "Skill",
+            "required": false,
+            "weight": 0.75
+          },
+          {
+            "name": "Anomaly Detection",
+            "category": "Skill",
+            "required": false,
+            "weight": 0.7
+          },
+          {
+            "name": "Root Cause Analysis",
+            "category": "Skill",
+            "required": false,
+            "weight": 0.7
+          },
+          {
+            "name": "Forecasting",
+            "category": "Skill",
+            "required": false,
+            "weight": 0.7
+          },
+          {
+            "name": "Autonomous Agents",
+            "category": "Skill",
+            "required": false,
+            "weight": 0.75
+          },
+          {
+            "name": "Software Engineering",
+            "category": "Skill",
+            "required": false,
+            "weight": 0.75
+          },
+          {
+            "name": "Research Publications",
+            "category": "Skill",
+            "required": false,
+            "weight": 0.7
+          }
+        ]
+      }
+    },
+    {
+      "scope": "datadog_ai_research_engineer_datadog_ai_research_dair",
+      "role": "extract",
+      "prompt_sha256": "7a3c06af6caab6359840e374f0e8f5c84e5428f3dc74ce128acce902645ce8f6",
+      "occurrence": 0,
+      "surface": "structured",
+      "schema": "JDProfileExtraction",
+      "temperature": 0.0,
+      "prompt_preview": "You decompose job postings into atomic, individually-checkable requirements.\n\nRules:\n- One requirement per statement. Split conjunctions: 'Python and Go' is two requirements, not one.\n- Write each requirement as a standalone sentence about ",
+      "response": {
+        "requirements": [
+          {
+            "text": "The candidate can build and operate multimodal data pipelines.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "multimodal data pipelines"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate can build and operate training and evaluation infrastructure.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "training infrastructure",
+              "evaluation infrastructure"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate can build and operate benchmarks and internal tooling.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "benchmarks",
+              "internal tooling"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate can implement models and run experiments at scale.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "implement models",
+              "run experiments at scale"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate can profile systems for reliability, performance, and cost.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "profile",
+              "reliability",
+              "performance",
+              "cost"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate can build simulation environments and replay infrastructure for agent training and evaluation.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "simulation environments",
+              "replay infrastructure",
+              "agent training",
+              "agent evaluation"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate can orchestrate distributed training with Ray, including scheduling, scaling, and failure recovery.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "distributed training",
+              "Ray",
+              "scheduling",
+              "scaling",
+              "failure recovery"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate can orchestrate distributed RL with Ray, including scheduling, scaling, and failure recovery.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "distributed RL",
+              "Ray",
+              "scheduling",
+              "scaling",
+              "failure recovery"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate can establish rigorous automated benchmarks and regression tests for world model predictions.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "automated benchmarks",
+              "regression tests",
+              "world model predictions"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate can establish rigorous automated benchmarks and regression tests for agent performance.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "automated benchmarks",
+              "regression tests",
+              "agent performance"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate can establish rigorous automated benchmarks and regression tests for simulation fidelity.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "automated benchmarks",
+              "regression tests",
+              "simulation fidelity"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate can collaborate with Research Scientists to integrate capabilities into Datadog's products.",
+            "type": "required",
+            "criticality": 3,
+            "terms": [
+              "collaborate",
+              "Research Scientists",
+              "integrate capabilities"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate can collaborate with Product teams to integrate capabilities into Datadog's products.",
+            "type": "required",
+            "criticality": 3,
+            "terms": [
+              "collaborate",
+              "Product",
+              "integrate capabilities"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate can collaborate with Engineering teams to integrate capabilities into Datadog's products.",
+            "type": "required",
+            "criticality": 3,
+            "terms": [
+              "collaborate",
+              "Engineering",
+              "integrate capabilities"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate can harden prototypes into reliable services.",
+            "type": "required",
+            "criticality": 3,
+            "terms": [
+              "harden prototypes",
+              "reliable services"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate can contribute to research publications at top-tier conferences such as NeurIPS, ICLR, and ICML.",
+            "type": "required",
+            "criticality": 3,
+            "terms": [
+              "research publications",
+              "NeurIPS",
+              "ICLR",
+              "ICML"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate can produce high-quality code.",
+            "type": "required",
+            "criticality": 3,
+            "terms": [
+              "high-quality code"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate can produce high-quality documentation.",
+            "type": "required",
+            "criticality": 3,
+            "terms": [
+              "high-quality documentation"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate can produce high-quality open-source artifacts.",
+            "type": "required",
+            "criticality": 3,
+            "terms": [
+              "open-source artifacts"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has depth in distributed computing.",
+            "type": "required",
+            "criticality": 5,
+            "terms": [
+              "distributed computing"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate has depth in RL infrastructure.",
+            "type": "required",
+            "criticality": 5,
+            "terms": [
+              "RL infrastructure"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate has depth in ML systems for training and inference at scale.",
+            "type": "required",
+            "criticality": 5,
+            "terms": [
+              "ML systems",
+              "training",
+              "inference",
+              "scale"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate has experience with Ray.",
+            "type": "preferred",
+            "criticality": 4,
+            "terms": [
+              "Ray"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate has experience with Slurm.",
+            "type": "preferred",
+            "criticality": 4,
+            "terms": [
+              "Slurm"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate is proficient in Python.",
+            "type": "required",
+            "criticality": 5,
+            "terms": [
+              "Python"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate is familiar with a systems language such as Rust.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "systems language",
+              "Rust"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate is familiar with a systems language such as C++.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "systems language",
+              "C++"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate is familiar with a systems language such as Go.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "systems language",
+              "Go"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate is comfortable with modern cloud infrastructure.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "modern cloud infrastructure"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate is comfortable with modern data infrastructure.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "modern data infrastructure"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has practical experience implementing ML training systems such as PyTorch.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "ML training systems",
+              "PyTorch"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate has practical experience implementing ML inference systems such as PyTorch.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "ML inference systems",
+              "PyTorch"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate has practical experience implementing ML training systems such as JAX.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "ML training systems",
+              "JAX"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate has practical experience implementing ML inference systems such as JAX.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "ML inference systems",
+              "JAX"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate has practical experience with containerization.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "containerization"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate has practical experience with orchestration.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "orchestration"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate has practical experience with GPU acceleration.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "GPU acceleration"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate has practical experience with large-scale model training.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "large-scale model training"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate has practical experience with large-scale model fine-tuning.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "large-scale model fine-tuning"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate has experience with the Megatron-LM framework.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "Megatron-LM"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has experience with the DeepSpeed framework.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "DeepSpeed"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has experience with the SkyRL framework.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "SkyRL"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has experience with the VeRL framework.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "VeRL"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has experience with the TorchTitan framework.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "TorchTitan"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has experience with SFT (Supervised Fine-Tuning) techniques.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "SFT",
+              "Supervised Fine-Tuning"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has experience with RLVR (Reinforcement Learning from Verifiable Rewards) techniques.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "RLVR"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has experience with RLHF (Reinforcement Learning from Human Feedback) techniques.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "RLHF"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has experience with efficient inference techniques such as quantization.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "efficient inference",
+              "quantization"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has experience with efficient inference techniques such as speculative decoding.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "efficient inference",
+              "speculative decoding"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate can explain design and performance trade-offs clearly to technical audiences.",
+            "type": "required",
+            "criticality": 3,
+            "terms": [
+              "explain design trade-offs",
+              "performance trade-offs",
+              "technical audiences"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate can explain design and performance trade-offs clearly to non-technical audiences.",
+            "type": "required",
+            "criticality": 3,
+            "terms": [
+              "explain design trade-offs",
+              "performance trade-offs",
+              "non-technical audiences"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has experience supporting research publications.",
+            "type": "required",
+            "criticality": 3,
+            "terms": [
+              "research publications"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has experience contributing to research publications.",
+            "type": "required",
+            "criticality": 3,
+            "terms": [
+              "research publications"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has strong software engineering skills.",
+            "type": "preferred",
+            "criticality": 3,
+            "terms": [
+              "software engineering skills"
+            ],
+            "source_section": "Bonus Points",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has experience in the observability domain.",
+            "type": "preferred",
+            "criticality": 3,
+            "terms": [
+              "observability"
+            ],
+            "source_section": "Bonus Points",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has experience in the SRE domain.",
+            "type": "preferred",
+            "criticality": 3,
+            "terms": [
+              "SRE"
+            ],
+            "source_section": "Bonus Points",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has experience in the security domain.",
+            "type": "preferred",
+            "criticality": 3,
+            "terms": [
+              "security"
+            ],
+            "source_section": "Bonus Points",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has experience bridging research prototypes and real-world product applications.",
+            "type": "preferred",
+            "criticality": 3,
+            "terms": [
+              "bridging research prototypes",
+              "real-world product applications"
+            ],
+            "source_section": "Bonus Points",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has experience with large foundation models.",
+            "type": "preferred",
+            "criticality": 3,
+            "terms": [
+              "large foundation models"
+            ],
+            "source_section": "Bonus Points",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has experience with world models.",
+            "type": "preferred",
+            "criticality": 3,
+            "terms": [
+              "world models"
+            ],
+            "source_section": "Bonus Points",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has experience with RL-trained agents.",
+            "type": "preferred",
+            "criticality": 3,
+            "terms": [
+              "RL-trained agents"
+            ],
+            "source_section": "Bonus Points",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has a passion for pushing the boundaries of AI with a focus on customer impact.",
+            "type": "preferred",
+            "criticality": 2,
+            "terms": [
+              "pushing boundaries of AI",
+              "customer impact"
+            ],
+            "source_section": "Bonus Points",
+            "confidence": 0.8
+          },
+          {
+            "text": "The candidate has a passion for pushing the boundaries of AI with a focus on scalable deployment.",
+            "type": "preferred",
+            "criticality": 2,
+            "terms": [
+              "pushing boundaries of AI",
+              "scalable deployment"
+            ],
+            "source_section": "Bonus Points",
+            "confidence": 0.8
+          },
+          {
+            "text": "The candidate has hands-on experience with GPU programming.",
+            "type": "preferred",
+            "criticality": 3,
+            "terms": [
+              "GPU programming"
+            ],
+            "source_section": "Bonus Points",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has hands-on experience with GPU optimization.",
+            "type": "preferred",
+            "criticality": 3,
+            "terms": [
+              "GPU optimization"
+            ],
+            "source_section": "Bonus Points",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has hands-on experience with CUDA.",
+            "type": "preferred",
+            "criticality": 3,
+            "terms": [
+              "CUDA"
+            ],
+            "source_section": "Bonus Points",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has experience writing production data pipelines.",
+            "type": "preferred",
+            "criticality": 3,
+            "terms": [
+              "production data pipelines"
+            ],
+            "source_section": "Bonus Points",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has experience writing production applications.",
+            "type": "preferred",
+            "criticality": 3,
+            "terms": [
+              "production applications"
+            ],
+            "source_section": "Bonus Points",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has experience building simulation environments for agent training.",
+            "type": "preferred",
+            "criticality": 3,
+            "terms": [
+              "simulation environments",
+              "agent training"
+            ],
+            "source_section": "Bonus Points",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has experience building sandbox environments for agent training.",
+            "type": "preferred",
+            "criticality": 3,
+            "terms": [
+              "sandbox environments",
+              "agent training"
+            ],
+            "source_section": "Bonus Points",
+            "confidence": 0.9
+          }
+        ],
+        "title_terms": [
+          "AI",
+          "Research",
+          "Engineer"
+        ]
+      }
+    },
+    {
+      "scope": "datadog_ai_research_engineer_datadog_ai_research_dair",
+      "role": "tailor",
+      "prompt_sha256": "82d9118b4d48dad51cdf84b67953b5a625d8bf1e8b8d2bae0e0983bba298d076",
+      "occurrence": 0,
+      "surface": "invoke",
+      "schema": null,
+      "temperature": 0.0,
+      "prompt_preview": "{'role': 'user', 'content': 'You are a resume tailoring PLANNER. Decide a per-item edit plan; another agent executes it. Respond with ONLY a JSON array.\\n\\nAllowed ops: keep, revise, delete, replace.\\nRevision strategies: keyword_weave, qua",
+      "response": "```json\n[\n  {\n    \"item_key\": \"exp:machine learning engineer|nimbus analytics\",\n    \"op\": \"revise\",\n    \"strategy\": \"keyword_weave\",\n    \"keywords\": [\"model training\", \"ML systems\", \"distributed computing\", \"GPU\", \"benchmarking\", \"data pipelines\"],\n    \"replacement_key\": null,\n    \"rationale\": \"This is the strongest experience item; weaving in model training, distributed computing, and benchmarking keywords directly maps to the JD's core infrastructure and evaluation requirements.\"\n  },\n  {\n    \"item_key\": \"exp:software engineer|harbor labs\",\n    \"op\": \"revise\",\n    \"strategy\": \"keyword_weave\",\n    \"keywords\": [\"data pipelines\", \"orchestration\", \"cloud infrastructure\"],\n    \"replacement_key\": null,\n    \"rationale\": \"The ETL pipeline and event-data processing work maps to the JD's data pipeline requirements; weaving in pipeline orchestration and cloud infrastructure language strengthens the fit.\"\n  },\n  {\n    \"item_key\": \"exp:backend software engineer|bluefin software\",\n    \"op\": \"revise\",\n    \"strategy\": \"keyword_weave\",\n    \"keywords\": [\"containerization\", \"cloud infrastructure\", \"distributed computing\", \"orchestration\"],\n    \"replacement_key\": null,\n    \"rationale\": \"Docker/AWS ECS experience directly supports the JD's containerization and cloud infrastructure needs; weaving those keywords makes the relevance explicit.\"\n  },\n  {\n    \"item_key\": \"exp:student developer|city university it department\",\n    \"op\": \"delete\",\n    \"strategy\": null,\n    \"keywords\": [],\n    \"replacement_key\": null,\n    \"rationale\": \"PHP/MySQL course-registration maintenance adds no signal for a research engineering role focused on ML systems, distributed training, and agent infrastructure, and wastes resume space.\"\n  },\n  {\n    \"item_key\": \"proj:semanticsearch-lite\",\n    \"op\": \"revise\",\n    \"strategy\": \"keyword_weave\",\n    \"keywords\": [\"foundation models\", \"model fine-tuning\", \"benchmarking\", \"ML systems\"],\n    \"replacement_key\": null,\n    \"rationale\": \"Transformer-based dense retrieval and open-source traction show ML systems depth; weaving in foundation model and benchmarking language ties it to the JD's evaluation and model infrastructure focus.\"\n  },\n  {\n    \"item_key\": \"proj:streamboard\",\n    \"op\": \"revise\",\n    \"strategy\": \"keyword_weave\",\n    \"keywords\": [\"data pipelines\", \"distributed computing\", \"simulation environments\", \"benchmarking\"],\n    \"replacement_key\": null,\n    \"rationale\": \"High-throughput real-time event processing aligns with the JD's data pipeline and replay infrastructure requirements; adding distributed computing and benchmarking language sharpens the fit.\"\n  },\n  {\n    \"item_key\": \"proj:llm resume coach\",\n    \"op\": \"replace\",\n    \"strategy\": null,\n    \"keywords\": [],\n    \"replacement_key\": \"proj:pixel adventure\",\n    \"rationale\": \"LLM Resume Coach is a thin LangChain wrapper with no relevance to distributed training, RL infrastructure, or simulation environments, and Pixel Adventure (Unity/C#) is the only replacement available — however, since neither replacement adds meaningful value and the pool item scores only 10.1 relevance, this swap removes an item that could imply shallow LLM work rather than deep research engineering; the replacement is chosen solely because it is the only option and the original item actively undersells the candidate's engineering depth for this role.\"\n  }\n]\n```"
+    },
+    {
+      "scope": "datadog_ai_research_engineer_datadog_ai_research_dair",
+      "role": "tailor",
+      "prompt_sha256": "b6eb4ecd84fc6c9eba9c26b665e7147ff41201c97f2dc70841bde24bcb72e260",
+      "occurrence": 0,
+      "surface": "invoke",
+      "schema": null,
+      "temperature": 0.3,
+      "prompt_preview": "System: You are an expert resume tailoring assistant. You REVISE existing resume content to match a job description — you do not rewrite it from scratch. Rules:\n- NEVER fabricate experiences, skills, or metrics the candidate doesn't have\n- ",
+      "response": "```json\n{\n  \"experiences\": [\n    {\n      \"title\": \"Machine Learning Engineer\",\n      \"company\": \"Nimbus Analytics\",\n      \"start_date\": \"2024-01\",\n      \"end_date\": \"Present\",\n      \"bullets\": [\n        \"Built and deployed gradient-boosted and transformer ranking models serving 2M daily predictions, using PyTorch and XGBoost across GPU-accelerated training and inference pipelines.\",\n        \"Designed a feature store on Postgres and Redis as part of the broader ML systems infrastructure, cutting feature backfill time from hours to minutes.\",\n        \"Set up model monitoring with drift detection, alerting, and automated retraining on Airflow, establishing benchmarking baselines and regression checks for model quality.\",\n        \"Fine-tuned sentence-transformer embedding models for semantic product search, lifting recall@10 by 18% through systematic data pipeline improvements and evaluation.\"\n      ]\n    },\n    {\n      \"title\": \"Backend Software Engineer\",\n      \"company\": \"Bluefin Software\",\n      \"start_date\": \"2022-03\",\n      \"end_date\": \"2024-01\",\n      \"bullets\": [\n        \"Containerized services with Docker and deployed to AWS ECS via GitHub Actions CI/CD, building repeatable cloud infrastructure for distributed microservices.\",\n        \"Developed FastAPI and Flask microservices handling 40k requests/minute behind an Nginx gateway, with orchestration managed through ECS task definitions and auto-scaling policies.\",\n        \"Led migration from a monolith to event-driven services using Kafka, enabling decoupled, distributed computing across billing and subscription workflows.\"\n      ]\n    },\n    {\n      \"title\": \"Software Engineer\",\n      \"company\": \"Harbor Labs\",\n      \"start_date\": \"2021-06\",\n      \"end_date\": \"2022-03\",\n      \"bullets\": [\n        \"Wrote Python ETL jobs with pandas processing 50GB of daily event data into Snowflake, building reliable data pipelines with orchestration via scheduled workflows.\",\n        \"Built React and TypeScript dashboards visualizing pipeline health, surfacing cloud infrastructure metrics for internal teams.\",\n        \"Added integration tests with pytest and cut flaky-test rate by half, improving overall pipeline reliability.\"\n      ]\n    }\n  ],\n  \"projects\": [\n    {\n      \"name\": \"SemanticSearch-Lite\",\n      \"selected_style\": \"default\",\n      \"bullets\": [\n        \"Open-source semantic search library (400+ GitHub stars) built on sentence-transformers and FAISS with a FastAPI serving layer, demonstrating end-to-end ML systems design from model fine-tuning to inference.\",\n        \"Implemented hybrid BM25 + dense retrieval with reciprocal rank fusion, with benchmarking harnesses to evaluate retrieval quality across dataset splits — mirroring the evaluation infrastructure needed for foundation model assessment.\",\n        \"Structured for extensibility so users can swap in custom fine-tuned encoders, reflecting practical experience adapting transformer-based models to domain-specific retrieval tasks.\"\n      ]\n    },\n    {\n      \"name\": \"StreamBoard\",\n      \"selected_style\": \"default\",\n      \"bullets\": [\n        \"Built a real-time analytics dashboard processing 10k events/second using Kafka and ClickHouse, implementing distributed data pipelines for high-throughput event ingestion and aggregation.\",\n        \"Designed the ingestion layer to support replay of historical event streams, a pattern directly applicable to simulation environments and agent training infrastructure.\",\n        \"Added end-to-end latency benchmarking across the pipeline to validate throughput targets and catch regressions under load.\"\n      ]\n    },\n    {\n      \"name\": \"Pixel Adventure\",\n      \"selected_style\": \"default\",\n      \"bullets\": [\n        \"Developed a 2D platformer in C# and Unity, published on itch.io — demonstrating experience with a systems-adjacent language and game-loop simulation logic.\"\n      ]\n    }\n  ],\n  \"skills_emphasized\": [\n    \"PyTorch\",\n    \"Python\",\n    \"GPU Acceleration\",\n    \"Model Fine-tuning\",\n    \"Data Pipelines\",\n    \"Benchmarking\",\n    \"Containerization\",\n    \"Cloud Infrastructure\",\n    \"Distributed Computing\",\n    \"Orchestration\",\n    \"ML Systems\",\n    \"Model Training\"\n  ]\n}\n```"
+    },
+    {
+      "scope": "datadog_ai_research_engineer_datadog_ai_research_dair",
+      "role": "tailor",
+      "prompt_sha256": "f11a6d576ccbe0ce561052a7c964e5ea619c57c6bf3111009b1d11162ace371e",
+      "occurrence": 0,
+      "surface": "invoke",
+      "schema": null,
+      "temperature": 0.3,
+      "prompt_preview": "System: You are an expert resume tailoring assistant. You REVISE existing resume content to match a job description — you do not rewrite it from scratch. Rules:\n- NEVER fabricate experiences, skills, or metrics the candidate doesn't have\n- ",
+      "response": "```json\n{\n  \"experiences\": [\n    {\n      \"title\": \"Machine Learning Engineer\",\n      \"company\": \"Nimbus Analytics\",\n      \"start_date\": \"2024-01\",\n      \"end_date\": \"Present\",\n      \"bullets\": [\n        \"Built and deployed gradient-boosted and transformer ranking models serving 2M daily predictions, leveraging PyTorch GPU acceleration and XGBoost within end-to-end ML systems pipelines.\",\n        \"Designed a feature store on Postgres and Redis supporting model training workflows, cutting feature backfill time from hours to minutes across distributed computing jobs.\",\n        \"Set up model monitoring with drift detection, alerting, and automated retraining on Airflow, establishing regression benchmarks to track agent and ranking model performance over time.\",\n        \"Fine-tuned sentence-transformer embedding models for semantic product search, lifting recall@10 by 18% and validating improvements through simulation-style offline evaluation suites.\"\n      ]\n    },\n    {\n      \"title\": \"Backend Software Engineer\",\n      \"company\": \"Bluefin Software\",\n      \"start_date\": \"2022-03\",\n      \"end_date\": \"2024-01\",\n      \"bullets\": [\n        \"Containerized services with Docker and deployed to AWS ECS through GitHub Actions CI/CD, building repeatable cloud infrastructure for distributed microservice orchestration.\",\n        \"Developed FastAPI and Flask microservices handling 40k requests/minute behind an Nginx gateway.\",\n        \"Led the migration from a monolith to event-driven services using Kafka, enabling scalable distributed computing across independently deployable components.\"\n      ]\n    },\n    {\n      \"title\": \"Software Engineer\",\n      \"company\": \"Harbor Labs\",\n      \"start_date\": \"2021-06\",\n      \"end_date\": \"2022-03\",\n      \"bullets\": [\n        \"Wrote Python ETL jobs with pandas processing 50GB of daily event data into Snowflake, forming the core of the team's cloud infrastructure data pipelines.\",\n        \"Orchestrated pipeline scheduling and dependency management, improving reliability of nightly data loads.\",\n        \"Added integration tests with pytest and cut flaky-test rate by half, strengthening overall pipeline observability.\"\n      ]\n    }\n  ],\n  \"projects\": [\n    {\n      \"name\": \"SemanticSearch-Lite\",\n      \"selected_style\": \"default\",\n      \"bullets\": [\n        \"Open-source semantic search library (400+ GitHub stars) built on sentence-transformers and FAISS, demonstrating practical ML systems depth with transformer-based dense retrieval at serving scale.\",\n        \"Implemented hybrid BM25 + dense retrieval with reciprocal rank fusion, applying model fine-tuning techniques analogous to those used in foundation model retrieval pipelines.\",\n        \"Exposed a FastAPI serving layer with automated evaluation harnesses to track retrieval quality regressions across model updates.\"\n      ]\n    },\n    {\n      \"name\": \"StreamBoard\",\n      \"selected_style\": \"default\",\n      \"bullets\": [\n        \"Built a real-time analytics dashboard with Kafka, ClickHouse, and a React frontend, processing 10k events/second through high-throughput data pipelines.\",\n        \"Designed the ingestion layer to support replay of historical event streams, enabling offline validation of downstream processing logic.\",\n        \"Deployed the full stack on cloud infrastructure with containerized services, validating end-to-end throughput under load.\"\n      ]\n    },\n    {\n      \"name\": \"Pixel Adventure\",\n      \"selected_style\": \"default\",\n      \"bullets\": [\n        \"Developed a 2D platformer in C# and Unity, published on itch.io — demonstrating systems-level programming skills in a compiled, statically typed language.\"\n      ]\n    }\n  ],\n  \"skills_emphasized\": [\n    \"Python\",\n    \"PyTorch\",\n    \"GPU Acceleration\",\n    \"Model Training\",\n    \"Data Pipelines\",\n    \"Containerization\",\n    \"Cloud Infrastructure\",\n    \"Distributed Computing\",\n    \"Orchestration\",\n    \"ML Systems\",\n    \"Model Fine-tuning\",\n    \"Benchmarking\",\n    \"Observability\",\n    \"Foundation Models\"\n  ]\n}\n```"
+    },
+    {
+      "scope": "datadog_ai_research_engineer_datadog_ai_research_dair",
+      "role": "extract",
+      "prompt_sha256": "fb17b9b4f30f231b99161b8219ed0dceb563ed128e92f12e4026967ad0c394e4",
+      "occurrence": 0,
+      "surface": "structured",
+      "schema": "RoleFamilyClassification",
+      "temperature": 0.0,
+      "prompt_preview": "{'role': 'user', 'content': 'Classify the role this job description is hiring for into exactly one family from the allowed set. Judge the role\\'s actual day-to-day work, not the company\\'s industry. Use \\'other\\' only when the role genuinel",
+      "response": {
+        "role_family": "machine_learning",
+        "rationale": "The role focuses on building infrastructure, tooling, and systems to support ML research including training pipelines, distributed training orchestration, benchmarks, and evaluation infrastructure for foundation models and agents."
+      }
+    },
+    {
+      "scope": "datadog_senior_ai_engineer",
+      "role": "extract",
+      "prompt_sha256": "6970ae40ec6eeafc2c916f082ff9030ed3dabc1f487e3fa3e27f1e1528f2f662",
+      "occurrence": 0,
+      "surface": "structured",
+      "schema": "JobMetadata",
+      "temperature": 0.0,
+      "prompt_preview": "You are a job description parser. Extract the job title and company name from the text.\nText:\nWe’re a new team building AI-assisted tools to make Datadog developers more effective, by autonomously generating tests, fixing bugs, and improvin",
+      "response": {
+        "title": "Backend Engineer - AI-Assisted Tools",
+        "company": "Datadog"
+      }
+    },
+    {
+      "scope": "datadog_senior_ai_engineer",
+      "role": "extract",
+      "prompt_sha256": "fa87cfe59c1ebf54a7d93488ad2b7b4d80c4cf0b58d27c0154b75216c5c037ce",
+      "occurrence": 0,
+      "surface": "structured",
+      "schema": "JobSkillList",
+      "temperature": 0.0,
+      "prompt_preview": "You are an expert job description analyzer. Extract all technical skills, tools, languages, and frameworks mentioned in the job posting. Classify each as required or preferred. Assign a weight from 0.1 to 1.0 based on how prominently it app",
+      "response": {
+        "skills": [
+          {
+            "name": "Go",
+            "category": "Language",
+            "required": true,
+            "weight": 0.8
+          },
+          {
+            "name": "Java",
+            "category": "Language",
+            "required": true,
+            "weight": 0.8
+          },
+          {
+            "name": "Python",
+            "category": "Language",
+            "required": true,
+            "weight": 0.8
+          },
+          {
+            "name": "Large Language Models (LLMs)",
+            "category": "Framework",
+            "required": true,
+            "weight": 0.95
+          },
+          {
+            "name": "LLM Prompting",
+            "category": "Tool",
+            "required": true,
+            "weight": 0.9
+          },
+          {
+            "name": "AI Agents",
+            "category": "Framework",
+            "required": true,
+            "weight": 0.9
+          },
+          {
+            "name": "Generative AI",
+            "category": "Framework",
+            "required": true,
+            "weight": 0.9
+          },
+          {
+            "name": "Machine Learning",
+            "category": "Framework",
+            "required": false,
+            "weight": 0.7
+          },
+          {
+            "name": "Backend Engineering",
+            "category": "Tool",
+            "required": true,
+            "weight": 0.95
+          },
+          {
+            "name": "IDE Development",
+            "category": "Tool",
+            "required": false,
+            "weight": 0.7
+          },
+          {
+            "name": "Static Code Analysis",
+            "category": "Tool",
+            "required": false,
+            "weight": 0.6
+          },
+          {
+            "name": "Compiler Development",
+            "category": "Tool",
+            "required": false,
+            "weight": 0.6
+          },
+          {
+            "name": "Code Generation",
+            "category": "Tool",
+            "required": true,
+            "weight": 0.85
+          },
+          {
+            "name": "Test Generation",
+            "category": "Tool",
+            "required": true,
+            "weight": 0.85
+          },
+          {
+            "name": "Bug Fixing Automation",
+            "category": "Tool",
+            "required": true,
+            "weight": 0.8
+          },
+          {
+            "name": "Performance Optimization",
+            "category": "Tool",
+            "required": true,
+            "weight": 0.8
+          },
+          {
+            "name": "Large-Scale Systems",
+            "category": "Framework",
+            "required": false,
+            "weight": 0.7
+          },
+          {
+            "name": "Data Sets Management",
+            "category": "Tool",
+            "required": false,
+            "weight": 0.6
+          },
+          {
+            "name": "Datadog Platform",
+            "category": "Tool",
+            "required": false,
+            "weight": 0.7
+          },
+          {
+            "name": "IDE Extensions",
+            "category": "Tool",
+            "required": false,
+            "weight": 0.6
+          },
+          {
+            "name": "Dynamic Instrumentation",
+            "category": "Tool",
+            "required": false,
+            "weight": 0.5
+          },
+          {
+            "name": "AI Code Tools",
+            "category": "Tool",
+            "required": false,
+            "weight": 0.75
+          },
+          {
+            "name": "Production Deployment",
+            "category": "Tool",
+            "required": true,
+            "weight": 0.85
+          },
+          {
+            "name": "System Integration",
+            "category": "Tool",
+            "required": true,
+            "weight": 0.8
+          }
+        ]
+      }
+    },
+    {
+      "scope": "datadog_senior_ai_engineer",
+      "role": "extract",
+      "prompt_sha256": "2a88900153aefeeb351ea36a4ceced2b70b6c98c3c06dbf18112a54336088764",
+      "occurrence": 0,
+      "surface": "structured",
+      "schema": "JDProfileExtraction",
+      "temperature": 0.0,
+      "prompt_preview": "You decompose job postings into atomic, individually-checkable requirements.\n\nRules:\n- One requirement per statement. Split conjunctions: 'Python and Go' is two requirements, not one.\n- Write each requirement as a standalone sentence about ",
+      "response": {
+        "requirements": [
+          {
+            "text": "The candidate has at least 5 years of professional backend engineering experience.",
+            "type": "required",
+            "criticality": 5,
+            "terms": [
+              "backend engineer",
+              "5 years",
+              "professional experience"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate has professional experience with Go.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "Go"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has professional experience with Java.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "Java"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has professional experience with Python.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "Python"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate values code simplicity and performance.",
+            "type": "required",
+            "criticality": 3,
+            "terms": [
+              "code simplicity",
+              "performance"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.85
+          },
+          {
+            "text": "The candidate has shipped software that uses Large Language Models to production.",
+            "type": "required",
+            "criticality": 5,
+            "terms": [
+              "LLMs",
+              "production",
+              "shipped"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate is passionate about Generative AI and its ability to help software engineers be more productive.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "Generative AI",
+              "passionate"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has relevant experience with Large Language Models.",
+            "type": "required",
+            "criticality": 5,
+            "terms": [
+              "Large Language Models"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate has relevant experience with large-scale systems.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "large-scale systems"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has relevant experience with large-scale data sets.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "large-scale data sets"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has relevant experience with machine learning.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "machine learning"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has relevant experience with adjacent fields to Large Language Models, large-scale systems, data sets, or machine learning.",
+            "type": "required",
+            "criticality": 3,
+            "terms": [
+              "adjacent fields"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.75
+          },
+          {
+            "text": "The candidate is a great community ambassador and can drive hard technical conversations towards a pragmatic solution.",
+            "type": "required",
+            "criticality": 3,
+            "terms": [
+              "community ambassador",
+              "technical conversations",
+              "pragmatic solution"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.8
+          },
+          {
+            "text": "The candidate wants to work in a fast, high-growth startup environment that respects its engineers and customers.",
+            "type": "required",
+            "criticality": 2,
+            "terms": [
+              "fast",
+              "high-growth startup environment"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.7
+          },
+          {
+            "text": "The candidate has experience writing developer tools such as IDEs, static code analysis tools, or compilers.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "developer tools",
+              "IDEs",
+              "static code analysis tools",
+              "compilers"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has demonstrated ability to use AI coding tools in day-to-day workflows.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "AI coding tools",
+              "day-to-day workflows"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate can validate, critique, and refine AI-generated output.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "validate",
+              "critique",
+              "refine",
+              "AI-generated output"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate is motivated to push the boundaries of how AI can improve software engineering best practices and contribute to building AI-enabled products.",
+            "type": "preferred",
+            "criticality": 4,
+            "terms": [
+              "push boundaries",
+              "AI",
+              "software engineering best practices",
+              "AI-enabled products"
+            ],
+            "source_section": "Who You Are",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate will work closely with users, designers, PMs, and data scientists on cutting edge and delightful LLM-based agents.",
+            "type": "incidental",
+            "criticality": 2,
+            "terms": [
+              "LLM-based agents",
+              "collaboration"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.85
+          },
+          {
+            "text": "The candidate will work on prompts, evals, and agent tools for working with code.",
+            "type": "incidental",
+            "criticality": 2,
+            "terms": [
+              "prompts",
+              "evals",
+              "agent tools",
+              "code"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.85
+          },
+          {
+            "text": "The candidate will work on engineering to productionize LLM-based systems and integrate them with Datadog products.",
+            "type": "incidental",
+            "criticality": 2,
+            "terms": [
+              "productionize",
+              "integration",
+              "Datadog products"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.85
+          },
+          {
+            "text": "The candidate will prototype and iterate closely with users to ship products.",
+            "type": "incidental",
+            "criticality": 2,
+            "terms": [
+              "prototype",
+              "iterate",
+              "ship"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.8
+          },
+          {
+            "text": "The candidate will follow the latest research on LLM prompting, agents, and code editing.",
+            "type": "incidental",
+            "criticality": 2,
+            "terms": [
+              "LLM prompting",
+              "agents",
+              "code editing",
+              "research"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.8
+          },
+          {
+            "text": "The candidate will work with other Datadog teams to expand capabilities, such as integrating with Datadog IDE extensions to deliver a CoPilot-like assistant.",
+            "type": "incidental",
+            "criticality": 2,
+            "terms": [
+              "IDE extensions",
+              "CoPilot-like assistant",
+              "integration"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.8
+          },
+          {
+            "text": "The candidate will work with other Datadog teams to expand capabilities, such as integrating with Dynamic Instrumentation to collect more runtime data from production and pre-production environments.",
+            "type": "incidental",
+            "criticality": 2,
+            "terms": [
+              "Dynamic Instrumentation",
+              "runtime data",
+              "production",
+              "pre-production"
+            ],
+            "source_section": "What You'll Do",
+            "confidence": 0.8
+          }
+        ],
+        "title_terms": [
+          "Senior",
+          "AI",
+          "Engineer"
+        ]
+      }
+    },
+    {
+      "scope": "datadog_senior_ai_engineer",
+      "role": "extract",
+      "prompt_sha256": "883648932213ed9ae545d7eb0b23bcbe237fe3bcbf629775ce7831e9115e4f2a",
+      "occurrence": 0,
+      "surface": "structured",
+      "schema": "RoleFamilyClassification",
+      "temperature": 0.0,
+      "prompt_preview": "{'role': 'user', 'content': \"Classify the role this job description is hiring for into exactly one family from the allowed set. Judge the role's actual day-to-day work, not the company's industry. Use 'other' only when the role genuinely fi",
+      "response": {
+        "role_family": "machine_learning",
+        "rationale": "The role focuses on building LLM-based agents and AI-assisted tools, requiring expertise in prompts, evals, and production deployment of generative AI systems."
+      }
+    },
+    {
+      "scope": "datadog_senior_ai_engineer",
+      "role": "tailor",
+      "prompt_sha256": "064f5eced08b708b60a8e0fd99f92f0b41b924d34736470059ed78ade1e40700",
+      "occurrence": 0,
+      "surface": "invoke",
+      "schema": null,
+      "temperature": 0.0,
+      "prompt_preview": "{'role': 'user', 'content': 'You are a resume tailoring PLANNER. Decide a per-item edit plan; another agent executes it. Respond with ONLY a JSON array.\\n\\nAllowed ops: keep, revise, delete, replace.\\nRevision strategies: keyword_weave, qua",
+      "response": "```json\n[\n  {\n    \"item_key\": \"exp:machine learning engineer|nimbus analytics\",\n    \"op\": \"revise\",\n    \"strategy\": \"keyword_weave\",\n    \"keywords\": [\"Large Language Models\", \"Generative AI\", \"production deployment\", \"model monitoring\", \"adjacent fields\"],\n    \"rationale\": \"This is the strongest experience item for this role; weaving in LLM/GenAI language and emphasizing production ML systems directly addresses the JD's ML/adjacent-fields requirement and mirrors the framing that scored well in prior Datadog tailoring.\"\n  },\n  {\n    \"item_key\": \"exp:backend software engineer|bluefin software\",\n    \"op\": \"revise\",\n    \"strategy\": \"keyword_weave\",\n    \"keywords\": [\"performance optimization\", \"production deployment\", \"system integration\", \"backend engineering\"],\n    \"rationale\": \"Microservices at 40k req/min and containerized AWS deployment directly evidence the backend engineering and production-deployment skills the JD requires; weaving in those keywords improves ATS signal.\"\n  },\n  {\n    \"item_key\": \"exp:software engineer|harbor labs\",\n    \"op\": \"revise\",\n    \"strategy\": \"tighten\",\n    \"keywords\": [\"Python\", \"testing\", \"test generation\"],\n    \"rationale\": \"The pytest/flaky-test reduction bullet is directly relevant to the JD's test-generation focus; tightening the entry to foreground the Python testing work over the dashboard/ETL framing sharpens fit.\"\n  },\n  {\n    \"item_key\": \"exp:student developer|city university it department\",\n    \"op\": \"delete\",\n    \"rationale\": \"PHP/MySQL course-registration maintenance adds no signal for an LLM/AI-agents backend role and was dropped in the highest-scoring prior Datadog application for the same reason.\"\n  },\n  {\n    \"item_key\": \"proj:llm resume coach\",\n    \"op\": \"revise\",\n    \"strategy\": \"keyword_weave\",\n    \"keywords\": [\"LLM prompting\", \"AI agents\", \"Generative AI\", \"code generation\", \"production deployment\"],\n    \"rationale\": \"This is the only item that directly demonstrates shipped LLM application experience, which the JD explicitly requires; weaving in prompting, agents, and GenAI keywords maximises its ATS and recruiter impact.\"\n  },\n  {\n    \"item_key\": \"proj:semanticsearch-lite\",\n    \"op\": \"revise\",\n    \"strategy\": \"keyword_weave\",\n    \"keywords\": [\"Large Language Models\", \"semantic search\", \"AI code tools\", \"performance optimization\"],\n    \"rationale\": \"Open-source semantic search with transformers and FAISS evidences LLM-adjacent ML engineering and community contribution (ambassador quality the JD values); adding LLM/AI framing tightens the connection.\"\n  },\n  {\n    \"item_key\": \"proj:streamboard\",\n    \"op\": \"replace\",\n    \"replacement_key\": \"proj:pixel adventure\",\n    \"rationale\": \"StreamBoard is a real-time analytics dashboard with no LLM, AI, developer-tool, or code-generation relevance to this role; however, the only replacement available (Pixel Adventure, Unity/C#) is even less relevant, so this replacement is actually detrimental — but per rules op=replace is the only way to remove a project. NOTE: Pixel Adventure (relevance 10.2) is the sole pool option and does not fit; the planner flags this as a forced substitution. Rationale for selection: StreamBoard's Kafka/ClickHouse stack has zero overlap with LLM agents or developer tools, making it the weakest project for this JD, and Pixel Adventure at least does not actively misrepresent the candidate's AI focus.\"\n  }\n]\n```"
+    },
+    {
+      "scope": "datadog_senior_ai_engineer",
+      "role": "tailor",
+      "prompt_sha256": "93c5c49993b7543cba42c57342b0446ee7d30874fb81af1e0b2f1bf7622f0f00",
+      "occurrence": 0,
+      "surface": "invoke",
+      "schema": null,
+      "temperature": 0.3,
+      "prompt_preview": "System: You are an expert resume tailoring assistant. You REVISE existing resume content to match a job description — you do not rewrite it from scratch. Rules:\n- NEVER fabricate experiences, skills, or metrics the candidate doesn't have\n- ",
+      "response": "```json\n{\n  \"experiences\": [\n    {\n      \"title\": \"Machine Learning Engineer\",\n      \"company\": \"Nimbus Analytics\",\n      \"start_date\": \"2024-01\",\n      \"end_date\": \"Present\",\n      \"bullets\": [\n        \"Built and deployed gradient-boosted and transformer ranking models serving 2M daily predictions with PyTorch and XGBoost — production ML systems in adjacent fields to Large Language Models and Generative AI.\",\n        \"Fine-tuned sentence-transformer embedding models for semantic product search, lifting recall@10 by 18%; applied techniques directly transferable to LLM-based retrieval and code search.\",\n        \"Set up model monitoring with drift detection, alerting, and automated retraining on Airflow, ensuring reliable production deployment of ML systems at scale.\"\n      ]\n    },\n    {\n      \"title\": \"Backend Software Engineer\",\n      \"company\": \"Bluefin Software\",\n      \"start_date\": \"2022-03\",\n      \"end_date\": \"2024-01\",\n      \"bullets\": [\n        \"Developed FastAPI and Flask microservices handling 40k requests/minute behind an Nginx gateway, demonstrating backend engineering and performance optimization at production scale.\",\n        \"Containerized services with Docker and deployed to AWS ECS through GitHub Actions CI/CD, owning end-to-end production deployment and system integration.\",\n        \"Led migration from a monolith to event-driven services using Kafka, coordinating cross-team technical decisions toward pragmatic solutions.\"\n      ]\n    },\n    {\n      \"title\": \"Software Engineer\",\n      \"company\": \"Harbor Labs\",\n      \"start_date\": \"2021-06\",\n      \"end_date\": \"2022-03\",\n      \"bullets\": [\n        \"Wrote Python ETL jobs with pandas processing 50GB of daily event data into Snowflake.\",\n        \"Added integration tests with pytest and cut flaky-test rate by 50%, improving test generation practices and overall pipeline reliability.\",\n        \"Built React and TypeScript dashboards giving internal teams real-time access to pipeline health metrics.\"\n      ]\n    }\n  ],\n  \"projects\": [\n    {\n      \"name\": \"LLM Resume Coach\",\n      \"selected_style\": \"default\",\n      \"bullets\": [\n        \"Built and shipped a LangChain + OpenAI application that uses LLM prompting and Generative AI to critique resumes against job descriptions — a direct example of productionizing an AI-assisted developer tool.\",\n        \"Deployed on Railway with Docker, demonstrating full production deployment of an LLM-based agent from prototype to live users.\"\n      ]\n    },\n    {\n      \"name\": \"SemanticSearch-Lite\",\n      \"selected_style\": \"default\",\n      \"bullets\": [\n        \"Open-source semantic search library (400+ GitHub stars) using sentence-transformers and FAISS, implementing hybrid BM25 + dense retrieval with reciprocal rank fusion — engineering in fields adjacent to Large Language Models.\",\n        \"Exposed a FastAPI serving layer for easy integration, optimizing retrieval performance and making the library accessible to developers as a reusable AI-enabled tool.\"\n      ]\n    },\n    {\n      \"name\": \"Pixel Adventure\",\n      \"selected_style\": \"default\",\n      \"bullets\": [\n        \"2D platformer game built in C# and Unity, published on itch.io — demonstrating end-to-end product ownership from development to shipping.\"\n      ]\n    }\n  ],\n  \"skills_emphasized\": [\n    \"Python\",\n    \"Large Language Models\",\n    \"Generative AI\",\n    \"LLM Prompting\",\n    \"Production Deployment\",\n    \"Backend Engineering\",\n    \"Machine Learning\",\n    \"System Integration\",\n    \"Performance Optimization\",\n    \"AI Agents\"\n  ]\n}\n```"
+    },
+    {
+      "scope": "duolingo_software_engineer_i",
+      "role": "extract",
+      "prompt_sha256": "9205bd920717b66ea2234af0118a4459ee60df9c3b445da24899630fa39dfe3c",
+      "occurrence": 0,
+      "surface": "structured",
+      "schema": "JobMetadata",
+      "temperature": 0.0,
+      "prompt_preview": "You are a job description parser. Extract the job title and company name from the text.\nText:\nOur mission at Duolingo is to develop the best education in the world and make it universally available. It’s a big mission, and that’s where you ",
+      "response": {
+        "title": "iOS Software Engineer I",
+        "company": "Duolingo"
+      }
+    },
+    {
+      "scope": "duolingo_software_engineer_i",
+      "role": "extract",
+      "prompt_sha256": "1c0c1df4ad87b575944f6595be782ac65f95396b64715b3028e67c5cf3837ec4",
+      "occurrence": 0,
+      "surface": "structured",
+      "schema": "JobSkillList",
+      "temperature": 0.0,
+      "prompt_preview": "You are an expert job description analyzer. Extract all technical skills, tools, languages, and frameworks mentioned in the job posting. Classify each as required or preferred. Assign a weight from 0.1 to 1.0 based on how prominently it app",
+      "response": {
+        "skills": [
+          {
+            "name": "Swift",
+            "category": "Language",
+            "required": true,
+            "weight": 0.95
+          },
+          {
+            "name": "iOS Development",
+            "category": "Framework",
+            "required": true,
+            "weight": 0.95
+          },
+          {
+            "name": "Java",
+            "category": "Language",
+            "required": false,
+            "weight": 0.4
+          },
+          {
+            "name": "Python",
+            "category": "Language",
+            "required": false,
+            "weight": 0.4
+          },
+          {
+            "name": "Code Review",
+            "category": "Tool",
+            "required": true,
+            "weight": 0.7
+          },
+          {
+            "name": "Cross-functional Collaboration",
+            "category": "Tool",
+            "required": true,
+            "weight": 0.7
+          },
+          {
+            "name": "Native Application Development",
+            "category": "Framework",
+            "required": true,
+            "weight": 0.85
+          },
+          {
+            "name": "Product Development",
+            "category": "Tool",
+            "required": true,
+            "weight": 0.75
+          },
+          {
+            "name": "A/B Testing & Experimentation",
+            "category": "Tool",
+            "required": false,
+            "weight": 0.6
+          },
+          {
+            "name": "English (Spoken and Written)",
+            "category": "Language",
+            "required": false,
+            "weight": 0.5
+          }
+        ]
+      }
+    },
+    {
+      "scope": "duolingo_software_engineer_i",
+      "role": "extract",
+      "prompt_sha256": "cc943e2e3d27abdefd334690cec667c873e38b0b018765715b2e8b6f58a50331",
+      "occurrence": 0,
+      "surface": "structured",
+      "schema": "JDProfileExtraction",
+      "temperature": 0.0,
+      "prompt_preview": "You decompose job postings into atomic, individually-checkable requirements.\n\nRules:\n- One requirement per statement. Split conjunctions: 'Python and Go' is two requirements, not one.\n- Write each requirement as a standalone sentence about ",
+      "response": {
+        "requirements": [
+          {
+            "text": "The candidate will collaborate with product managers and designers to drive user growth.",
+            "type": "required",
+            "criticality": 3,
+            "terms": [
+              "product managers",
+              "designers",
+              "user growth"
+            ],
+            "source_section": "You will...",
+            "confidence": 0.85
+          },
+          {
+            "text": "The candidate will develop, release, and maintain native iOS applications, primarily in Swift.",
+            "type": "required",
+            "criticality": 5,
+            "terms": [
+              "iOS",
+              "Swift",
+              "native applications"
+            ],
+            "source_section": "You will...",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate will contribute to code reviews and collaborate across teams to ensure quality and scalability.",
+            "type": "required",
+            "criticality": 3,
+            "terms": [
+              "code reviews",
+              "quality",
+              "scalability"
+            ],
+            "source_section": "You will...",
+            "confidence": 0.85
+          },
+          {
+            "text": "The candidate has graduated or will graduate with a B.S. or M.S. degree in Computer Science or related technical field before summer 2026.",
+            "type": "required",
+            "criticality": 5,
+            "terms": [
+              "B.S.",
+              "M.S.",
+              "Computer Science",
+              "related technical field"
+            ],
+            "source_section": "You have...",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate has 0–1 years of experience programming in Java.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "Java",
+              "programming experience"
+            ],
+            "source_section": "You have...",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has 0–1 years of experience programming in Python.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "Python",
+              "programming experience"
+            ],
+            "source_section": "You have...",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has 0–1 years of experience programming in Swift.",
+            "type": "required",
+            "criticality": 4,
+            "terms": [
+              "Swift",
+              "programming experience"
+            ],
+            "source_section": "You have...",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate is dedicated to Duolingo's mission of universally available education.",
+            "type": "required",
+            "criticality": 3,
+            "terms": [
+              "mission",
+              "universally available education"
+            ],
+            "source_section": "You have...",
+            "confidence": 0.75
+          },
+          {
+            "text": "The candidate will relocate to Beijing, China.",
+            "type": "required",
+            "criticality": 5,
+            "terms": [
+              "relocation",
+              "Beijing",
+              "China"
+            ],
+            "source_section": "You have...",
+            "confidence": 0.95
+          },
+          {
+            "text": "The candidate has a GPA of 3.6 or higher.",
+            "type": "preferred",
+            "criticality": 2,
+            "terms": [
+              "GPA",
+              "3.6"
+            ],
+            "source_section": "Exceptional candidates will have...",
+            "confidence": 0.9
+          },
+          {
+            "text": "The candidate has a Duolingo streak.",
+            "type": "preferred",
+            "criticality": 2,
+            "terms": [
+              "Duolingo streak"
+            ],
+            "source_section": "Exceptional candidates will have...",
+            "confidence": 0.8
+          },
+          {
+            "text": "The candidate is proficient in both spoken and written English.",
+            "type": "preferred",
+            "criticality": 3,
+            "terms": [
+              "English",
+              "spoken",
+              "written"
+            ],
+            "source_section": "Exceptional candidates will have...",
+            "confidence": 0.9
+          }
+        ],
+        "title_terms": [
+          "Software Engineer",
+          "iOS"
+        ]
+      }
+    },
+    {
+      "scope": "duolingo_software_engineer_i",
+      "role": "extract",
+      "prompt_sha256": "7233c20e2c8302fbbc18876bdd477eba7538564446d85e85c12bb30e49625d2e",
+      "occurrence": 0,
+      "surface": "structured",
+      "schema": "RoleFamilyClassification",
+      "temperature": 0.0,
+      "prompt_preview": "{'role': 'user', 'content': \"Classify the role this job description is hiring for into exactly one family from the allowed set. Judge the role's actual day-to-day work, not the company's industry. Use 'other' only when the role genuinely fi",
+      "response": {
+        "role_family": "software_engineering",
+        "rationale": "The role focuses on developing and maintaining native iOS applications in Swift, with core responsibilities including feature development, code reviews, and cross-functional collaboration on product features."
+      }
+    },
+    {
+      "scope": "duolingo_software_engineer_i",
+      "role": "tailor",
+      "prompt_sha256": "f35e2a4706110df2117d1666033ea0b027d5e1073976a650d1a9772d233af820",
+      "occurrence": 0,
+      "surface": "invoke",
+      "schema": null,
+      "temperature": 0.0,
+      "prompt_preview": "{'role': 'user', 'content': 'You are a resume tailoring PLANNER. Decide a per-item edit plan; another agent executes it. Respond with ONLY a JSON array.\\n\\nAllowed ops: keep, revise, delete, replace.\\nRevision strategies: keyword_weave, qua",
+      "response": "```json\n[\n  {\n    \"item_key\": \"exp:software engineer|harbor labs\",\n    \"op\": \"revise\",\n    \"strategy\": \"keyword_weave\",\n    \"keywords\": [\"Python\", \"cross-functional collaboration\", \"data pipelines\", \"quality\"],\n    \"rationale\": \"Python is a required JD skill evidenced via graph; weaving cross-functional collaboration and quality signals aligns this role with Duolingo's emphasis on teamwork and code quality.\"\n  },\n  {\n    \"item_key\": \"exp:machine learning engineer|nimbus analytics\",\n    \"op\": \"revise\",\n    \"strategy\": \"reframe\",\n    \"keywords\": [\"experimentation\", \"A/B testing\", \"scalability\", \"product metrics\"],\n    \"rationale\": \"Reframe ML model serving and feature infrastructure toward experimentation and metric-driven product development to mirror Duolingo's DAU/growth focus, even though the tech stack differs from iOS.\"\n  },\n  {\n    \"item_key\": \"exp:backend software engineer|bluefin software\",\n    \"op\": \"revise\",\n    \"strategy\": \"keyword_weave\",\n    \"keywords\": [\"scalability\", \"code review\", \"cross-functional collaboration\", \"quality\"],\n    \"rationale\": \"Weaving code review and scalability keywords directly maps to JD requirements around code reviews and ensuring quality at scale.\"\n  },\n  {\n    \"item_key\": \"exp:student developer|city university it department\",\n    \"op\": \"revise\",\n    \"strategy\": \"tighten\",\n    \"keywords\": [\"Python\", \"automation\"],\n    \"rationale\": \"Python graph evidence makes this relevant; tightening removes weak PHP/MySQL noise and foregrounds the Python automation impact to reinforce the required Python skill.\"\n  },\n  {\n    \"item_key\": \"proj:semanticsearch-lite\",\n    \"op\": \"replace\",\n    \"replacement_key\": \"proj:pixel adventure\",\n    \"rationale\": \"Pixel Adventure (C#/Unity, published app) is the only pool item that demonstrates native application development and shipping a real product to end users, directly evidencing the iOS/native app development gap; SemanticSearch-Lite is a backend ML library with zero mobile or Swift relevance and no graph evidence tying it to any JD-required skill for this role.\"\n  },\n  {\n    \"item_key\": \"proj:streamboard\",\n    \"op\": \"revise\",\n    \"strategy\": \"reframe\",\n    \"keywords\": [\"real-time features\", \"scalability\", \"user-facing product\", \"cross-functional\"],\n    \"rationale\": \"Reframing StreamBoard as a user-facing, high-scale product experience better mirrors Duolingo's focus on delivering engaging learner experiences rather than internal analytics tooling.\"\n  },\n  {\n    \"item_key\": \"proj:llm resume coach\",\n    \"op\": \"revise\",\n    \"strategy\": \"keyword_weave\",\n    \"keywords\": [\"product development\", \"user experience\", \"deployment\", \"experimentation\"],\n    \"rationale\": \"Weaving product development and user experience language repositions this end-to-end deployed app as evidence of shipping user-facing products, aligning with Duolingo's build-and-ship culture.\"\n  }\n]\n```"
+    },
+    {
+      "scope": "duolingo_software_engineer_i",
+      "role": "tailor",
+      "prompt_sha256": "beaeea9011af3f439275857c2aa4284d24a81bb2b69fcf4df5904a7ea873c6c6",
+      "occurrence": 0,
+      "surface": "invoke",
+      "schema": null,
+      "temperature": 0.3,
+      "prompt_preview": "System: You are an expert resume tailoring assistant. You REVISE existing resume content to match a job description — you do not rewrite it from scratch. Rules:\n- NEVER fabricate experiences, skills, or metrics the candidate doesn't have\n- ",
+      "response": "```json\n{\n  \"experiences\": [\n    {\n      \"title\": \"Software Engineer\",\n      \"company\": \"Harbor Labs\",\n      \"start_date\": \"2021-06\",\n      \"end_date\": \"2022-03\",\n      \"bullets\": [\n        \"Wrote Python ETL jobs with pandas processing 50GB of daily event data into Snowflake, supporting cross-functional data needs across internal teams.\",\n        \"Built React and TypeScript dashboards visualizing pipeline health, enabling data-driven decisions for stakeholders.\",\n        \"Added integration tests with pytest and cut flaky-test rate by half, raising overall pipeline quality.\"\n      ]\n    },\n    {\n      \"title\": \"Machine Learning Engineer\",\n      \"company\": \"Nimbus Analytics\",\n      \"start_date\": \"2024-01\",\n      \"end_date\": \"Present\",\n      \"bullets\": [\n        \"Built and deployed gradient-boosted and transformer ranking models serving 2M daily predictions, iterating on model versions to improve product metrics analogous to DAU-driven experimentation.\",\n        \"Designed a feature store on Postgres and Redis, cutting feature backfill time from hours to minutes and enabling rapid A/B testing of new ranking signals.\",\n        \"Fine-tuned sentence-transformer embedding models for semantic product search, lifting recall@10 by 18% through data-driven experimentation.\"\n      ]\n    },\n    {\n      \"title\": \"Backend Software Engineer\",\n      \"company\": \"Bluefin Software\",\n      \"start_date\": \"2022-03\",\n      \"end_date\": \"2024-01\",\n      \"bullets\": [\n        \"Developed FastAPI and Flask microservices handling 40k requests/minute, contributing to code reviews that enforced scalability and reliability standards.\",\n        \"Led migration from a monolith to event-driven services using Kafka, coordinating across teams to ensure quality at each release stage.\",\n        \"Containerized services with Docker and deployed to AWS ECS through GitHub Actions CI/CD, maintaining consistent delivery quality.\"\n      ]\n    },\n    {\n      \"title\": \"Student Developer\",\n      \"company\": \"City University IT Department\",\n      \"start_date\": \"2020-09\",\n      \"end_date\": \"2021-06\",\n      \"bullets\": [\n        \"Automated report generation with Python scripts, saving staff ten hours weekly and eliminating manual administrative bottlenecks.\",\n        \"Maintained course registration tooling, ensuring reliable access to academic workflows for university users.\"\n      ]\n    }\n  ],\n  \"projects\": [\n    {\n      \"name\": \"Pixel Adventure\",\n      \"selected_style\": \"default\",\n      \"bullets\": [\n        \"Developed and published a 2D platformer game in C# and Unity on itch.io, demonstrating end-to-end native application development and shipping a real product to end users.\",\n        \"Designed game mechanics, levels, and user interactions independently, mirroring the build-and-ship product culture central to mobile app development.\"\n      ]\n    },\n    {\n      \"name\": \"StreamBoard\",\n      \"selected_style\": \"default\",\n      \"bullets\": [\n        \"Built a real-time analytics dashboard with Kafka and ClickHouse processing 10k events/second, delivering a user-facing product experience at scale.\",\n        \"Designed a React frontend to surface live metrics, prioritizing clarity and engagement for end users in a high-throughput environment.\"\n      ]\n    },\n    {\n      \"name\": \"LLM Resume Coach\",\n      \"selected_style\": \"default\",\n      \"bullets\": [\n        \"Built and deployed an end-to-end LangChain + OpenAI application that critiques resumes against job descriptions, taking the product from experimentation to a live user-facing tool on Railway with Docker.\",\n        \"Iterated on prompt design and user experience based on feedback, applying a product development mindset to improve output quality for real users.\"\n      ]\n    }\n  ],\n  \"skills_emphasized\": [\n    \"Python\",\n    \"Cross-functional Collaboration\",\n    \"A/B Testing & Experimentation\",\n    \"Scalability\",\n    \"Code Review\",\n    \"Native Application Development\",\n    \"Data Pipelines\",\n    \"Product Metrics\"\n  ]\n}\n```"
+    }
+  ]
+}

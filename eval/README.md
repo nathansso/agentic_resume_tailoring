@@ -7,12 +7,70 @@ dataset of real job descriptions, driving the **web API exactly as a user
 would** (register → upload resume → create job → analyze → tailor → export) on
 an isolated temp database.
 
+### Execution modes (issue #171)
+
+One harness, three modes with different evidentiary weight. **The mode is part
+of every number.** It is printed before and after each run and recorded in the
+JSON, the CSV and each per-task row.
+
+| Mode | What runs | What its numbers may claim |
+|---|---|---|
+| `product` | Real LLM + real embeddings, the deployed path | Tailoring quality. The only mode whose numbers describe the product. |
+| `replay` | Recorded LLM responses; all real deterministic code and real embeddings | Everything the recording covered, deterministically, at near-zero marginal cost |
+| `plumbing` (the old `--stub`) | Canned payloads, no model | Wiring, schemas, determinism. **Explicitly not tailoring quality** |
+
+Plumbing mode's canned payload returns every source bullet **verbatim** — it
+never rewrites one. That is deliberate and pinned by tests: a stub that faked
+rewriting would produce a plausible number measuring nothing. Any figure from a
+plumbing run describes the harness and the deterministic post-processing
+(bullet budget, one-page fitting, ordering, skill selection), never the rewrite.
+
 ```bash
-python eval/tailoring_benchmark.py            # real LLMs (needs API keys)
-python eval/tailoring_benchmark.py --stub     # offline, deterministic fake LLM
-python eval/tailoring_benchmark.py --judge    # + LLM-as-judge quality scores
+python eval/tailoring_benchmark.py --mode plumbing --limit 3   # offline, free
+python eval/tailoring_benchmark.py --mode product --record --limit 3
+python eval/tailoring_benchmark.py --mode replay --limit 3
+python eval/tailoring_benchmark.py --judge                     # product only
 python eval/tailoring_benchmark.py --tasks stripe_ai_engineer --limit 3
 ```
+
+`--stub` remains an alias for `--mode plumbing`.
+
+### Replay contract
+
+Cassettes live in `eval/cassettes/` and are committed. A cassette is keyed by
+`(task scope, role, sha256(rendered prompt), occurrence index)` — the occurrence
+counter matters because the tailor runs at `temperature=0.3` with
+`MAX_RETRIES = 2`, so one prompt can legitimately be invoked twice and return
+two different samples.
+
+What replay **does** reproduce:
+
+- Every deterministic line of the pipeline: parsing, matching, planning,
+  post-processing, rendering, scoring, and the whole metric suite.
+- Real embeddings — `sentence-transformers` must be installed. Semantic
+  redundancy is *not* silently disabled in replay; a missing encoder is a hard
+  error, because degrading to None would re-create #122's symptom (all four
+  redundancy modes reporting clean) inside the new mode.
+- Byte-identical metrics across consecutive replays, on both engines (#158).
+
+What replay **does not** reproduce, and the conditions it requires:
+
+- **The same task list, in the same order.** JobCard injection (#137) feeds
+  earlier completed jobs into later prompts, so replaying a subset changes the
+  prompts and is a cassette miss, not a silent divergence.
+- **A prompt change invalidates its cassette.** That is correct behaviour: it
+  makes every prompt edit an explicitly re-measured event. Re-record with
+  `--mode product --record`.
+- **`BulletSimilarityCache` batch composition still depends on which texts are
+  already cached** (residual carried forward from #158 and #122). Sorted encode
+  order fixes the batch for a given set of *new* texts, but a differently-warmed
+  cache can still encode a text in a different batch. It cannot make one process
+  disagree with itself, which is what replay determinism requires; bit-exactness
+  across differently-warmed caches is not claimed.
+- A cassette miss is **fatal** and never falls through to a live call. Misses are
+  also tallied on the session and fail the run at the end, because several call
+  sites catch every exception and would otherwise turn a miss into a silently
+  empty parse.
 
 Results land in `eval/results/` (gitignored): a JSON with per-task metrics +
 aggregate stats, a flat CSV, and per-task rendered `.tex`/`.json` under
