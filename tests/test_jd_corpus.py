@@ -401,3 +401,40 @@ def test_every_task_has_the_fields_the_benchmark_reads():
         missing = [k for k in required if not task.get(k)]
         assert not missing, f"{path.name} missing {missing}"
         assert len(task["description"]) >= MIN_DESCRIPTION_CHARS, path.name
+
+
+# ── stratified sampling ────────────────────────────────────────────────────────
+
+def test_limit_samples_across_families_not_off_the_front():
+    """A stratified corpus must not be sampled in a way that destroys the strata.
+
+    Files sort alphabetically by company, so `tasks[:limit]` returns whichever
+    families happen to start with "A" — and silently, since every reported
+    number still looks well-formed.
+    """
+    from eval.tailoring_benchmark import load_tasks
+
+    tasks = load_tasks(limit=10)
+    assert len(tasks) == 10
+    families = {t["role_family"] for t in tasks}
+    assert len(families) == len(ROLE_FAMILY_NAMES), families
+    counts = {f: sum(1 for t in tasks if t["role_family"] == f) for f in families}
+    assert set(counts.values()) == {2}, counts
+
+
+def test_limit_sampling_is_reproducible_and_in_corpus_order():
+    """Order is load-bearing: JobCard injection (#137) feeds earlier tasks into
+    later prompts, so a run's sequence must not depend on how it was drawn."""
+    from eval.tailoring_benchmark import load_tasks
+
+    first, second = load_tasks(limit=10), load_tasks(limit=10)
+    assert [t["id"] for t in first] == [t["id"] for t in second]
+    assert [t["id"] for t in first] == sorted(t["id"] for t in first)
+
+
+def test_limit_at_or_above_corpus_size_returns_everything():
+    from eval.tailoring_benchmark import load_tasks
+
+    everything = load_tasks()
+    assert len(load_tasks(limit=len(everything) + 50)) == len(everything)
+    assert len(load_tasks(limit=0)) == len(everything)

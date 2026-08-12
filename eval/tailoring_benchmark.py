@@ -452,6 +452,18 @@ def _install_stubs(profile_path: Path = DEFAULT_PROFILE) -> None:
 # ── dataset ────────────────────────────────────────────────────────────────────
 
 def load_tasks(task_ids: Optional[List[str]] = None, limit: int = 0) -> List[Dict]:
+    """The task set for one run, in a stable order.
+
+    `limit` samples **across role families**, not off the front of the list. The
+    corpus is stratified (issue #177: 30 postings in each of five families), and
+    files sort alphabetically by company, so `tasks[:limit]` would hand back a
+    dozen postings from whichever families happen to start with "A" — a
+    stratified corpus sampled in a way that destroys the stratification, and
+    silently, since every reported number would still look well-formed.
+
+    Round-robins over families in a fixed order and takes them in sorted order
+    within each, so the sample is balanced and reproducible (#158/#171).
+    """
     tasks = []
     for path in sorted(DATASET_DIR.glob("*.json")):
         task = json.loads(path.read_text(encoding="utf-8"))
@@ -462,7 +474,27 @@ def load_tasks(task_ids: Optional[List[str]] = None, limit: int = 0) -> List[Dic
         missing = set(task_ids) - {t["id"] for t in tasks}
         if missing:
             raise SystemExit(f"Unknown task id(s): {', '.join(sorted(missing))}")
-    return tasks[:limit] if limit else tasks
+    if not limit or limit >= len(tasks):
+        return tasks
+
+    by_family: Dict[str, List[Dict]] = {}
+    for task in tasks:
+        by_family.setdefault(task.get("role_family") or "", []).append(task)
+
+    sampled: List[Dict] = []
+    families = sorted(by_family)
+    depth = 0
+    while len(sampled) < limit and any(len(by_family[f]) > depth for f in families):
+        for family in families:
+            if len(by_family[family]) > depth:
+                sampled.append(by_family[family][depth])
+                if len(sampled) == limit:
+                    break
+        depth += 1
+    # Restored to corpus order so a run's task sequence stays independent of how
+    # the sample was drawn — JobCard injection (#137) makes order load-bearing.
+    order = {t["id"]: i for i, t in enumerate(tasks)}
+    return sorted(sampled, key=lambda t: order[t["id"]])
 
 
 # ── benchmark run ──────────────────────────────────────────────────────────────
