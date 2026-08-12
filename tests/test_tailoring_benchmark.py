@@ -545,3 +545,97 @@ def test_llm_judge_scores_real_resume():
     out = judge_resume_quality(content, jd, DEFAULT_PROFILE.read_text(encoding="utf-8"))
     assert out is not None
     assert 1 <= out["mean_score"] <= 5
+
+
+# ── per-stratum aggregation (issue #172) ──────────────────────────────────────
+
+def _task_row(task_id, family, level="entry", delta=10.0, attempts=None):
+    return {
+        "task_id": task_id, "mode": "plumbing",
+        "role_family": family, "level": level, "n_attempts": attempts,
+        "metrics": {"ats": {"delta": delta, "baseline_composite": 50.0,
+                            "tailored_composite": 50.0 + delta},
+                    "experience_allocation": {}, "skills": {}, "redundancy": {}},
+    }
+
+
+def test_pooled_aggregate_is_unchanged_by_the_stratum_split():
+    """The pooled figure must survive verbatim.
+
+    Every historical table in CHANGELOG.md is pooled and #171 retro-labelled
+    rather than deleted them; replacing the pooled number would break
+    comparability with everything already recorded.
+    """
+    from eval.tailoring_benchmark import _aggregate
+
+    rows = [_task_row("a", "data_science", delta=10.0),
+            _task_row("b", "ml_engineering", delta=30.0)]
+    assert _aggregate(rows)["ats_delta"]["mean"] == 20.0
+    assert _aggregate(rows)["tasks"] == 2
+
+
+def test_aggregate_by_stratum_slices_every_axis():
+    from eval.tailoring_benchmark import _aggregate_by_stratum
+
+    rows = [_task_row("a", "data_science", "entry", 10.0),
+            _task_row("b", "data_science", "intern", 20.0),
+            _task_row("c", "ml_engineering", "entry", 40.0)]
+    by = _aggregate_by_stratum(rows)
+    assert by["role_family"]["data_science"]["ats_delta"]["mean"] == 15.0
+    assert by["role_family"]["ml_engineering"]["ats_delta"]["mean"] == 40.0
+    assert by["level"]["entry"]["ats_delta"]["mean"] == 25.0
+    assert by["level"]["intern"]["tasks"] == 1
+
+
+def test_stratum_values_are_sorted_so_the_table_cannot_reorder():
+    """#158/#171: a table that reorders between runs is the same bug class."""
+    from eval.tailoring_benchmark import _aggregate_by_stratum
+
+    rows = [_task_row("a", "software_engineering"), _task_row("b", "ai_engineering"),
+            _task_row("c", "data_science")]
+    forward = list(_aggregate_by_stratum(rows)["role_family"])
+    backward = list(_aggregate_by_stratum(list(reversed(rows)))["role_family"])
+    assert forward == backward == sorted(forward)
+
+
+def test_a_task_missing_one_axis_is_skipped_only_for_that_axis():
+    from eval.tailoring_benchmark import _aggregate_by_stratum
+
+    rows = [_task_row("a", "data_science", "entry"), _task_row("b", None, "entry")]
+    by = _aggregate_by_stratum(rows)
+    assert by["role_family"]["data_science"]["tasks"] == 1
+    assert by["level"]["entry"]["tasks"] == 2
+
+
+def test_an_axis_no_task_declares_is_omitted_entirely():
+    from eval.tailoring_benchmark import _aggregate_by_stratum
+
+    rows = [_task_row("a", None, None)]
+    assert _aggregate_by_stratum(rows) == {}
+
+
+def test_n_attempts_is_reported_because_the_delta_is_a_max_over_it():
+    """Best-of-N is on by default and N is endogenous, so `ats_delta` is a max
+    over a data-dependent number of draws. The count was already written to
+    tailoring_decisions and simply never read."""
+    from eval.tailoring_benchmark import _aggregate
+
+    rows = [_task_row("a", "data_science", attempts=1),
+            _task_row("b", "data_science", attempts=2)]
+    assert _aggregate(rows)["n_attempts"]["mean"] == 1.5
+    assert _aggregate(rows)["n_attempts"]["max"] == 2.0
+
+
+def test_n_attempts_is_null_when_no_task_recorded_one():
+    from eval.tailoring_benchmark import _aggregate
+
+    assert _aggregate([_task_row("a", "data_science")])["n_attempts"] is None
+
+
+def test_stratum_columns_reach_the_csv():
+    """A CSV row is where someone re-pools the numbers without the stratum."""
+    from eval.tailoring_benchmark import _CSV_COLUMNS
+
+    names = [name for name, _ in _CSV_COLUMNS]
+    for required in ("mode", "role_family", "level", "n_attempts"):
+        assert required in names, required
