@@ -1,5 +1,44 @@
 # eval/ — offline evaluation harnesses
 
+## Ability → dataset coverage map
+
+Nine abilities are named across #172, #173 and #174. This table is the map from each
+to the dataset that measures it, the metric that reports it, and whether that
+measurement exists **today**. It is the first place to look before writing a new
+fixture: four of the nine currently have no data at all, and one has a metric suite
+with nothing to point it at.
+
+Keep it current. A new dataset that does not move a cell here is a fixture nobody
+asked for; an ability whose row stays `none` after its issue ships did not ship.
+
+| # | Ability | What it asks | Dataset today | Metric | Coverage |
+|---|---|---|---|---|---|
+| **A** | Selection | Do the right items and skills get chosen? | `jd_dataset/` × `profiles/` | `skills.selection_ratio`, `skills.matched_recall`, `experience_allocation.allocation_correlation` | **partial** — reported, but no answer key. `skill_selection_tasks/` holds the only labelled `relevant` set and is **not wired into the tailoring benchmark** |
+| **B** | Grounded inference | Can it use evidence that never names the requirement? | — | — | **none** — `keyword_coverage` is substring matching, so coverage is monotone and no edit can lower it (#127). Needs #172's β-calibrated implicitness filter |
+| **C** | Abstention | Does it refuse to fabricate? | — | `llm_judge.faithfulness` (1–5, opt-in, product only); `FAITHFULNESS_MIN` (`agents/tailor.py:93`) is a product guard, not a measurement | **indirect** — no abstention fixture exists; nothing presents a claim the profile cannot support |
+| **D** | Update durability | After a re-tailor, do prior decisions survive? | — | — | **none** — `_run_task` tailors once and never re-tailors (#173 chunk 1) |
+| **E** | Locality | Does tailoring job B degrade job A? | — | — | **none** — JobCard injection (#137) is a live cross-job channel, unmeasured |
+| **F** | Suppression | Is "that was just coursework" honoured? | — | — | **none** — needs profile-bound conversations (#178). The literature's hardest case: ImplexConv reports 55.18 supportive vs 14.84 opposed retrieval F1 |
+| **G** | Redundancy | Semantic duplication, stuffing, monotony, dilution | `jd_dataset/` × 1 profile | `agents/redundancy.py` — 4 modes + 6 counting keys | **metric yes, data no** — #122 recorded the suite reports clean across the board and could not distinguish "genuinely clean" from "too simple to generate redundancy" |
+| **H** | Action ranking | Does it rank the higher-value move above the lower? | — | — | **none** — needs execution-derived preference pairs (#174) |
+| **I** | Personalization | applied / ignored / violated | — | — | **none** — #129 and #133 shipped the machinery; nothing checks a preference reaches the rendered resume. Needs #178 + #173's `preference_adherence` axis |
+
+### Datasets, and what each is actually for
+
+| Dataset | Size | Harness | Note |
+|---|---|---|---|
+| `jd_dataset/` | 8 | tailoring benchmark | Being rebuilt to ~100 intern/entry postings across five role families (#177) |
+| `profiles/` | 1 | tailoring benchmark | Mid-level candidate; #172 replaces with 15 intern/entry profiles |
+| `ku_dataset/` | 4 | knowledge-updates eval | **Scripted by default** — the task file supplies the notes *and* the decisions, so the extractor is not under test unless `--live` |
+| `jobcard_dataset/` | 4 | JobCard eval | Cross-job memory, outcome-carrying |
+| `skill_selection_tasks/` | 2 | skill-selection tuning | Carries a labelled `relevant` answer key; unused by the tailoring benchmark |
+| `cassettes/` | 1 | replay mode | `benchmark_profile` at `--limit 3` only |
+| `tests/memory_evals/` | 5 YAML | chat-memory eval | Recall across compression; not bound to any profile |
+
+**No dataset is bound to a profile except the tailoring benchmark's own.** That is why
+abilities F and I are unmeasurable rather than merely unmeasured: a preference only means
+something relative to a profile that has the item being suppressed or promoted (#178).
+
 ## Tailoring efficacy benchmark (issue #51)
 
 Measures how much the tailoring pipeline improves resumes against a versioned
