@@ -309,12 +309,18 @@ def _stub_tailored(jd_text: str) -> Dict:
 def _stub_payload(text: str):
     """Route a formatted prompt to its canned/deterministic payload (dict/list).
 
-    Anything with no branch here (education, achievements) returns `{}` and so
-    compiles to an empty list — the same surface the constants covered before
-    #171 derived them, deliberately unchanged so this stays a source swap rather
-    than a re-baseline of what plumbing mode measures.
+    Education and achievements are derived from the profile markdown as of #172;
+    before that they returned `{}` and **plumbing mode rendered no education
+    section at all**, so a whole section the product ships was invisible to
+    every plumbing number. That was #171's recorded follow-on.
+
+    Anything still without a branch returns `{}` and compiles to an empty list.
     """
     profile = fixture()
+    if "Extract education entries" in text or "education entry" in text:
+        return profile.education
+    if "Extract achievements" in text or "achievement:" in text:
+        return profile.achievements
     if "Extract work experiences" in text:
         return profile.experiences
     if "Extract projects" in text:
