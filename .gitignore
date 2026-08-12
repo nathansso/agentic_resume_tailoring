@@ -66,6 +66,9 @@ omnium_interview_prep/
 
 # Tailoring benchmark artifacts (issue #51) - outputs, not source
 eval/results/
+# JD-text fetch cache (issue #177). A build artifact of the corpus refresh, not
+# source: eval/jd_dataset/ is the checked-in output.
+eval/.jd_cache.db
 
 # Agent scratch space and captured terminal transcripts. Working files, never
 # source — and `docs/parallel-agents.md` tells you to `git add -A`, so they
