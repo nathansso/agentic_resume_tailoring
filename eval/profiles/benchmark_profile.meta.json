@@ -1,0 +1,33 @@
+{
+  "strata": {
+    "role_family": "ml_engineering",
+    "breadth": "generalist",
+    "evidence_density": "metric_rich",
+    "redundancy": "clean"
+  },
+  "notes": "The original #51 fixture (Alex Rivera). Synthetic. Declares no `level`: it is a four-year mid-level candidate, which is out of the intern/entry domain #177 restricted the JD corpus to, and mislabelling it as `entry` would silently pollute that slice. It is kept because every historical benchmark figure is measured on it and #172's new profiles are compared against it; it should be retired from the reported strata once the intern/entry set exists.",
+  "github_metrics": {
+    "SemanticSearch-Lite": {
+      "stars": 412,
+      "languages": ["Python", "Dockerfile"],
+      "readme_length": 1840,
+      "contributors": 3,
+      "author_commits": 155,
+      "total_commits": 190,
+      "project_type": "open_source"
+    },
+    "StreamBoard": {
+      "stars": 8,
+      "languages": ["TypeScript", "Python"],
+      "readme_length": 620,
+      "contributors": 1,
+      "author_commits": 74,
+      "total_commits": 74,
+      "project_type": "self_project"
+    }
+  },
+  "distractors": {
+    "skills": [],
+    "projects": []
+  }
+}
