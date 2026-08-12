@@ -1,4 +1,5 @@
 import asyncio
+import re
 from datetime import datetime
 from uuid import UUID, uuid4
 
@@ -592,6 +593,25 @@ async def preview_tex(
 
 # ── Export job ───────────────────────────────────────────────
 
+def _content_disposition(name: str, ext: str) -> str:
+    """An attachment header that survives a non-ASCII job title.
+
+    HTTP header values are latin-1, so interpolating a raw job title into
+    `filename=` raises `UnicodeEncodeError` and 500s the export. Real titles hit
+    this constantly — en-dashes in "Software Engineer – New Grad", and boards
+    increasingly ship emoji ("🎓 New Grad"). Found when 6 of 150 benchmark tasks
+    failed on export (issue #177).
+
+    RFC 6266's answer, and the one every browser implements: an ASCII fallback in
+    `filename=` plus the true UTF-8 name in `filename*=`.
+    """
+    from urllib.parse import quote
+
+    ascii_name = re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("_") or "resume"
+    return (f'attachment; filename="tailored_{ascii_name}.{ext}"; '
+            f"filename*=UTF-8''tailored_{quote(name, safe='')}.{ext}")
+
+
 @router.get("/{job_id}/export")
 async def export_job(job_id: str, format: str = "pdf", user: User = Depends(get_current_user)):
     if format not in ("pdf", "tex", "docx"):
@@ -633,16 +653,16 @@ async def export_job(job_id: str, format: str = "pdf", user: User = Depends(get_
         return Response(
             content=content,
             media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="tailored_{job_title}.pdf"'},
+            headers={"Content-Disposition": _content_disposition(job_title, "pdf")},
         )
     if format == "tex":
         return Response(
             content=content if isinstance(content, bytes) else content.encode("utf-8"),
             media_type="text/plain",
-            headers={"Content-Disposition": f'attachment; filename="tailored_{job_title}.tex"'},
+            headers={"Content-Disposition": _content_disposition(job_title, "tex")},
         )
     return Response(
         content=content,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": f'attachment; filename="tailored_{job_title}.docx"'},
+        headers={"Content-Disposition": _content_disposition(job_title, "docx")},
     )
