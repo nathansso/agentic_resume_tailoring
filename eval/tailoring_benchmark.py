@@ -65,7 +65,8 @@ from eval.profile_meta import check_projects_exist, load_meta  # noqa: E402
 
 DATASET_DIR = ROOT / "eval" / "jd_dataset"
 RESULTS_DIR = ROOT / "eval" / "results"
-DEFAULT_PROFILE = ROOT / "eval" / "profiles" / "benchmark_profile.md"
+PROFILES_DIR = ROOT / "eval" / "profiles"
+DEFAULT_PROFILE = PROFILES_DIR / "benchmark_profile.md"
 
 BENCH_EMAIL = "benchmark@example.com"
 BENCH_PASSWORD = "benchmark-pass-123"
@@ -785,7 +786,8 @@ def _aggregate(task_results: List[Dict]) -> Dict:
 STRATUM_KEYS = ("role_family", "level")
 
 
-def _aggregate_by_stratum(task_results: List[Dict]) -> Dict:
+def _aggregate_by_stratum(task_results: List[Dict],
+                          axes: Optional[tuple] = None) -> Dict:
     """Per-stratum slices of the same metrics `_aggregate` pools.
 
     **An addition, never a replacement.** Every historical table in
@@ -799,7 +801,7 @@ def _aggregate_by_stratum(task_results: List[Dict]) -> Dict:
     axis is skipped for that axis only rather than dropped from every slice.
     """
     out: Dict[str, Dict] = {}
-    for axis in STRATUM_KEYS:
+    for axis in (axes or STRATUM_KEYS):
         buckets: Dict[str, List[Dict]] = {}
         for task in task_results:
             value = task.get(axis)
