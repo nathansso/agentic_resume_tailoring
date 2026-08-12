@@ -1,0 +1,18 @@
+{
+  "id": "litellm_ai_engineer",
+  "source": "speedyapply-ai/New Grad",
+  "company": "LiteLLM",
+  "title": "AI Engineer",
+  "location": "San Francisco, CA",
+  "url": "https://jobs.ashbyhq.com/litellm/6e025e39-6f8a-46bd-91f7-8784d1f5076b",
+  "role_family": "ai_engineering",
+  "level": "entry",
+  "posted": "2026-08-01",
+  "verified": true,
+  "verification": [
+    "own ATS",
+    "2 feeds"
+  ],
+  "description": "LiteLLM is the world's most popular AI Gateway, trusted by companies like Adobe, Netflix, and NASA. We're building the next generation of infrastructure for AI applications—and now we're building our second product.\n\nWHAT YOU WILL BE WORKING ON\n\nSkills: Python, LLM APIs, FastAPI\n\nAs the Backend LLM Engineer, you'll be responsible for ensuring LiteLLM unifies the format for calling LLM APIs in the broader OpenAI + Anthropic spec. This involves writing transformations to convert API requests from OpenAI/Anthropic spec to various LLM provider formats, building provider-agnostic unification functionality (e.g. session management across non-openai models for /v1/responses API, etc.). You'll work directly with the CEO and CTO on critical projects including:\n\n - System design for supporting provider level features at the gateway level (skills, compaction, batches, etc.)\n\n - Thinking about the developer experience - to support millions of users who leverage your work via LiteLLM's Python SDK\n\n - Building across LLM's, MCP's, and Agents by maintaining an excellent LLM interoperability layer, supporting a wide range of MCP Auth flows and enabling various Agent use-cases\n\nWhat is our tech stack\n\nThe tech stack includes Python, FastAPI, Redis, Postgres.\n\nWHO WE ARE LOOKING FOR\n\n - 1-2 years of backend/full-stack experience with production systems\n\n - Passion for open source and user engagement\n\n - Experience working with the OpenAI api (understand the difference between /chat/completions and /responses, and can speak to API-specific nuances)\n\n - Strong work ethic and ability to thrive in small teams\n\n - Eagerness to talk to users and help solve real problems\n\nWHY JOIN LITELLM?\n\n - Work directly with the founders every day.\n\n - Build products used by thousands of engineering teams around the world.\n\n - Own meaningful product decisions—not just implementation.\n\n - Move incredibly fast and see your work in production immediately.\n\n - Help define the future of AI infrastructure and developer tooling.\n\n - Competitive salary, equity, health, dental, and vision benefits.\n\nABOUT LITELLM\n\nLiteLLM is the world's most widely adopted AI Gateway. We provide a unified API for 100+ LLM providers along with routing, authentication, budgets, observability, and governance for production AI systems. Thousands of companies rely on LiteLLM to power AI in production.\n\nIf you love talking to users, building products, and shipping software that people actually use, we'd love to meet you.",
+  "scraped_at": "2026-08-11"
+}

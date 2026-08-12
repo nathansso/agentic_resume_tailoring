@@ -123,16 +123,62 @@ per component), `experience_allocation` (does text volume track JD relevance?),
 (boundary-aware term repetition). `--judge` adds `llm_judge` scores
 (relevance_balance / redundancy / faithfulness, 1–5) via `eval/llm_judge.py`.
 
-### Adding a task
+### The JD corpus (issue #177)
 
-Each task is one JSON file in `eval/jd_dataset/` with keys
-`id, source, company, title, location, url, description, scraped_at`.
-Refresh or extend the dataset from public job boards:
+The corpus is restricted to the product's actual target population: **intern and
+entry-level roles in five families**. Before #177 it was not — the scraper's own
+exclusion regex listed `intern`, so it filtered out that population, and the
+corpus contained a *Senior* AI Engineer while the benchmark profile was a
+four-year mid-level candidate. `role_level` carries weight 0.10 in
+`agents/ats_scorer.py::_WEIGHTS` and was scored against that mismatch on every
+run.
+
+Each task is one JSON file in `eval/jd_dataset/`:
+
+| field | meaning |
+|---|---|
+| `id, source, company, title, location, url, description, scraped_at` | as before |
+| `role_family` | `data_science` · `data_engineering` · `ml_engineering` · `software_engineering` · `ai_engineering` |
+| `level` | `intern` · `entry` |
+| `posted` | ISO date, or null when the feed gave none |
+| `verified` / `verification` | structural evidence the employer exists — see below |
+
+`role_family` and `level` are **written to the file, not recomputed at load
+time**: a task file must be reviewable and stable, and a classifier that ran at
+load time would silently re-label the whole corpus when it changed. They exist
+because per-stratum reporting has a JD side as well as a candidate side.
+
+**Every posting is verified** (`scripts/job_verification.py`). A fabricated or
+lead-generation listing is not a job description, and tailoring against one
+measures the pipeline's response to marketing copy. The signals are structural,
+never reputational — does the employer run its own ATS, is the posting
+corroborated across independent feeds, does it state a salary. Admission
+requires the description to have been fetched from the live URL *and* either an
+ATS host or ≥2 independent feeds.
+
+**Coverage comes from the aggregators, not from a token list.** A hand-curated
+list of ATS tokens cannot be comprehensive — 32 of 80 guessed tokens 404'd, and
+across ~110 boards the old approach reached 6 entry-level AI-engineering
+postings. So `scripts/job_sources.py` reads the community GitHub boards first,
+mines their apply links for the ATS tokens that actually exist, then reads those
+boards in full. Aggregator rows are a title and a link, so
+`scripts/job_descriptions.py` backfills bodies through a URL-keyed SQLite cache
+(`eval/.jd_cache.db`, gitignored — a build artifact, not source).
 
 ```bash
-python scripts/scrape_job_descriptions.py                    # default boards
-python scripts/scrape_job_descriptions.py --greenhouse figma --per-board 3
+python scripts/scrape_job_descriptions.py              # refresh the corpus
+python scripts/scrape_job_descriptions.py --dry-run    # report, write nothing
+python scripts/scrape_job_descriptions.py --per-family 50
 ```
+
+A refresh **replaces** the corpus rather than layering on top of it; leaving
+stale files behind is how senior postings would survive a domain restriction.
+Pass `--keep-existing` to override.
+
+Sizing: the JD is the *item* and the profile is the *subject*, so a per-family
+claim's sample size is the number of JDs in that family. The default 30 detects
+a moderate paired effect (d≈0.50) and matches LongMemEval's 30-question
+per-ability slice.
 
 The candidate profile the benchmark tailors is `eval/profiles/benchmark_profile.md`
 (override with `--profile`).

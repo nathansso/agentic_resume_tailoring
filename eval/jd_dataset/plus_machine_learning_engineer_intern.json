@@ -1,0 +1,18 @@
+{
+  "id": "plus_machine_learning_engineer_intern",
+  "source": "speedyapply-ai/Internship",
+  "company": "Plus",
+  "title": "Machine Learning Engineer Intern",
+  "location": "Santa Clara, CA",
+  "url": "https://jobs.lever.co/plus-2/5d71c173-fef1-409f-b3f0-750e3b828266",
+  "role_family": "ml_engineering",
+  "level": "intern",
+  "posted": "2026-05-22",
+  "verified": true,
+  "verification": [
+    "own ATS",
+    "2 feeds"
+  ],
+  "description": "Machine Learning Engineer Intern\nPlusAI is a Physical AI company pioneering AI-based virtual driver software for factory-built autonomous trucks. Headquartered in Silicon Valley with operations in the United States and Europe, Plus was named by Fast Company as one of the World’s Most Innovative Companies. Partners including TRATON GROUP’s Scania, MAN, and International brands, Hyundai Motor Company, Iveco Group, Bosch, and DSV are working with Plus to accelerate the deployment of next-generation autonomous trucks. If you’re ready to make a huge impact and drive the future of autonomy, Plus is looking for talented individuals to join its fast-growing teams.\n\nResponsibilities:\nMulti-Modal Feature Fusion: Develop a pipeline to ingest and synchronize disparate data streams, including raw camera frames and structured proto modules (Perception, Planning, Control). \n\n Event Classifier Development: Design and train temporal models (e.g., Video Transformers, LSTMs, or 1D-CNNs) to recognize and categorize discrete driving behaviors.\nRequired Skills:\nMust-Haves \n\n Experience with temporal data (Time-series analysis or Video Understanding). \n\n Proficiency in Python and libraries like Pandas, NumPy, and PyArrow/Parquet for handling large-scale protobuf data. \n\n Strong foundation in classification and supervised learning.\nPreferred Skills:\nNice-to-Haves \n\n Experience with distributed processing (e.g., Spark or Ray). Understanding of autonomous driving problems\nYour opportunities joining PlusAI\nWork, learn and grow in a highly future-oriented, innovative and dynamic field.\nWide range of opportunities for personal and professional development.\nCatered free lunch, unlimited snacks and beverages.\nHighly competitive salary and benefits package, including 401(k) plan.",
+  "scraped_at": "2026-08-11"
+}

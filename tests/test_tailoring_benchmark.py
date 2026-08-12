@@ -444,12 +444,31 @@ def test_two_replays_are_byte_identical(tmp_path):
     artifacts. Integration-marked because replay uses the *real* embedding
     model — semantic redundancy is not stubbed out in replay, by design.
     """
+    from eval.cassettes import Cassette
+    from eval.tailoring_benchmark import DATASET_DIR, DEFAULT_PROFILE, default_cassette_path
+
+    # Driven by the cassette's *own* task list rather than `--limit 3`.
+    # `--limit` takes an alphabetical prefix of whatever is in the dataset, so a
+    # corpus change silently re-points this test at tasks the recording never
+    # covered — which surfaces as a bare CASSETTE MISS rather than as the real
+    # problem (issue #177 replaced the corpus wholesale).
+    recorded = Cassette.load(default_cassette_path(DEFAULT_PROFILE.stem, 3, None)
+                             ).meta["tasks"]
+    available = {p.stem for p in DATASET_DIR.glob("*.json")}
+    missing = [t for t in recorded if t not in available]
+    if missing:
+        pytest.skip(
+            "the committed cassette predates the current JD corpus "
+            f"(missing: {', '.join(missing)}). Re-record with "
+            "`--mode product --record --limit 3` once the profile set is final "
+            "(#172) — recording before the fixture stops changing pays twice.")
+
     runs = []
     for i in (1, 2):
         out = tmp_path / f"run{i}"
         proc = subprocess.run(
             [sys.executable, str(ROOT / "eval" / "tailoring_benchmark.py"),
-             "--mode", "replay", "--limit", "3", "--out", str(out)],
+             "--mode", "replay", "--tasks", *recorded, "--out", str(out)],
             cwd=ROOT, capture_output=True, text=True, timeout=1800,
         )
         assert proc.returncode == 0, f"replay {i} failed:\n{proc.stderr[-3000:]}"

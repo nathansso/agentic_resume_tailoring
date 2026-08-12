@@ -1,0 +1,18 @@
+{
+  "id": "eragon_applied_ai_intern",
+  "source": "speedyapply-ai/Internship",
+  "company": "Eragon",
+  "title": "Applied AI Intern",
+  "location": "San Francisco, CA",
+  "url": "https://jobs.ashbyhq.com/eragon/0b90ea4a-8684-4ae1-a7cc-c998db6e862e",
+  "role_family": "ai_engineering",
+  "level": "intern",
+  "posted": "2026-06-03",
+  "verified": true,
+  "verification": [
+    "own ATS",
+    "2 feeds"
+  ],
+  "description": "Applied AI Intern\n Job Description \n We’re looking for an Applied AI Intern to help build and deploy production-grade AI systems. In this role, you’ll work closely with engineers and researchers to take models from concept to real-world applications.\n You’ll gain hands-on experience working across modeling, data, and systems, contributing to projects that ship to real users.\n Key Responsibilities \n Model Development: Assist in fine-tuning, evaluating, and applying machine learning models to real-world problems\n\n System Implementation: Help build and integrate AI-powered features into production systems\n\n Data & Pipelines: Work with datasets to support training, evaluation, and iteration\n\n Experimentation: Run experiments, analyze results, and iterate on model performance\n\n Evaluation & Monitoring: Contribute to evaluation frameworks and help track system performance\n\n Cross-Functional Collaboration: Work with engineering and product teams to support feature development\n\n Minimum Qualifications \n Education: Currently pursuing a Bachelor’s or Master’s in Computer Science, Engineering, or a related field\n\n Technical Skills: Proficiency in Python and familiarity with ML frameworks (e.g., PyTorch, TensorFlow)\n\n ML Fundamentals: Understanding of basic machine learning concepts and workflows\n\n Problem Solving: Ability to break down problems and contribute to practical solutions\n\n Curiosity & Ownership: Strong desire to learn and contribute in a fast-paced environment\n\n Nice to Have \n Experience with ML projects, internships, or research\n\n Familiarity with LLMs, agents, or data pipelines\n\n Experience building projects outside of coursework\n\n Interest in working on real-world AI applications",
+  "scraped_at": "2026-08-11"
+}

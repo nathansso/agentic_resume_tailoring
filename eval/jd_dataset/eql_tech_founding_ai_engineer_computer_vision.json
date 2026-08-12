@@ -1,0 +1,18 @@
+{
+  "id": "eql_tech_founding_ai_engineer_computer_vision",
+  "source": "workable",
+  "company": "EQL Tech",
+  "title": "Founding AI Engineer (Computer Vision)",
+  "location": "",
+  "url": "https://apply.workable.com/j/82B0C510DF",
+  "role_family": "ai_engineering",
+  "level": "entry",
+  "posted": "2026-07-28",
+  "verified": true,
+  "verification": [
+    "own ATS",
+    "2 feeds"
+  ],
+  "description": "Founding AI Engineer (Computer Vision)\nOn-site · Engineering, Product & Tech · Full time San Francisco, California, United States\n\nOur client is a stealth, seed-stage startup building an AI-powered wearable platform for industrial field technicians - running a real-time computer-vision and agentic AI system directly on smart-glasses hardware, live today with major data-center, energy, and industrial customers across multiple countries. Backed by a $5M seed round and founded by researchers from Harvard/NASA (computer vision, published at NeurIPS and ICCV) and MIT (machine learning, ex-quant researcher).\nThe bet: computer vision and agentic vision-language models (VLMs) grounded in real integrations with legacy enterprise systems (ServiceNow, SAP, Salesforce) - not another LLM wrapper. The industrial data this generates is also laying the groundwork for robotics automation down the line.\nAs Founding AI Engineer, you'll own the AI core: an agentic vision-language model (VLM) system doing multimodal visual reasoning, evals, and model orchestration, running on real hardware against real industrial workflows - not benchmark demos.\nWhat you'll do\n\n- Build and ship agentic VLM systems that reliably do visual reasoning in production (detection, segmentation, image/video understanding)\n- Own model orchestration and build real evals discipline (ground-truth, trajectory, or regression harnesses)\n- Work directly with the founding team, shaping the AI roadmap from day one\nLocation & culture\nFully on-site in the SF Bay Area. The founding team lives and works together for the first several months in a shared house before moving to a standard office - expect an intense, in-person, roughly 9-9-6 pace. Hours flex for exceptional, senior talent; the priority is getting the right person, not saving on salary.\nRequirements\nEssential\n\n- 1–5 years applied AI/ML experience, ideally computer vision or multimodal — a practical builder, not a career academic\n- Has shipped multimodal/CV systems to production in the VLM era, owning the model layer end-to-end\n- Applied VLM/multimodal engineering specifically — vision-language, not sensor-fusion, audio-only, or time-series\n- Applied agentic AI/model orchestration plus real evals discipline\n- Startup or AI-team production experience, ideally as founder/CTO/founding engineer\nParticularly valuable\n\n- Edge/on-device inference; on-prem serving and fine-tuning (vLLM, SFT, quantization)\n- RAG against knowledge bases\n- Production AR/wearable AI or autonomous-driving CV experience\n- Industrial domain exposure\nBenefits\nCompensation & benefits\n\n- Base: $180K–$240K\n- Equity: 0.25%–0.75%\n- Visa sponsorship available (O-1, TN, E-3, H-1B1, H-1B transfer, F-1 OPT/STEM OPT)\nHow to apply: resume plus a short description of the most complex production VLM/CV system you've shipped.",
+  "scraped_at": "2026-08-11"
+}

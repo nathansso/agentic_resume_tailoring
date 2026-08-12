@@ -1,0 +1,18 @@
+{
+  "id": "hayden_ai_associate_data_scientist",
+  "source": "speedyapply-ai/New Grad",
+  "company": "Hayden AI",
+  "title": "Associate Data Scientist",
+  "location": "San Francisco, CA",
+  "url": "https://jobs.ashbyhq.com/haydenai/6951fb04-478b-46f5-b918-123a69a28925",
+  "role_family": "data_science",
+  "level": "entry",
+  "posted": "2026-07-23",
+  "verified": true,
+  "verification": [
+    "own ATS",
+    "2 feeds"
+  ],
+  "description": "Associate Data Scientist\n About Us \n At Hayden AI, we are on a mission to harness the power of computer vision to transform the way transit systems and other government agencies address real-world challenges.\n From bus lane and bus stop enforcement to transportation optimization technologies and beyond, our innovative mobile perception system empowers our clients to accelerate transit, enhance street safety, and drive toward a sustainable future.\n Job Summary: \n Hayden AI seeks a Data Scientist to support a diverse set of stakeholders with Data and Analytics needs. This is a great opportunity for someone who wants to deliver a big impact: you’ll be supporting the Data Science team and operate at the intersection of Data Engineering, Analytics and Data Science. You will work with transit agencies, the customer success team, finance, product, company executives, and engineers. You will enable all of them to get their data questions answered in a timely manner with a high accuracy.\n \n Responsibilities: \n Create and improve standardized metrics from foundational datasets using dbt models and AWS Glue jobs\n\n Create and improve compelling data stories, visualizations and dashboards based on stakeholder and UX feedback\n\n Create data reports that answer ad hoc requests from cross-functional teams for impact analyses, anomaly investigations and root cause analyses, etc.\n\n Serve as first responder for data discrepancy and freshness issues.\n\n Translate business questions into data requirements, acting as the interface between customer-facing teams and the data team.\n\n Monitor data quality and completeness in data processing steps across multiple fleets, flagging issues and driving fixes.\n\n Support data scientists by preparing datasets, performing exploratory analysis, and providing review and feedback on team analyses.\n\n Communicate findings and recommendations clearly to both technical and non-technical stakeholders.\n\n Required Qualifications: \n Master's in Data Science, Statistics, Computer Science, Economics, Transportation Engineering, or a related field.\n\n 6+ months of Data Science related work, projects or internships.\n\n Strong SQL skills and experience working with data warehouse systems such as Amazon Redshift, Google BigQuery, or Snowflake.\n\n Strong knowledge of Python for data manipulation and analysis (e.g., Pandas, NumPy).\n\n Experience with dbt, AWS Glue, or similar data transformation and pipeline tools.\n\n Experience building and maintaining dashboards in BI tools such as Tableau or Looker.\n\n Solid understanding of descriptive statistics and ability to interpret analytical results.\n\n Strong communication skills with the ability to present findings to both technical and business audiences.\n\n Preferred Qualifications: \n Previous experience working with geospatial analytics and spatial datasets.\n\n Experience with large-scale time-series and mobility datasets (e.g., GTFS, GPS traces, transit logs).\n\n Experience with Grafana or similar operational monitoring tools.\n\n Exposure to cloud platforms, especially AWS.\n\n Prior experience in a startup environment and a desire to make a significant impact.",
+  "scraped_at": "2026-08-11"
+}
