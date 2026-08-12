@@ -6,6 +6,63 @@ Entries titled `PRD NN — …` are historical: they predate the move to issue-d
 
 Benchmark figures below are labelled with the **execution mode** that produced them (issue #171). Entries written before #171 have been retro-labelled in place: `--stub` runs are **plumbing** mode and describe the harness, not tailoring quality. Nothing was deleted.
 
+**Benchmark figures from 2026-08-11 onward are measured on a different corpus** (issue #177): 150 intern/entry postings across five role families, replacing the 8 mid-level-and-senior postings every earlier figure was measured on. Numbers either side of that line are not comparable. Nothing was deleted.
+
+---
+
+## Issue 177 — Entry/intern JD corpus: domain-scoped postings across five role families
+**Status:** complete | **Tests:** 1278 pass on SQLite (129 new)
+
+The corpus contradicted the product it measures. `scripts/scrape_job_descriptions.py:47` put **`intern` on its `EXCLUDE` regex** — filtering out the exact population ART targets — and the 8 postings it produced included a *Senior* AI Engineer and a research engineer, while `eval/profiles/benchmark_profile.md` is a four-year mid-level candidate. `role_level` carries weight 0.10 in `agents/ats_scorer.py::_WEIGHTS` and was scored against that mismatch on every benchmark run in this repo's history.
+
+### What shipped
+- **150 postings, 30 per family** across data science, data engineering, ML engineering, software engineering and AI engineering. 100 entry / 50 intern, **129 distinct companies, 30 distinct companies within every family**, no two tasks sharing a description. 2,132 in-domain verified candidates were reachable, so the cap is a choice rather than a ceiling.
+- **`role_family` and `level` are written to each file, not recomputed at load time.** A task file must be reviewable and stable, and a classifier running at load time would silently re-label the whole corpus when it changed. Per-stratum reporting has a JD side as well as a candidate side.
+- **Coverage is architectural, not a longer token list.** ART's scraper knew 5 Greenhouse + 2 Lever tokens; across ~110 hand-guessed tokens on three ATS platforms it could reach **6 entry-level AI-engineering postings and 5 data-science ones**, and 32 of 80 guessed tokens 404'd. Ported from the sibling `Job_Tracker` project: read the community GitHub boards first, mine their apply links for the ATS tokens that *actually exist*, then read those boards in full. That found **405 live tokens and 35,894 raw postings**, 2,132 of them in-domain and verified.
+- **Every posting is structurally verified** (`scripts/job_verification.py`, ported from the tracker's `legitimacy.py`). A lead-generation listing is not a job description, and tailoring against one measures the pipeline's response to marketing copy. Signals are structural, never reputational — own ATS, corroboration across independent feeds, a stated salary. Admission requires the body fetched from the live URL *and* either an ATS host or ≥2 independent feeds.
+- **Selection is deterministic *and* representative.** Sorting by company and taking the first N would hand each 30-slot family to companies beginning with "A" — deterministic and useless as a sample. Allocation round-robins over employers instead.
+- **Three deduplication defects, each found by measuring the first pull.** The same role posted under several locations; one employer under two spellings (`AEG` / `AEG Worldwide`, `Aquatic Capital` / `Aquatic`, `ASSYST, Inc.` / `Assyst`), compared on **word tokens** because the stripped form both under-matches (`aeg` ≠ `aegworldwide`) and over-matches ("Meta" into "Metabase"); and one description under two ids — in the Microsoft case under two *different role families*, which would have made a per-family contrast partly compare a posting with itself.
+- **Tests (129 new).** `tests/test_jd_corpus.py` (62), `tests/test_job_sources.py` (35), `tests/test_job_verification.py` (29), 3 on the export fix. All offline.
+
+### Re-baseline
+
+**Mode: plumbing** — canned payloads return every source bullet verbatim, so these describe the harness and the deterministic post-processing, not tailoring quality (#171). 150/150 tasks complete.
+
+| metric | mean | min | max |
+|---|---|---|---|
+| `ats_delta` | **25.7** | 3.8 | 45.0 |
+| `baseline_composite` | 63.3 | 37.0 | 88.3 |
+| `tailored_composite` | 89.0 | 76.0 | 95.7 |
+| `skills_rendered` | 14.2 | 9.0 | 18.0 |
+| `skills_selection_ratio` | 0.443 | 0.281 | 0.562 |
+| `allocation_correlation` | 0.106 | −1.0 | 1.0 |
+| `max_bullet_df` | 0.123 | 0.111 | 0.154 |
+| `leading_verb_entropy` | 0.969 | 0.958 | 0.973 |
+| `mtld` | 240.3 | 207.2 | 253.9 |
+| `mean_new_information` | 0.996 | 0.986 | 1.0 |
+
+**The strata disagree, which is the point** — and they disagree in plumbing mode, before #172 adds a single profile:
+
+| role family | n | `ats_delta` | baseline | tailored |
+|---|---|---|---|---|
+| ml_engineering | 30 | **30.1** | 59.3 | 89.5 |
+| ai_engineering | 30 | **29.3** | 57.7 | 87.0 |
+| software_engineering | 30 | **23.4** | 66.2 | 89.6 |
+| data_engineering | 30 | **23.0** | 66.5 | 89.5 |
+| data_science | 30 | **22.8** | 66.8 | 89.6 |
+
+A 7.3-point spread in `ats_delta` and 9.1 in `baseline_composite`, with a legible mechanism: the fixture candidate already matches DS/DE/SWE postings well (baseline 66–67) and matches AI/ML postings poorly (57–59), so tailoring has more headroom there. Pooled into one number — which is all the harness could report before — that finding does not exist.
+
+### Deviations from spec
+- **The 20-per-family target in the issue was not reachable when it was written, and the issue was wrong about why.** Measured before building: across ~110 boards on Greenhouse, Lever and Ashby, only software engineering cleared 20 (98 available); ML had 10, AI 5, DS 5, DE 4. Adding Ashby as a third platform contributed **+19 total and +0 data science**. The constraint was never the token list's length — it was that guessing tokens does not scale. Porting the tracker's discovery mechanism moved the ceiling from 36 to 2,132, and 30/family became comfortable.
+- **A production bug was found and fixed here, which is scope the issue did not ask for.** `jobs_router.py` interpolated the raw job title into a `Content-Disposition` header; HTTP header values are latin-1, so an en-dash or emoji in a title raised `UnicodeEncodeError` and returned a **500 instead of a resume**. 6 of 150 tasks failed on it. Real board titles carry en-dashes constantly. Fixed per RFC 6266 (ASCII fallback + `filename*=UTF-8''`). **The old corpus was hand-picked and ASCII, so the harness structurally could not see this** — the same class of blindness #171 and #155 each recorded, and the third instance of "the fixture was too clean to fire the bug".
+- **`--limit` was silently destroying the stratification, and this ships fixed rather than filed.** `load_tasks` returned `tasks[:limit]` over a company-alphabetical listing, so `--limit 12` on a five-family corpus returned one or two families while every reported number still looked well-formed. Harmless at 8 tasks, a trap at 150 — so it is fixed by the change that creates the hazard rather than left for #172. Sampling now round-robins across families and restores corpus order before returning, since JobCard injection (#137) makes task sequence load-bearing.
+- **Replacing the corpus invalidates the committed cassette, and it is deliberately not re-recorded.** Its three task ids no longer exist. #172 replaces the profile too, and #171's deviations record paying for the same recording twice for exactly this reason — recording before the fixture stops changing pays twice. The replay determinism test now drives `--tasks` from the cassette's own task list instead of `--limit 3` (which silently re-points at uncovered tasks and surfaces as a bare `CASSETTE MISS`) and skips with an explicit re-record instruction. **#172 must re-record once its profile set is final.**
+- **`junior` / `jr.` were not entry markers.** Those postings entered only through the years-of-experience gate, so a "Jr. Data Scientist" with no stated years was silently dropped. Added.
+- **The corpus is all current inventory, not multi-year.** The tracker's cache spans 2026-08-01 → 2026-08-11; its 1,549 "orphaned" URLs are postings that dropped off the active list during those eleven days, not archives. Breadth of sources, not history, is what fixed the supply — so the multi-year idea was not pursued. The Simplify/vanshb03 archive repos carry metadata plus frequently-dead links, so descriptions would need Wayback reconstruction for marginal gain against 2,132 current postings.
+- **Only 50 intern postings, and that is seasonal rather than structural.** Scraped in August; the 2027 cycle opens in earnest around September–November. The `level` label is carried on every posting so the stratum is sliceable now, but the intern share should be expected to move on a later refresh.
+- **The JD-text cache is warm-started from the sibling project, once.** `eval/.jd_cache.db` (gitignored) was seeded from `Job_Tracker/jd_cache.db` rather than re-requesting ~2,000 URLs the user's own tooling had already fetched. The schema matches exactly and it is a cache, not a source of truth: a cold run refetches and produces the same corpus. It is politeness toward third parties, not a dependency — but a fully cold rebuild is correspondingly slower than the run recorded here.
+
 ---
 
 ## Issue 171 — Benchmark execution modes: product, replay, plumbing
