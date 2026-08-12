@@ -1,0 +1,17 @@
+{
+  "id": "kargo_agentic_ai_engineer",
+  "source": "greenhouse",
+  "company": "Kargo",
+  "title": "Agentic AI Engineer",
+  "location": "Locations: San Francisco",
+  "url": "https://job-boards.greenhouse.io/kargo/jobs/6100171004",
+  "role_family": "ai_engineering",
+  "level": "entry",
+  "posted": "2026-06-23",
+  "verified": true,
+  "verification": [
+    "own ATS"
+  ],
+  "description": "At Kargo, our mission is to build a connective tissue between the physical world of freight and the digital ecosystem used to manage it. We believe that advancements in smart infrastructure are critical to enabling a safer and more efficient future for logistics.  Our loading dock sensor platform verifies all incoming and outgoing freight, aggregating data that enables shippers and carriers to efficiently manage dock operations, switch out suppliers and understand material flow in real time.\n\nWe care deeply about delivering the best solutions for our customers. As a member of the Kargo team, you will have the opportunity to develop and deploy tomorrow’s hardware & software solutions and help revolutionize logistics.\n\nResponsibilities\n\n- Build AI agents that autonomously navigate websites and execute complex workflows.\n\n- Develop browser automation solutions using Playwright, Selenium, or similar frameworks.\n\n- Design agent architectures leveraging LLMs, tool calling, memory, and planning capabilities.\n\n- Integrate AI agents with APIs, SaaS platforms, and internal systems.\n\n- Improve agent reliability through evaluation, testing, monitoring, and guardrails.\n\n- Optimize agent performance, scalability, and operational cost.\n\n- Collaborate with product and engineering teams to identify and automate high-value workflows.\n\n- Stay current on emerging agent frameworks, models, and AI technologies.\n\nExperience\n\n- 3+ years of software engineering experience building production systems.\n\n- 1+ years experience building agentic workflows.\n\n- Strong Python programming skills.\n\n- Experience with LLMs, agent frameworks and browser automation tools.\n\n- Experience integrating APIs and third-party services.\n\n- Familiarity with cloud platforms such as AWS or GCP.\n\n- Startup experience and ability to work in a fast-paced environment is preferred.\n\n- BS/MS in Computer Science, Engineering, AI, or a related field.\n\nKargo is an equal opportunity/affirmative action employer committed to an inclusive and diverse workplace. All qualified applicants will receive consideration for employment without regards to race, color, religion, sex, sexual orientation, gender identity, national origin, disability status, protected veteran status or any other basis prohibited by law. We also consider qualified applicants with criminal histories consistent with applicable federal, state and local law.",
+  "scraped_at": "2026-08-11"
+}

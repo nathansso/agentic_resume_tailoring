@@ -1,0 +1,18 @@
+{
+  "id": "plus_data_engineer",
+  "source": "speedyapply-ai/New Grad",
+  "company": "Plus",
+  "title": "Data Engineer",
+  "location": "Santa Clara, CA",
+  "url": "https://jobs.lever.co/plus-2/083142f4-70ed-40f4-8726-a5f99ea52e36",
+  "role_family": "data_engineering",
+  "level": "entry",
+  "posted": "2026-06-14",
+  "verified": true,
+  "verification": [
+    "own ATS",
+    "2 feeds"
+  ],
+  "description": "Data Engineer\nPlusAI is a Physical AI company pioneering AI-based virtual driver software for factory-built autonomous trucks. Headquartered in Silicon Valley with operations in the United States and Europe, Plus was named by Fast Company as one of the World’s Most Innovative Companies. Partners including TRATON GROUP’s Scania, MAN, and International brands, Hyundai Motor Company, Iveco Group, Bosch, and DSV are working with Plus to accelerate the deployment of next-generation autonomous trucks. If you’re ready to make a huge impact and drive the future of autonomy, Plus is looking for talented individuals to join its fast-growing teams.\n\nResponsibilities: \nCreate and maintain optimal data processing pipeline architecture\n\n Build the infrastructure required for optimal extraction, transformation, and loading of data using SQL and big data technologies.\n\n Identify, design, and implement internal process improvements: automating manual processes, optimizing data delivery, re-designing infrastructure for greater scalability, etc.\n\n Build analytics tools that utilize the data pipeline to provide actionable insights into customer acquisition, operational efficiency and other key business performance metrics\n\n Interpret data, analyze results using statistical techniques and provide ongoing reports \n\n Identify, analyze, and interpret trends or patterns in complex data sets\n\n Work with stakeholders including the Executive, Engineering, and Operation teams to assist with data-related technical issues and support their data infrastructure, analysis, and reporting needs\n\n Keep our data secure through multiple data centers and AWS regions\nRequired Skills:\nMS in Computer Science, Electrical Engineering, or related field\n\n 1+ years of software engineering experience\n\n Good oral and written communication skills\n\n Expertise in Python, SQL, microservices, databases, data pipelines\n\n Technical expertise regarding data models, database design and development, data mining and segmentation techniques\n\n Experience with large scale data processing, e.g. MapReduce, Spark, Kafka\n\n Experience with AWS core technologies such as S3, EC2, RDS\n\n Extensive software design and development skills\n\n Ability to learn and adapt to new technologies and contribute in a productive environment.\n\n Strong knowledge of and experience with reporting packages\nPreferred Skills\nExperience with deep learning frameworks (e.g. TensorFlow, PyTorch)\n\n Experience working with autonomous vehicles or robotics.\nYour opportunities joining PlusAI\nWork, learn and grow in a highly future-oriented, innovative and dynamic field.\nWide range of opportunities for personal and professional development.\nCatered free lunch, unlimited snacks and beverages.\nHighly competitive salary and benefits package, including 401(k) plan.",
+  "scraped_at": "2026-08-11"
+}

@@ -1,0 +1,18 @@
+{
+  "id": "assistrx_data_engineer",
+  "source": "speedyapply-ai/New Grad",
+  "company": "AssistRX",
+  "title": "Data Engineer",
+  "location": "USA",
+  "url": "https://apply.workable.com/assist-rx/j/7F761604FA/",
+  "role_family": "data_engineering",
+  "level": "entry",
+  "posted": "2026-08-06",
+  "verified": true,
+  "verification": [
+    "own ATS",
+    "2 feeds"
+  ],
+  "description": "AssistRx, LLC has an opening for the position of Data Engineer (Ref# DE68SRM). \n Work Location: Position may telecommute / work remotely from anywhere in the U.S.\n Job Duties: Build ETL (extract, transform, and loading) jobs using Azure Data Factory for internal projects and externally facing customers that use various platforms such as Azure, Salesforce, and SFTP technologies. Develop ETL jobs that manipulate and transfer large volumes of data and perform quality checks. Monitor active ETL jobs in production. When ETL jobs fail, log into the environment to determine what failed and work on the issue or collaborate with team members to resolve the failure. Create Azure Data Factory pipelines to process the data and manipulate and clean the data using SQL scripts. Assist with the build out data lineage artifacts to ensure all current and future systems are properly documented. Assist with the build out design/mapping documentation to ensure development is clear and testable for QA (quality assurance) and UAT (user acceptance testing) purposes. Help to assess current and future data transformation needs to recommend, develop, and train new data integration tool technologies. Build ETL jobs for the new Snowflake data platform initiative to help centralize all data for operational and analytical reporting needs. Assist with discovering efficiencies with shared data processes and batch schedules to help ensure no redundancy and smooth operations. Assist with the data quality analyst to implement checks and balances across all jobs to ensure data quality throughout the entire environment for current and future batch jobs. Use of Azure Data Factory, Apache Kafka, SQL, Python, Scala, Hadoop, Spark, Snowflake, Salesforce, Azure, AWS, and SQL Server.\n Requirements \n Bachelor’s degree or foreign academic equivalent in Computer Science, Computer Engineering, Data Analytics, Information Systems, or a related field. Plus 1 year of experience in the job offered or a related occupation including Programmer Analyst or related experience. Position requires 1 year of experience with ETL, Python, and SQL. 40hrs/week.\n Benefits \n Application Instructions: To apply, please MAIL resume to the following address, ensuring to indicate the position reference code (Ref# DE68SRM) for which you are applying. Mail to: AssistRx, LLC, Attn: Lisa Beard, Sr. Human Resources Business Partner, 495 N. Keller Rd., Suite 100, Maitland, FL 32751.",
+  "scraped_at": "2026-08-11"
+}

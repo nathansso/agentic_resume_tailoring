@@ -571,3 +571,34 @@ def test_layout_is_not_reachable_across_users(isolated_engine, jobs_client):
         f"/api/jobs/{job.job_id}/layout",
         json={"section_order": ["skills"]}).status_code == 403
     assert jobs_client(bob).delete(f"/api/jobs/{job.job_id}/layout").status_code == 403
+
+
+# ── export filenames (issue #177) ─────────────────────────────────────────────
+
+def test_content_disposition_survives_a_non_ascii_job_title():
+    """HTTP headers are latin-1, so a raw title 500s the export.
+
+    Found when 6 of 150 benchmark tasks failed: real board titles carry
+    en-dashes ("Software Engineer - New Grad" with U+2013) and increasingly
+    emoji. RFC 6266's answer is an ASCII fallback plus a UTF-8 `filename*`.
+    """
+    from web.routers.jobs_router import _content_disposition
+
+    for title in ("\U0001f393 New Grad SWE", "Software Engineer \u2013 New Grad",
+                  "Ingenieur Donn\u00e9es", "ML Engineer"):
+        header = _content_disposition(title, "pdf")
+        header.encode("latin-1")  # must not raise — this is the actual bug
+        assert "filename=" in header and "filename*=UTF-8''" in header
+
+
+def test_content_disposition_ascii_fallback_is_sanitized():
+    from web.routers.jobs_router import _content_disposition
+
+    header = _content_disposition("Software Engineer \u2013 New Grad", "tex")
+    assert 'filename="tailored_Software_Engineer_New_Grad.tex"' in header
+
+
+def test_content_disposition_never_produces_an_empty_filename():
+    from web.routers.jobs_router import _content_disposition
+
+    assert 'filename="tailored_resume.pdf"' in _content_disposition("\U0001f393", "pdf")
