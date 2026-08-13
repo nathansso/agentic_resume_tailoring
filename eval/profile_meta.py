@@ -68,12 +68,18 @@ class ProfileMeta:
     def __init__(self, strata: Optional[Dict[str, str]] = None,
                  github_metrics: Optional[Dict[str, Dict]] = None,
                  distractors: Optional[Dict[str, List]] = None,
-                 notes: str = "", source: Optional[Path] = None):
+                 notes: str = "", source: Optional[Path] = None,
+                 retired: bool = False):
         self.strata = dict(strata or {})
         self.github_metrics = dict(github_metrics or {})
         self.distractors = dict(distractors or {})
         self.notes = notes
         self.source = source
+        # A fixture kept for provenance but out of the current domain. It still
+        # runs when named explicitly; it is not swept up by suite discovery, so
+        # a retired candidate cannot leak into a reported stratum. See
+        # `eval/benchmark_suite.py::discover_profiles`.
+        self.retired = bool(retired)
 
     @property
     def cell(self) -> str:
@@ -152,9 +158,14 @@ def parse_meta(raw: Dict, source: Optional[Path] = None) -> ProfileMeta:
             raise ProfileMetaError(
                 f"{label}: distractors[{key!r}] must be a list")
 
+    retired = raw.get("retired", False)
+    if not isinstance(retired, bool):
+        raise ProfileMetaError(f"{label}: 'retired' must be true or false")
+
     return ProfileMeta(strata=strata, github_metrics=metrics,
                        distractors=distractors,
-                       notes=str(raw.get("notes") or ""), source=source)
+                       notes=str(raw.get("notes") or ""), source=source,
+                       retired=retired)
 
 
 def check_projects_exist(meta: ProfileMeta, project_names: List[str]) -> None:

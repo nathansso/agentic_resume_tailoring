@@ -5,7 +5,8 @@
     "evidence_density": "metric_rich",
     "redundancy": "clean"
   },
-  "notes": "The original #51 fixture (Alex Rivera). Synthetic. Declares no `level`: it is a four-year mid-level candidate, which is out of the intern/entry domain #177 restricted the JD corpus to, and mislabelling it as `entry` would silently pollute that slice. It is kept because every historical benchmark figure is measured on it and #172's new profiles are compared against it; it should be retired from the reported strata once the intern/entry set exists.",
+  "notes": "The original #51 fixture (Alex Rivera). Synthetic. Declares no `level`: it is a four-year mid-level candidate, which is out of the intern/entry domain #177 restricted the JD corpus to, and mislabelling it as `entry` would silently pollute that slice. RETIRED as of #172, which is the retirement its earlier note said to perform once the intern/entry set existed: it is skipped by suite discovery and still runs when named explicitly, so the committed cassette and every historical figure keep working. Not edited, for the same reason. Recorded on retirement: `agents/ats_scorer.py::_detect_level` reads this résumé as **lead** level, because the bullet 'saving staff ten hours weekly' contains `staff` and the detector returns the highest tier matched anywhere in the text — so `role_level` (weight 0.10) has scored a lead-level candidate against entry-level postings on every benchmark run in this repo's history. See eval/profile_checks.py.",
+  "retired": true,
   "github_metrics": {
     "SemanticSearch-Lite": {
       "stars": 412,

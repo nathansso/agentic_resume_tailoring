@@ -40,6 +40,7 @@ from typing import Dict, List, Optional
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from eval.profile_meta import load_meta  # noqa: E402
 from eval.profile_ontology import REPORTED_STRATA  # noqa: E402
 from eval.tailoring_benchmark import (  # noqa: E402
     MODE_PLUMBING,
@@ -56,13 +57,21 @@ BENCHMARK = ROOT / "eval" / "tailoring_benchmark.py"
 
 
 def discover_profiles(profiles_dir: Path = PROFILES_DIR) -> List[Path]:
-    """Every profile markdown, in a stable order.
+    """Every profile markdown the suite reports on, in a stable order.
 
     Sorted on filename, which is content rather than filesystem order — a
     `glob` is not ordered, and an unordered iteration feeding a reported table
     is the bug class #158 and #171 each paid for.
+
+    Profiles whose sidecar sets `"retired": true` are skipped. `#177` restricted
+    the corpus to intern/entry postings and the original `benchmark_profile.md`
+    is a four-year mid-level candidate, so pooling it into a per-stratum table
+    would report an out-of-domain candidate under whatever slice it landed in.
+    It is still runnable by name (`--profiles eval/profiles/benchmark_profile.md`),
+    which is what the committed cassette and every historical figure need.
     """
-    return sorted(Path(profiles_dir).glob("*.md"))
+    return [path for path in sorted(Path(profiles_dir).glob("*.md"))
+            if not load_meta(path).retired]
 
 
 def run_profile(profile: Path, out_dir: Path, mode: str, limit: int,
