@@ -10,6 +10,34 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 180 — Deterministic ordering: an insertion ordinal for every `created_at`-ordered read
+**Status:** complete | **Tests:** 1298 pass on SQLite / 1307 on Postgres (21 new)
+
+`load_chat_history` ordered only on `ChatMessage.created_at`, which has no tiebreaker. Messages written in the same clock tick came back in arbitrary order, so a conversation could render with the assistant's reply above the user's question. A sweep found the same pattern at **21 sites** across three tables' worth of reads; #180's non-goals scoped the fix to chat, and that was deliberately overridden — all of them are fixed here.
+
+The bug class is the one #158 and #171 each paid for already: an ordering not fully determined by content, relied on as if it were.
+
+### What shipped
+
+- **A `seq` insertion ordinal on five tables** — `ChatMessage`, plus `Experience` / `Education` / `Achievement` / `Project` — assigned at write time through one shared `database/db.py::next_seq` helper at all 11 write sites (8 in the parser's résumé and LinkedIn paths, 2 in the chat-capture path, 1 in `save_chat_message`). Insertion order is the only thing that carries the meaning: two identical chat messages are legitimately identical, and nothing in a résumé row says which of two entries came first in the source document, so no content key can order either. It is recorded rather than inferred.
+- **A plain `INTEGER` column, not an autoincrement.** SQLite cannot add `AUTOINCREMENT` to an existing table and Postgres would need `BIGSERIAL`, so a portable `ALTER` through this repo's migration list has to carry an ordinal the write path assigns itself.
+- **Reads order on `(seq IS NULL, seq, created_at, <pk>)`.** The leading term is load-bearing: SQLite and Postgres disagree about where NULLs sort, so a row written by a path that did not assign an ordinal would land in a different place on the two engines — the divergence #149 exists to catch. Unassigned rows sort last, explicitly, rather than inheriting either engine's default. The trailing terms keep the order defined if two concurrent writers compute the same ordinal.
+- **No unique constraint on `seq`.** `save_chat_message` is documented never to raise, so a constraint violation there would silently drop a user's message. A race degrades to the old behaviour instead of losing data.
+- **Backfills for rows predating the column**, run from `init_db()` and idempotent. Ordered by `created_at`, then — for chat only — `user` before `assistant`, then the primary key.
+- **`latest_result()` replacing eight copies of `max(results, key=lambda r: r.created_at)`.** That form returns the first maximal element in iteration order, and the order came from an unordered `select()`, so "the latest tailoring result" — which decides the score shown for a job and the content exported for it — could resolve differently between runs and engines.
+- **Tests (22 new).** `tests/test_ordering_determinism.py` (21) and a migration-chain test in `tests/test_pg_migrations.py`. `conftest` builds schemas with `create_all`, so the `ALTER TABLE` list and the backfill — the code that runs against deployed databases — were exercised by nothing; the new test drops the column to reproduce a real pre-#180 database.
+
+### Deviations from spec
+
+- **Scope deliberately exceeds the issue's non-goals.** #180 says other instances "should be found by a sweep, but fixing it is separate work." The sweep found 21 live sites — including résumé-section ordering that reaches the rendered resume — and all were fixed in one arc rather than filed. The issue body should be amended to match; as written the PR reads as scope creep against its own spec.
+- **The backfill cannot restore true order for fully-tied legacy rows, and says so.** Rows sharing a `created_at` *and* a role carry nothing that distinguishes them. They get contiguous ordinals frozen at backfill and deterministic thereafter — a test asserts that limit rather than papering over it. Distinct timestamps *are* restored correctly, which covers the deployed data: Railway runs Linux, where `utcnow()` resolves to microseconds.
+- **One heuristic is applied, to chat only.** Legacy ties break `user` before `assistant`, because the dominant real tie is a question and its reply written in one tick. It invents an ordering over unrecoverable history, and is labelled as a heuristic at both the code and test level. No equivalent applies to résumé rows, so none was invented there.
+- **`latest_result` is stable, not correct.** Ties break on `result_id` — arbitrary, but the same answer every time. Recovering which of two same-tick runs finished second would need an ordinal on `UserJobResult`, and no caller wants one: every one asks for "the current result", not a history.
+- **First versions of the résumé-ordering tests were vacuous and were rewritten.** They passed against the unfixed code, because SQLite returns tied rows in rowid order, which coincides with insertion order — so writing rows in the intended order and reading them back proves nothing. They now write in reverse. Verified against the pre-fix ordering: 6 of the chat tests and 2 of the résumé tests fail without it.
+- **Why this survived to now.** It reproduces on every run on Windows, where `utcnow()` is coarse enough that 200 consecutive calls return one value, and almost never on Linux, where it resolves to microseconds — so CI stayed green for the whole life of the defect. The new tests force the tie explicitly instead of hoping for a collision, so they run identically on every platform and both engines.
+
+---
+
 ## Issue 177 — Entry/intern JD corpus: domain-scoped postings across five role families
 **Status:** complete | **Tests:** 1278 pass on SQLite (129 new)
 
