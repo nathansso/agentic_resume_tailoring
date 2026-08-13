@@ -440,6 +440,72 @@ def test_unassigned_rows_sort_last_on_both_engines(isolated_engine):
     assert titles == ["ordered", "unassigned"]
 
 
+def test_latest_result_is_stable_when_two_results_share_a_timestamp(isolated_engine):
+    """"The latest tailoring result" must be one answer, not whichever came back.
+
+    `max(results, key=lambda r: r.created_at)` returns the first maximal element
+    in iteration order, and the iteration order was an unordered `select()`. Two
+    results written in one tick could therefore resolve differently between
+    runs and between the two engines — and this value decides the score shown
+    for a job and the content exported for it.
+
+    Asserts stability, which is what the tiebreaker actually promises. It does
+    not assert *which* result wins: nothing records which of two same-tick runs
+    finished second, so that is not recoverable and is documented as such.
+    """
+    from conftest import _seed_user_and_skill
+    from database.db import latest_result
+    from database.models import UserJobResult
+    from uuid import UUID
+
+    seeded = _seed_user_and_skill(isolated_engine)
+    job_id = _make_job(isolated_engine)
+
+    with Session(isolated_engine) as session:
+        for score in (10.0, 20.0, 30.0):
+            session.add(UserJobResult(user_id=seeded.user_id, job_id=UUID(job_id),
+                                      ats_score=score, created_at=FIXED))
+        session.commit()
+
+    picks = []
+    for _ in range(10):
+        with Session(isolated_engine) as session:
+            rows = session.exec(select(UserJobResult)).all()
+            picks.append(str(latest_result(rows).result_id))
+
+    assert len(set(picks)) == 1, f"latest_result was not stable: {set(picks)}"
+
+
+def test_latest_result_prefers_a_genuinely_newer_row(isolated_engine):
+    """The tiebreaker must not override a real timestamp difference."""
+    from conftest import _seed_user_and_skill
+    from database.db import latest_result
+    from database.models import UserJobResult
+    from datetime import timedelta
+    from uuid import UUID
+
+    seeded = _seed_user_and_skill(isolated_engine)
+    job_id = _make_job(isolated_engine)
+
+    with Session(isolated_engine) as session:
+        for i, score in enumerate((10.0, 99.0)):
+            session.add(UserJobResult(user_id=seeded.user_id, job_id=UUID(job_id),
+                                      ats_score=score,
+                                      created_at=FIXED + timedelta(minutes=i)))
+        session.commit()
+
+    with Session(isolated_engine) as session:
+        rows = session.exec(select(UserJobResult)).all()
+        assert latest_result(rows).ats_score == 99.0
+
+
+def test_latest_result_of_nothing_is_none(isolated_engine):
+    """The `if results else None` the helper folded in."""
+    from database.db import latest_result
+
+    assert latest_result([]) is None
+
+
 def test_landing_context_and_job_threads_number_independently(isolated_engine):
     """Each conversation carries its own ordinal series.
 

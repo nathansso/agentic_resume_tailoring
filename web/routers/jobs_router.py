@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from agents.skill_selection import skill_names
-from database.db import engine
+from database.db import engine, latest_result
 from database.models import JobDescription, UserJobResult, User
 from web.auth import get_current_user
 from web.routers.dependencies import (
@@ -98,7 +98,7 @@ def _latest_result(session: Session, job_id: UUID) -> UserJobResult | None:
     results = session.exec(
         select(UserJobResult).where(UserJobResult.job_id == job_id)
     ).all()
-    return max(results, key=lambda r: r.created_at) if results else None
+    return latest_result(results)
 
 
 def _get_owned_job(job_id: str, user: User) -> tuple[JobDescription, Session]:

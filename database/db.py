@@ -287,6 +287,26 @@ def next_seq(session, model, user_id) -> int:
     return 0 if highest is None else highest + 1
 
 
+def latest_result(results):
+    """The most recent `UserJobResult` in *results*, or None if empty (#180).
+
+    Replaces eight copies of `max(results, key=lambda r: r.created_at)`. That
+    form is undefined under a tie: `max` returns the first maximal element in
+    iteration order, and the iteration order is an unordered `select()` — so
+    "the latest tailoring result" could be either of two written in one tick,
+    and could differ between the two engines.
+
+    Ties break on `result_id`, which is **stable-arbitrary, not correct**: when
+    two results share a timestamp nothing records which ran second, so no
+    tiebreaker can recover it. What this guarantees is that the same rows always
+    yield the same answer. A result needs an ordinal of its own to do better,
+    and no caller needs that today — every one of them wants "the current
+    result", not a full history.
+    """
+    return max(results, key=lambda r: (r.created_at, str(r.result_id)),
+               default=None)
+
+
 def _backfill_document_seq() -> None:
     """Assign `seq` to résumé rows that predate the column (issue #180).
 

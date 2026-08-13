@@ -18,7 +18,7 @@ from sqlalchemy import func
 from sqlmodel import Session, delete, select
 
 from agents.skill_selection import skill_names
-from database.db import engine, next_seq
+from database.db import engine, latest_result, next_seq
 from database.models import (
     Achievement, ChatMessage, DeletedEntry, Education, Experience,
     JobDescription, JobSkill, Project, Skill, User, UserJobResult, UserSkill,
@@ -689,7 +689,7 @@ def get_job_details(job_uuid: str) -> Optional[dict]:
             "description": job.description or "",
         }
         if results:
-            latest = max(results, key=lambda r: r.created_at)
+            latest = latest_result(results)
             detail["ats_score"] = latest.ats_score
             detail["matched_skills"] = skill_names(latest.matched_skills)[:10]
             detail["missing_skills"] = latest.missing_skills[:10] if latest.missing_skills else []
@@ -1283,7 +1283,7 @@ def _latest_job_result(session, user_id: UUID, job_id: UUID):
         .where(UserJobResult.user_id == user_id)
         .where(UserJobResult.job_id == job_id)
     ).all()
-    return max(results, key=lambda r: r.created_at) if results else None
+    return latest_result(results)
 
 
 def resolve_role_family(
