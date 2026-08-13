@@ -182,3 +182,57 @@ def test_vector_columns_exist_after_init_db(isolated_engine):
     # Postgres and "text" on SQLite — assert it is a string column, not a
     # specific spelling of one.
     assert live[("skill", "embedding")] in ("text", "character varying")
+
+
+@requires_postgres
+def test_chat_seq_is_added_and_backfilled_by_init_db(isolated_engine):
+    """The whole #180 migration chain, against a database that predates it.
+
+    `conftest` builds schemas with `create_all`, so every other test in the
+    suite sees `chatmessage.seq` already present and correctly typed — the same
+    blind spot that let the UUID defect ship, and the reason this file exists.
+    Dropping the column reproduces a real deployed database, where the column
+    arrives by `ALTER TABLE` and the ordinals arrive by backfill.
+
+    Timestamps are set an hour apart because that is the shape of the production
+    data being migrated: Railway runs Linux, where `utcnow()` resolves to
+    microseconds, so deployed rows carry distinct values and their order is
+    recoverable. The fully-tied case has its own test in
+    `test_ordering_determinism.py`, which pins what the backfill can*not* do.
+    """
+    from datetime import datetime, timedelta
+
+    import database.db as db
+    from database.models import ChatMessage, JobDescription
+
+    _assert_on_a_test_schema(isolated_engine)
+
+    job_id = None
+    base = datetime(2026, 8, 12, 9, 0, 0)
+    with Session(isolated_engine) as session:
+        job = JobDescription(title="Legacy Thread", company="Co", description="")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+        job_id = job.job_id
+        for i in range(4):
+            session.add(ChatMessage(job_id=job_id, role="user", content=f"msg {i}",
+                                    created_at=base + timedelta(hours=i)))
+        session.commit()
+        # Reproduce the pre-#180 table: the column simply does not exist.
+        session.execute(text("ALTER TABLE chatmessage DROP COLUMN seq"))
+        session.commit()
+        assert ("chatmessage", "seq") not in _column_types(session)
+
+    db.init_db()  # create_all + _migrate_db + both pg repairs + _backfill_chat_seq
+
+    with Session(isolated_engine) as session:
+        assert _column_types(session)[("chatmessage", "seq")] == "integer"
+        rows = session.exec(
+            select(ChatMessage).order_by(ChatMessage.seq)
+        ).all()
+
+    assert [r.content for r in rows] == [f"msg {i}" for i in range(4)]
+    assert [r.seq for r in rows] == [0, 1, 2, 3], (
+        "legacy rows must come out of the backfill with contiguous ordinals"
+    )
