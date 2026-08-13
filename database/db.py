@@ -111,6 +111,12 @@ def _migrate_db() -> None:
         # default — NULL is the "ranker decides" case, so existing rows keep
         # behaving exactly as they did.
         "ALTER TABLE userjobresult ADD COLUMN layout_overrides TEXT",
+        # issue 180: per-conversation insertion ordinal. Plain INTEGER, not an
+        # autoincrement: SQLite cannot add an AUTOINCREMENT column to an existing
+        # table and Postgres would need BIGSERIAL, so a portable ALTER has to
+        # carry an ordinal the write path assigns itself. Backfilled by
+        # _backfill_chat_seq below.
+        "ALTER TABLE chatmessage ADD COLUMN seq INTEGER",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
@@ -197,11 +203,65 @@ def _migrate_pg_vector_columns() -> None:
                 )
 
 
+def _backfill_chat_seq() -> None:
+    """Assign `seq` to chat rows that predate the column (issue #180).
+
+    Python-side rather than one UPDATE with a window function: `UPDATE ... FROM`
+    is spelled differently on SQLite and Postgres, and the row count is bounded
+    anyway — `services._MAX_CHAT_MESSAGES_PER_JOB` caps each conversation at 100.
+
+    Touches only `seq IS NULL` rows, so it is idempotent and costs one indexed
+    lookup once every row has been assigned.
+
+    **The ordering rule for legacy rows.** Within a conversation, rows are
+    ordered by `created_at`, then `user` before `assistant`, then `message_id`.
+    The middle term is a deliberate heuristic over history that is otherwise
+    unrecoverable: the dominant tie is a question and its reply written in the
+    same clock tick, and this recovers that pair the right way round. For any
+    other tie, true insertion order is **not recoverable** — the order assigned
+    here is arbitrary, but it is frozen at backfill and deterministic after it.
+    """
+    from sqlalchemy import text
+    from sqlmodel import Session, select
+    from database.models import ChatMessage
+
+    with Session(engine) as session:
+        pending = session.exec(
+            select(ChatMessage).where(ChatMessage.seq.is_(None))
+        ).all()
+        if not pending:
+            return
+
+        # Group by conversation: a job's thread, or one user's landing context.
+        conversations: dict = {}
+        for row in pending:
+            conversations.setdefault((row.job_id, row.user_id), []).append(row)
+
+        for (job_id, user_id), rows in conversations.items():
+            # Where a conversation is partly assigned, continue after its
+            # highest existing seq rather than restarting at 0 and colliding.
+            query = select(ChatMessage).where(ChatMessage.seq.is_not(None))
+            query = (query.where(ChatMessage.job_id == job_id) if job_id is not None
+                     else query.where(ChatMessage.job_id.is_(None),
+                                      ChatMessage.user_id == user_id))
+            assigned = [r.seq for r in session.exec(query).all()]
+            next_seq = max(assigned) + 1 if assigned else 0
+
+            rows.sort(key=lambda r: (r.created_at,
+                                     0 if r.role == "user" else 1,
+                                     str(r.message_id)))
+            for offset, row in enumerate(rows):
+                row.seq = next_seq + offset
+                session.add(row)
+        session.commit()
+
+
 def init_db():
     SQLModel.metadata.create_all(engine)
     _migrate_db()
     _migrate_pg_uuid_columns()
     _migrate_pg_vector_columns()
+    _backfill_chat_seq()
 
 def get_session():
     with Session(engine) as session:

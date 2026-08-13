@@ -265,6 +265,16 @@ class ChatMessage(SQLModel, table=True):
     user_id: Optional[UUID] = Field(default=None, foreign_key="user.user_id", index=True)
     role: str        # "user" | "assistant"
     content: str
+    # Per-conversation insertion ordinal (issue #180). `created_at` alone cannot
+    # order this table: the system clock is coarse enough that a question and its
+    # reply routinely land on the same value, and with a tied sort key the engine
+    # is free to return them in either order. Two identical messages are
+    # legitimately identical, so no content key can break the tie either --
+    # insertion order is the only thing that carries the meaning, and it has to
+    # be recorded rather than inferred. Assigned by services.py::_next_chat_seq.
+    # Nullable only so the migration can add the column; the backfill leaves no
+    # NULLs, which keeps reads off SQLite/Postgres NULL-collation differences.
+    seq: Optional[int] = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 

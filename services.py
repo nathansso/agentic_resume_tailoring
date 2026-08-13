@@ -14,6 +14,7 @@ from uuid import UUID
 
 _ENV_PATH = Path(__file__).parent.parent / ".env"
 
+from sqlalchemy import func
 from sqlmodel import Session, delete, select
 
 from agents.skill_selection import skill_names
@@ -2465,17 +2466,49 @@ def _acting_user_id() -> Optional[UUID]:
     return user.user_id if user else None
 
 
+def _chat_scope(query, jid: Optional[UUID], user_id: Optional[UUID]):
+    """Narrow a ChatMessage query to one conversation.
+
+    A job's thread is identified by `job_id` alone — callers verify ownership.
+    Landing context (`job_id IS NULL`) is one conversation *per user* (issue
+    #73), so it needs both terms.
+    """
+    if jid is not None:
+        return query.where(ChatMessage.job_id == jid)
+    return query.where(ChatMessage.job_id.is_(None), ChatMessage.user_id == user_id)
+
+
+def _next_chat_seq(session, jid: Optional[UUID], user_id: Optional[UUID]) -> int:
+    """The next insertion ordinal for this conversation (issue #180).
+
+    Read inside the caller's transaction, immediately before the insert. Two
+    writers racing on one conversation can still compute the same ordinal; that
+    is deliberately *not* guarded with a unique constraint, because
+    `save_chat_message` is documented never to raise and a constraint violation
+    there would silently drop a user's message. The read path breaks a duplicate
+    ordinal on `(created_at, message_id)` instead, so a race degrades to the old
+    behaviour rather than losing data.
+    """
+    query = _chat_scope(select(func.max(ChatMessage.seq)), jid, user_id)
+    highest = session.exec(query).one()
+    return 0 if highest is None else highest + 1
+
+
 def save_chat_message(job_id: Optional[str], role: str, content: str) -> None:
     """Persist one message to the ChatMessage table. Never raises.
 
     Stamped with the acting user so landing-context messages (job_id=None)
-    stay isolated between users (issue #73).
+    stay isolated between users (issue #73), and with a per-conversation
+    insertion ordinal so the thread can be read back in the order it was
+    written (issue #180).
     """
     try:
         jid = UUID(job_id) if job_id else None
         uid = _acting_user_id()
         with Session(engine) as session:
-            session.add(ChatMessage(job_id=jid, user_id=uid, role=role, content=content))
+            session.add(ChatMessage(job_id=jid, user_id=uid, role=role,
+                                    content=content,
+                                    seq=_next_chat_seq(session, jid, uid)))
             session.commit()
         _prune_chat_messages(jid, user_id=uid)
     except Exception as e:
@@ -2490,16 +2523,21 @@ def _prune_chat_messages(
     """Delete oldest messages beyond `keep` for the given job_id. Never raises.
 
     Landing context (jid=None) prunes only the given user's messages.
+
+    Ordered on `seq` (issue #180). This path is why the ordering defect was not
+    merely cosmetic: it takes `ids[keep:]` off the sort, so under a tied
+    `created_at` it deleted an arbitrary set of messages rather than the oldest
+    ones. The cap held and the wrong rows went.
     """
     try:
         with Session(engine) as session:
-            query = (
-                select(ChatMessage.message_id)
-                .where(ChatMessage.job_id == jid)
-                .order_by(ChatMessage.created_at.desc())
+            query = _chat_scope(
+                select(ChatMessage.message_id), jid, user_id
+            ).order_by(
+                ChatMessage.seq.desc(),
+                ChatMessage.created_at.desc(),
+                ChatMessage.message_id.desc(),
             )
-            if jid is None:
-                query = query.where(ChatMessage.user_id == user_id)
             ids = session.exec(query).all()
             if len(ids) > keep:
                 to_delete = list(ids[keep:])
@@ -2518,19 +2556,25 @@ def load_chat_history(
     Landing context (job_id=None) is scoped to `user_id` — or the acting user
     when not passed — so users never see each other's landing chat (issue #73).
     Job contexts are scoped by job_id; callers verify job ownership.
+
+    Ordered on `seq` (issue #180). `created_at` and `message_id` follow it only
+    to keep the order defined if two concurrent writers ever land on the same
+    ordinal — see `_next_chat_seq`. Because `.limit(limit)` cuts the sorted
+    window, an undefined order here did not just reorder the transcript: when a
+    tie straddled the boundary an arbitrary message was dropped from it.
     """
     try:
         jid = UUID(job_id) if job_id else None
         with Session(engine) as session:
-            query = (
-                select(ChatMessage)
-                .where(ChatMessage.job_id == jid)
-                .order_by(ChatMessage.created_at.desc())
-                .limit(limit)
-            )
-            if jid is None:
-                uid = user_id if user_id is not None else _acting_user_id()
-                query = query.where(ChatMessage.user_id == uid)
+            # Only landing context needs the owner; resolving it for a job
+            # thread would be a wasted profile lookup on every history read.
+            uid = (user_id if user_id is not None else _acting_user_id()) \
+                if jid is None else None
+            query = _chat_scope(select(ChatMessage), jid, uid).order_by(
+                ChatMessage.seq.desc(),
+                ChatMessage.created_at.desc(),
+                ChatMessage.message_id.desc(),
+            ).limit(limit)
             msgs = session.exec(query).all()
         return [{"role": m.role, "content": m.content, "created_at": m.created_at.isoformat()} for m in reversed(msgs)]
     except Exception as e:
