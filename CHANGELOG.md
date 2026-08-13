@@ -8,6 +8,82 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 **Benchmark figures from 2026-08-11 onward are measured on a different corpus** (issue #177): 150 intern/entry postings across five role families, replacing the 8 mid-level-and-senior postings every earlier figure was measured on. Numbers either side of that line are not comparable. Nothing was deleted.
 
+**Benchmark figures from 2026-08-12 onward are measured on a different candidate too** (issue #172): 20 stratified intern/entry profiles, replacing the single mid-level fixture every earlier figure was measured on, and on repaired posting bodies — a third of the corpus had been cut mid-word at a fetch ceiling. Numbers either side of that line are not comparable, and the pooled figure now averages over candidates as well as postings. Nothing was deleted.
+
+---
+
+## Issue 172 (chunks 1–4 of 7) — The benchmark profile set, and a JD corpus audit
+**Status:** chunks 1–4 complete; 5–7 open | **Tests:** 1365 pass on SQLite (34 new)
+
+The benchmark measured **one** candidate, so every metric was a single pooled number over one synthetic person and "weak" was the only available finding — "weak on metric-poor candidates" was not expressible. Three shipped issues (#122, #155, #150/#115) had each recorded a missing fixture capability in almost the same words, and none had been filed. This ships the candidate side of the dataset: **20 profiles**, each declaring which stratum it isolates, each verified against its own text.
+
+While wiring them up, the corpus they run against turned out to carry defects that no metric could show — a third of the postings were cut mid-word at a byte ceiling, and 18 carried their own HTML as visible text. Those are fixed too, because a profile set is only as good as what it is measured against.
+
+### What shipped
+
+- **20 profiles — 15 authored people (5 role families × 3 variants) plus 5 derived redundancy variants.** `eval/profile_banks.py` holds the authored material and the family vocabularies; `eval/profile_generator.py` composes, transforms and renders; the markdown is generated and a test fails on hand-edits, so the bank can never become a stale comment beside the file that replaced it.
+- **Declared strata are verified, never trusted** (`eval/profile_checks.py`). A sidecar claiming `metric_poor` while every bullet carries a number would report under a slice it does not belong to *and the table would still look complete* — strictly worse than not slicing. 80/80 checks pass, with the populations separated by a margin recorded beside each threshold: digit share 0.60–1.00 vs 0.00, skills 15 vs 27, min-new-information 0.000–0.111 vs 0.857–1.000.
+- **#122's fixture gap is closed.** Its deviations recorded `mean_new_information` 0.998 against a suite that could not distinguish "genuinely clean" from "too simple to generate redundancy". Measured through the real pipeline on the same 5 tasks: `mean_new_information` 1.000 → 0.860, `leading_verb_entropy` 1.000 → 0.889, `mtld` 336.5 → 148.8.
+- **#155's fixture gap is closed.** Every family carries at least one profile with seeded GitHub metrics, and a test asserts `_github_signal()` returns non-`None` rather than merely asserting the keys exist.
+- **The legacy mid-level fixture is retired** — skipped by suite discovery via a new `"retired": true` sidecar flag, still runnable by name so the committed cassette and every historical figure keep working. Its own note said to do this once the intern/entry set existed.
+- **A JD corpus audit** (`scripts/audit_jd_corpus.py`) and an **in-place repair** (`scripts/repair_jd_bodies.py`). Findings and outcome:
+
+| finding | before | after | cause |
+|---|---|---|---|
+| cut at a fetch ceiling | 62 | **23** | 48 cut at exactly 6,000 mid-word; 14 *exceeded* it, because the feed adapters never applied the cap the comment claimed they did |
+| literal HTML in the body | 18 | **2** | `strip_html` stripped tags *before* unescaping entities, so every double-escaped body emerged as its own `<li>` markup |
+| unescaped entities | 3 | **1** | one unescape of a double-escaped body leaves `&#xa0;` |
+| invisible characters | 80 | **61** | NBSP and zero-width joiners surviving the unescape |
+
+- **One HTML-to-text implementation instead of two that disagreed.** `strip_html` now unescapes to a fixed point and delegates parsing to the BeautifulSoup-based `clean_html`; a naive `<[^>]+>` also stopped at the first `>` inside an attribute value, leaving fragments like `data-aria-level="1">` in the text. The ceiling moved 6,000 → 20,000, above the longest real posting measured (8,821).
+- **The intern/entry restriction is now an invariant, not a claim about one afternoon's scrape.** `role_family` and `level` are stored rather than recomputed (#177) — right for stability, silent about drift. The audit re-decides both from the committed title and body on every run: **150/150 still classify as filed**, no title carries a seniority marker, and every posting stating more than `MAX_ENTRY_YEARS` was read by hand (all six are regex false positives — company heritage lines, an age question, a UK residency rule, and one "*no more than* 3 years of professional experience", which is an entry-level constraint).
+- **Tests (34 new).** `tests/test_profile_set.py` (21), `tests/test_jd_corpus.py` (+9), `tests/test_job_sources.py` (+4). All offline.
+
+### Re-baseline
+
+**Mode: plumbing** — canned payloads return every source bullet verbatim, so these describe the harness and the deterministic post-processing, not tailoring quality (#171). 20 profiles × 25 tasks = 500 task-runs, on the repaired corpus. Not comparable with #177's table: both the candidate and the posting text changed.
+
+| metric | mean | min | max |
+|---|---|---|---|
+| `ats_delta` | **28.5** | −0.1 | 45.1 |
+| `baseline_composite` | 55.7 | 28.5 | 89.2 |
+| `tailored_composite` | 84.3 | 68.4 | 98.2 |
+| `skills_rendered` | 9.6 | 8.0 | 18.0 |
+| `skills_selection_ratio` | 0.565 | 0.296 | 1.0 |
+| `max_bullet_df` | 0.174 | 0.091 | 0.333 |
+| `leading_verb_entropy` | 0.958 | 0.875 | 1.0 |
+| `mtld` | 223.6 | 123.3 | 474.0 |
+| `mean_new_information` | 0.964 | 0.837 | 1.0 |
+
+**The redundancy pair separates at scale**, which is the #122 gap closing — 125 bearing task-runs against 375 clean, not the 5-task spot check:
+
+| profile stratum | n | `mean_new_information` | `leading_verb_entropy` | `mtld` |
+|---|---|---|---|---|
+| `redundancy: bearing` | 125 | **0.867** | **0.907** | **164.4** |
+| `redundancy: clean` | 375 | 0.997 | 0.975 | 243.4 |
+
+**Candidate strata disagree, and the mechanism is legible:**
+
+| profile stratum | n | `ats_delta` | `baseline_composite` | `skills_rendered` |
+|---|---|---|---|---|
+| `breadth: specialist` | 375 | **30.1** | 53.6 | 9.1 |
+| `breadth: generalist` | 125 | **23.7** | 62.2 | 11.0 |
+| `evidence_density: metric_poor` | 125 | 30.1 | 54.2 | 8.9 |
+| `evidence_density: metric_rich` | 375 | 28.0 | 56.3 | 9.8 |
+
+A 6.4-point `ats_delta` spread on breadth, and the cause is visible beside it: a generalist claims more skills, so it already matches more postings (baseline 62.2 vs 53.6) and tailoring has less headroom to recover. Pooled into one number — which is all the harness could report before this issue — that finding does not exist. The candidate `role_family` slice is reported separately from the JD `role_family` slice (`profile_` prefixed), because pooling a candidate axis with a posting axis of the same name would be meaningless.
+
+### Deviations from spec
+
+- **20 profiles, not 15, and the redundancy variant is derived rather than authored.** The issue's three variants each differ from `specialist` on exactly one axis, which leaves **redundancy with no contrast at all** — yet a redundancy-bearing fixture is one of its acceptance criteria. A fourth authored person per family would have supplied one while confounding redundancy with that person's wording. So the redundancy variant is the `specialist` profile with restating bullets **appended** — same person, same employers, same metrics, same skills — making it a matched pair, which the authored-only design cannot produce. Family-level contrasts keep n=3 authored profiles exactly as specified.
+- **Term stuffing still does not fire, and is reported rather than manufactured.** Additive-only injection cannot push a term past a 0.5 bullet document frequency without rewriting the base bullets, which would destroy the matched pair. Two of #122's four modes fire; a stuffing-bearing variant is unfiled.
+- **`_detect_level` is broken on both sides, and is filed rather than fixed — #181.** It matches seniority keywords as bare substrings and returns the highest tier found anywhere, so 60 of 150 postings read as `lead` and 27 as `manager`; only 22 are read at the tier they are filed under. The same defect reads the retired benchmark profile as **`lead`**, because one bullet says "saving **staff** ten hours weekly" — so `role_level` (weight 0.10) has compared two independently wrong labels for the whole life of the #51 benchmark. Fixing it is product scoring, which #172 lists as a non-goal. The dataset side now guards itself instead: no profile may contain `senior`, `staff`, `principal`, `manager` or any `lead…` word, and a test asserts none reads above `junior`.
+- **25 damaged postings are kept, not dropped.** Two hosts 403 and the rest have expired, so re-fetching yields a stub. They span all five families (DS 8, DE 6, AI 5, MLE 3, SWE 1) and dropping them would break the 30-per-family balance the primary stratum rests on. A test pins the count so it can only go down.
+- **Repair does not re-select.** Re-running `scrape_job_descriptions.py` would redo discovery and selection and return a materially different 150 postings — a change to *which* postings are measured bundled with a fix to *how their text was extracted*, with no way to attribute a moved number to either. `repair_jd_bodies.py` touches `description` and nothing else, and discards a re-fetch that comes back shorter or dirtier than what is committed.
+- **A latent crash in the harness, fixed here.** `--profile eval/profiles/x.md` with a relative path raised `ValueError` from `relative_to` **after** the full run had completed, discarding the results. The default profile was absolute, so it had never fired.
+- **Chunks 5–7 remain open**: the distractor pool, the β calibration and implicitness verifier, and the 60-pair human anchor set. The sidecar already carries an empty `distractors` section so a fixture predating the idea is distinguishable from one with none injected.
+- **The cassette is still not re-recorded.** #177's deviations deferred it to "once #172's profile set is final"; the set is final now, but recording belongs with a product-mode run rather than this dataset change.
+
 ---
 
 ## Issue 180 — Deterministic ordering: an insertion ordinal for every `created_at`-ordered read
