@@ -26,7 +26,7 @@ The bug class is the one #158 and #171 each paid for already: an ordering not fu
 - **Backfills for rows predating the column**, run from `init_db()` and idempotent. Ordered by `created_at`, then — for chat only — `user` before `assistant`, then the primary key.
 - **`latest_result()` replacing eight copies of `max(results, key=lambda r: r.created_at)`.** That form returns the first maximal element in iteration order, and the order came from an unordered `select()`, so "the latest tailoring result" — which decides the score shown for a job and the content exported for it — could resolve differently between runs and engines. It now resolves on the run ordinal, so the winner is **determined by the run that produced it** rather than by a timestamp two runs can share.
 - **The three backfills share one `_assign_missing_seq`.** They differ only in how rows group into series and how a series is ordered; three hand-copies would be three places for the NULL handling and the continue-after-existing rule to drift apart.
-- **Tests (22 new).** `tests/test_ordering_determinism.py` (21) and a migration-chain test in `tests/test_pg_migrations.py`. `conftest` builds schemas with `create_all`, so the `ALTER TABLE` list and the backfill — the code that runs against deployed databases — were exercised by nothing; the new test drops the column to reproduce a real pre-#180 database.
+- **Tests (24 new).** `tests/test_ordering_determinism.py` (23) and a migration-chain test in `tests/test_pg_migrations.py`. `conftest` builds schemas with `create_all`, so the `ALTER TABLE` list and the backfill — the code that runs against deployed databases — were exercised by nothing; the new test drops the column to reproduce a real pre-#180 database.
 
 ### Deviations from spec
 
