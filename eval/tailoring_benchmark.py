@@ -780,6 +780,22 @@ def _aggregate(task_results: List[Dict]) -> Dict:
     }
 
 
+def _profile_label(profile_path: Path) -> str:
+    """Repo-relative path for the results artifact, tolerating any spelling.
+
+    `--profile eval/profiles/x.md` is the obvious way to type this on the
+    command line and it used to raise `ValueError` from `relative_to` — *after*
+    the entire run had completed, throwing the results away at the last step.
+    A profile stored outside the repo keeps its absolute path rather than
+    failing.
+    """
+    resolved = Path(profile_path).resolve()
+    try:
+        return str(resolved.relative_to(ROOT))
+    except ValueError:
+        return str(resolved)
+
+
 # Task-row keys a run can be sliced on. JD-side today (#177 labels every
 # posting); the profile-side strata arrive with the multi-profile suite, and are
 # read off the same rows once each row carries them.
@@ -932,7 +948,7 @@ def run_benchmark(
             # artifact without reading this file (issue #171).
             "mode_claim": MODE_CLAIMS[mode],
             "cassette": str(cassette_path) if cassette_path else None,
-            "profile": str(profile_path.relative_to(ROOT)),
+            "profile": _profile_label(profile_path),
             # Which candidate stratum this profile isolates (issue #172). Empty
             # for a profile with no sidecar, which runs exactly as before.
             "profile_strata": profile_meta.strata,
