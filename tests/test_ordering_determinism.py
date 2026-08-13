@@ -440,18 +440,24 @@ def test_unassigned_rows_sort_last_on_both_engines(isolated_engine):
     assert titles == ["ordered", "unassigned"]
 
 
-def test_latest_result_is_stable_when_two_results_share_a_timestamp(isolated_engine):
-    """"The latest tailoring result" must be one answer, not whichever came back.
+def test_latest_result_is_decided_by_the_run_that_produced_it(isolated_engine):
+    """"The latest result" means the latest *run*, even when timestamps tie.
 
-    `max(results, key=lambda r: r.created_at)` returns the first maximal element
-    in iteration order, and the iteration order was an unordered `select()`. Two
-    results written in one tick could therefore resolve differently between
-    runs and between the two engines — and this value decides the score shown
-    for a job and the content exported for it.
+    `max(results, key=lambda r: r.created_at)` returned the first maximal
+    element in iteration order, and that order came from an unordered
+    `select()` — so this could resolve differently between runs and engines.
+    It decides the score shown for a job and the content exported for it.
 
-    Asserts stability, which is what the tiebreaker actually promises. It does
-    not assert *which* result wins: nothing records which of two same-tick runs
-    finished second, so that is not recoverable and is documented as such.
+    The run ordinal makes the answer recoverable rather than merely stable:
+    run 2 wins because it is run 2, not because its uuid happened to sort last.
+
+    **The uuids are pinned, and that is what makes this a real test.** The old
+    tiebreaker was `str(result_id)` over a random uuid4, so an unpinned version
+    of this test picks the right row roughly one time in three and passes
+    against the broken code by luck — it did exactly that when first written.
+    Here the uuid order is the *reverse* of the run order, and rows are written
+    newest-first, so neither storage order nor uuid order can produce the
+    expected answer by accident.
     """
     from conftest import _seed_user_and_skill
     from database.db import latest_result
@@ -461,19 +467,119 @@ def test_latest_result_is_stable_when_two_results_share_a_timestamp(isolated_eng
     seeded = _seed_user_and_skill(isolated_engine)
     job_id = _make_job(isolated_engine)
 
+    runs = [
+        (0, 10.0, UUID("ffffffff-0000-4000-8000-000000000000")),
+        (1, 20.0, UUID("88888888-0000-4000-8000-000000000000")),
+        (2, 30.0, UUID("00000000-0000-4000-8000-000000000000")),
+    ]
     with Session(isolated_engine) as session:
-        for score in (10.0, 20.0, 30.0):
-            session.add(UserJobResult(user_id=seeded.user_id, job_id=UUID(job_id),
-                                      ats_score=score, created_at=FIXED))
+        for run, score, result_id in reversed(runs):
+            session.add(UserJobResult(result_id=result_id,
+                                      user_id=seeded.user_id, job_id=UUID(job_id),
+                                      ats_score=score, created_at=FIXED, seq=run))
         session.commit()
 
-    picks = []
-    for _ in range(10):
-        with Session(isolated_engine) as session:
-            rows = session.exec(select(UserJobResult)).all()
-            picks.append(str(latest_result(rows).result_id))
+    with Session(isolated_engine) as session:
+        rows = session.exec(select(UserJobResult)).all()
+        assert latest_result(rows).ats_score == 30.0
 
-    assert len(set(picks)) == 1, f"latest_result was not stable: {set(picks)}"
+
+def test_result_run_ordinals_are_per_job(isolated_engine):
+    """Each job carries its own run sequence.
+
+    Numbering results globally would make one job's analyze runs advance
+    another's ordinals, so "run 2 of this job" would stop meaning anything.
+    """
+    from conftest import _seed_user_and_skill
+    from database.db import next_seq
+    from database.models import UserJobResult
+    from uuid import UUID
+
+    seeded = _seed_user_and_skill(isolated_engine)
+    job_a = _make_job(isolated_engine, title="Job A")
+    job_b = _make_job(isolated_engine, title="Job B")
+
+    with Session(isolated_engine) as session:
+        for job in (job_a, job_b, job_a, job_b, job_a):
+            session.add(UserJobResult(
+                user_id=seeded.user_id, job_id=UUID(job), created_at=FIXED,
+                seq=next_seq(session, UserJobResult, seeded.user_id,
+                             job_id=UUID(job)),
+            ))
+        session.commit()
+
+    with Session(isolated_engine) as session:
+        rows = session.exec(select(UserJobResult)).all()
+        a = sorted(r.seq for r in rows if str(r.job_id) == job_a)
+        b = sorted(r.seq for r in rows if str(r.job_id) == job_b)
+    assert a == [0, 1, 2]
+    assert b == [0, 1]
+
+
+def test_unassigned_results_fall_back_to_the_old_behaviour(isolated_engine):
+    """A set with no ordinals must behave exactly as it did before.
+
+    Covers rows built directly by a fixture and the window between the column
+    arriving and `_backfill_result_seq` running. An assigned row outranks an
+    unassigned one; among unassigned rows the old `(created_at, result_id)`
+    ordering applies.
+    """
+    from conftest import _seed_user_and_skill
+    from database.db import latest_result
+    from database.models import UserJobResult
+    from datetime import timedelta
+    from uuid import UUID
+
+    seeded = _seed_user_and_skill(isolated_engine)
+    job_id = _make_job(isolated_engine)
+
+    with Session(isolated_engine) as session:
+        session.add(UserJobResult(user_id=seeded.user_id, job_id=UUID(job_id),
+                                  ats_score=1.0, created_at=FIXED, seq=None))
+        session.add(UserJobResult(user_id=seeded.user_id, job_id=UUID(job_id),
+                                  ats_score=2.0,
+                                  created_at=FIXED + timedelta(minutes=1),
+                                  seq=None))
+        session.commit()
+        rows = session.exec(select(UserJobResult)).all()
+        assert latest_result(rows).ats_score == 2.0
+
+        # One assigned row now outranks both unassigned ones, whatever their
+        # timestamps: it is the only row whose run position is known.
+        session.add(UserJobResult(user_id=seeded.user_id, job_id=UUID(job_id),
+                                  ats_score=3.0, created_at=FIXED, seq=0))
+        session.commit()
+        rows = session.exec(select(UserJobResult)).all()
+        assert latest_result(rows).ats_score == 3.0
+
+
+def test_result_backfill_assigns_run_ordinals_per_job(isolated_engine):
+    """Results predating the column are numbered per job, in timestamp order."""
+    import database.db as db
+    from conftest import _seed_user_and_skill
+    from database.models import UserJobResult
+    from datetime import timedelta
+    from uuid import UUID
+
+    seeded = _seed_user_and_skill(isolated_engine)
+    job_a = _make_job(isolated_engine, title="Job A")
+    job_b = _make_job(isolated_engine, title="Job B")
+
+    with Session(isolated_engine) as session:
+        for i, job in enumerate((job_a, job_b, job_a)):
+            session.add(UserJobResult(user_id=seeded.user_id, job_id=UUID(job),
+                                      ats_score=float(i),
+                                      created_at=FIXED + timedelta(minutes=i)))
+        session.commit()
+
+    db._backfill_result_seq()
+
+    with Session(isolated_engine) as session:
+        rows = session.exec(select(UserJobResult)).all()
+        a = sorted(r.seq for r in rows if str(r.job_id) == job_a)
+        b = sorted(r.seq for r in rows if str(r.job_id) == job_b)
+    assert a == [0, 1]
+    assert b == [0]
 
 
 def test_latest_result_prefers_a_genuinely_newer_row(isolated_engine):

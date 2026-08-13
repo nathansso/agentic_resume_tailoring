@@ -125,6 +125,10 @@ def _migrate_db() -> None:
         "ALTER TABLE education ADD COLUMN seq INTEGER",
         "ALTER TABLE achievement ADD COLUMN seq INTEGER",
         "ALTER TABLE project ADD COLUMN seq INTEGER",
+        # issue 180: per-(user, job) run ordinal, so "the latest result" is
+        # decided by the run that produced it. Backfilled by
+        # _backfill_result_seq below.
+        "ALTER TABLE userjobresult ADD COLUMN seq INTEGER",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
@@ -211,66 +215,89 @@ def _migrate_pg_vector_columns() -> None:
                 )
 
 
+def _assign_missing_seq(session, model, scope_columns, sort_key) -> bool:
+    """Give every `seq IS NULL` row in *model* an ordinal. Returns whether any.
+
+    The shared body of all three backfills below. They differ only in how rows
+    are grouped into series (*scope_columns*) and how a series is ordered
+    (*sort_key*); the algorithm is identical, and three hand-copies of it would
+    be three places for the NULL handling and the continue-after-existing rule
+    to drift apart.
+
+    Python-side rather than one UPDATE with a window function: `UPDATE ... FROM`
+    is spelled differently on SQLite and Postgres, and the row counts are
+    bounded (chat is capped per conversation; résumé and result rows are
+    per-user and small).
+
+    Touches only unassigned rows, so it is idempotent — it runs on every
+    `init_db()` and costs one indexed lookup once everything is assigned.
+    """
+    from sqlmodel import select
+
+    pending = session.exec(select(model).where(model.seq.is_(None))).all()
+    if not pending:
+        return False
+
+    series: dict = {}
+    for row in pending:
+        series.setdefault(tuple(getattr(row, c) for c in scope_columns),
+                          []).append(row)
+
+    for key, rows in series.items():
+        # Where a series is partly assigned, continue after its highest
+        # existing ordinal rather than restarting at 0 and colliding.
+        query = select(model).where(model.seq.is_not(None))
+        for column, value in zip(scope_columns, key):
+            col = getattr(model, column)
+            # `is_(None)` rather than `== None`: chat's landing context is
+            # keyed by a NULL job_id, and `= NULL` matches nothing in SQL.
+            query = query.where(col.is_(None) if value is None else col == value)
+        assigned = [r.seq for r in session.exec(query).all()]
+        next_free = max(assigned) + 1 if assigned else 0
+
+        rows.sort(key=sort_key)
+        for offset, row in enumerate(rows):
+            row.seq = next_free + offset
+            session.add(row)
+    return True
+
+
 def _backfill_chat_seq() -> None:
     """Assign `seq` to chat rows that predate the column (issue #180).
 
-    Python-side rather than one UPDATE with a window function: `UPDATE ... FROM`
-    is spelled differently on SQLite and Postgres, and the row count is bounded
-    anyway — `services._MAX_CHAT_MESSAGES_PER_JOB` caps each conversation at 100.
+    Grouped per conversation — a job's thread, or one user's landing context.
 
-    Touches only `seq IS NULL` rows, so it is idempotent and costs one indexed
-    lookup once every row has been assigned.
-
-    **The ordering rule for legacy rows.** Within a conversation, rows are
-    ordered by `created_at`, then `user` before `assistant`, then `message_id`.
-    The middle term is a deliberate heuristic over history that is otherwise
-    unrecoverable: the dominant tie is a question and its reply written in the
-    same clock tick, and this recovers that pair the right way round. For any
-    other tie, true insertion order is **not recoverable** — the order assigned
-    here is arbitrary, but it is frozen at backfill and deterministic after it.
+    **The ordering rule for legacy rows.** Rows are ordered by `created_at`,
+    then `user` before `assistant`, then `message_id`. The middle term is a
+    deliberate heuristic over history that is otherwise unrecoverable: the
+    dominant tie is a question and its reply written in the same clock tick, and
+    this recovers that pair the right way round. For any other tie, true
+    insertion order is **not recoverable** — the order assigned here is
+    arbitrary, but it is frozen at backfill and deterministic after it.
     """
-    from sqlalchemy import text
-    from sqlmodel import Session, select
+    from sqlmodel import Session
     from database.models import ChatMessage
 
     with Session(engine) as session:
-        pending = session.exec(
-            select(ChatMessage).where(ChatMessage.seq.is_(None))
-        ).all()
-        if not pending:
-            return
-
-        # Group by conversation: a job's thread, or one user's landing context.
-        conversations: dict = {}
-        for row in pending:
-            conversations.setdefault((row.job_id, row.user_id), []).append(row)
-
-        for (job_id, user_id), rows in conversations.items():
-            # Where a conversation is partly assigned, continue after its
-            # highest existing seq rather than restarting at 0 and colliding.
-            query = select(ChatMessage).where(ChatMessage.seq.is_not(None))
-            query = (query.where(ChatMessage.job_id == job_id) if job_id is not None
-                     else query.where(ChatMessage.job_id.is_(None),
-                                      ChatMessage.user_id == user_id))
-            assigned = [r.seq for r in session.exec(query).all()]
-            next_seq = max(assigned) + 1 if assigned else 0
-
-            rows.sort(key=lambda r: (r.created_at,
-                                     0 if r.role == "user" else 1,
-                                     str(r.message_id)))
-            for offset, row in enumerate(rows):
-                row.seq = next_seq + offset
-                session.add(row)
-        session.commit()
+        if _assign_missing_seq(
+            session, ChatMessage, ("job_id", "user_id"),
+            lambda r: (r.created_at, 0 if r.role == "user" else 1,
+                       str(r.message_id)),
+        ):
+            session.commit()
 
 
-def next_seq(session, model, user_id) -> int:
-    """The next résumé-document ordinal for this user's rows (issue #180).
+def next_seq(session, model, user_id, **extra_scope) -> int:
+    """The next ordinal for this user's rows in *model* (issue #180).
 
     Shared by every write path that appends to `Experience`, `Education`,
-    `Achievement` or `Project`, so document position is recorded once at write
-    time rather than guessed at read time from a timestamp the whole ingestion
-    loop shares.
+    `Achievement`, `Project` or `UserJobResult`, so position is recorded once at
+    write time rather than guessed at read time from a timestamp the whole
+    writing loop shares.
+
+    *extra_scope* narrows the series further as `column=value` pairs.
+    `UserJobResult` passes `job_id=` so each job carries its own run sequence;
+    the résumé tables pass nothing and are numbered per user.
 
     Called inside the caller's open session, typically mid-loop with earlier
     rows still pending. SQLAlchemy autoflushes before evaluating a query, so
@@ -281,9 +308,10 @@ def next_seq(session, model, user_id) -> int:
     from sqlalchemy import func
     from sqlmodel import select
 
-    highest = session.exec(
-        select(func.max(model.seq)).where(model.user_id == user_id)
-    ).one()
+    query = select(func.max(model.seq)).where(model.user_id == user_id)
+    for column, value in extra_scope.items():
+        query = query.where(getattr(model, column) == value)
+    highest = session.exec(query).one()
     return 0 if highest is None else highest + 1
 
 
@@ -294,17 +322,25 @@ def latest_result(results):
     form is undefined under a tie: `max` returns the first maximal element in
     iteration order, and the iteration order is an unordered `select()` — so
     "the latest tailoring result" could be either of two written in one tick,
-    and could differ between the two engines.
+    and could differ between the two engines. This value decides the score shown
+    for a job and the content exported for it.
 
-    Ties break on `result_id`, which is **stable-arbitrary, not correct**: when
-    two results share a timestamp nothing records which ran second, so no
-    tiebreaker can recover it. What this guarantees is that the same rows always
-    yield the same answer. A result needs an ordinal of its own to do better,
-    and no caller needs that today — every one of them wants "the current
-    result", not a full history.
+    Ordered on the run ordinal, so which row wins is **determined by the run
+    that produced it** rather than by a timestamp two runs can share. `seq` is
+    assigned per (user, job) at the single write site, `agents/matcher.py`.
+
+    Rows with no ordinal sort as oldest and fall back to `(created_at,
+    result_id)` among themselves. That covers two cases: rows predating the
+    column, in the window before `_backfill_result_seq` runs, and rows built
+    directly by a test or fixture. A set where none is assigned therefore
+    behaves exactly as it did before, rather than resolving arbitrarily.
     """
-    return max(results, key=lambda r: (r.created_at, str(r.result_id)),
-               default=None)
+    return max(
+        results,
+        key=lambda r: (r.seq if r.seq is not None else -1,
+                       r.created_at, str(r.result_id)),
+        default=None,
+    )
 
 
 def _backfill_document_seq() -> None:
@@ -320,7 +356,7 @@ def _backfill_document_seq() -> None:
     résumé row indicates which of two entries came first in the source document
     — so none is invented.
     """
-    from sqlmodel import Session, select
+    from sqlmodel import Session
     from database.models import Achievement, Education, Experience, Project
 
     tables = [
@@ -332,30 +368,34 @@ def _backfill_document_seq() -> None:
     with Session(engine) as session:
         wrote = False
         for model, pk in tables:
-            pending = session.exec(
-                select(model).where(model.seq.is_(None))
-            ).all()
-            if not pending:
-                continue
-
-            by_user: dict = {}
-            for row in pending:
-                by_user.setdefault(row.user_id, []).append(row)
-
-            for user_id, rows in by_user.items():
-                assigned = [
-                    r.seq for r in session.exec(
-                        select(model).where(model.user_id == user_id,
-                                            model.seq.is_not(None))
-                    ).all()
-                ]
-                next_free = max(assigned) + 1 if assigned else 0
-                rows.sort(key=lambda r: (r.created_at, str(getattr(r, pk))))
-                for offset, row in enumerate(rows):
-                    row.seq = next_free + offset
-                    session.add(row)
-                wrote = True
+            # `pk=pk` binds the loop variable per iteration; a bare closure over
+            # `pk` would sort every table by the last primary key in the list.
+            wrote |= _assign_missing_seq(
+                session, model, ("user_id",),
+                lambda r, pk=pk: (r.created_at, str(getattr(r, pk))),
+            )
         if wrote:
+            session.commit()
+
+
+def _backfill_result_seq() -> None:
+    """Assign `seq` to tailoring results that predate the column (issue #180).
+
+    Grouped per (user, job), so each job carries its own run sequence.
+
+    Ordered by `(created_at, result_id)`. As with the résumé tables there is no
+    heuristic to apply: nothing on a result records which of two same-tick runs
+    finished second. Distinct timestamps — which is what deployed data carries,
+    since Railway runs Linux — are restored to true run order.
+    """
+    from sqlmodel import Session
+    from database.models import UserJobResult
+
+    with Session(engine) as session:
+        if _assign_missing_seq(
+            session, UserJobResult, ("user_id", "job_id"),
+            lambda r: (r.created_at, str(r.result_id)),
+        ):
             session.commit()
 
 
@@ -366,6 +406,7 @@ def init_db():
     _migrate_pg_vector_columns()
     _backfill_chat_seq()
     _backfill_document_seq()
+    _backfill_result_seq()
 
 def get_session():
     with Session(engine) as session:

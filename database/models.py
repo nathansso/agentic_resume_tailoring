@@ -230,6 +230,16 @@ class UserJobResult(SQLModel, table=True):
     result_id: UUID = Field(default_factory=uuid4, primary_key=True)
     user_id: UUID = Field(foreign_key="user.user_id")
     job_id: UUID = Field(foreign_key="jobdescription.job_id")
+    # Per-(user, job) run ordinal (issue #180). A job accumulates one row per
+    # analyze run, and "the latest result" decides the score shown for the job
+    # and the content exported for it — so which row wins must be determined by
+    # the run that produced it, not by a timestamp two runs can share or by a
+    # random uuid. Assigned at the single write site, agents/matcher.py.
+    #
+    # Deliberately not `JobDescription.retailor_count`: that counts *tailor*
+    # runs and is incremented after this row already exists, while rows are
+    # created by *analyze*, so it cannot identify which row is newest.
+    seq: Optional[int] = Field(default=None, index=True)
     ats_score: float = 0.0
     
     # JSON columns for detailed reporting
