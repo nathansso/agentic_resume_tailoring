@@ -117,6 +117,14 @@ def _migrate_db() -> None:
         # carry an ordinal the write path assigns itself. Backfilled by
         # _backfill_chat_seq below.
         "ALTER TABLE chatmessage ADD COLUMN seq INTEGER",
+        # issue 180: résumé-document ordinal, same mechanism. Ingestion writes
+        # every row of a section in one loop, so they share a `created_at` and
+        # ordering on it alone is undefined — and this one reaches the rendered
+        # resume. Backfilled by _backfill_document_seq below.
+        "ALTER TABLE experience ADD COLUMN seq INTEGER",
+        "ALTER TABLE education ADD COLUMN seq INTEGER",
+        "ALTER TABLE achievement ADD COLUMN seq INTEGER",
+        "ALTER TABLE project ADD COLUMN seq INTEGER",
     ]
     with engine.connect() as conn:
         for stmt in migrations:
@@ -256,12 +264,88 @@ def _backfill_chat_seq() -> None:
         session.commit()
 
 
+def next_seq(session, model, user_id) -> int:
+    """The next résumé-document ordinal for this user's rows (issue #180).
+
+    Shared by every write path that appends to `Experience`, `Education`,
+    `Achievement` or `Project`, so document position is recorded once at write
+    time rather than guessed at read time from a timestamp the whole ingestion
+    loop shares.
+
+    Called inside the caller's open session, typically mid-loop with earlier
+    rows still pending. SQLAlchemy autoflushes before evaluating a query, so
+    those pending rows are included in the MAX and consecutive calls return
+    consecutive ordinals — the behaviour this relies on, stated because it is
+    not obvious from the call site.
+    """
+    from sqlalchemy import func
+    from sqlmodel import select
+
+    highest = session.exec(
+        select(func.max(model.seq)).where(model.user_id == user_id)
+    ).one()
+    return 0 if highest is None else highest + 1
+
+
+def _backfill_document_seq() -> None:
+    """Assign `seq` to résumé rows that predate the column (issue #180).
+
+    Same shape and the same honest limit as `_backfill_chat_seq`: rows are
+    ordered by `(created_at, <pk>)` per user, so a database whose rows carry
+    distinct timestamps is restored to its true document order, while rows
+    written in one ingestion tick get an arbitrary order that is frozen here and
+    deterministic afterwards.
+
+    There is no role-style heuristic to apply on this side — nothing in a
+    résumé row indicates which of two entries came first in the source document
+    — so none is invented.
+    """
+    from sqlmodel import Session, select
+    from database.models import Achievement, Education, Experience, Project
+
+    tables = [
+        (Experience, "experience_id"),
+        (Education, "education_id"),
+        (Achievement, "achievement_id"),
+        (Project, "project_id"),
+    ]
+    with Session(engine) as session:
+        wrote = False
+        for model, pk in tables:
+            pending = session.exec(
+                select(model).where(model.seq.is_(None))
+            ).all()
+            if not pending:
+                continue
+
+            by_user: dict = {}
+            for row in pending:
+                by_user.setdefault(row.user_id, []).append(row)
+
+            for user_id, rows in by_user.items():
+                assigned = [
+                    r.seq for r in session.exec(
+                        select(model).where(model.user_id == user_id,
+                                            model.seq.is_not(None))
+                    ).all()
+                ]
+                next_free = max(assigned) + 1 if assigned else 0
+                rows.sort(key=lambda r: (r.created_at, str(getattr(r, pk))))
+                for offset, row in enumerate(rows):
+                    row.seq = next_free + offset
+                    session.add(row)
+                wrote = True
+        if wrote:
+            session.commit()
+
+
 def init_db():
     SQLModel.metadata.create_all(engine)
     _migrate_db()
     _migrate_pg_uuid_columns()
     _migrate_pg_vector_columns()
     _backfill_chat_seq()
+    _backfill_document_seq()
 
 def get_session():
     with Session(engine) as session:

@@ -292,6 +292,154 @@ def test_backfill_continues_after_existing_seq_values(isolated_engine):
     assert seqs == [0, 1, 2], f"expected contiguous ordinals, got {seqs}"
 
 
+def test_resume_sections_read_back_in_document_order_not_storage_order(isolated_engine):
+    """Document order must come from `seq`, not from how rows happen to sit.
+
+    **Rows are written in reverse.** A test that writes in the intended order
+    proves nothing: SQLite returns tied rows in rowid order, which coincides
+    with insertion order, so a `created_at`-only query passes it while still
+    being undefined. Writing 3,2,1,0 and expecting 0,1,2,3 back forces the read
+    to use the ordinal — and it is the honest shape of the risk anyway, since
+    ingestion merge paths and re-ingest do not append in document order.
+
+    This group reaches the rendered resume, not just a debug view:
+    `get_achievements` documents itself as returning "in resume-document order",
+    which ordering on a shared `created_at` could not deliver.
+    """
+    from conftest import _seed_user_and_skill
+    from database.models import Achievement, Education, Experience, Project
+
+    seeded = _seed_user_and_skill(isolated_engine)
+    uid = seeded.user_id
+
+    with Session(isolated_engine) as session:
+        for i in reversed(range(4)):
+            session.add(Experience(user_id=uid, title=f"Role {i}", company=f"Co {i}",
+                                   created_at=FIXED, seq=i))
+            session.add(Project(user_id=uid, name=f"Project {i}",
+                                created_at=FIXED, seq=i))
+            session.add(Education(user_id=uid, institution=f"School {i}",
+                                  degree=f"Degree {i}", created_at=FIXED, seq=i))
+            session.add(Achievement(user_id=uid, title=f"Award {i}",
+                                    created_at=FIXED, seq=i))
+        session.commit()
+
+    assert [e["title"] for e in services_module.get_experiences(uid)] == \
+        [f"Role {i}" for i in range(4)]
+    assert [p["name"] for p in services_module.get_projects(uid)] == \
+        [f"Project {i}" for i in range(4)]
+    assert [e["institution"] for e in services_module.get_education(uid)] == \
+        [f"School {i}" for i in range(4)]
+    assert [a["title"] for a in services_module.get_achievements(uid)] == \
+        [f"Award {i}" for i in range(4)]
+
+
+def test_next_seq_numbers_a_section_in_write_order(isolated_engine):
+    """The write half: consecutive `next_seq` calls return consecutive ordinals.
+
+    Relies on SQLAlchemy autoflushing pending rows before evaluating the MAX,
+    which is what makes this work mid-loop with nothing committed yet. Pinned
+    because that behaviour is not visible at the call site in `parser.py`.
+    """
+    from conftest import _seed_user_and_skill
+    from database.db import next_seq
+    from database.models import Experience
+
+    seeded = _seed_user_and_skill(isolated_engine)
+    uid = seeded.user_id
+
+    with Session(isolated_engine) as session:
+        for i in range(5):
+            session.add(Experience(user_id=uid, title=f"Role {i}", company="Co",
+                                   created_at=FIXED,
+                                   seq=next_seq(session, Experience, uid)))
+        session.commit()
+
+    with Session(isolated_engine) as session:
+        rows = session.exec(select(Experience).order_by(Experience.seq)).all()
+    assert [r.seq for r in rows] == [0, 1, 2, 3, 4]
+    assert [r.title for r in rows] == [f"Role {i}" for i in range(5)]
+
+
+def test_next_seq_continues_across_separate_ingests(isolated_engine):
+    """A later ingest appends after existing rows instead of restarting at 0."""
+    from conftest import _seed_user_and_skill
+    from database.db import next_seq
+    from database.models import Experience
+
+    seeded = _seed_user_and_skill(isolated_engine)
+    uid = seeded.user_id
+
+    for batch in range(2):
+        with Session(isolated_engine) as session:
+            for i in range(3):
+                session.add(Experience(user_id=uid, title=f"batch {batch} role {i}",
+                                       company="Co", created_at=FIXED,
+                                       seq=next_seq(session, Experience, uid)))
+            session.commit()
+
+    with Session(isolated_engine) as session:
+        seqs = sorted(r.seq for r in session.exec(select(Experience)).all())
+    assert seqs == [0, 1, 2, 3, 4, 5]
+
+
+def test_document_backfill_assigns_contiguous_ordinals(isolated_engine):
+    """Résumé rows predating the column are ordered and keep loading.
+
+    No role-style heuristic applies on this side — nothing in a résumé row says
+    which of two entries came first in the source document — so rows tied on
+    `created_at` get a frozen arbitrary order, exactly as documented.
+    """
+    import database.db as db
+    from datetime import timedelta
+    from conftest import _seed_user_and_skill
+    from database.models import Experience
+
+    seeded = _seed_user_and_skill(isolated_engine)
+    uid = seeded.user_id
+
+    with Session(isolated_engine) as session:
+        for i in range(4):
+            session.add(Experience(user_id=uid, title=f"Role {i}", company="Co",
+                                   created_at=FIXED + timedelta(minutes=i)))
+        session.commit()
+
+    db._backfill_document_seq()
+
+    with Session(isolated_engine) as session:
+        rows = session.exec(select(Experience).order_by(Experience.seq)).all()
+    assert [r.seq for r in rows] == [0, 1, 2, 3]
+    assert [e["title"] for e in services_module.get_experiences(uid)] == \
+        [f"Role {i}" for i in range(4)]
+
+
+def test_unassigned_rows_sort_last_on_both_engines(isolated_engine):
+    """A row with no ordinal must not land in an engine-dependent position.
+
+    SQLite and Postgres disagree about where NULLs sort, so a read path that let
+    NULL reach the comparison would order differently on the two engines — the
+    same both-engine divergence #149 exists to catch. The read paths put
+    unassigned rows last explicitly rather than inheriting either default.
+    """
+    from conftest import _seed_user_and_skill
+    from database.models import Experience
+
+    seeded = _seed_user_and_skill(isolated_engine)
+    uid = seeded.user_id
+
+    # Written unassigned-first, so storage order disagrees with the expected
+    # answer and the assertion cannot pass by coincidence.
+    with Session(isolated_engine) as session:
+        session.add(Experience(user_id=uid, title="unassigned", company="Co",
+                               created_at=FIXED, seq=None))
+        session.add(Experience(user_id=uid, title="ordered", company="Co",
+                               created_at=FIXED, seq=0))
+        session.commit()
+
+    titles = [e["title"] for e in services_module.get_experiences(uid)]
+    assert titles == ["ordered", "unassigned"]
+
+
 def test_landing_context_and_job_threads_number_independently(isolated_engine):
     """Each conversation carries its own ordinal series.
 

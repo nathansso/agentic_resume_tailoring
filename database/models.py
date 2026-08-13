@@ -99,6 +99,10 @@ class Experience(SQLModel, table=True):
     manually_edited: bool = Field(default=False)
     # Soft origin-chat back-reference (issue #21). See UserSkill.source_context.
     source_context: Optional[str] = Field(default=None)
+    # Per-user résumé-document ordinal (issue #180). See ChatMessage.seq: these
+    # rows are written in one ingestion loop, so they all share a `created_at`
+    # and ordering on it alone is undefined. Assigned by database.db::next_seq.
+    seq: Optional[int] = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -122,6 +126,8 @@ class Education(SQLModel, table=True):
     gpa: Optional[str] = None
     # User manually edited this row via the Data Explorer (issue #92).
     manually_edited: bool = Field(default=False)
+    # Per-user résumé-document ordinal (issue #180). See Experience.seq.
+    seq: Optional[int] = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -142,6 +148,10 @@ class Achievement(SQLModel, table=True):
     description: Optional[str] = None    # optional supporting line
     issuer: Optional[str] = None         # awarding org / publication
     date: Optional[str] = None           # free-form, matching Experience (e.g. "2023")
+    # Per-user résumé-document ordinal (issue #180). See Experience.seq. This
+    # table's read path documents itself as "in resume-document order", which
+    # ordering on a tied `created_at` could not actually deliver.
+    seq: Optional[int] = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -161,6 +171,8 @@ class Project(SQLModel, table=True):
     manually_edited: bool = Field(default=False)
     # Soft origin-chat back-reference (issue #21). See UserSkill.source_context.
     source_context: Optional[str] = Field(default=None)
+    # Per-user résumé-document ordinal (issue #180). See Experience.seq.
+    seq: Optional[int] = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

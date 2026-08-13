@@ -18,7 +18,7 @@ from sqlalchemy import func
 from sqlmodel import Session, delete, select
 
 from agents.skill_selection import skill_names
-from database.db import engine
+from database.db import engine, next_seq
 from database.models import (
     Achievement, ChatMessage, DeletedEntry, Education, Experience,
     JobDescription, JobSkill, Project, Skill, User, UserJobResult, UserSkill,
@@ -382,7 +382,7 @@ def get_experiences(user_id: Optional[UUID]) -> list[dict]:
     with Session(engine) as session:
         exps = session.exec(
             select(Experience).where(Experience.user_id == user_id)
-            .order_by(Experience.created_at)
+            .order_by(Experience.seq.is_(None), Experience.seq, Experience.created_at, Experience.experience_id)
         ).all()
         return [_exp_row_dict(e) for e in exps]
 
@@ -395,7 +395,7 @@ def get_education(user_id: Optional[UUID]) -> list[dict]:
         entries = session.exec(
             select(Education)
             .where(Education.user_id == user_id)
-            .order_by(Education.created_at)
+            .order_by(Education.seq.is_(None), Education.seq, Education.created_at, Education.education_id)
         ).all()
         return [
             {
@@ -419,7 +419,7 @@ def get_achievements(user_id: Optional[UUID]) -> list[dict]:
         entries = session.exec(
             select(Achievement)
             .where(Achievement.user_id == user_id)
-            .order_by(Achievement.created_at)
+            .order_by(Achievement.seq.is_(None), Achievement.seq, Achievement.created_at, Achievement.achievement_id)
         ).all()
         return [
             {
@@ -438,7 +438,7 @@ def get_projects(user_id: Optional[UUID]) -> list[dict]:
     with Session(engine) as session:
         projs = session.exec(
             select(Project).where(Project.user_id == user_id)
-            .order_by(Project.created_at)
+            .order_by(Project.seq.is_(None), Project.seq, Project.created_at, Project.project_id)
         ).all()
         return [
             {
@@ -982,6 +982,7 @@ def create_artifact_from_chat(
                     description=description,
                     repo_url=repo_url,
                     source_context=source_context,
+                    seq=next_seq(session, Project, user_id),
                 ))
                 session.commit()
             return f"Added project '{name}' to your profile."
@@ -1008,6 +1009,7 @@ def create_artifact_from_chat(
                     company=company,
                     description=description,
                     source_context=source_context,
+                    seq=next_seq(session, Experience, user_id),
                 ))
                 session.commit()
             return f"Added experience '{title} @ {company}' to your profile."
@@ -2534,6 +2536,7 @@ def _prune_chat_messages(
             query = _chat_scope(
                 select(ChatMessage.message_id), jid, user_id
             ).order_by(
+                ChatMessage.seq.is_(None),
                 ChatMessage.seq.desc(),
                 ChatMessage.created_at.desc(),
                 ChatMessage.message_id.desc(),
@@ -2571,6 +2574,7 @@ def load_chat_history(
             uid = (user_id if user_id is not None else _acting_user_id()) \
                 if jid is None else None
             query = _chat_scope(select(ChatMessage), jid, uid).order_by(
+                ChatMessage.seq.is_(None),
                 ChatMessage.seq.desc(),
                 ChatMessage.created_at.desc(),
                 ChatMessage.message_id.desc(),
