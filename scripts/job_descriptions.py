@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import sys
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -29,18 +30,34 @@ from pathlib import Path
 
 import requests
 
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from job_sources import clean_html, unescape_fully  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
 CACHE_PATH = ROOT / "eval" / ".jd_cache.db"
 
-MAX_TEXT = 6000            # ceiling the source adapters already apply
+# Ceiling on a stored body. Raised from 6,000 after `scripts/audit_jd_corpus.py`
+# measured what 6,000 was doing: **48 of the 150 committed postings were cut at
+# exactly that byte**, mid-word, and 14 more exceeded it — the feed adapters
+# never applied the cap, so the corpus carried two different ceilings and the
+# comment claiming they did was wrong. A user pasting a posting pastes all of
+# it, and nothing downstream truncates: `job_analyzer` sends the whole body to
+# the extractor and `jd_profile` reads requirements in source order (#121/#125),
+# so a cut tail silently drops the end of the requirement list. 20,000 clears
+# the longest real posting measured (8,821) with room, and still bounds a
+# pathological page.
+MAX_TEXT = 20000
 WORKERS = 6                # politeness ceiling
 TIMEOUT = 20
 RETRY_AFTER = timedelta(days=14)
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/122.0 Safari/537.36")
 
+# Removed with their contents before parsing: `get_text()` would otherwise
+# return the body of a <script> as if it were prose.
 _TAGS = re.compile(r"(?is)<(script|style|noscript|svg)[^>]*>.*?</\1>")
-_BLOCK = re.compile(r"(?i)</(p|div|li|tr|h[1-6]|section|br)\s*/?>")
 
 
 # ── cache ──────────────────────────────────────────────────────────────────────
@@ -85,23 +102,27 @@ def store(conn: sqlite3.Connection, url: str, text: str, status: str,
 # ── html → text ────────────────────────────────────────────────────────────────
 
 def strip_html(html: str) -> str:
-    """HTML to readable text.
+    """HTML to readable text — the shape a user's paste has.
 
-    Block-level closers become newlines *first*, so a bulleted Requirements list
-    survives as separate lines. Collapsing everything onto one line would erase
-    the section boundaries the JD-profile extraction keys on (#121), and would
-    also defeat the years-of-experience gate, which reads requirement bullets.
+    Block-level boundaries become newlines and list items keep a `- ` marker, so
+    a bulleted Requirements list survives as a list. Collapsing everything onto
+    one line would erase the section boundaries the JD-profile extraction keys
+    on (#121) and the ordinals #125 reads importance from.
+
+    **Entities are unescaped before tags are stripped, and to a fixed point.**
+    The previous implementation stripped tags with a regex first and unescaped
+    afterwards, which is exactly backwards for a body that is escaped more than
+    once — and posting bodies embedded in JSON usually are. `&lt;li&gt;`
+    survived the tag pass untouched, and the entity pass then turned it into a
+    literal `<li>` *in the finished text*: the posting's own markup rendered as
+    prose, every block boundary gone, and 18 of the 150 committed postings
+    carrying it (`scripts/audit_jd_corpus.py`). A naive `<[^>]+>` also stops at
+    the first `>` inside an attribute value, which left fragments like
+    `data-aria-level="1">` in the text — a parser handles what a regex cannot,
+    so the parsing is delegated to `job_sources.clean_html` and there is now one
+    HTML-to-text implementation in the repo instead of two that disagreed.
     """
-    html = _TAGS.sub(" ", html or "")
-    html = _BLOCK.sub("\n", html)
-    text = re.sub(r"<[^>]+>", " ", html)
-    for entity, char in (("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"),
-                         ("&quot;", '"'), ("&#39;", "'"), ("&nbsp;", " ")):
-        text = text.replace(entity, char)
-    text = re.sub(r"&[a-z]+;|&#\d+;", " ", text)
-    text = re.sub(r"[ \t]+", " ", text)
-    text = re.sub(r"\n\s*\n\s*\n+", "\n\n", text)
-    return text.strip()
+    return clean_html(_TAGS.sub(" ", unescape_fully(html or "")))
 
 
 def _get(url: str) -> str:

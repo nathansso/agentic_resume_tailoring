@@ -202,6 +202,51 @@ def test_strip_html_drops_script_and_style_bodies():
     assert "var x" not in text and ".a{" not in text
 
 
+def test_strip_html_unescapes_before_stripping_tags():
+    """A double-escaped body must not emerge as literal markup.
+
+    Bodies embedded in JSON are routinely escaped more than once — Greenhouse
+    always is. Stripping tags first leaves `&lt;li&gt;` untouched and a later
+    entity pass then turns it into a literal `<li>` in the finished text: the
+    posting's own markup rendered as prose, with every block boundary gone.
+    18 of the 150 committed postings carry exactly that
+    (`scripts/audit_jd_corpus.py`).
+    """
+    text = job_descriptions.strip_html(
+        "&lt;p&gt;We need &lt;strong&gt;Python&lt;/strong&gt;&lt;/p&gt;"
+        "&lt;ul&gt;&lt;li&gt;3 years SQL&lt;/li&gt;&lt;li&gt;Airflow&lt;/li&gt;&lt;/ul&gt;")
+    assert "<" not in text and ">" not in text
+    assert "We need Python" in text
+    assert "- 3 years SQL" in text and "- Airflow" in text
+
+
+def test_strip_html_survives_an_angle_bracket_inside_an_attribute():
+    """`<[^>]+>` stops at the first `>` inside an attribute value and leaves the
+    remainder of the tag in the text — the source of fragments like
+    `data-aria-level="1">` in the committed corpus. A parser handles it."""
+    text = job_descriptions.strip_html(
+        '<span data-x="a>b" data-aria-level="1">Familiarity with agile</span>')
+    assert text == "Familiarity with agile"
+
+
+def test_strip_html_renders_apostrophe_entities_as_apostrophes():
+    """`&rsquo;` fell through to the catch-all entity rule and became a space,
+    turning "today's" into "today s" — invented word boundaries in the text
+    every keyword metric counts over."""
+    text = job_descriptions.strip_html("<p>you&#39;ll ship today&rsquo;s work</p>")
+    assert "you'll" in text
+    assert "today’s" in text
+    assert " s " not in text
+
+
+def test_the_text_ceiling_clears_the_longest_real_posting():
+    """6,000 cut 48 of the 150 committed postings mid-word, and the feed
+    adapters never applied it at all — the corpus carried two ceilings. Nothing
+    downstream truncates, so a cut tail silently drops the end of the
+    requirement list `jd_profile` reads in source order (#121/#125)."""
+    assert job_descriptions.MAX_TEXT >= 20000
+
+
 def test_a_posting_that_already_has_a_body_is_marked_fetched_without_a_request(tmp_path):
     conn = job_descriptions.connect(tmp_path / "c.db")
     jobs = [{"url": "https://example.com/1", "text": "Full description here."}]
