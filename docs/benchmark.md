@@ -136,9 +136,15 @@ than an error.
 
 One real task, end to end.
 
-**Mode: plumbing.** Run on 2026-08-14, `python eval/tailoring_benchmark.py --mode plumbing
---limit 3`, on the current 150-posting corpus. Every number below is from that run's
-`eval/results/tailoring_benchmark_20260814T112422.json`. **Because it is plumbing, no bullet
+**Mode: plumbing.** Run on 2026-08-14:
+
+```bash
+python eval/tailoring_benchmark.py --mode plumbing --limit 3 \
+  --profile eval/profiles/ai_engineering_specialist_ravi_deshmukh.md
+```
+
+Every number below is from that run's
+`eval/results/tailoring_benchmark_20260814T115418.json`. **Because it is plumbing, no bullet
 was rewritten** — these numbers describe the harness and the deterministic post-processing.
 
 The task, `eval/jd_dataset/arizent_data_ai_engineer.json`:
@@ -158,16 +164,17 @@ The task, `eval/jd_dataset/arizent_data_ai_engineer.json`:
 }
 ```
 
-The candidate is `eval/profiles/benchmark_profile.md` — Alex Rivera, four years across
-backend services, ML systems and data infrastructure: **4 experiences, 4 projects, 32
-skills** as `eval/profile_fixture.py` parses them. `MAX_PROJECTS = 3`, so three projects are
-selected and the fourth becomes the replacement pool the planner may swap from.
+The candidate is one of the 20 stratified profiles (§5): Ravi Deshmukh, an **AI-engineering
+narrow specialist**, entry level, metric-rich, redundancy-clean — **15 skills**, well under
+the `MAX_SKILLS = 18` cap. That last fact matters for reading the numbers below, and §5
+explains why.
 
 One caveat before the numbers, because it applies to every plumbing figure in this repo:
-**plumbing and product are not measuring the same candidate.** The derived fixture parse
-yields 32 skills; the *real* parser extracts **36** from the same markdown, because it picks
-skills out of bullet text and not just the explicit Skills line. Deriving the fixture from
-the profile (#171) narrowed that gap without closing it.
+**plumbing and product are not measuring the same candidate.** The canned payloads are
+derived from `eval/profile_fixture.py`'s parse of the markdown; the *real* parser extracts
+more, because it picks skills out of bullet text and not just the explicit Skills line. On
+the retired `benchmark_profile.md` the gap was measured at 32 versus 36. Deriving the
+fixture from the profile (#171) narrowed that gap without closing it.
 
 ### The flow
 
@@ -189,22 +196,22 @@ the profile (#171) narrowed that gap without closing it.
 
 ```json
 {
-  "baseline_composite": 59.7,
-  "tailored_composite": 88.0,
-  "delta": 28.3,
-  "skill_coverage":   {"baseline": 36.7, "tailored": 100.0, "delta": 63.3},
-  "keyword_coverage": {"baseline": 69.1, "tailored":  68.2, "delta": -0.9},
+  "baseline_composite": 52.1,
+  "tailored_composite": 79.4,
+  "delta": 27.3,
+  "skill_coverage":   {"baseline": 38.2, "tailored": 100.0, "delta": 61.8},
+  "keyword_coverage": {"baseline": 66.5, "tailored":  64.6, "delta": -1.9},
   "section_presence": {"baseline": 100.0, "tailored": 100.0, "delta": 0.0},
-  "role_level":       {"baseline": 75.0, "tailored":  75.0, "delta": 0.0}
+  "role_level":       {"baseline":  0.0, "tailored":   0.0, "delta": 0.0}
 }
 ```
 
 Read that carefully, because three of the four components carry a lesson:
 
-- **`skill_coverage` does all the work** (+63.3 of a +28.3 weighted composite). The
+- **`skill_coverage` does all the work** (+61.8 of a +27.3 weighted composite). The
   baseline scores the whole ingested profile as flat text; the tailored side scores a
   document that names the matched skills explicitly.
-- **`keyword_coverage` went *down* 0.9 points**, and that is not a bug. Coverage is
+- **`keyword_coverage` went *down* 1.9 points**, and that is not a bug. Coverage is
   monotone non-decreasing *in text added to a given document* — which is why the objective
   cannot detect over-tailoring, and why #127 exists. But the baseline and tailored sides
   are not the same document: the baseline flattens the entire profile, while
@@ -212,31 +219,34 @@ Read that carefully, because three of the four components carry a lesson:
   tailored content. Tailoring **drops** content, so this component can fall. "Monotone in
   edits" and "monotone from baseline to tailored" are different claims, and only the first
   one is true.
-- **`role_level` did not move, and its value is suspect anyway.** #181 reports that
-  `_detect_level` matches seniority keywords as bare substrings and returns the highest
-  tier found anywhere in the text: only 22 of the 150 corpus postings read at the tier they
-  are filed under, and the benchmark profile itself reads as `lead` because one bullet says
-  "saving **staff** ten hours weekly". This 75.0 is a comparison between two independently
-  wrong labels.
+- **`role_level` scored 0.0 on both sides, and its value is not trustworthy anyway.** #181
+  reports that `_detect_level` matches seniority keywords as bare substrings and returns
+  the highest tier found anywhere in the text: only **22 of the 150** corpus postings read
+  at the tier they are filed under, 60 read as `lead` and 27 as `manager`. On the other
+  two tasks in this same run the component scored 50.0 on both sides. A weight-0.10
+  component swinging between 0 and 50 on label noise is what #181 exists to fix.
 
 The other families for the same task:
 
 | family | value |
 |---|---|
-| `skills.rendered_count` | 15 of 32 profile skills (`selection_ratio` 0.469, `within_cap_bounds` true) |
+| `skills.rendered_count` | 9 of 15 profile skills (`selection_ratio` 0.600, `within_cap_bounds` true) |
 | `skills.matched_recall` | 1.0 |
-| `experience_allocation.allocation_correlation` | 0.0 |
-| `redundancy.max_bullet_df` | 0.125 (16 bullets; `python`, `react`, `docker`, `fastapi` each in 2) |
-| `redundancy.leading_verb_entropy` | 0.969 |
-| `redundancy.mtld` | 237.81 |
-| `redundancy.mean_new_information` | 1.0 |
+| `experience_allocation.allocation_correlation` | 1.0 |
+| `redundancy.max_bullet_df` | 0.100 (10 bullets) |
+| `redundancy.leading_verb_entropy` | 0.940 |
+| `redundancy.mtld` | 242.0 |
+| `redundancy.mean_new_information` | 0.988 |
 | `redundancy.max_pairwise_cosine` | absent — no encoder in plumbing mode |
 
-`allocation_correlation` of exactly 0.0 is the plumbing signature: the stub returns every
-source bullet verbatim, so bullet-word share tracks the source resume rather than JD
-relevance. The run's three tasks aggregate to `ats_delta` mean **24.5** (22.5–28.3),
-`baseline_composite` mean 63.7, `tailored_composite` mean 88.2 — consistent with the
-150-task plumbing baseline in §5.
+`selection_ratio` of 0.600 is the number to be suspicious of. It is 9 rendered over a
+15-skill profile — a *narrow specialist*, so the `MAX_SKILLS = 18` cap never binds and the
+ratio is measuring the profile's size as much as the selection. A 27-skill generalist
+scoring the same ratio would mean something quite different. That confound is exactly what
+#172's distractor pool (chunk 5, open) is built to remove.
+
+The run's three tasks aggregate to `ats_delta` mean **30.9** (27.3–33.7),
+`baseline_composite` mean 53.4, `tailored_composite` mean 84.3.
 
 ---
 
@@ -302,6 +312,14 @@ duplication is the only one an LLM cannot cheaply satisfy by surface variation �
 the one that goes missing in plumbing mode. Returning `{}` below two bullets is deliberate:
 one bullet cannot duplicate anything, and `0.0` would read as "verified clean".
 
+**Two of the four are now exercised, and two are not.** Until #172 the suite reported clean
+across the board on the only fixture that existed, and could not distinguish "genuinely
+clean" from "too simple to generate redundancy". The redundancy-bearing profiles separate
+dilution and monotony cleanly from their matched clean twins (§5). Term stuffing still does
+not fire on either population, and semantic duplication is only measurable in product or
+replay mode. Read a clean redundancy report accordingly: for two of these modes it is
+evidence, and for two it is silence.
+
 ### `llm_judge` (opt-in, product only)
 
 `--judge` adds 1–5 scores with rationales on `relevance_balance`, `redundancy` and
@@ -315,12 +333,17 @@ justification, turning the evidence field into post-hoc rationalisation.
 
 ---
 
-## 5. The corpus
+## 5. The corpus: postings and profiles
 
-**150 postings, 30 in each of five role families** — data science, data engineering, ML
-engineering, software engineering, AI engineering. 100 entry-level / 50 intern, **129
-distinct companies**, 30 distinct companies within every family, no two tasks sharing a
-description.
+A benchmark task is a **(posting, candidate)** pair, and both sides are stratified.
+
+**The JD side: 150 postings, 30 in each of five role families** — data science, data
+engineering, ML engineering, software engineering, AI engineering. 100 entry-level / 50
+intern, **129 distinct companies**, 30 distinct companies within every family, no two tasks
+sharing a description.
+
+**The candidate side: 20 profiles** — 15 authored people (5 families × 3 variants) plus 5
+derived redundancy variants (#172 chunks 1–4).
 
 ### Why the old corpus was invalid
 
@@ -348,6 +371,51 @@ report before — that finding does not exist.
 
 Pooled, the same run reports `ats_delta` mean **25.7** (3.8–45.0), `baseline_composite`
 63.3, `tailored_composite` 89.0.
+
+### The profile set
+
+Until #172 the benchmark measured **one** candidate, so every metric was a single pooled
+number over one synthetic person: "weak" was the only available finding, and "weak on
+metric-poor candidates" was not expressible.
+
+There are now 20 profiles — 15 authored people across 5 role families × 3 variants, plus 5
+redundancy-bearing derivatives. Each declares the stratum it isolates in a sidecar:
+
+```json
+{
+  "strata": {"role_family": "software_engineering", "level": "entry",
+             "breadth": "specialist", "evidence_density": "metric_rich",
+             "redundancy": "clean"},
+  "github_metrics": {"Queue Keeper": {"stars": 96, "contributors": 3,
+                     "author_commits": 154, "total_commits": 188,
+                     "project_type": "open_source"}},
+  "distractors": {"skills": [], "projects": []}
+}
+```
+
+Three properties are worth knowing:
+
+- **Declared strata are verified, never trusted** (`eval/profile_checks.py`). A sidecar
+  claiming `metric_poor` while every bullet carries a number would report under a slice it
+  does not belong to *and the table would still look complete* — strictly worse than not
+  slicing at all.
+- **Profiles are generated, not hand-edited.** `eval/profile_banks.py` holds the material,
+  `eval/profile_generator.py` composes and renders it, and a test fails on a hand-edit — so
+  the bank cannot become a stale comment beside the file that replaced it. Synthetic only:
+  no real résumé ever enters `eval/`.
+- **The redundancy variant is a matched pair, not a fourth person.** It is the specialist
+  profile with restating bullets *appended* — same employer, same metrics, same skills — so
+  a redundancy contrast is not confounded with one synthetic person's wording.
+
+That closes two of the three fixture gaps shipped issues had each recorded and never filed.
+#122's redundancy suite now separates the pair (`mean_new_information` 0.867 bearing vs
+0.997 clean, over 125 and 375 task-runs), and #155's `_github_signal()` returns non-`None`
+because every family carries a profile with seeded GitHub metrics. **Term stuffing still
+does not fire** on either population: additive-only injection cannot push a term past a 0.5
+bullet document frequency without rewriting the base bullets, which would break the matched
+pair. A stuffing-bearing variant is unfiled.
+
+The `distractors` slot is empty on every profile today — chunk 5, still open.
 
 ### How postings are sourced and verified
 
@@ -377,12 +445,36 @@ employers. `--limit` samples the same way, across families rather than off the f
 list; before #177 it returned `tasks[:limit]` over a company-alphabetical listing, which was
 harmless at 8 tasks and a trap at 150.
 
+### Posting bodies were repaired, and that moved numbers too
+
+Wiring the profile set up surfaced defects in the postings themselves that no metric could
+have shown (#172 chunks 1–4). `scripts/audit_jd_corpus.py` found them and
+`scripts/repair_jd_bodies.py` fixed them in place:
+
+| finding | before | after | cause |
+|---|---|---|---|
+| cut at a fetch ceiling | 62 | 23 | 48 cut at exactly 6,000 bytes mid-word; 14 *exceeded* it, because the feed adapters never applied the cap their comment claimed |
+| literal HTML in the body | 18 | 2 | `strip_html` stripped tags *before* unescaping entities, so a double-escaped body emerged as its own `<li>` markup |
+| invisible characters | 80 | 61 | NBSP and zero-width joiners surviving the unescape |
+
+25 damaged postings are **kept, not dropped**: two hosts 403 and the rest have expired, so
+re-fetching yields a stub, and they span all five families — dropping them would break the
+30-per-family balance the primary stratum rests on. A test pins the count so it can only go
+down. The repair also **does not re-select**: re-running the scraper would return a
+materially different 150 postings, bundling a change to *which* postings are measured with a
+fix to *how their text was extracted*, with no way to attribute a moved number to either.
+
 ### The rule that governs every figure in this repo
 
-**A corpus change invalidates comparison against earlier runs.** Every benchmark figure in
-`CHANGELOG.md` dated before 2026-08-11 was measured on the 8 mid-level-and-senior postings;
-figures from 2026-08-11 onward are on these 150. Numbers either side of that line are not
-comparable. Nothing was deleted — the older entries carry the warning instead.
+**A corpus change invalidates comparison against earlier runs**, and there are now two such
+lines:
+
+| from | what changed | consequence |
+|---|---|---|
+| **2026-08-11** (#177) | 8 mid-level-and-senior postings → 150 intern/entry across five families | figures either side are not comparable |
+| **2026-08-12** (#172) | one mid-level candidate → 20 stratified intern/entry profiles, on repaired posting bodies | figures either side are not comparable, and the pooled figure now averages over candidates as well as postings |
+
+Nothing was deleted — the older `CHANGELOG.md` entries carry the warning instead.
 
 A refresh **replaces** the corpus rather than layering on top of it; leaving stale files
 behind is how senior postings would survive a domain restriction. Sizing: the JD is the
@@ -406,17 +498,26 @@ whose `role_level` component is known to be mislabelled (#181). That is genuinel
 a regression signal and genuinely weak as an efficacy claim.
 
 **What it does not establish.** That the resume reads better, that a recruiter would prefer
-it, or that the improvement generalises to a different candidate — there is exactly **one**
-profile in `eval/profiles/`, so every number in this repo is one candidate's experience of
-the corpus. That is the gap #172 exists to close, and it is why the per-family table in §5
-is a statement about *this* candidate's headroom rather than about the five role families.
+it, or that the composite tracks what a human would choose. Nothing in this repo has
+measured that last one — the ATS composite is *our own scorer*, so tuning against it and
+then reporting it as evidence the product works is circular. #172 chunk 7's human anchor set
+is the fix, and it is open.
+
+Generalisation across candidates is now partly established and partly not. The per-family
+table in §5 was one candidate's headroom; the suite runs 20 profiles × 25 tasks and reports
+per-stratum slices, so a claim like "specialists gain 30.1 and generalists 23.7" is now
+sayable. But the 20 profiles are synthetic, authored by one person from one ontology, so
+they share an author's blind spots in a way 20 real résumés would not.
 
 **Checklist before quoting a number:**
 
 1. Say the mode. A plumbing number is not a quality claim.
-2. Say the corpus. Pre- and post-2026-08-11 figures are not comparable.
-3. Say the profile. All of them are Alex Rivera today.
-4. Say `n`. `--limit 3` and 150 tasks are different measurements of different things.
+2. Say the corpus and the profile set. There are two incomparability lines, 2026-08-11 and
+   2026-08-12 (§5).
+3. Say which profile, or which stratum slice. A pooled figure now averages over candidates
+   as well as postings, and the candidate `role_family` slice is *not* the JD `role_family`
+   slice — the suite prefixes the former `profile_` for exactly that reason.
+4. Say `n`. `--limit 3`, 150 tasks, and 500 task-runs are different measurements.
 5. Check whether the run re-tailored. It did not — see below.
 
 **Run-to-run variance.** In plumbing and replay there is none worth speaking of: two
@@ -481,12 +582,29 @@ have hidden the null result.
 
 Specified but **not shipped**. Nothing below describes the harness today.
 
-- **#172** (in progress) — the dataset foundation: stratified *profiles* (the benchmark has
-  one candidate today), a distractor pool, a calibrated implicitness filter, and human
-  anchors. This is the blocker on almost every "unmeasurable" cell in
-  [`../eval/README.md`](../eval/README.md)'s coverage map, because a preference or a
-  suppression only means something relative to a profile that holds the item being
-  suppressed. It must also re-record the replay cassette once its profile set is final.
+- **#172 chunks 5–7** — the rest of the dataset foundation. Chunks 1–4 (the 20-profile set,
+  per-stratum reporting, seeded GitHub metrics, the corpus audit) shipped and are described
+  above. What remains:
+  - **Chunk 5, the distractor pool** — inject plausible-but-irrelevant skills and projects
+    without moving the answer key, so haystack size decouples from the true-positive set.
+    This is what makes `selection_ratio` interpretable across strata (§3) and what makes the
+    `MAX_SKILLS` cap actually bind on a 15-skill specialist. Admission must be checked
+    against every posting in the corpus, not just the one in hand: a distractor genuinely
+    relevant to *some* JD silently corrupts that JD's labels.
+  - **Chunk 6, β calibration** — measure the encoder-distance threshold that separates
+    "trivially matchable" from "inference required" on ART's own `all-MiniLM-L6-v2`, rather
+    than adopting ImplexConv's 0.4 (computed on a different model, domain and text length).
+    Both distributions get reported; if they do not separate, that is a finding about the
+    encoder, not something to paper over with a borrowed constant. Ability B becomes
+    measurable.
+  - **Chunk 7, the human anchor set** — 60 blind pairwise judgments, both orderings, ties
+    recorded, and the agreement between `sign(Δ composite)` and human preference reported as
+    a number whatever it turns out to be. Below ~70% agreement the composite is not a valid
+    efficacy proxy and every number keyed on it needs that caveat attached. Wants recorded
+    product-mode runs, so it comes last.
+- **The replay cassette is dead and not yet re-recorded.** Its three task ids do not exist in
+  the current corpus. The profile set is final now, so re-recording is unblocked, but it
+  belongs with a product-mode run rather than a dataset change.
 - **#173** — the re-tailor arm, plus update-durability, locality (does tailoring job B
   degrade job A?), suppression, and a three-way preference-adherence axis. This is what
   would make §6's structural blind spot go away.

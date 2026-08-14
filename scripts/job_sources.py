@@ -61,19 +61,44 @@ def _json(url: str, headers: "dict | None" = None):
     return resp.json()
 
 
-def clean_html(raw: str) -> str:
-    """Job-board APIs return HTML (Greenhouse double-escapes it). → plain text."""
+# Characters that survive an unescape as invisible junk: non-breaking and
+# narrow spaces, zero-width joiners, the BOM. They are not what a paste looks
+# like and they split tokens for anything counting words, so they are folded to
+# an ordinary space here rather than left for each consumer to rediscover.
+_INVISIBLE = re.compile(r"[   ​‌‍⁠﻿‎‏]")
+
+
+# Bodies embedded in JSON are routinely escaped more than once — Greenhouse
+# always is, and SmartRecruiters' section text can be too. A single unescape
+# leaves the second layer behind, which surfaces as `&#xa0;` and `&amp;` in the
+# finished text and, when the inner layer is markup, as literal `<li>`. Bounded
+# because a body containing a literal "&amp;amp;" would otherwise oscillate.
+_MAX_UNESCAPE_PASSES = 3
+
+
+def unescape_fully(raw: str) -> str:
     import html as _html
 
+    text = raw or ""
+    for _ in range(_MAX_UNESCAPE_PASSES):
+        once = _html.unescape(text)
+        if once == text:
+            break
+        text = once
+    return text
+
+
+def clean_html(raw: str) -> str:
+    """Job-board APIs return HTML (Greenhouse double-escapes it). → plain text."""
     from bs4 import BeautifulSoup
 
-    soup = BeautifulSoup(_html.unescape(raw or ""), "html.parser")
+    soup = BeautifulSoup(unescape_fully(raw), "html.parser")
     for li in soup.find_all("li"):
         li.insert_before("\n- ")
     for block in soup.find_all(["p", "div", "br", "h1", "h2", "h3", "h4", "ul"]):
         block.insert_before("\n")
-    text = soup.get_text()
-    text = re.sub(r"[ \t]+", " ", text)
+    text = _INVISIBLE.sub(" ", soup.get_text())
+    text = re.sub(r"[ \t\r]+", " ", text)
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 

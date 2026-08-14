@@ -19,7 +19,7 @@ asked for; an ability whose row stays `none` after its issue ships did not ship.
 | **D** | Update durability | After a re-tailor, do prior decisions survive? | — | — | **none** — `_run_task` tailors once and never re-tailors (#173 chunk 1) |
 | **E** | Locality | Does tailoring job B degrade job A? | — | — | **none** — JobCard injection (#137) is a live cross-job channel, unmeasured |
 | **F** | Suppression | Is "that was just coursework" honoured? | — | — | **none** — needs profile-bound conversations (#178). The literature's hardest case: ImplexConv reports 55.18 supportive vs 14.84 opposed retrieval F1 |
-| **G** | Redundancy | Semantic duplication, stuffing, monotony, dilution | `jd_dataset/` × 1 profile | `agents/redundancy.py` — 4 modes + 6 counting keys | **metric yes, data no** — #122 recorded the suite reports clean across the board and could not distinguish "genuinely clean" from "too simple to generate redundancy" |
+| **G** | Redundancy | Semantic duplication, stuffing, monotony, dilution | `jd_dataset/` × the 5 `redundancy: bearing` profiles, each paired with its clean twin | `agents/redundancy.py` — 4 modes + 6 counting keys | **partial** — dilution and monotony now separate the pair cleanly (`mean_new_information` 1.000 → 0.860, `leading_verb_entropy` 1.000 → 0.889, `mtld` 336.5 → 148.8 on the same 5 tasks). **Stuffing still does not fire** on either population: additive-only injection cannot push a term past a 0.5 bullet document frequency without rewriting the base bullets, which would break the matched pair. A stuffing-bearing variant is unfiled |
 | **H** | Action ranking | Does it rank the higher-value move above the lower? | — | — | **none** — needs execution-derived preference pairs (#174) |
 | **I** | Personalization | applied / ignored / violated | — | — | **none** — #129 and #133 shipped the machinery; nothing checks a preference reaches the rendered resume. Needs #178 + #173's `preference_adherence` axis |
 
@@ -27,8 +27,8 @@ asked for; an ability whose row stays `none` after its issue ships did not ship.
 
 | Dataset | Size | Harness | Note |
 |---|---|---|---|
-| `jd_dataset/` | 150 | tailoring benchmark | 30 intern/entry postings in each of five role families (#177). Replaced the 8 mid-level-and-senior postings every pre-2026-08-11 figure was measured on |
-| `profiles/` | 1 | tailoring benchmark | Mid-level candidate; #172 replaces with 15 intern/entry profiles |
+| `jd_dataset/` | 150 | tailoring benchmark | Intern/entry postings, 30 per role family (#177), replacing the 8 mid-level-and-senior postings every pre-2026-08-11 figure was measured on. Audit its parse fidelity with `python scripts/audit_jd_corpus.py` |
+| `profiles/` | 20 + 1 retired | tailoring benchmark | 15 authored people (5 families × 3 variants) + 5 redundancy-bearing derivatives (#172). Generated from `profile_banks.py`; the mid-level `benchmark_profile.md` is retired but still runnable by name |
 | `ku_dataset/` | 4 | knowledge-updates eval | **Scripted by default** — the task file supplies the notes *and* the decisions, so the extractor is not under test unless `--live` |
 | `jobcard_dataset/` | 4 | JobCard eval | Cross-job memory, outcome-carrying |
 | `skill_selection_tasks/` | 2 | skill-selection tuning | Carries a labelled `relevant` answer key; unused by the tailoring benchmark |
@@ -180,8 +180,133 @@ claim's sample size is the number of JDs in that family. The default 30 detects
 a moderate paired effect (d≈0.50) and matches LongMemEval's 30-question
 per-ability slice.
 
-The candidate profile the benchmark tailors is `eval/profiles/benchmark_profile.md`
-(override with `--profile`).
+#### Corpus audit — is it what a user would paste? (issue #172)
+
+```bash
+python scripts/audit_jd_corpus.py                  # summary, exit 1 on errors
+python scripts/audit_jd_corpus.py --detail truncated
+```
+
+`_run_task` posts each `description` to the same endpoint the paste box calls,
+so the corpus is only a valid measurement if every body is the text a browser
+would have put on the clipboard. Assembly from ATS APIs does not guarantee that,
+and nothing in a metrics table shows when it fails — every number stays
+well-formed while the input degrades. The audit checks schema, fidelity
+(truncation, HTML leakage, encoding damage, fused words, stripped apostrophes),
+structure (do the section and list boundaries `jd_profile` keys on still exist?)
+and content (is it a job description, and does its stated seniority match the
+label it is filed under?).
+
+First run against the corpus as #177 committed it, and after the repair below:
+
+| finding | before | after | what it was |
+|---|---|---|---|
+| cut at a fetch ceiling | 62 | **23** | 48 cut at exactly 6,000 mid-word; 14 more *exceeded* it, because the feed adapters never applied it — the corpus carried two ceilings |
+| literal HTML in the body | 18 | **2** | `strip_html` stripped tags *before* unescaping entities, so every double-escaped body emerged as its own `<li>` markup |
+| unescaped entities | 3 | **1** | a single unescape of a double-escaped body leaves `&#xa0;` behind — and the audit's first entity pattern matched only the named and decimal forms, so the check passed while the residue sat in the corpus |
+| no bulleted lines | 91 | **66** | correlates with `source`, which correlates with `role_family` — a per-family contrast is partly a contrast between text formats |
+| invisible characters | 80 | **63** | NBSP and zero-width joiners surviving the unescape |
+| `level` label ≠ detected tier | 124 | 124 | not a corpus defect — see below |
+
+**Repairing:**
+
+```bash
+python scripts/repair_jd_bodies.py                          # dry run
+python scripts/repair_jd_bodies.py --only truncated,html_tag --apply
+```
+
+`scripts/repair_jd_bodies.py` re-fetches bodies **in place**: it touches
+`description` and nothing else, so ids, labels, verification, ordering and
+membership are unchanged. Re-running `scrape_job_descriptions.py` instead would
+redo discovery and selection and hand back a materially different 150 postings —
+a change to *which* postings are measured, bundled with a fix to *how their text
+was extracted*, with no way to attribute a moved number to either. A re-fetch
+that returns a much shorter body (an expired listing's "no longer accepting
+applications" page) or that introduces a new audit finding is discarded and the
+committed body kept.
+
+**25 postings could not be repaired** — 2 hosts return 403 and the rest have
+expired, so a re-fetch yields a stub. They keep their cut bodies rather than
+being dropped: they are spread across all five families (DS 8, DE 6, AI 5,
+MLE 3, SWE 1) and dropping them would break the 30-per-family balance the
+primary stratum rests on. `tests/test_jd_corpus.py` pins the count so it can
+only go down.
+
+**The corpus is intern/entry-only, and that is now an invariant.** `role_family`
+and `level` are stored rather than recomputed (#177), which is right for
+stability and wrong for drift — nothing re-checked them after the scrape. The
+audit re-decides both from the committed title and body on every run: 150/150
+still classify as filed, no title carries a seniority marker, and every
+posting whose body states more than `MAX_ENTRY_YEARS` was read by hand (all six
+are regex false positives — company heritage lines, an age question, a UK
+residency rule, and one "**no more than** 3 years of professional experience",
+which is an entry-level constraint).
+
+**The `level` mismatch is a product finding, not a corpus one.**
+`_detect_level` returns the highest tier whose keyword appears *anywhere*, and
+its `lead` tier matches the bare substring `lead` — so "leadership", "leading"
+and "hiring manager" promote an entry-level posting. 60 of 150 postings read as
+`lead` and 27 as `manager`; only 22 are read at the tier they are filed under.
+The same defect hits the candidate side: the retired `benchmark_profile.md`
+reads as `lead` because one bullet says "saving staff ten hours weekly". So
+`role_level` (weight 0.10) has been comparing two mostly-wrong tiers for the
+whole life of this benchmark. Fixing the detector belongs to the product-scoring
+issues (#124/#126/#151/#152), not here — filed as **#181**. Note that
+`scrape_job_descriptions.py::classify_level` reads the same 150 postings
+correctly, so the corpus labels are sound and only the scorer is wrong.
+
+### The profile set (issue #172)
+
+Twenty profiles: **15 authored people** — 5 role families × 3 variants — plus
+**5 derived redundancy-bearing variants**.
+
+| variant | breadth | evidence density | redundancy | differs from `specialist` on |
+|---|---|---|---|---|
+| `specialist` | specialist | metric_rich | clean | — (the base) |
+| `generalist` | generalist | metric_rich | clean | breadth |
+| `metric_poor` | specialist | metric_poor | clean | evidence density |
+| `…_redundant` *(derived)* | specialist | metric_rich | **bearing** | redundancy |
+
+Each variant moves exactly one axis, so a contrast against the base isolates it.
+The redundancy variant is derived rather than authored — the same synthetic
+person with restating bullets **appended** to the first role and first project —
+which makes that contrast a matched pair rather than a comparison between two
+different people's prose.
+
+```
+eval/profile_banks.py       authored content: 15 people + family vocabularies
+eval/profile_generator.py   composition, hazard transforms, rendering
+eval/profile_checks.py      declared strata verified against the rendered text
+eval/profiles/<slug>.md     generated — never hand-edit
+eval/profiles/<slug>.meta.json  strata, GitHub metrics, distractors
+```
+
+```bash
+python eval/profile_generator.py --write   # regenerate after editing the bank
+python eval/profile_generator.py --check   # fail if a committed file drifted
+python eval/profile_checks.py --verbose    # every stratum measurement
+python eval/benchmark_suite.py --mode plumbing --limit 25
+```
+
+**The markdown is generated, so editing it is a defect.** The hand-review
+discipline the issue borrows from LongMemEval applies to the *bank*; a rendered
+file that drifts from it becomes the real dataset while the bank silently
+becomes a stale comment. `--check` and `tests/test_profile_set.py` both fail on
+drift.
+
+**Declared strata are verified, not trusted.** A sidecar claiming
+`metric_poor` while every bullet carries a number would report under a slice it
+does not belong to, and the table would still look complete —
+`eval/profile_checks.py` measures each claim against the text (digit share,
+skill count, redundancy modes, detected seniority tier) with thresholds set from
+the measured set rather than borrowed.
+
+Two vocabulary hazards constrain every profile, both consequences of
+`_detect_level` returning the *highest* tier matched anywhere: no profile may
+contain `senior`, `staff`, `principal`, `manager` or any `lead…` word (so no
+"principal component analysis", no "leadership", no "staffing"), and an
+intern-level profile may not say `junior` or `associate`. Tests assert no
+profile reads above `junior`.
 
 ## Knowledge-Updates regression eval (issue #21)
 

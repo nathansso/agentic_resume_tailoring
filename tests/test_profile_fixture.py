@@ -170,3 +170,96 @@ def test_unknown_skill_names_fall_back_rather_than_needing_a_dictionary_entry():
 def test_a_malformed_profile_fails_loudly():
     with pytest.raises(ValueError, match="parsed empty"):
         parse_profile_text("# Someone\n\nNo headings at all.\n")
+
+
+# ── education & achievements (issue #172, #171's recorded follow-on) ──────────
+
+_MINIMAL = """# Sam Chen
+
+## Experience
+
+**Acme** — Data Engineer (Jan 2024 – Present)
+- Built pipelines.
+
+## Projects
+
+**Thing** — A thing
+- Did the thing.
+
+## Skills
+Python, SQL
+"""
+
+
+def _parsed(extra: str):
+    from eval.profile_fixture import parse_profile_text
+    return parse_profile_text(_MINIMAL + extra)
+
+
+def test_education_is_parsed_from_the_markdown():
+    """Plumbing mode rendered no education section at all before this.
+
+    `_stub_payload` returned `{}` for the education prompt, so a section the
+    product ships was invisible to every plumbing number (#171's follow-on).
+    """
+    row = _parsed("\n## Education\nB.S. Computer Science, City University (2021)\n"
+                  ).education[0]
+    assert row["degree"] == "B.S. Computer Science"
+    assert row["institution"] == "City University"
+    assert row["end_date"] == "2021"
+
+
+def test_a_lone_year_is_a_graduation_date_not_a_start_date():
+    row = _parsed("\n## Education\nB.S. Math, State (2021)\n").education[0]
+    assert row["start_date"] is None and row["end_date"] == "2021"
+
+
+def test_education_date_ranges_split():
+    row = _parsed("\n## Education\nB.S. Math, State (Sep 2021 – Jun 2025)\n").education[0]
+    assert row["start_date"] == "2021-09" and row["end_date"] == "2025-06"
+
+
+def test_education_gpa_is_extracted_and_removed_from_the_degree():
+    row = _parsed("\n## Education\nB.S. Math, State (2025), GPA: 3.92\n").education[0]
+    assert row["gpa"] == "3.92"
+    assert "GPA" not in (row["degree"] or "") and "GPA" not in (row["institution"] or "")
+
+
+def test_an_unparseable_education_line_is_kept_not_dropped():
+    """A fixture author should see their line render oddly, not vanish."""
+    rows = _parsed("\n## Education\nSelf-taught\n").education
+    assert len(rows) == 1 and rows[0]["degree"] == "Self-taught"
+
+
+def test_achievements_parse_title_date_and_description():
+    row = _parsed("\n## Achievements\n- **1st Place, HackMIT** (2024) — Built a "
+                  "real-time translator\n").achievements[0]
+    assert row["title"] == "1st Place, HackMIT"
+    assert row["date"] == "2024"
+    assert row["description"] == "Built a real-time translator"
+
+
+def test_achievements_accept_alternate_headings():
+    for heading in ("Achievements", "Honors", "Awards"):
+        rows = _parsed(f"\n## {heading}\n- Dean's List\n").achievements
+        assert [r["title"] for r in rows] == ["Dean's List"], heading
+
+
+def test_a_profile_with_neither_section_still_parses():
+    fixture = _parsed("")
+    assert fixture.education == [] and fixture.achievements == []
+
+
+def test_the_stub_routes_education_and_achievements_to_the_profile():
+    """The canned payload must answer the real prompts, not just parse."""
+    from agents.parser import ResumeParserAgent  # noqa: F401  (import guard)
+    from eval.tailoring_benchmark import _stub_payload, bind_fixture
+    from pathlib import Path
+
+    bind_fixture(Path("eval/profiles/benchmark_profile.md"))
+    education_prompt = ("You are an expert resume parser. Extract education "
+                        "entries from the text.")
+    achievement_prompt = ("You are an expert resume parser. Extract achievements, "
+                          "honors, and awards from the text.")
+    assert _stub_payload(education_prompt), "education still compiles to nothing"
+    assert isinstance(_stub_payload(achievement_prompt), list)

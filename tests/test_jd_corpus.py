@@ -438,3 +438,123 @@ def test_limit_at_or_above_corpus_size_returns_everything():
     everything = load_tasks()
     assert len(load_tasks(limit=len(everything) + 50)) == len(everything)
     assert len(load_tasks(limit=0)) == len(everything)
+
+
+# ── corpus audit (parse fidelity against a user's paste) ──────────────────────
+#
+# Every task is replayed through the paste endpoint the user's own flow calls,
+# so the corpus is only a valid measurement if each description is the kind of
+# text a browser would have put on the clipboard. `scripts/audit_jd_corpus.py`
+# measures that; these pin the checks it is built from, and the corpus-level
+# invariants that hold today.
+
+def test_audit_flags_a_body_that_kept_its_markup():
+    from audit_jd_corpus import audit_task
+
+    task = _fake_task(description="<p>We need Python</p>" + "x" * 2000)
+    checks = {i.check for i in audit_task(task, Path("fake.json"))}
+    assert "html_tag" in checks
+
+
+def test_audit_flags_a_body_cut_at_the_fetch_ceiling():
+    from audit_jd_corpus import MAX_TEXT, audit_task
+
+    task = _fake_task(description=("Requirements: Python and SQL. " * 1000)[:MAX_TEXT])
+    issues = [i for i in audit_task(task, Path("fake.json")) if i.check == "truncated"]
+    assert issues and issues[0].severity == "error"
+
+
+def test_audit_flags_unescaped_entities_and_stripped_apostrophes():
+    from audit_jd_corpus import audit_task
+
+    task = _fake_task(description="R&amp;D team. You need today s tooling. " * 40)
+    checks = {i.check for i in audit_task(task, Path("fake.json"))}
+    assert "html_entity" in checks
+    assert "stripped_apostrophe" in checks
+
+
+def test_audit_passes_a_clean_posting():
+    from audit_jd_corpus import audit_task
+
+    body = "\n".join([
+        "About the role", "You will build data pipelines for our platform.",
+        "Requirements", "- 0-2 years of experience with Python",
+        "- Familiarity with SQL and Airflow", "- Currently pursuing a B.S. degree",
+        "Responsibilities", "- Ship features with the team",
+        "- Write tests for what you ship",
+        "We are an equal opportunity employer and value diverse perspectives here.",
+    ]) + "\n" + ("This paragraph describes the team and the product in detail. " * 20)
+    task = _fake_task(description=body, level="entry")
+    issues = audit_task(task, Path(task["id"] + ".json"))
+    assert not [i for i in issues if i.severity == "error"], issues
+
+
+def test_no_two_postings_share_a_description():
+    """One description under two ids makes a per-family contrast partly compare
+    a posting with itself — the defect #177 found in the Microsoft pair."""
+    from audit_jd_corpus import audit_corpus
+
+    dupes = [i for i in audit_corpus() if i.check == "duplicate_description"]
+    assert not dupes, dupes
+
+
+def test_every_committed_posting_has_a_valid_schema():
+    from audit_jd_corpus import audit_corpus
+
+    schema = [i for i in audit_corpus() if i.check in ("schema", "unreadable")]
+    assert not schema, schema
+
+
+def _fake_task(**overrides):
+    task = {
+        "id": "fake", "source": "test", "company": "Test Co",
+        "title": "Data Engineer I", "url": "https://example.com/jobs/1",
+        "role_family": "data_engineering", "level": "entry", "verified": True,
+        "description": "A description.",
+    }
+    task.update(overrides)
+    return task
+
+
+def test_every_committed_posting_is_still_intern_or_entry_level():
+    """The domain restriction is an invariant, not a claim about one scrape.
+
+    `role_family` and `level` were decided at scrape time and are stored rather
+    than recomputed (#177), which is right for stability and wrong for drift:
+    nothing re-checked them afterwards, and the bodies have since been
+    re-fetched and grown. A label that no longer follows from the committed
+    title and body silently moves a posting into a stratum it does not belong
+    to, and every per-family and per-level figure inherits it.
+    """
+    from audit_jd_corpus import audit_corpus
+
+    off_domain = [i for i in audit_corpus()
+                  if i.check in ("out_of_domain", "level_relabelled",
+                                 "family_relabelled")]
+    assert not off_domain, "\n".join(f"{i.task_id}: {i.detail}" for i in off_domain)
+
+
+def test_the_repaired_corpus_does_not_regain_fetch_damage():
+    """23 postings could not be re-fetched (expired listing, 403) and still
+    carry a body cut at the old 6,000 ceiling; 2 still carry literal markup.
+    They are kept rather than dropped — they are spread across all five
+    families, and dropping them would break the 30-per-family balance the
+    primary stratum rests on. This pins the count so it can only go down."""
+    from audit_jd_corpus import audit_corpus
+
+    issues = audit_corpus()
+    truncated = {i.task_id for i in issues if i.check == "truncated"}
+    markup = {i.task_id for i in issues if i.check == "html_tag"}
+    entities = {i.task_id for i in issues if i.check == "html_entity"}
+    assert len(truncated) <= 23, sorted(truncated)
+    assert len(markup) <= 2, sorted(markup)
+    assert len(entities) <= 1, sorted(entities)
+
+
+def test_audit_rejects_a_senior_posting_that_reached_the_corpus():
+    from audit_jd_corpus import audit_task
+
+    task = _fake_task(title="Senior Data Engineer",
+                      description="Requirements: 8+ years of Python. " * 40)
+    checks = {i.check for i in audit_task(task, Path("fake.json"))}
+    assert "out_of_domain" in checks

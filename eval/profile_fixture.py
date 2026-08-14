@@ -59,17 +59,24 @@ SKILL_CATEGORIES: Dict[str, str] = {
                      "Kotlin"],
         "Library": ["PyTorch", "XGBoost", "scikit-learn", "sentence-transformers",
                     "pandas", "NumPy", "FAISS", "TensorFlow", "Keras", "SciPy",
-                    "Hugging Face", "Transformers"],
+                    "Hugging Face", "Transformers", "matplotlib", "seaborn",
+                    "statsmodels", "Ray", "ONNX", "CUDA", "pytest", "JUnit",
+                    "Cypress"],
         "Framework": ["LangChain", "FastAPI", "Flask", "React", "Node.js",
                       "Django", "Vue", "Angular", "Next.js", "Spring",
-                      "OpenAI API", "Express"],
+                      "OpenAI API", "Express", "Spring Boot", "Streamlit",
+                      "Anthropic API", "REST APIs", "GraphQL", "gRPC", "dbt",
+                      "RAG", "vLLM"],
         "Database": ["Postgres", "PostgreSQL", "MySQL", "Redis", "ClickHouse",
                      "Snowflake", "MongoDB", "Elasticsearch", "SQLite",
-                     "DynamoDB", "BigQuery"],
-        "Cloud": ["AWS", "GCP", "Azure", "Railway", "Heroku", "Vercel"],
+                     "DynamoDB", "BigQuery", "pgvector", "Pinecone", "Parquet"],
+        "Cloud": ["AWS", "GCP", "Azure", "Railway", "Heroku", "Vercel",
+                  "SageMaker", "Databricks"],
         "Tool": ["Airflow", "Kafka", "Docker", "Kubernetes", "GitHub Actions",
                  "Nginx", "Unity", "Git", "Terraform", "Spark", "Jenkins",
-                 "Grafana", "Prometheus"],
+                 "Grafana", "Prometheus", "MLflow", "Weights & Biases", "Flink",
+                 "Jupyter", "Tableau", "Looker", "Excel", "Bash", "Linux",
+                 "A/B testing", "prompt engineering"],
     }.items()
     for name in names
 }
@@ -81,6 +88,9 @@ SKILL_CATEGORIES: Dict[str, str] = {
 _EXPERIENCE_HEADING = "experience"
 _PROJECT_HEADING = "projects"
 _SKILL_HEADING = "skills"
+_EDUCATION_HEADING = "education"
+_ACHIEVEMENT_HEADINGS = ("achievements", "honors", "awards",
+                         "honors & awards", "honors and awards")
 
 _DASH = r"[—–-]"
 
@@ -190,6 +200,92 @@ def _parse_projects(lines: List[str]) -> List[Dict]:
     return entries
 
 
+_EDUCATION_RE = re.compile(
+    rf"^(?P<degree>[^,]+(?:,[^,]+)*?)\s*,\s*(?P<institution>[^(]+?)"
+    rf"(?:\s*\((?P<dates>[^)]*)\))?\s*$"
+)
+_GPA_RE = re.compile(r"gpa[:\s]*([0-4]\.\d{1,3})", re.I)
+
+
+def _parse_education(lines: List[str]) -> List[Dict]:
+    """`B.S. Computer Science, City University (2021)` → one education row.
+
+    Plumbing mode rendered **no education section at all** before this: the
+    canned payload returned `{}` for the education prompt, so the fixture's own
+    `## Education` line never reached the graph and every plumbing render was
+    missing a section the product ships (issue #171's recorded follow-on).
+
+    The degree-first, comma, institution shape is the ordinary résumé
+    convention and matches the existing fixture. A line that does not fit is
+    kept as the degree with no institution rather than dropped — a fixture
+    author should see their line rendered oddly, not silently vanish.
+    """
+    entries: List[Dict] = []
+    for raw in lines:
+        line = raw.strip().lstrip("-•* ").strip()
+        if not line or line.startswith("#"):
+            continue
+        gpa_match = _GPA_RE.search(line)
+        gpa = gpa_match.group(1) if gpa_match else None
+        if gpa_match:
+            line = _GPA_RE.sub("", line).strip().strip(",;|").strip()
+
+        match = _EDUCATION_RE.match(line)
+        if match:
+            degree = match.group("degree").strip()
+            institution = match.group("institution").strip()
+            dates = match.group("dates") or ""
+        else:
+            degree, institution, dates = line, "", ""
+        start, end = _split_dates(dates) if dates else (None, None)
+        # A single year in the parens is a graduation date, not a start date.
+        if end is None and start is not None:
+            start, end = None, start
+        entries.append({
+            "institution": institution or None,
+            "degree": degree or None,
+            "location": None,
+            "start_date": start,
+            "end_date": end,
+            "gpa": gpa,
+        })
+    return entries
+
+
+def _parse_achievements(lines: List[str]) -> List[Dict]:
+    """`**1st Place, HackMIT** (2024) — supporting detail` → one achievement.
+
+    Every field beyond the title is optional, matching `AchievementItem`, and
+    the title is the only thing a fixture must supply.
+    """
+    entries: List[Dict] = []
+    for raw in lines:
+        line = raw.strip().lstrip("-•* ").strip()
+        if not line or line.startswith("#"):
+            continue
+        description = None
+        parts = re.split(rf"\s+{_DASH}\s+", line, maxsplit=1)
+        if len(parts) == 2:
+            line, description = parts[0].strip(), parts[1].strip()
+        date = None
+        date_match = re.search(r"\(([^)]*)\)\s*$", line)
+        if date_match:
+            date = date_match.group(1).strip() or None
+            line = line[:date_match.start()].strip()
+        title = line.strip("*").strip()
+        if not title:
+            continue
+        entries.append({
+            "title": title,
+            "description": description,
+            # The fixture format carries no separate issuer field; left None
+            # rather than guessed out of the title.
+            "issuer": None,
+            "date": date,
+        })
+    return entries
+
+
 def _term_pattern(name: str) -> re.Pattern:
     # Same boundary rule as eval/metrics.py and agents/redundancy.py, so `SQL`
     # does not match inside `MySQL` or `SQLAlchemy`.
@@ -226,10 +322,17 @@ class ProfileFixture:
     """The canned parse of one profile fixture, derived from its markdown."""
 
     def __init__(self, experiences: List[Dict], projects: List[Dict],
-                 skills: List[Dict], source: Optional[Path] = None):
+                 skills: List[Dict], source: Optional[Path] = None,
+                 education: Optional[List[Dict]] = None,
+                 achievements: Optional[List[Dict]] = None):
         self.experiences = experiences
         self.projects = projects
         self.skills = skills
+        # Optional sections: a profile with neither still parses, and both
+        # default to empty rather than raising, matching how the real pipeline
+        # treats a résumé that omits them.
+        self.education = education or []
+        self.achievements = achievements or []
         self.source = source
 
     @property
@@ -241,7 +344,8 @@ class ProfileFixture:
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return (f"ProfileFixture(experiences={len(self.experiences)}, "
                 f"projects={len(self.projects)}, skills={len(self.skills)}, "
-                f"source={self.source})")
+                f"education={len(self.education)}, "
+                f"achievements={len(self.achievements)}, source={self.source})")
 
 
 def parse_profile_text(text: str, source: Optional[Path] = None) -> ProfileFixture:
@@ -251,6 +355,10 @@ def parse_profile_text(text: str, source: Optional[Path] = None) -> ProfileFixtu
     evidence = [b for item in (*experiences, *projects) for b in item["bullets"]]
     evidence += [p["description"] for p in projects if p.get("description")]
     skills = _parse_skills(sections.get(_SKILL_HEADING, []), evidence)
+    education = _parse_education(sections.get(_EDUCATION_HEADING, []))
+    achievements: List[Dict] = []
+    for heading in _ACHIEVEMENT_HEADINGS:
+        achievements.extend(_parse_achievements(sections.get(heading, [])))
 
     if not experiences or not projects or not skills:
         raise ValueError(
@@ -259,7 +367,8 @@ def parse_profile_text(text: str, source: Optional[Path] = None) -> ProfileFixtu
             f"{len(skills)} skills — check the '## Experience' / '## Projects' / "
             f"'## Skills' headings in {source or '<text>'}"
         )
-    return ProfileFixture(experiences, projects, skills, source)
+    return ProfileFixture(experiences, projects, skills, source,
+                          education=education, achievements=achievements)
 
 
 def load_profile(path: Path) -> ProfileFixture:

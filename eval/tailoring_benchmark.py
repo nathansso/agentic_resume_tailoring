@@ -61,10 +61,12 @@ from eval.cassettes import (  # noqa: E402
     render_prompt,
 )
 from eval.profile_fixture import ProfileFixture, load_profile  # noqa: E402
+from eval.profile_meta import check_projects_exist, load_meta  # noqa: E402
 
 DATASET_DIR = ROOT / "eval" / "jd_dataset"
 RESULTS_DIR = ROOT / "eval" / "results"
-DEFAULT_PROFILE = ROOT / "eval" / "profiles" / "benchmark_profile.md"
+PROFILES_DIR = ROOT / "eval" / "profiles"
+DEFAULT_PROFILE = PROFILES_DIR / "benchmark_profile.md"
 
 BENCH_EMAIL = "benchmark@example.com"
 BENCH_PASSWORD = "benchmark-pass-123"
@@ -309,12 +311,18 @@ def _stub_tailored(jd_text: str) -> Dict:
 def _stub_payload(text: str):
     """Route a formatted prompt to its canned/deterministic payload (dict/list).
 
-    Anything with no branch here (education, achievements) returns `{}` and so
-    compiles to an empty list — the same surface the constants covered before
-    #171 derived them, deliberately unchanged so this stays a source swap rather
-    than a re-baseline of what plumbing mode measures.
+    Education and achievements are derived from the profile markdown as of #172;
+    before that they returned `{}` and **plumbing mode rendered no education
+    section at all**, so a whole section the product ships was invisible to
+    every plumbing number. That was #171's recorded follow-on.
+
+    Anything still without a branch returns `{}` and compiles to an empty list.
     """
     profile = fixture()
+    if "Extract education entries" in text or "education entry" in text:
+        return profile.education
+    if "Extract achievements" in text or "achievement:" in text:
+        return profile.achievements
     if "Extract work experiences" in text:
         return profile.experiences
     if "Extract projects" in text:
@@ -581,6 +589,14 @@ def _run_task(client, task: Dict, renders_dir: Path,
         total_profile_skills = len({
             us.skill_id for us in session.exec(select(UserSkill)).all()
         })
+        # How many generation attempts the tailor actually spent. #112 already
+        # writes this onto every decision-log entry so exploration data stays
+        # separable from best-of-N data; `eval/` never read it.
+        n_attempts = max(
+            (entry.get("n_attempts") or 0
+             for entry in (result.tailoring_decisions or [])),
+            default=None,
+        ) or None
 
     metrics = compute_task_metrics(
         tailored_content, task["description"], matched_skills,
@@ -608,10 +624,66 @@ def _run_task(client, task: Dict, renders_dir: Path,
         "mode": mode,
         "company": task["company"],
         "title": task["title"],
+        # JD-side strata (issue #177). Carried per row for the same reason
+        # `mode` is: a pooled mean over five role families hides which of them
+        # moved, and a CSV row loaded into pandas is where that context is lost.
+        "role_family": task.get("role_family"),
+        "level": task.get("level"),
         "job_id": job_id,
         "ats_score": detail.get("ats_score"),
+        # Best-of-N is on by default (`agents/tailor.py::_max_attempts`) and the
+        # early exit makes N endogenous, so a reported `ats_delta` is a max over
+        # a data-dependent number of draws. The count is already written to
+        # `tailoring_decisions` and was simply never read; reporting it costs
+        # nothing and turns an unmeasured bias into a stated one.
+        "n_attempts": n_attempts,
         "metrics": metrics,
     }
+
+
+def _seed_github_metrics(profile_meta) -> int:
+    """Write the sidecar's GitHub metrics onto the ingested Project rows.
+
+    Closes the gap **#155's deviations recorded**: "the harness profile carries
+    no ingested GitHub metrics, so `_github_signal()` returns `None` for every
+    fixture project and the component is omitted from `_complexity()` exactly as
+    before — a fixture with GitHub metrics is the missing capability."
+
+    Seeded post-ingest rather than expressed in the résumé, because a résumé has
+    nowhere to state stars or commit counts — `Project.metrics` is a JSON column
+    the GitHub ingest fills. The values are the shape
+    `services.py::_build_repo_metrics()` produces, so the row is indistinguishable
+    from one a real ingest would have written.
+
+    Matching is case-insensitive on project name and the sidecar is validated
+    against the parsed profile first, so a typo fails loudly rather than seeding
+    onto nothing.
+    """
+    if not profile_meta.github_metrics:
+        return 0
+    from sqlmodel import Session, select
+
+    from database.db import engine
+    from database.models import Project
+
+    wanted = {name.strip().lower(): metrics
+              for name, metrics in profile_meta.github_metrics.items()}
+    seeded = 0
+    with Session(engine) as session:
+        # Sorted on content so the write order is reproducible (#158/#171).
+        rows = sorted(session.exec(select(Project)).all(),
+                      key=lambda p: (p.name or "").lower())
+        for row in rows:
+            metrics = wanted.get((row.name or "").strip().lower())
+            if metrics is None:
+                continue
+            row.metrics = dict(metrics)
+            session.add(row)
+            seeded += 1
+        session.commit()
+    if seeded:
+        print(f"  seeded GitHub metrics on {seeded} project(s)", flush=True)
+    return seeded
 
 
 def _install_mode(mode: str, profile_path: Path, cassette_path: Optional[Path],
@@ -675,8 +747,17 @@ def _aggregate(task_results: List[Dict]) -> Dict:
         return {"mean": round(mean(vals), 3), "median": round(median(vals), 3),
                 "min": round(min(vals), 3), "max": round(max(vals), 3)}
 
+    attempts = [float(t["n_attempts"]) for t in task_results
+                if isinstance(t.get("n_attempts"), (int, float))]
+
     return {
         "tasks": len(task_results),
+        # A reported `ats_delta` is a max over this many draws, and N is
+        # endogenous — a strong first attempt exits early, a weak one spends the
+        # budget (`agents/tailor.py::_max_attempts`). Stating the distribution
+        # does not remove the bias; it stops the number being read as though the
+        # bias were not there. Absent in plumbing mode, which never re-attempts.
+        "n_attempts": stats(attempts),
         "ats_delta": stats(collect(["ats", "delta"])),
         "baseline_composite": stats(collect(["ats", "baseline_composite"])),
         "tailored_composite": stats(collect(["ats", "tailored_composite"])),
@@ -697,6 +778,56 @@ def _aggregate(task_results: List[Dict]) -> Dict:
         "max_pairwise_cosine": stats(collect(["redundancy", "max_pairwise_cosine"])),
         "judge_mean_score": stats(collect(["llm_judge", "mean_score"])),
     }
+
+
+def _profile_label(profile_path: Path) -> str:
+    """Repo-relative path for the results artifact, tolerating any spelling.
+
+    `--profile eval/profiles/x.md` is the obvious way to type this on the
+    command line and it used to raise `ValueError` from `relative_to` — *after*
+    the entire run had completed, throwing the results away at the last step.
+    A profile stored outside the repo keeps its absolute path rather than
+    failing.
+    """
+    resolved = Path(profile_path).resolve()
+    try:
+        return str(resolved.relative_to(ROOT))
+    except ValueError:
+        return str(resolved)
+
+
+# Task-row keys a run can be sliced on. JD-side today (#177 labels every
+# posting); the profile-side strata arrive with the multi-profile suite, and are
+# read off the same rows once each row carries them.
+STRATUM_KEYS = ("role_family", "level")
+
+
+def _aggregate_by_stratum(task_results: List[Dict],
+                          axes: Optional[tuple] = None) -> Dict:
+    """Per-stratum slices of the same metrics `_aggregate` pools.
+
+    **An addition, never a replacement.** Every historical table in
+    `CHANGELOG.md` is a pooled figure, and #171 retro-labelled rather than
+    deleted them; dropping the pooled number here would break comparability with
+    everything already recorded. So `results["aggregate"]` keeps its exact shape
+    and value and this lands beside it as `results["aggregate_by_stratum"]`.
+
+    Shape is `{axis: {value: <same flat aggregate>}}`. Values are sorted so the
+    table cannot reorder itself between runs (#158/#171), and a task missing an
+    axis is skipped for that axis only rather than dropped from every slice.
+    """
+    out: Dict[str, Dict] = {}
+    for axis in (axes or STRATUM_KEYS):
+        buckets: Dict[str, List[Dict]] = {}
+        for task in task_results:
+            value = task.get(axis)
+            if value is None:
+                continue
+            buckets.setdefault(str(value), []).append(task)
+        if buckets:
+            out[axis] = {value: _aggregate(rows)
+                         for value, rows in sorted(buckets.items())}
+    return out
 
 
 def run_benchmark(
@@ -724,6 +855,15 @@ def run_benchmark(
     tasks = load_tasks(task_ids, limit)
     if not tasks:
         raise SystemExit(f"No tasks found in {DATASET_DIR} — run scripts/scrape_job_descriptions.py")
+
+    # Loaded before anything runs so a malformed sidecar fails immediately
+    # rather than after the ingest (issue #172). Validated against the parsed
+    # profile so a metrics entry naming a project that does not exist is an
+    # error, not a silent no-op.
+    profile_meta = load_meta(profile_path)
+    if profile_meta.github_metrics:
+        check_projects_exist(
+            profile_meta, [p["name"] for p in load_profile(profile_path).projects])
 
     if mode == MODE_REPLAY or record:
         cassette_path = Path(cassette_path or default_cassette_path(
@@ -765,6 +905,10 @@ def run_benchmark(
         renders_dir.mkdir(parents=True, exist_ok=True)
 
         profile_text = profile_path.read_text(encoding="utf-8")
+        # Seeded after ingest, not before: the projects have to exist as rows
+        # first. A profile with no sidecar seeds nothing and behaves exactly as
+        # it did (issue #172).
+        _seed_github_metrics(profile_meta)
         # Resolved once: the model load is cached in matcher, but the redundancy
         # suite's encoder is a per-run property, not a per-task one (issue #122).
         encoder = _semantic_encoder(mode)
@@ -804,10 +948,17 @@ def run_benchmark(
             # artifact without reading this file (issue #171).
             "mode_claim": MODE_CLAIMS[mode],
             "cassette": str(cassette_path) if cassette_path else None,
-            "profile": str(profile_path.relative_to(ROOT)),
+            "profile": _profile_label(profile_path),
+            # Which candidate stratum this profile isolates (issue #172). Empty
+            # for a profile with no sidecar, which runs exactly as before.
+            "profile_strata": profile_meta.strata,
             "dataset_size": len(tasks),
             "failed": [t["task_id"] for t in task_results if "error" in t],
             "aggregate": _aggregate(ok),
+            # Added beside the pooled figure, never in place of it: every
+            # historical CHANGELOG table is pooled, and #171 retro-labelled
+            # rather than deleted them (issue #172).
+            "aggregate_by_stratum": _aggregate_by_stratum(ok),
             "task_results": task_results,
         }
 
@@ -834,6 +985,12 @@ _CSV_COLUMNS = [
     # First-class column, not metadata: a CSV row loaded into pandas is where a
     # plumbing number most easily loses the context that it is one (issue #171).
     ("mode", ["mode"]),
+    # Same reasoning as `mode`, one level down: a pooled mean over five role
+    # families hides which of them moved, and the CSV is exactly where someone
+    # loads the rows and re-pools them without the stratum (issues #172/#177).
+    ("role_family", ["role_family"]),
+    ("level", ["level"]),
+    ("n_attempts", ["n_attempts"]),
     ("company", ["company"]),
     ("baseline_composite", ["metrics", "ats", "baseline_composite"]),
     ("tailored_composite", ["metrics", "ats", "tailored_composite"]),

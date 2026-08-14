@@ -147,10 +147,13 @@ Full detail, with the LLM-versus-deterministic split stated explicitly, is in
 ## Evaluation
 
 `eval/tailoring_benchmark.py` replays a versioned corpus of **150 verified
-intern/entry postings across five role families** through the real HTTP API
-(register → ingest → analyze → tailor → export) on an isolated database,
-computing ATS deltas, experience-allocation balance, skills organization, and a
-four-mode redundancy suite per task.
+intern/entry postings across five role families**, against **20 stratified
+candidate profiles**, through the real HTTP API (register → ingest → analyze →
+tailor → export) on an isolated database, computing ATS deltas,
+experience-allocation balance, skills organization, and a four-mode redundancy
+suite per task. Both sides are stratified and every metric is reported per
+stratum — pooling a candidate axis into one number is what hides which ability
+moved.
 
 It runs in three modes — `product`, `replay`, `plumbing` — with different
 evidentiary weight, and **the mode travels with every number**. A plumbing run
@@ -227,8 +230,10 @@ Work is sequenced in phases on the board. **P0** (research spikes) and **P1**
 (preferences & knowledge) are complete — the P1 epic #140 closed with the JD
 profile, layout overrides, the preference and persona tiers, JobCards,
 chat→graph extraction, and KG evidence in the planner all shipped. The current
-front is the **benchmark dataset foundation** (#172, in progress), which most of
-P2 and all of P3 depend on for a measurement worth optimising.
+front is the **benchmark dataset foundation** (#172) — chunks 1–4 shipped the
+20-profile set, per-stratum reporting and a corpus audit; chunks 5–7 (distractor
+pool, β calibration, human anchor set) are open. Most of P2 and all of P3 depend
+on it for a measurement worth optimising.
 
 | Phase | Theme | State |
 |---|---|---|
@@ -238,8 +243,10 @@ P2 and all of P3 depend on for a measurement worth optimising.
 | **P4** | UI & Migration | **Partial.** The hosting migration (#48) and old-deployment teardown (#102) are complete. Editable rendered resume view (#87) and the UI restructure (#82) remain. |
 
 Cross-cutting and unphased: the benchmark arc (#172 → #173 → #174 → #178), which
-adds stratified profiles, a re-tailor arm, action-ranking preference pairs, and
-profile-bound conversation fixtures.
+adds stratified profiles and a difficulty dial, a re-tailor arm, action-ranking
+preference pairs, and profile-bound conversation fixtures. #181 (a `role_level`
+mislabelling defect) gates the product-mode recordings the arc's later chunks
+need.
 
 ---
 

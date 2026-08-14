@@ -136,8 +136,8 @@ JobCard is the sufficient statistic that survives from one job to the next.
   "job": {"title": "Data & AI Engineer", "company": "Arizent",
           "terminal_status": "tailored", "verification_status": "pending"},
   "role_family": "ai_engineering",
-  "ats": {"composite": 88.0, "baseline_composite": 59.7, "delta": 28.3,
-          "skill_coverage": 100.0, "keyword_coverage": 68.2},
+  "ats": {"composite": 79.4, "baseline_composite": 52.1, "delta": 27.3,
+          "skill_coverage": 100.0, "keyword_coverage": 64.6},
   "emphasized": {"experiences": ["Machine Learning Engineer"],
                  "projects": ["SemanticSearch-Lite"],
                  "skills": ["PyTorch", "FastAPI"], "led_with": "experience"},
@@ -210,11 +210,11 @@ run, built by `tailor_planner.decision_log_entry`:
   ],
   "context": {"n_experiences": 4, "n_projects": 3, "n_replacement_pool": 1,
               "n_missing_skills": 7, "n_priority_keywords": 6,
-              "baseline_composite": 59.7, "is_revision": false, "attempts": 2,
+              "baseline_composite": 52.1, "is_revision": false, "attempts": 2,
               "n_graph_evidence": 5, "n_job_cards": 0, "n_preferences": 0},
-  "reward": {"composite": 88.0, "baseline_composite": 59.7, "delta": 28.3,
-             "skill_coverage": 100.0, "keyword_coverage": 68.2,
-             "section_presence": 100.0, "role_level": 75.0}
+  "reward": {"composite": 79.4, "baseline_composite": 52.1, "delta": 27.3,
+             "skill_coverage": 100.0, "keyword_coverage": 64.6,
+             "section_presence": 100.0, "role_level": 0.0}
 }
 ```
 
