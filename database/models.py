@@ -99,6 +99,10 @@ class Experience(SQLModel, table=True):
     manually_edited: bool = Field(default=False)
     # Soft origin-chat back-reference (issue #21). See UserSkill.source_context.
     source_context: Optional[str] = Field(default=None)
+    # Per-user résumé-document ordinal (issue #180). See ChatMessage.seq: these
+    # rows are written in one ingestion loop, so they all share a `created_at`
+    # and ordering on it alone is undefined. Assigned by database.db::next_seq.
+    seq: Optional[int] = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -122,6 +126,8 @@ class Education(SQLModel, table=True):
     gpa: Optional[str] = None
     # User manually edited this row via the Data Explorer (issue #92).
     manually_edited: bool = Field(default=False)
+    # Per-user résumé-document ordinal (issue #180). See Experience.seq.
+    seq: Optional[int] = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -142,6 +148,10 @@ class Achievement(SQLModel, table=True):
     description: Optional[str] = None    # optional supporting line
     issuer: Optional[str] = None         # awarding org / publication
     date: Optional[str] = None           # free-form, matching Experience (e.g. "2023")
+    # Per-user résumé-document ordinal (issue #180). See Experience.seq. This
+    # table's read path documents itself as "in resume-document order", which
+    # ordering on a tied `created_at` could not actually deliver.
+    seq: Optional[int] = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -161,6 +171,8 @@ class Project(SQLModel, table=True):
     manually_edited: bool = Field(default=False)
     # Soft origin-chat back-reference (issue #21). See UserSkill.source_context.
     source_context: Optional[str] = Field(default=None)
+    # Per-user résumé-document ordinal (issue #180). See Experience.seq.
+    seq: Optional[int] = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -218,6 +230,16 @@ class UserJobResult(SQLModel, table=True):
     result_id: UUID = Field(default_factory=uuid4, primary_key=True)
     user_id: UUID = Field(foreign_key="user.user_id")
     job_id: UUID = Field(foreign_key="jobdescription.job_id")
+    # Per-(user, job) run ordinal (issue #180). A job accumulates one row per
+    # analyze run, and "the latest result" decides the score shown for the job
+    # and the content exported for it — so which row wins must be determined by
+    # the run that produced it, not by a timestamp two runs can share or by a
+    # random uuid. Assigned at the single write site, agents/matcher.py.
+    #
+    # Deliberately not `JobDescription.retailor_count`: that counts *tailor*
+    # runs and is incremented after this row already exists, while rows are
+    # created by *analyze*, so it cannot identify which row is newest.
+    seq: Optional[int] = Field(default=None, index=True)
     ats_score: float = 0.0
     
     # JSON columns for detailed reporting
@@ -265,6 +287,16 @@ class ChatMessage(SQLModel, table=True):
     user_id: Optional[UUID] = Field(default=None, foreign_key="user.user_id", index=True)
     role: str        # "user" | "assistant"
     content: str
+    # Per-conversation insertion ordinal (issue #180). `created_at` alone cannot
+    # order this table: the system clock is coarse enough that a question and its
+    # reply routinely land on the same value, and with a tied sort key the engine
+    # is free to return them in either order. Two identical messages are
+    # legitimately identical, so no content key can break the tie either --
+    # insertion order is the only thing that carries the meaning, and it has to
+    # be recorded rather than inferred. Assigned by services.py::_next_chat_seq.
+    # Nullable only so the migration can add the column; the backfill leaves no
+    # NULLs, which keeps reads off SQLite/Postgres NULL-collation differences.
+    seq: Optional[int] = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 

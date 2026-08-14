@@ -16,7 +16,7 @@ from sqlmodel import Session, select
 
 from llm import get_llm
 from agents.skill_selection import skill_names
-from database.db import engine
+from database.db import engine, latest_result
 import services
 from database.models import (
     User, Skill, UserSkill, Experience, Project,
@@ -404,7 +404,7 @@ def query_skills_vs_jobs() -> str:
             if not results:
                 lines.append(f"\n{job.title} @ {job.company}\n  No match results yet — run `tailor` to score.")
                 continue
-            latest = max(results, key=lambda r: r.created_at)
+            latest = latest_result(results)
             matched = skill_names(latest.matched_skills)
             missing = latest.missing_skills or []
             matched_str = ", ".join(matched[:8]) + (f" (+{len(matched)-8} more)" if len(matched) > 8 else "")
@@ -857,7 +857,7 @@ class ChatAgent:
                     results = session.exec(
                         select(UserJobResult).where(UserJobResult.job_id == job.job_id)
                     ).all()
-                latest = max(results, key=lambda r: r.created_at) if results else None
+                latest = latest_result(results)
                 if latest and latest.edited_tex:
                     self._pending_options = {
                         "1": lambda: self._tailor_active_job(
@@ -1001,7 +1001,7 @@ class ChatAgent:
         if not results:
             return 'No tailoring results yet. Type "tailor" first.'
 
-        latest = max(results, key=lambda r: r.created_at)
+        latest = latest_result(results)
         if not latest.tailored_resume_content:
             return 'No tailored content found. Type "tailor" first.'
 
@@ -1065,7 +1065,7 @@ class ChatAgent:
             if user:
                 query = query.where(UserJobResult.user_id == user.user_id)
             results = session.exec(query).all()
-        return max(results, key=lambda r: r.created_at) if results else None
+        return latest_result(results)
 
     @staticmethod
     def _result_content(result: Optional[UserJobResult]) -> dict:
@@ -1747,7 +1747,7 @@ class ChatAgent:
                     # Ground the router in the current tailored resume (issue
                     # #91) so it answers about it instead of offering to "look
                     # it up" or regenerating from scratch.
-                    _latest = max(_job_results, key=lambda r: r.created_at)
+                    _latest = latest_result(_job_results)
                     _content = self._result_content(_latest)
                     if _content:
                         _exp_titles = [e.get("title") for e in _content.get("experiences") or []]

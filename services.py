@@ -14,10 +14,11 @@ from uuid import UUID
 
 _ENV_PATH = Path(__file__).parent.parent / ".env"
 
+from sqlalchemy import func
 from sqlmodel import Session, delete, select
 
 from agents.skill_selection import skill_names
-from database.db import engine
+from database.db import engine, latest_result, next_seq
 from database.models import (
     Achievement, ChatMessage, DeletedEntry, Education, Experience,
     JobDescription, JobSkill, Project, Skill, User, UserJobResult, UserSkill,
@@ -381,7 +382,7 @@ def get_experiences(user_id: Optional[UUID]) -> list[dict]:
     with Session(engine) as session:
         exps = session.exec(
             select(Experience).where(Experience.user_id == user_id)
-            .order_by(Experience.created_at)
+            .order_by(Experience.seq.is_(None), Experience.seq, Experience.created_at, Experience.experience_id)
         ).all()
         return [_exp_row_dict(e) for e in exps]
 
@@ -394,7 +395,7 @@ def get_education(user_id: Optional[UUID]) -> list[dict]:
         entries = session.exec(
             select(Education)
             .where(Education.user_id == user_id)
-            .order_by(Education.created_at)
+            .order_by(Education.seq.is_(None), Education.seq, Education.created_at, Education.education_id)
         ).all()
         return [
             {
@@ -418,7 +419,7 @@ def get_achievements(user_id: Optional[UUID]) -> list[dict]:
         entries = session.exec(
             select(Achievement)
             .where(Achievement.user_id == user_id)
-            .order_by(Achievement.created_at)
+            .order_by(Achievement.seq.is_(None), Achievement.seq, Achievement.created_at, Achievement.achievement_id)
         ).all()
         return [
             {
@@ -437,7 +438,7 @@ def get_projects(user_id: Optional[UUID]) -> list[dict]:
     with Session(engine) as session:
         projs = session.exec(
             select(Project).where(Project.user_id == user_id)
-            .order_by(Project.created_at)
+            .order_by(Project.seq.is_(None), Project.seq, Project.created_at, Project.project_id)
         ).all()
         return [
             {
@@ -688,7 +689,7 @@ def get_job_details(job_uuid: str) -> Optional[dict]:
             "description": job.description or "",
         }
         if results:
-            latest = max(results, key=lambda r: r.created_at)
+            latest = latest_result(results)
             detail["ats_score"] = latest.ats_score
             detail["matched_skills"] = skill_names(latest.matched_skills)[:10]
             detail["missing_skills"] = latest.missing_skills[:10] if latest.missing_skills else []
@@ -981,6 +982,7 @@ def create_artifact_from_chat(
                     description=description,
                     repo_url=repo_url,
                     source_context=source_context,
+                    seq=next_seq(session, Project, user_id),
                 ))
                 session.commit()
             return f"Added project '{name}' to your profile."
@@ -1007,6 +1009,7 @@ def create_artifact_from_chat(
                     company=company,
                     description=description,
                     source_context=source_context,
+                    seq=next_seq(session, Experience, user_id),
                 ))
                 session.commit()
             return f"Added experience '{title} @ {company}' to your profile."
@@ -1280,7 +1283,7 @@ def _latest_job_result(session, user_id: UUID, job_id: UUID):
         .where(UserJobResult.user_id == user_id)
         .where(UserJobResult.job_id == job_id)
     ).all()
-    return max(results, key=lambda r: r.created_at) if results else None
+    return latest_result(results)
 
 
 def resolve_role_family(
@@ -2465,17 +2468,49 @@ def _acting_user_id() -> Optional[UUID]:
     return user.user_id if user else None
 
 
+def _chat_scope(query, jid: Optional[UUID], user_id: Optional[UUID]):
+    """Narrow a ChatMessage query to one conversation.
+
+    A job's thread is identified by `job_id` alone — callers verify ownership.
+    Landing context (`job_id IS NULL`) is one conversation *per user* (issue
+    #73), so it needs both terms.
+    """
+    if jid is not None:
+        return query.where(ChatMessage.job_id == jid)
+    return query.where(ChatMessage.job_id.is_(None), ChatMessage.user_id == user_id)
+
+
+def _next_chat_seq(session, jid: Optional[UUID], user_id: Optional[UUID]) -> int:
+    """The next insertion ordinal for this conversation (issue #180).
+
+    Read inside the caller's transaction, immediately before the insert. Two
+    writers racing on one conversation can still compute the same ordinal; that
+    is deliberately *not* guarded with a unique constraint, because
+    `save_chat_message` is documented never to raise and a constraint violation
+    there would silently drop a user's message. The read path breaks a duplicate
+    ordinal on `(created_at, message_id)` instead, so a race degrades to the old
+    behaviour rather than losing data.
+    """
+    query = _chat_scope(select(func.max(ChatMessage.seq)), jid, user_id)
+    highest = session.exec(query).one()
+    return 0 if highest is None else highest + 1
+
+
 def save_chat_message(job_id: Optional[str], role: str, content: str) -> None:
     """Persist one message to the ChatMessage table. Never raises.
 
     Stamped with the acting user so landing-context messages (job_id=None)
-    stay isolated between users (issue #73).
+    stay isolated between users (issue #73), and with a per-conversation
+    insertion ordinal so the thread can be read back in the order it was
+    written (issue #180).
     """
     try:
         jid = UUID(job_id) if job_id else None
         uid = _acting_user_id()
         with Session(engine) as session:
-            session.add(ChatMessage(job_id=jid, user_id=uid, role=role, content=content))
+            session.add(ChatMessage(job_id=jid, user_id=uid, role=role,
+                                    content=content,
+                                    seq=_next_chat_seq(session, jid, uid)))
             session.commit()
         _prune_chat_messages(jid, user_id=uid)
     except Exception as e:
@@ -2490,16 +2525,22 @@ def _prune_chat_messages(
     """Delete oldest messages beyond `keep` for the given job_id. Never raises.
 
     Landing context (jid=None) prunes only the given user's messages.
+
+    Ordered on `seq` (issue #180). This path is why the ordering defect was not
+    merely cosmetic: it takes `ids[keep:]` off the sort, so under a tied
+    `created_at` it deleted an arbitrary set of messages rather than the oldest
+    ones. The cap held and the wrong rows went.
     """
     try:
         with Session(engine) as session:
-            query = (
-                select(ChatMessage.message_id)
-                .where(ChatMessage.job_id == jid)
-                .order_by(ChatMessage.created_at.desc())
+            query = _chat_scope(
+                select(ChatMessage.message_id), jid, user_id
+            ).order_by(
+                ChatMessage.seq.is_(None),
+                ChatMessage.seq.desc(),
+                ChatMessage.created_at.desc(),
+                ChatMessage.message_id.desc(),
             )
-            if jid is None:
-                query = query.where(ChatMessage.user_id == user_id)
             ids = session.exec(query).all()
             if len(ids) > keep:
                 to_delete = list(ids[keep:])
@@ -2518,19 +2559,26 @@ def load_chat_history(
     Landing context (job_id=None) is scoped to `user_id` — or the acting user
     when not passed — so users never see each other's landing chat (issue #73).
     Job contexts are scoped by job_id; callers verify job ownership.
+
+    Ordered on `seq` (issue #180). `created_at` and `message_id` follow it only
+    to keep the order defined if two concurrent writers ever land on the same
+    ordinal — see `_next_chat_seq`. Because `.limit(limit)` cuts the sorted
+    window, an undefined order here did not just reorder the transcript: when a
+    tie straddled the boundary an arbitrary message was dropped from it.
     """
     try:
         jid = UUID(job_id) if job_id else None
         with Session(engine) as session:
-            query = (
-                select(ChatMessage)
-                .where(ChatMessage.job_id == jid)
-                .order_by(ChatMessage.created_at.desc())
-                .limit(limit)
-            )
-            if jid is None:
-                uid = user_id if user_id is not None else _acting_user_id()
-                query = query.where(ChatMessage.user_id == uid)
+            # Only landing context needs the owner; resolving it for a job
+            # thread would be a wasted profile lookup on every history read.
+            uid = (user_id if user_id is not None else _acting_user_id()) \
+                if jid is None else None
+            query = _chat_scope(select(ChatMessage), jid, uid).order_by(
+                ChatMessage.seq.is_(None),
+                ChatMessage.seq.desc(),
+                ChatMessage.created_at.desc(),
+                ChatMessage.message_id.desc(),
+            ).limit(limit)
             msgs = session.exec(query).all()
         return [{"role": m.role, "content": m.content, "created_at": m.created_at.isoformat()} for m in reversed(msgs)]
     except Exception as e:

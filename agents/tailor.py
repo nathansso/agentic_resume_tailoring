@@ -1487,7 +1487,7 @@ class ResumeTailorAgent:
         with Session(engine) as session:
             rows = session.exec(
                 select(Achievement).where(Achievement.user_id == user_id)
-                .order_by(Achievement.created_at)
+                .order_by(Achievement.seq.is_(None), Achievement.seq, Achievement.created_at, Achievement.achievement_id)
             ).all()
             return [
                 {
@@ -1512,7 +1512,7 @@ class ResumeTailorAgent:
         with Session(engine) as session:
             rows = session.exec(
                 select(Education).where(Education.user_id == user_id)
-                .order_by(Education.created_at)
+                .order_by(Education.seq.is_(None), Education.seq, Education.created_at, Education.education_id)
             ).all()
             return [
                 {

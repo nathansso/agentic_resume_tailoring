@@ -348,7 +348,7 @@ class ResumeFormatterAgent:
             return list(session.exec(
                 select(Education)
                 .where(Education.user_id == self.user_id)
-                .order_by(Education.created_at)
+                .order_by(Education.seq.is_(None), Education.seq, Education.created_at, Education.education_id)
             ).all())
 
     @staticmethod

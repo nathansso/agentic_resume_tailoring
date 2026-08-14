@@ -10,7 +10,7 @@ from llm import get_llm, get_extractor
 from agents.extraction_schemas import (
     ExperienceList, EducationList, AchievementList, ProjectList, SkillList,
 )
-from database.db import engine
+from database.db import engine, next_seq
 from database.models import User, Skill, UserSkill, Education, Experience, Project, Achievement, DeletedEntry
 from database.user_utils import require_active_user
 from agents.skill_postprocessor import postprocess_skills, normalize_skill_name
@@ -295,6 +295,7 @@ class ResumeParserAgent:
                     end_date=end,
                     description=desc,
                     bullets=bullets,
+                    seq=next_seq(session, Experience, self.user.user_id),
                 )
                 session.add(exp)
                 existing_exps.append(exp)
@@ -341,7 +342,7 @@ class ResumeParserAgent:
         the number of rows removed. Idempotent when the data is already clean."""
         rows = list(session.exec(
             select(Experience).where(Experience.user_id == user_id)
-            .order_by(Experience.created_at)
+            .order_by(Experience.seq.is_(None), Experience.seq, Experience.created_at, Experience.experience_id)
         ).all())
         kept: List = []
         removed = 0
@@ -380,7 +381,7 @@ class ResumeParserAgent:
         user, keeping the richer of each pair. Returns rows removed."""
         rows = list(session.exec(
             select(Project).where(Project.user_id == user_id)
-            .order_by(Project.created_at)
+            .order_by(Project.seq.is_(None), Project.seq, Project.created_at, Project.project_id)
         ).all())
 
         def richness(p) -> tuple:
@@ -434,7 +435,7 @@ class ResumeParserAgent:
         idempotent when the data is already clean."""
         rows = list(session.exec(
             select(Education).where(Education.user_id == user_id)
-            .order_by(Education.created_at)
+            .order_by(Education.seq.is_(None), Education.seq, Education.created_at, Education.education_id)
         ).all())
 
         def richness(e) -> tuple:
@@ -523,6 +524,7 @@ class ResumeParserAgent:
                     start_date=item.get("start_date"),
                     end_date=item.get("end_date"),
                     gpa=str(gpa).strip() if gpa else None,
+                    seq=next_seq(session, Education, self.user.user_id),
                 )
                 session.add(row)
                 existing.append(row)
@@ -559,6 +561,7 @@ class ResumeParserAgent:
                     description=str(item.get("description") or "").strip() or None,
                     issuer=issuer,
                     date=str(item.get("date") or "").strip() or None,
+                    seq=next_seq(session, Achievement, self.user.user_id),
                 )
                 session.add(row)
                 existing.append(row)
@@ -586,7 +589,7 @@ class ResumeParserAgent:
         removed; idempotent when the data is already clean."""
         rows = list(session.exec(
             select(Achievement).where(Achievement.user_id == user_id)
-            .order_by(Achievement.created_at)
+            .order_by(Achievement.seq.is_(None), Achievement.seq, Achievement.created_at, Achievement.achievement_id)
         ).all())
 
         def richness(a) -> tuple:
@@ -672,6 +675,7 @@ class ResumeParserAgent:
                     start_date=_clean_date(item.get("start_date")),
                     end_date=_clean_date(item.get("end_date")),
                     metrics=metrics,
+                    seq=next_seq(session, Project, self.user.user_id),
                 )
                 session.add(proj)
                 existing_projects.append(proj)
@@ -988,6 +992,7 @@ class ResumeParserAgent:
                     description=item.get("description"),
                     start_date=item.get("start_date"),
                     end_date=item.get("end_date"),
+                    seq=next_seq(session, Project, self.user.user_id),
                 )
                 session.add(proj)
                 existing_projects.append(proj)
@@ -1049,6 +1054,7 @@ class ResumeParserAgent:
                     end_date=item.get("end_date"),
                     description=item.get("description"),
                     bullets=bullets,
+                    seq=next_seq(session, Experience, self.user.user_id),
                 )
                 session.add(exp)
                 existing_exps.append(exp)
@@ -1084,6 +1090,7 @@ class ResumeParserAgent:
                     degree=degree,
                     start_date=str(item.get("start_year") or "").strip() or None,
                     end_date=str(item.get("end_year") or "").strip() or None,
+                    seq=next_seq(session, Education, self.user.user_id),
                 )
                 session.add(edu)
                 existing_edu.append(edu)
@@ -1123,6 +1130,7 @@ class ResumeParserAgent:
                     description=str(item.get("description") or "").strip() or None,
                     issuer=issuer,
                     date=str(item.get("date") or "").strip() or None,
+                    seq=next_seq(session, Achievement, self.user.user_id),
                 )
                 session.add(ach)
                 existing_ach.append(ach)

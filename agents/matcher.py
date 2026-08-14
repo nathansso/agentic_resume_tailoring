@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlmodel import Session, select
 import numpy as np
 
-from database.db import engine
+from database.db import engine, next_seq
 from database.models import (
     User, Skill, UserSkill, JobDescription, JobSkill, UserJobResult,
     Experience, Project,
@@ -204,6 +204,11 @@ class SkillMatcherAgent:
                 matched_skills=matched_skills,
                 missing_skills=missing_skills,
                 score_breakdown=breakdown,
+                # Run ordinal for this job (issue #180). The only place a
+                # result row is created, so this is the only place the run
+                # order can be recorded — after this, nothing distinguishes
+                # two rows written in the same clock tick.
+                seq=next_seq(session, UserJobResult, user_id, job_id=job_id),
             )
             session.add(result)
             session.commit()

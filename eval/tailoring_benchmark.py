@@ -551,7 +551,7 @@ def _run_task(client, task: Dict, renders_dir: Path,
     """Drive one JD through the exact user flow and compute its metrics."""
     from sqlmodel import Session, select
 
-    from database.db import engine
+    from database.db import engine, latest_result
     from database.models import UserJobResult, UserSkill
     from eval.metrics import compute_task_metrics
 
@@ -573,7 +573,7 @@ def _run_task(client, task: Dict, renders_dir: Path,
         results = session.exec(
             select(UserJobResult).where(UserJobResult.job_id == UUID(job_id))
         ).all()
-        result = max(results, key=lambda r: r.created_at)
+        result = latest_result(results)
         tailored_content = result.tailored_resume_content or {}
         matched_skills = result.matched_skills or {}
         baseline_breakdown = result.score_breakdown or {}
