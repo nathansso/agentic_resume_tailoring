@@ -42,6 +42,20 @@ Do not break the CLI when making web changes.
 
 ---
 
+## Response style
+
+Chat responses are frequently too verbose. Apply these:
+
+- Answer, then stop. No preamble, and no closing summary restating what you just did.
+- Report outcomes, not process. Skip verification tables and step-by-step recaps unless asked.
+- No "one thing worth flagging" / "two things worth knowing" sections. A caveat is one sentence or it is cut.
+- Prose, not tables, under ~4 items.
+- Default cap: ~4 lines for routine answers. Go long only when the text *is* the deliverable (a written document, a requested report, a plan).
+
+This governs chat output only. It never shortens the work itself, and never trims a file, document, or artifact the task asked for.
+
+---
+
 ## Guidance hierarchy
 
 Use the repo guidance in this order:
