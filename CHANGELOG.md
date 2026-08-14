@@ -13,7 +13,7 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 ---
 
 ## Issue 172 (chunks 1–4 of 7) — The benchmark profile set, and a JD corpus audit
-**Status:** chunks 1–4 complete; 5–7 open | **Tests:** 1365 pass on SQLite (34 new)
+**Status:** chunks 1–4 complete; 5–7 open | **Tests:** 1388 pass on SQLite (34 new)
 
 The benchmark measured **one** candidate, so every metric was a single pooled number over one synthetic person and "weak" was the only available finding — "weak on metric-poor candidates" was not expressible. Three shipped issues (#122, #155, #150/#115) had each recorded a missing fixture capability in almost the same words, and none had been filed. This ships the candidate side of the dataset: **20 profiles**, each declaring which stratum it isolates, each verified against its own text.
 
@@ -38,6 +38,7 @@ While wiring them up, the corpus they run against turned out to carry defects th
 - **One HTML-to-text implementation instead of two that disagreed.** `strip_html` now unescapes to a fixed point and delegates parsing to the BeautifulSoup-based `clean_html`; a naive `<[^>]+>` also stopped at the first `>` inside an attribute value, leaving fragments like `data-aria-level="1">` in the text. The ceiling moved 6,000 → 20,000, above the longest real posting measured (8,821).
 - **The intern/entry restriction is now an invariant, not a claim about one afternoon's scrape.** `role_family` and `level` are stored rather than recomputed (#177) — right for stability, silent about drift. The audit re-decides both from the committed title and body on every run: **150/150 still classify as filed**, no title carries a seniority marker, and every posting stating more than `MAX_ENTRY_YEARS` was read by hand (all six are regex false positives — company heritage lines, an age question, a UK residency rule, and one "*no more than* 3 years of professional experience", which is an entry-level constraint).
 - **Tests (34 new).** `tests/test_profile_set.py` (21), `tests/test_jd_corpus.py` (+9), `tests/test_job_sources.py` (+4). All offline.
+- **`docs/benchmark.md` updated in the same PR rather than left to go stale.** It shipped hours before this branch merged and stated, correctly at the time, that `eval/profiles/` holds exactly one candidate — a claim this change falsifies. The worked run is re-measured on a current profile (`ai_engineering_specialist_ravi_deshmukh`, mode plumbing), §5 gains the profile-set and corpus-repair sections and a second incomparability line at 2026-08-12, and the *In flight* section now describes chunks 5–7 individually instead of the issue as a whole. `docs/architecture.md`'s JobCard and decision-log examples carry the re-measured figures so the two documents cite one run rather than two.
 
 ### Re-baseline
 
