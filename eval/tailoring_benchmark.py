@@ -28,7 +28,7 @@ Execution modes (issue #171) — see MODE_CLAIMS for what each may claim:
     python eval/tailoring_benchmark.py --mode plumbing --limit 3
     python eval/tailoring_benchmark.py --mode product --record --limit 3
     python eval/tailoring_benchmark.py --mode replay --limit 3
-    python eval/tailoring_benchmark.py --tasks stripe_ai_engineer duolingo_software_engineer_i
+    python eval/tailoring_benchmark.py --tasks arizent_data_ai_engineer
 
 Replay contract (what a replay run does and does not reproduce) is documented
 in eval/README.md.

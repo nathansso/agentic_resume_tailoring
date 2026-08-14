@@ -8,6 +8,7 @@ focused, ATS-friendly one-page resume for a specific job — with a chat
 interface for iterative, reviewable revision.
 
 🔗 **Live demo:** https://web-production-2ead7.up.railway.app/
+📦 **Setup:** [`INSTALL.md`](INSTALL.md) — Docker, local Python, and cloud deploy
 
 ---
 
@@ -39,14 +40,25 @@ flowchart LR
 
 Every tailoring run is **planned as typed, per-item edit actions**, executed
 under deterministic guards, **scored algorithmically**, and **logged** — so the
-system can explain each change and learn which tailoring choices work over
-time.
+system can explain each change and, in future, learn which tailoring choices
+work over time.
+
+---
+
+## Documentation
+
+| Document | What it covers |
+|---|---|
+| [`docs/architecture.md`](docs/architecture.md) | The full system: memory units, reasoning units, KG retrieval, the preference/persona tier, exploration, and the determinism invariants |
+| [`docs/benchmark.md`](docs/benchmark.md) | What the benchmark measures, its three execution modes, a worked run, and what a number may claim |
+| [`eval/README.md`](eval/README.md) | Operational reference for every eval harness — commands, dataset schemas, replay contract |
+| [`INSTALL.md`](INSTALL.md) | Docker, local development, configuration, and cloud deploy |
+| [`docs/parallel-agents.md`](docs/parallel-agents.md) | Worktree-isolated agent sessions |
+| [`CHANGELOG.md`](CHANGELOG.md) | Every completed delivery, with its deviations from spec |
 
 ---
 
 ## Architecture
-
-### System overview
 
 React/TypeScript SPA served as static files by a FastAPI backend — one process
 runs the whole product in production. `services.py` is the shared business
@@ -63,110 +75,92 @@ web/frontend (React/TS)  ──►  FastAPI routers (web/routers/)
               (resume,          knowledge_graph/  ── skills graph builder
                github,                 │
                linkedin)               ▼
-                          database/ (SQLModel: SQLite / Supabase Postgres)
+                          database/ (SQLModel: Supabase Postgres / SQLite)
 ```
 
-- **Auth:** Supabase Auth (JWT via JWKS) in production, signed-cookie fallback
-  locally. Per-request user binding keeps multi-user data isolated.
-- **Database:** SQLModel ORM on **Supabase Postgres**. `docker compose up`
-  brings up a local pgvector Postgres and points `DATABASE_URL` at it, so
-  development runs the engine production runs. SQLite is a *fallback* when
-  `DATABASE_URL` is unset — it keeps `cli.py` and the no-Docker path working,
-  but it is not the target: dialect gaps between the two have shipped bugs
-  before. Schema changes ship as idempotent `ALTER TABLE` migrations so
-  existing databases keep loading.
+**Memory units** — what the system carries between turns and between jobs:
 
-### Ingestion → knowledge graph
+- the **skills knowledge graph**, where every skill records where it was
+  demonstrated (`UserSkill.evidence_source/detail`), so nothing is ever claimed
+  without support;
+- **JobCards**, one deterministic card per finished job, relevance-ranked and
+  injected into the planner under a token budget so prompt cost stays flat as
+  jobs accumulate;
+- the **decision log** on `UserJobResult.tailoring_decisions` — an append-only
+  `(context, actions, propensity, reward)` tuple per run;
+- the **preference store and persona index**, a lossless one-level abstraction
+  over standing preferences extracted from chat;
+- **layout overrides**, the arrangement a user chose, which the pipeline reads
+  and never writes;
+- **chat history** and its rolling compression.
 
-Each source (resume file, GitHub account/repo, LinkedIn PDF) is parsed into
-structured rows — skills, experiences, projects, education, achievements —
-with **evidence edges**: every skill records where it was demonstrated
-(`UserSkill.evidence_source/detail`). Tailoring later uses this graph degree as
-a signal (a project evidencing many skills ranks higher) and never claims a
-skill without support. Rows are deduplicated across sources, and manual edits
-in the profile UI are protected from re-ingestion overwrites.
+**Reasoning units** — how a job description becomes a resume:
 
-### The tailoring pipeline (`graph/pipeline.py`, `agents/`)
+1. **Analyze / match** — the JD is extracted once into a persisted, inspectable
+   `JDProfile` (requirements with type, criticality, terms, and source order),
+   then matched against the graph to fix the pre-tailor baseline score.
+2. **Plan** — a planner LLM emits one typed action per resume item:
+   `keep | revise | replace | delete`, with a named strategy
+   (`keyword_weave | quantify | tighten | reframe`), the keywords to weave, and a
+   rationale. The plan is then validated deterministically — unknown items
+   dropped, replace is pool-only, a section can never be emptied — and degrades
+   to a safe default plan if the model fails. Re-tailors plan a **delta against
+   the current tailored resume**, never a regeneration.
+3. **Generate** — the generator executes the plan under strict rules, then
+   deterministic guards enforce what prompts cannot guarantee: deleted items stay
+   out, `keep` items keep their bullets verbatim, budgets and ordering hold.
+4. **Evaluate** — the same algorithmic ATS engine that scored the baseline scores
+   each attempt, plus keyword *placement* precision, faithfulness drift, and
+   stuffing checks. The loop retries with targeted feedback and ships the
+   **best-of-N** attempt, never the last one.
+5. **Format** — tailored JSON renders to LaTeX (Jake's Resume layout) compiled by
+   tectonic to a one-page PDF, with DOCX mirroring the same layout.
 
-A LangGraph flow: `analyze_job → match_skills → tailor_resume → format_resume`.
-The tailor stage is itself a **plan → generate → evaluate** loop:
+Two things run **unconditionally** inside step 2's input loading, because a tier
+consulted only when something upstream thinks it relevant is a tier that
+silently stops binding: a **knowledge-graph evidence step** that promotes and
+annotates items the JD's own prose never names, and a **persona step** that
+arbitrates the candidate's standing preferences against the job's requirements.
+Truthfulness wins that arbitration outright — a preference to emphasize
+something the graph does not evidence is refused, not honoured.
 
-1. **Prepare** — experiences are cleaned, deduplicated, relevance-ranked
-   against the JD, and given per-item bullet budgets; projects are scored
-   (relevance + complexity + recency) and the top-k selected, keeping the
-   remainder as a **replacement pool**; missing JD keywords are signal-ranked
-   and assigned to the specific item whose own content supports them.
-2. **Plan** (`agents/tailor_planner.py`) — a planner LLM emits one typed action
-   per item: `keep | revise | replace | delete`, with a named revision strategy
-   (`keyword_weave | quantify | tighten | reframe`), the keywords to weave, a
-   replacement from the pool, and a one-sentence rationale. Plans are validated
-   deterministically (unknown items dropped, replace is pool-only, a section
-   can never be emptied) and degrade to a safe default plan if the LLM fails.
-   On re-tailors the planner plans a **delta against the current tailored
-   resume** — the source of truth — instead of regenerating from scratch.
-3. **Generate** — the generator LLM executes the plan under strict rules:
-   revise-don't-rewrite, never fabricate, respect bullet budgets and per-item
-   keyword assignments. Deterministic guards enforce what prompts can't
-   guarantee: pre-ranked ordering, restored dates and repo links, budget
-   truncation, plan enforcement (deleted items stay out, kept items keep their
-   bullets verbatim).
-4. **Evaluate** — the same algorithmic **ATS scoring engine** that scores the
-   pre-tailor baseline scores each attempt (skill coverage, keyword *placement*
-   precision, section presence, role level), plus faithfulness-drift and
-   keyword-stuffing checks. The loop retries with targeted feedback and ships
-   the **best-of-N** attempt, never the last one.
-5. **Format** — tailored JSON renders to LaTeX (Jake's Resume layout) compiled
-   by tectonic to a one-page PDF, with DOCX export mirroring the same layout.
-   Section order is re-ranked per job, and content is trimmed to fit one page
-   at the source so previews, editors, and exports agree.
+**Chat** is router-first: deterministic fast paths handle command-like input
+with no model call, and everything else goes to a routing LLM restricted to a
+`TOOL_CALL / CLARIFY / RESPONSE` envelope. Within a job chat, tailoring is a
+strict action set — `PROPOSE_PLAN`, `APPLY_PLAN`, `SHOW_DIFF`, `EXPLAIN`,
+`REVERT`, `SAVE_ARTIFACT` — so a revision is a reviewable delta you approve, not
+a regeneration you receive.
 
-### The chat agent (`agents/chat.py`)
+**Auth and storage.** Supabase Auth (JWT via JWKS) in production with a
+signed-cookie fallback locally; per-request user binding keeps multi-user data
+isolated. SQLModel on **Supabase Postgres**, with `docker compose up` bringing up
+a local pgvector Postgres so development runs the engine production runs. SQLite
+is a *fallback* when `DATABASE_URL` is unset — it keeps `cli.py` and the
+no-Docker path working, but dialect gaps between the two have shipped bugs
+before. Schema changes ship as idempotent `ALTER TABLE` migrations.
 
-A router-first design: deterministic fast paths handle command-like input
-without an LLM call; everything else goes to a routing LLM restricted to a
-`TOOL_CALL / CLARIFY / RESPONSE` envelope over an explicit tool list. Runtime
-state (active profile, active job, current tailored resume) is injected into
-the router prompt every turn.
+Full detail, with the LLM-versus-deterministic split stated explicitly, is in
+[`docs/architecture.md`](docs/architecture.md).
 
-Within a job chat, tailoring is a **strict action set**:
+---
 
-| Action | What it does |
-|---|---|
-| `PROPOSE_PLAN` | Show the per-item delta a re-tailor would apply, before spending a run |
-| `APPLY_PLAN` | Execute the approved plan (`plan_override` through the pipeline) |
-| `SHOW_DIFF` | List what the last run changed |
-| `EXPLAIN` | The rationale behind each change, from the decision log |
-| `REVERT` | One-level undo to the previous tailored resume |
-| `SAVE_ARTIFACT` | Persist chat-mentioned skills/projects into the knowledge graph |
+## Evaluation
 
-`tailor <request>` on an already-tailored job proposes the plan and asks for
-approval (`1` to apply, `2` to cancel) — chat revisions are reviewable deltas,
-not regenerations.
+`eval/tailoring_benchmark.py` replays a versioned corpus of **150 verified
+intern/entry postings across five role families** through the real HTTP API
+(register → ingest → analyze → tailor → export) on an isolated database,
+computing ATS deltas, experience-allocation balance, skills organization, and a
+four-mode redundancy suite per task.
 
-### The learning loop (decision log → policy)
+It runs in three modes — `product`, `replay`, `plumbing` — with different
+evidentiary weight, and **the mode travels with every number**. A plumbing run
+never rewrites a bullet, so its figures describe the harness and the
+deterministic post-processing, never tailoring quality. Four narrower harnesses
+isolate what the end-to-end delta cannot see: JobCard quality, knowledge-graph
+updates, skill selection, and chat memory.
 
-Every tailoring run appends a `(context, actions, propensity, reward)` tuple to
-`UserJobResult.tailoring_decisions`:
-
-- **context** — profile/JD features (item counts, missing skills, baseline
-  score, whether it's a revision),
-- **actions** — the executed plan with rationales,
-- **reward** — the per-component ATS delta, plus an explicit **1–5 user score**
-  collected in chat after each revision.
-
-This is an offline contextual-bandit dataset: the planner's strategy knobs
-(default revision strategy, replace/delete aggressiveness) are the discrete
-levers a learned policy will select per run, evaluated off-policy before
-deployment. The benchmark harness doubles as the data generator.
-
-### Evaluation (`eval/`)
-
-`eval/tailoring_benchmark.py` replays a versioned JD dataset through the real
-HTTP API (register → ingest → analyze → tailor → export) on an isolated
-database, computing ATS deltas, experience-allocation balance, skills
-organization, and redundancy metrics per task — with a deterministic stub-LLM
-mode for offline runs. Results land in `eval/results/` as JSON/CSV plus
-rendered `.tex` artifacts.
+See [`docs/benchmark.md`](docs/benchmark.md) for what the numbers mean and
+[`eval/README.md`](eval/README.md) for how to run them.
 
 ---
 
@@ -174,7 +168,7 @@ rendered `.tex` artifacts.
 
 | Layer     | Technology |
 |-----------|------------|
-| Frontend  | React 18, TypeScript, Vite |
+| Frontend  | React 18, TypeScript, Vite, Tailwind CSS |
 | Backend   | FastAPI (Python 3.11+) |
 | Database  | SQLModel ORM — Supabase Postgres (pgvector), SQLite fallback |
 | Auth      | Supabase Auth (JWT) with a local signed-cookie fallback |
@@ -182,75 +176,6 @@ rendered `.tex` artifacts.
 | PDF       | LaTeX (tectonic) |
 | Deploy    | Docker → Railway |
 | CI        | GitHub Actions — the suite on both Postgres and SQLite |
-
-## Quickstart
-
-### Option A — Docker
-
-```bash
-git clone https://github.com/nathansso/agentic_resume_tailoring.git
-cd agentic_resume_tailoring
-cp .env.example .env          # then set ANTHROPIC_API_KEY (or OPENAI_API_KEY)
-docker compose up --build
-```
-
-Open http://localhost:8000. This also brings up a pgvector Postgres and points
-the app's `DATABASE_URL` at it, so you get the production engine locally.
-
-### Option B — Local development
-
-```bash
-git clone https://github.com/nathansso/agentic_resume_tailoring.git
-cd agentic_resume_tailoring
-
-# Backend
-python -m venv .venv
-source .venv/Scripts/activate      # bash / Git Bash on Windows
-# .venv\Scripts\Activate.ps1        # PowerShell
-pip install -r requirements-core.txt
-cp .env.example .env               # set your API key + SESSION_SECRET_KEY
-
-# Database — run against Postgres, the engine production uses
-docker compose up -d postgres
-export DATABASE_URL=postgresql://art:art@localhost:5433/art
-
-DEV_MODE=1 uvicorn web.app:app --port 8000 --reload
-
-# Frontend (separate terminal) — proxies /api to :8000
-cd web/frontend
-npm install
-npm run dev                        # http://localhost:5173
-```
-
-`requirements-full.txt` adds optional LinkedIn scraping (Playwright) and
-semantic skill matching (sentence-transformers).
-
-### CLI
-
-A command-line surface mirrors the core pipeline:
-
-```bash
-python cli.py ingest-resume <file>
-python cli.py ingest-github [username]
-python cli.py tailor <job_file_or_text>
-python cli.py status
-```
-
-## Configuration
-
-Copy `.env.example` to `.env` and fill in what you need. The essentials:
-
-| Variable | Purpose |
-|----------|---------|
-| `LLM_PROVIDER` | `anthropic` (default) or `openai` |
-| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | LLM access |
-| `SESSION_SECRET_KEY` | signs local session cookies (`python -c "import secrets; print(secrets.token_hex(32))"`) |
-| `DATABASE_URL` | Postgres connection string; unset falls back to local SQLite |
-| `ART_TEST_DATABASE_URL` | Postgres DSN for the test suite's Postgres leg (never the same as `DATABASE_URL`) |
-| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth for repo ingestion (optional) |
-
-Supabase Auth variables are only needed for cloud multi-user deployment — see
-`.env.example` for the full list.
 
 ## Testing
 
@@ -278,19 +203,19 @@ PR, with Postgres required.
 
 ```
 web/            FastAPI backend (routers/) + React frontend (frontend/)
-agents/         chat router, job analyzer, matcher, planner, tailor,
-                ATS scorer, formatter
-graph/          LangGraph tailoring pipeline
+agents/         chat router, job analyzer, JD profile, matcher, planner, tailor,
+                preferences, persona, arbitration, JobCards, scorers, formatter
+graph/          LangGraph tailoring pipeline (CLI + chat composition)
 knowledge_graph/ skills-to-evidence graph builder
 ingestion/      resume / GitHub / LinkedIn ingestors
-database/       SQLModel models, engine, migrations, user utilities
+database/       SQLModel models, engine, migrations, vector search, user utilities
 eval/           benchmark + regression eval harnesses, datasets, metrics
 supabase/       Supabase schema, RLS policies, migrations
-scripts/        JD scraper, agent-worktree bootstrap
+scripts/        JD sourcing / verification / scraping, agent-worktree bootstrap
 services.py     shared business logic used by web, agents, and CLI
 cli.py          command-line entry point
 tests/          pytest suite (+ tests/fixtures/ sample data)
-docs/           contributor guides (parallel agent worktrees)
+docs/           architecture, benchmark, and contributor guides
 ```
 
 Task specs and roadmaps live in GitHub issues and the **ART Development Plan**
@@ -298,28 +223,23 @@ board, not in checked-in documents.
 
 ## Roadmap
 
-Work is sequenced in phases on the board. P0 (research spikes) is closed; the
-current front is P1.
+Work is sequenced in phases on the board. **P0** (research spikes) and **P1**
+(preferences & knowledge) are complete — the P1 epic #140 closed with the JD
+profile, layout overrides, the preference and persona tiers, JobCards,
+chat→graph extraction, and KG evidence in the planner all shipped. The current
+front is the **benchmark dataset foundation** (#172, in progress), which most of
+P2 and all of P3 depend on for a measurement worth optimising.
 
-| Phase | Theme | What it delivers |
+| Phase | Theme | State |
 |---|---|---|
-| **P1** | Preferences & Knowledge | A structured JD artifact (#121), persisted layout overrides (#118), then a standing user-preference profile arbitrated against JD criticality (#129) and a codified persona tier over it (#133). Sequencing epic: **#140**. |
-| **P2** | Tailoring Policy | Make the objective worth optimizing before optimizing it — separable redundancy metrics (#122), a fabrication gate (#123), entailment-based coverage (#124–#126), and a cost-weighted marginal objective (#127) feeding per-edit reward (#113). |
-| **P3** | Reinforcement Learning | Induce the planner's policy from the logged `(context, action, propensity, reward)` tuples (#51 Phase 2). Exploration already ships (#112). Arc epic: **#114**. |
-| **P4** | UI & Migration | Editable rendered resume view (#87) and the UI restructure (#82). The hosting migration (#48) and teardown of the old deployment (#102) are complete. |
+| **P1** | Preferences & Knowledge | **Complete.** JD profile (#121), layout overrides (#118), preference profile arbitrated against JD criticality (#129), codified persona tier (#133), JobCards (#137), chat→KG extraction (#21), KG evidence in the planner (#138). Epic **#140**, closed. |
+| **P2** | Tailoring Policy | **In progress.** The redundancy suite (#122) and weighted keyword scoring (#125) shipped; the objective is still monotone in coverage, so a fabrication gate (#123), entailment-based coverage (#124–#126), and the cost-weighted marginal objective (#127) are what make it worth optimising. |
+| **P3** | Reinforcement Learning | **Not started.** Exploration ships (#112) and the log is RL-ready, but no policy update loop is closed. Induction from the logged tuples is #51 Phase 2; prerequisites are #119. Arc epic **#114**. |
+| **P4** | UI & Migration | **Partial.** The hosting migration (#48) and old-deployment teardown (#102) are complete. Editable rendered resume view (#87) and the UI restructure (#82) remain. |
 
-## Deployment
-
-Deployed on **Railway** — Docker build from the repo root `Dockerfile`
-(Node 24 builds the React app → Python 3.12 serves it), health-checked at
-`/api/health`, configured by `railway.json`.
-
-```bash
-railway up
-```
-
-Full setup instructions, plus Docker and local Postgres, live in
-[`INSTALL.md`](INSTALL.md).
+Cross-cutting and unphased: the benchmark arc (#172 → #173 → #174 → #178), which
+adds stratified profiles, a re-tailor arm, action-ranking preference pairs, and
+profile-bound conversation fixtures.
 
 ---
 

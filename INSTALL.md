@@ -66,7 +66,7 @@ DEV_MODE=1 uvicorn web.app:app --port 8000 --reload
 
 Open http://localhost:8000. For frontend hot-reloading, run the Vite dev server
 in a second terminal (`cd web/frontend && npm install && npm run dev`) — it
-proxies `/api` to port 8000. See the README for the full dev workflow.
+serves on port 5173 and proxies `/api` to port 8000.
 
 The CLI mirrors the core pipeline without the web UI:
 
@@ -76,6 +76,22 @@ python cli.py ingest-github [username]
 python cli.py tailor <job_file_or_text>
 python cli.py status
 ```
+
+### Configuration
+
+Copy `.env.example` to `.env` and fill in what you need. The essentials:
+
+| Variable | Purpose |
+|----------|---------|
+| `LLM_PROVIDER` | `anthropic` (default) or `openai` |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | LLM access |
+| `SESSION_SECRET_KEY` | signs local session cookies (`python -c "import secrets; print(secrets.token_hex(32))"`) |
+| `DATABASE_URL` | Postgres connection string; unset falls back to local SQLite |
+| `ART_TEST_DATABASE_URL` | Postgres DSN for the test suite's Postgres leg (never the same as `DATABASE_URL`) |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth for repo ingestion (optional) |
+
+Supabase Auth variables are only needed for cloud multi-user deployment — see
+`.env.example` for the full list, and Option C below for the Railway deployment variables.
 
 ### Database: Postgres or SQLite
 

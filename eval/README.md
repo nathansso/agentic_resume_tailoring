@@ -27,12 +27,12 @@ asked for; an ability whose row stays `none` after its issue ships did not ship.
 
 | Dataset | Size | Harness | Note |
 |---|---|---|---|
-| `jd_dataset/` | 8 | tailoring benchmark | Being rebuilt to ~100 intern/entry postings across five role families (#177) |
+| `jd_dataset/` | 150 | tailoring benchmark | 30 intern/entry postings in each of five role families (#177). Replaced the 8 mid-level-and-senior postings every pre-2026-08-11 figure was measured on |
 | `profiles/` | 1 | tailoring benchmark | Mid-level candidate; #172 replaces with 15 intern/entry profiles |
 | `ku_dataset/` | 4 | knowledge-updates eval | **Scripted by default** — the task file supplies the notes *and* the decisions, so the extractor is not under test unless `--live` |
 | `jobcard_dataset/` | 4 | JobCard eval | Cross-job memory, outcome-carrying |
 | `skill_selection_tasks/` | 2 | skill-selection tuning | Carries a labelled `relevant` answer key; unused by the tailoring benchmark |
-| `cassettes/` | 1 | replay mode | `benchmark_profile` at `--limit 3` only |
+| `cassettes/` | 1 | replay mode | **Dead until re-recorded** — its three task ids do not exist in the #177 corpus. #172 re-records once its profile set is final; the determinism test drives `--tasks` from the cassette's own task list and skips with a re-record instruction |
 | `tests/memory_evals/` | 5 YAML | chat-memory eval | Recall across compression; not bound to any profile |
 
 **No dataset is bound to a profile except the tailoring benchmark's own.** That is why
@@ -69,7 +69,7 @@ python eval/tailoring_benchmark.py --mode plumbing --limit 3   # offline, free
 python eval/tailoring_benchmark.py --mode product --record --limit 3
 python eval/tailoring_benchmark.py --mode replay --limit 3
 python eval/tailoring_benchmark.py --judge                     # product only
-python eval/tailoring_benchmark.py --tasks stripe_ai_engineer --limit 3
+python eval/tailoring_benchmark.py --tasks arizent_data_ai_engineer
 ```
 
 `--stub` remains an alias for `--mode plumbing`.
