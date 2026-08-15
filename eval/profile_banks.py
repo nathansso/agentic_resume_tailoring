@@ -728,3 +728,40 @@ SLOTS: Tuple[Slot, ...] = (
     _SWE_SPECIALIST, _SWE_GENERALIST, _SWE_METRIC_POOR,
     _AI_SPECIALIST, _AI_GENERALIST, _AI_METRIC_POOR,
 )
+
+
+# ── distractor candidates (issue #172, chunk 5) ───────────────────────────────
+#
+# Plausible-but-irrelevant skills, proposed here and *audited* by
+# `eval/distractors.py` against every posting in `eval/jd_dataset/`. Nothing in
+# this list is admitted by virtue of appearing in it: the audit runs two rules —
+# no shared keyword with any posting, and cosine below the matcher's own
+# `SEMANTIC_THRESHOLD` against every corpus keyword — and roughly a third of
+# these are rejected. `eval/distractors.py::ADMITTED` is the authority; this is
+# the proposal.
+#
+# Chosen from domains a real entry-level candidate might plausibly carry from
+# coursework or a prior life — engineering CAD, academic and statistical tooling,
+# legacy enterprise stacks, typesetting, qualitative research — while being
+# genuinely absent from a corpus of DS/DE/MLE/SWE/AI-engineering postings. A
+# distractor that is merely *rare* is not the same as one that is irrelevant, and
+# only the audit can tell them apart.
+
+DISTRACTOR_CANDIDATES: Tuple[str, ...] = (
+    # legacy and enterprise
+    "COBOL", "Fortran", "Delphi", "ColdFusion", "Perl", "VBScript", "Pascal",
+    "Objective-C", "SAP ABAP", "PeopleSoft", "Lotus Notes", "Crystal Reports",
+    # academic languages and theorem-adjacent
+    "Haskell", "Erlang", "Prolog", "Common Lisp", "Smalltalk", "Scheme",
+    "OCaml", "Ada", "F#", "Julia",
+    # hardware description and simulation
+    "VHDL", "Verilog", "LabVIEW", "Simulink", "OpenFOAM", "ANSYS",
+    # CAD and design
+    "AutoCAD", "SolidWorks", "CATIA", "Rhino 3D", "Grasshopper", "Blender",
+    "InDesign", "Scribus", "Unreal Engine",
+    # statistics, GIS and qualitative research tooling
+    "SPSS", "Stata", "Mathematica", "Maple", "GAMS", "AMPL",
+    "ArcGIS", "QGIS", "GRASS GIS", "NVivo", "Atlas.ti", "Praat", "ELAN",
+    # publishing, finance and creative
+    "LaTeX", "QuickBooks", "Sibelius", "Finale", "Pro Tools", "Max/MSP",
+)
