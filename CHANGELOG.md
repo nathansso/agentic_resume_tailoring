@@ -12,6 +12,64 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 172 (chunks 5–6 of 7) — The distractor dial, and the β that does not exist
+**Status:** chunks 5–6 complete; 7 open | **Tests:** 1424 pass on SQLite (38 new)
+
+Two chunks that were specified as threshold-calibration work and came back as measurement results. Chunk 6 was told to measure β on ART's own encoder rather than adopt ImplexConv's 0.4, **and to report a failure to separate as a finding rather than paper over it**. It does not separate. Chunk 5 needed an admission rule for the distractor pool, and reading the matcher turned that from a similarity judgement into an exact condition.
+
+### What shipped
+
+- **`eval/distractors.py` — the difficulty dial.** `--distractors N` injects N audited distractor skills as ingested rows after the profile is parsed. Injection is a run parameter rather than a fixture rebuild, matching the sidecar's own note that "injecting them is a harness decision, and the same profile can run with and without". `selection_ratio` was uninterpretable across strata — a specialist carries 15 skills and a generalist 27, so the breadth contrast was confounded with profile size — and `MAX_SKILLS` never bound on a 15-skill profile.
+- **Admission is exact, not estimated, and that is the design.** `SkillMatcherAgent.match` iterates over *JD* skills, so adding a profile skill can only flip one from missing to matched, never the reverse. "The answer key does not move" therefore reduces to "no JD skill becomes matched", which decomposes onto the matcher's own channels: **L** no shared keyword with any of the 150 postings under the metric's own extractor (protects `keyword_coverage`, plus direct and name matching); **S** cosine below `SkillMatcherAgent.SEMANTIC_THRESHOLD` against every corpus keyword (the semantic channel); **G** project text naming no corpus keyword (the knowledge-graph indirect channel, whose edges are built by substring match). 56 candidates proposed, **31 admitted**, 25 rejected with their reasons retained in `REJECTED`.
+- **`eval/implicitness.py` — the filter, and the measurement that shaped it.** 31 hand-labelled `(JD requirement, résumé bullet)` pairs across three populations, every one quoting a real posting and a real profile. `is_implicit` ships as a single lexical rule: zero shared keywords under `ATSScoringEngine._extract_keywords`, so "implicit" means precisely *`keyword_coverage` can score nothing here*. Deterministic, no model.
+- **Labels are re-derived, never trusted.** `label_violations` re-measures the lexical half of every declared label on every run — `eval/profile_checks.py`'s discipline applied to a second dataset. Provenance tests assert every quoted requirement still appears in its posting and every bullet in its profile.
+- **Tests (38 new).** `tests/test_implicitness.py` (17), `tests/test_distractors.py` (21). Both keep their model-dependent halves behind `@pytest.mark.integration`, matching `profile_checks.py`'s existing refusal to load a sentence-transformer in the default suite.
+
+### The β measurement
+
+Measured on `all-MiniLM-L6-v2`, the encoder `config.py` actually ships:
+
+| population | n | min | mean | max |
+|---|---|---|---|---|
+| `explicit` | 10 | 0.1144 | 0.3261 | 0.5236 |
+| `implicit` | 11 | 0.0407 | 0.1495 | 0.2501 |
+| `unrelated` | 10 | 0.0328 | 0.1218 | 0.3953 |
+
+Explicit's minimum sits **below** implicit's maximum, so no threshold classifies the set. But cosine is not uninformative — it ranks explicit above implicit at **AUC 0.918**. The failure is that the *tails* interleave, and a β filter discards everything above a threshold, so it operates on tails. Good ranking and usable thresholding are different properties and ImplexConv needs the second.
+
+Why they interleave: cosine measures topical relatedness, explicitness is term containment, and pairs land in both off-diagonal corners. `"2 years of experience as a Full Stack Developer"` against `"Added Terraform and Docker Compose so a full stack starts from 1 command"` shares the literal term and scores **0.205**; `"At least one back-end technology (.NET, Node.js, Java Spring Boot, or Python)"` against `"Exported to ONNX and benchmarked 3 runtimes on a Raspberry Pi"` shares nothing, evidences nothing, and scores **0.395** — the highest `unrelated` score in the set — because both read as technology lists.
+
+This is deeper than "0.4 was computed on a different model". ImplexConv compares a generated trait against *its own source trait*, paraphrase versus original, where cosine is the right instrument. ART compares a JD requirement against a résumé bullet: different genres about a shared topic. **The construct does not transfer, not merely the constant.**
+
+### Verification
+
+**Mode: plumbing**, `--limit 3`, profile `ai_engineering_specialist_ravi_deshmukh`. The same profile and tasks, with and without 25 injected distractors:
+
+| metric | no distractors | 25 distractors |
+|---|---|---|
+| `ats_delta` | 30.9 | **30.9** |
+| `baseline_composite` | 53.433 | **53.433** |
+| `tailored_composite` | 84.333 | **84.333** |
+| `skills_matched_recall` | 1.0 | **1.0** |
+| `total_profile_skills` | 15 | 40 |
+| `skills_rendered` | 8.3 | 18.3 |
+| `skills_selection_ratio` | 0.555 | 0.458 |
+
+Every ATS number is identical; only the haystack moved. That is the acceptance criterion, measured end to end through the real pipeline rather than asserted about the rules.
+
+### Deviations from spec
+
+- **β is committed as `None`, and so is the evidence floor.** The issue asks for "β set from measured data with both distributions recorded" and "a build-failing test asserts no `implicit` pair scores above β". Both distributions are recorded and the build-failing test exists, but it asserts the *negative result*: `BETA is None`, and the populations do not separate. Committing a fitted value would be the borrowed-constant mistake in a new costume.
+- **The conjunction was built, measured, and its second half dropped.** The obvious repair to a failed β is "lexically invisible AND topically plausible", which needs a negative class to calibrate against — hence the third `unrelated` population, which the issue does not mention. Measured on that axis the floor is **AUC 0.709, best accuracy 76.2% against a 52.4% majority baseline**. A gate whose false positives silently corrupt labels has to beat that comfortably, so rule 2 is not shipped and cosine is carried as a reported diagnostic instead.
+- **The first labelled set was defective and had to be rebuilt.** 7 of 12 `explicit` pairs shared *zero* extracted keywords — they were picked by intuition about relatedness rather than by measured overlap. The explicit pairs were re-mined by measured overlap ≥ 0.30 and the non-separation result held, which is the only reason it is trustworthy. `label_violations` exists so that mistake cannot recur silently, and the provenance tests caught a further 8 misattributed source ids.
+- **Rule S uses the encoder that chunk 6 just found unreliable, deliberately.** It asks a different question: not "is this relevant?" but "**would `_check_semantic_match` fire?**", computed with the production model at the production threshold over a superset of the JD skill vocabulary. The encoder is replayed, not trusted. Every semantic rejection is an orthographic artefact — `CATIA` blocked by *scania*, `QuickBooks` by *playbooks*, `Blender` by *blends* — which would be fatal in a relevance judgement and is merely a cost here, because a false block loses a candidate while a false admission would corrupt labels.
+- **A product defect was found and filed, not fixed — #185.** Padding a profile made `MAX_SKILLS` bind for the first time, and the cap does not hold: 19 and 20 skills rendered against a cap of 18. `select_skills` applies the cap and then appends the core floor past it unconditionally, so the worst case is `MAX_SKILLS + CORE_FLOOR_K` = 22 and the observed values fit exactly. The pinned-skill bypass is a deliberate #54 promise; the *fallback* floor inheriting it is not. Fixing it is product scoring, which #172 lists as a non-goal. **Saturation and overshoot look identical until the candidate set can be pushed past the cap** — which is why #158 recorded saturation as unconfirmed and #171 confirmed saturation without either being able to see this.
+- **Distractor projects are admitted for but not authored.** Rule G is implemented and tested; the bank ships skills only. A skills-only pool already makes the cap bind, which was the blocking need, and project distractors want their own review pass for the same reason the profiles did.
+- **The sidecar `distractors` slot stays empty on every profile.** Injection is a run parameter, so baking a specific N into 21 committed fixtures would fix the difficulty at generation time — the opposite of a dial. The slot remains for profile-specific distractors, which nothing needs yet.
+- **Chunk 7 remains open**: the 60-pair human anchor set, which is the only chunk that addresses the composite's circularity. It wants recorded product-mode runs.
+
+---
+
 ## Issue 172 (chunks 1–4 of 7) — The benchmark profile set, and a JD corpus audit
 **Status:** chunks 1–4 complete; 5–7 open | **Tests:** 1388 pass on SQLite (34 new)
 

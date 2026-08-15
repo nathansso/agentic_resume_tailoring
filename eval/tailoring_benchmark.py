@@ -686,6 +686,58 @@ def _seed_github_metrics(profile_meta) -> int:
     return seeded
 
 
+def _seed_distractors(profile_meta, count: int, profile_path: Path) -> List[str]:
+    """Inject `count` admitted distractor skills as ingested rows (issue #172).
+
+    The difficulty dial. Distractors scale the haystack without moving the answer
+    key — `eval/distractors.py` admits a term only when it shares no keyword with
+    any posting and falls below the matcher's own semantic threshold against every
+    corpus keyword, so no JD skill can flip from missing to matched because of one.
+
+    Seeded post-ingest rather than written into the résumé, and for the reason the
+    sidecar records: injection is a harness decision, so the same profile runs with
+    and without. Writes `UserSkill` rows the same way an ingest would, so nothing
+    downstream can tell a distractor from a real skill — which is the point.
+    """
+    if count <= 0:
+        return []
+    from sqlmodel import Session, select
+
+    from database.db import engine
+    from database.models import Skill, User, UserSkill
+    from eval.distractors import select_for
+    from eval.profile_fixture import load_profile
+
+    own = [s["name"] for s in load_profile(profile_path).skills]
+    chosen = select_for(own, count, (profile_meta.distractors or {}).get("skills") or [])
+    if not chosen:
+        return []
+
+    with Session(engine) as session:
+        user = session.exec(select(User)).first()
+        if user is None:
+            return []
+        existing = {
+            (s.name or "").strip().lower()
+            for s in session.exec(select(Skill)).all()
+        }
+        for name in chosen:  # sorted by select_for, so writes are reproducible
+            if name.strip().lower() in existing:
+                continue
+            skill = Skill(name=name, category="Tool")
+            session.add(skill)
+            session.flush()
+            session.add(UserSkill(
+                user_id=user.user_id, skill_id=skill.skill_id,
+                evidence_source="distractor",
+                evidence_detail="eval/distractors.py (issue #172)",
+                confidence_score=1.0,
+            ))
+        session.commit()
+    print(f"  injected {len(chosen)} distractor skill(s)", flush=True)
+    return chosen
+
+
 def _install_mode(mode: str, profile_path: Path, cassette_path: Optional[Path],
                   record: bool, task_ids: List[str]):
     """Bind the `get_llm` seam for this mode. Returns the CassetteSession, if any.
@@ -840,6 +892,7 @@ def run_benchmark(
     judge: bool = False,
     cassette_path: Optional[Path] = None,
     record: bool = False,
+    distractors: int = 0,
 ) -> Dict:
     """Full benchmark run. Returns the results dict (also persisted to out_dir).
 
@@ -909,6 +962,10 @@ def run_benchmark(
         # first. A profile with no sidecar seeds nothing and behaves exactly as
         # it did (issue #172).
         _seed_github_metrics(profile_meta)
+        # The difficulty dial (issue #172, chunk 5). Admitted distractors
+        # scale the haystack without moving the answer key, which is what
+        # makes skills.selection_ratio comparable across profile sizes.
+        injected = _seed_distractors(profile_meta, distractors, profile_path)
         # Resolved once: the model load is cached in matcher, but the redundancy
         # suite's encoder is a per-run property, not a per-task one (issue #122).
         encoder = _semantic_encoder(mode)
@@ -953,6 +1010,10 @@ def run_benchmark(
             # for a profile with no sidecar, which runs exactly as before.
             "profile_strata": profile_meta.strata,
             "dataset_size": len(tasks),
+            # Part of every number: a selection_ratio measured with a padded
+            # haystack is not comparable with one measured without.
+            "distractors": len(injected),
+            "distractor_terms": list(injected),
             "failed": [t["task_id"] for t in task_results if "error" in t],
             "aggregate": _aggregate(ok),
             # Added beside the pooled figure, never in place of it: every
@@ -1036,6 +1097,10 @@ def main() -> int:
     ap.add_argument("--tasks", nargs="*", default=None, help="task ids to run (default: all)")
     ap.add_argument("--limit", type=int, default=0, help="run only the first N tasks")
     ap.add_argument("--profile", type=Path, default=DEFAULT_PROFILE, help="resume fixture to ingest")
+    ap.add_argument("--distractors", type=int, default=0,
+                    metavar="N",
+                    help="inject N admitted distractor skills (issue #172) — "
+                         "scales the haystack without moving the answer key")
     ap.add_argument("--out", type=Path, default=RESULTS_DIR, help="results directory")
     ap.add_argument("--judge", action="store_true",
                     help="add LLM-as-judge quality scores (product mode only)")
@@ -1051,6 +1116,7 @@ def main() -> int:
         task_ids=args.tasks, profile_path=args.profile, mode=mode,
         limit=args.limit, out_dir=args.out, judge=args.judge,
         cassette_path=args.cassette, record=args.record,
+        distractors=args.distractors,
     )
     agg = results["aggregate"]
     print(json.dumps(agg, indent=2))

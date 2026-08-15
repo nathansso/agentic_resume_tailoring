@@ -242,8 +242,9 @@ The other families for the same task:
 `selection_ratio` of 0.600 is the number to be suspicious of. It is 9 rendered over a
 15-skill profile — a *narrow specialist*, so the `MAX_SKILLS = 18` cap never binds and the
 ratio is measuring the profile's size as much as the selection. A 27-skill generalist
-scoring the same ratio would mean something quite different. That confound is exactly what
-#172's distractor pool (chunk 5, open) is built to remove.
+scoring the same ratio would mean something quite different. Removing that confound is what
+the distractor dial is for (§5.3) — and re-running this same task with `--distractors 25`
+holds every ATS number identical while `total_profile_skills` goes 15 → 40.
 
 The run's three tasks aggregate to `ats_delta` mean **30.9** (27.3–33.7),
 `baseline_composite` mean 53.4, `tailored_composite` mean 84.3.
@@ -415,7 +416,39 @@ does not fire** on either population: additive-only injection cannot push a term
 bullet document frequency without rewriting the base bullets, which would break the matched
 pair. A stuffing-bearing variant is unfiled.
 
-The `distractors` slot is empty on every profile today — chunk 5, still open.
+### The distractor dial
+
+`--distractors N` injects `N` audited distractor skills — plausible but genuinely
+irrelevant, drawn from legacy stacks, CAD, academic tooling and typesetting — as ingested
+rows after the profile is parsed. The `distractors` slot in each sidecar stays empty:
+injection is a **run parameter**, so the same profile runs with and without and difficulty
+costs no fixture rebuild.
+
+The point is to decouple haystack size from the true-positive set. `selection_ratio` was
+uninterpretable across strata — a specialist carries 15 skills and a generalist 27, so the
+breadth contrast was confounded with profile size — and `MAX_SKILLS = 18` never bound on a
+15-skill profile, leaving the cap's behaviour unobservable.
+
+**Admission is exact rather than a similarity judgement**, and that is the part worth
+understanding. `SkillMatcherAgent.match` iterates over *JD* skills, so adding a profile
+skill can only flip a JD skill from missing to matched, never the reverse. "The answer key
+does not move" therefore reduces to "no JD skill becomes matched", which decomposes onto
+the matcher's channels: a distractor must share no keyword with any of the 150 postings
+(protecting `keyword_coverage` and direct/name matching), must fall below
+`SkillMatcherAgent.SEMANTIC_THRESHOLD` against every corpus keyword (the semantic channel),
+and a distractor project must name no corpus keyword (the knowledge-graph channel).
+
+56 candidates were proposed, **31 admitted**. Verified end to end on the §3 task set: with
+and without 25 distractors, `ats_delta` (30.9), `baseline_composite` (53.4),
+`tailored_composite` (84.3) and `matched_recall` (1.0) are identical while
+`total_profile_skills` goes 15 → 40.
+
+**The dial found a product defect the first time it was used.** Padding the profile made
+`MAX_SKILLS` bind for the first time, and the cap did not hold — 19 and 20 skills rendered
+against a cap of 18. `select_skills` applies the cap and then appends the core floor past
+it, so the worst case is `MAX_SKILLS + CORE_FLOOR_K` = 22. Filed as **#185**. Saturation and
+overshoot look identical until the candidate set can be pushed well past the cap, which is
+why #158 and #171 could not see it.
 
 ### How postings are sourced and verified
 
@@ -518,7 +551,9 @@ they share an author's blind spots in a way 20 real résumés would not.
    as well as postings, and the candidate `role_family` slice is *not* the JD `role_family`
    slice — the suite prefixes the former `profile_` for exactly that reason.
 4. Say `n`. `--limit 3`, 150 tasks, and 500 task-runs are different measurements.
-5. Check whether the run re-tailored. It did not — see below.
+5. Say the distractor count. A `selection_ratio` measured on a padded haystack is not
+   comparable with one measured without; the run records it as `distractors`.
+6. Check whether the run re-tailored. It did not — see below.
 
 **Run-to-run variance.** In plumbing and replay there is none worth speaking of: two
 consecutive runs produce byte-identical metrics *and* byte-identical renders, on both
@@ -582,29 +617,21 @@ have hidden the null result.
 
 Specified but **not shipped**. Nothing below describes the harness today.
 
-- **#172 chunks 5–7** — the rest of the dataset foundation. Chunks 1–4 (the 20-profile set,
-  per-stratum reporting, seeded GitHub metrics, the corpus audit) shipped and are described
-  above. What remains:
-  - **Chunk 5, the distractor pool** — inject plausible-but-irrelevant skills and projects
-    without moving the answer key, so haystack size decouples from the true-positive set.
-    This is what makes `selection_ratio` interpretable across strata (§3) and what makes the
-    `MAX_SKILLS` cap actually bind on a 15-skill specialist. Admission must be checked
-    against every posting in the corpus, not just the one in hand: a distractor genuinely
-    relevant to *some* JD silently corrupts that JD's labels.
-  - **Chunk 6, β calibration** — measure the encoder-distance threshold that separates
-    "trivially matchable" from "inference required" on ART's own `all-MiniLM-L6-v2`, rather
-    than adopting ImplexConv's 0.4 (computed on a different model, domain and text length).
-    Both distributions get reported; if they do not separate, that is a finding about the
-    encoder, not something to paper over with a borrowed constant. Ability B becomes
-    measurable.
-  - **Chunk 7, the human anchor set** — 60 blind pairwise judgments, both orderings, ties
-    recorded, and the agreement between `sign(Δ composite)` and human preference reported as
-    a number whatever it turns out to be. Below ~70% agreement the composite is not a valid
-    efficacy proxy and every number keyed on it needs that caveat attached. Wants recorded
-    product-mode runs, so it comes last.
+- **#172 chunk 7, the human anchor set** — the last open chunk, and the one that addresses
+  the circularity in §6. 60 blind pairwise judgments, both orderings, ties recorded, and the
+  agreement between `sign(Δ composite)` and human preference reported as a number whatever
+  it turns out to be. Below ~70% agreement the composite is not a valid efficacy proxy and
+  every figure keyed on it needs that caveat attached. It wants recorded product-mode runs,
+  so it comes last. *(Chunks 1–4, 5 and 6 have shipped and are described above.)*
+- **#185** — `select_skills` renders up to `MAX_SKILLS + CORE_FLOOR_K`, found by the
+  distractor dial. Until it lands, `skills.within_cap_bounds` can read `false` for a product
+  reason rather than a fixture one on any padded run.
 - **The replay cassette is dead and not yet re-recorded.** Its three task ids do not exist in
   the current corpus. The profile set is final now, so re-recording is unblocked, but it
   belongs with a product-mode run rather than a dataset change.
+- **Ability B has a filter but no tasks.** `eval/implicitness.py` decides whether a pair is
+  implicit, and nothing yet *runs* the pipeline against implicit-only requirements. The
+  filter is the admission criterion such a task set would be built with.
 - **#173** — the re-tailor arm, plus update-durability, locality (does tailoring job B
   degrade job A?), suppression, and a three-way preference-adherence axis. This is what
   would make §6's structural blind spot go away.
