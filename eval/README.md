@@ -13,7 +13,7 @@ asked for; an ability whose row stays `none` after its issue ships did not ship.
 
 | # | Ability | What it asks | Dataset today | Metric | Coverage |
 |---|---|---|---|---|---|
-| **A** | Selection | Do the right items and skills get chosen? | `jd_dataset/` × `profiles/` | `skills.selection_ratio`, `skills.matched_recall`, `experience_allocation.allocation_correlation` | **partial** — reported, but no answer key. `skill_selection_tasks/` holds the only labelled `relevant` set and is **not wired into the tailoring benchmark** |
+| **A** | Selection | Do the right items and skills get chosen? | `jd_dataset/` × `profiles/`, with the `--distractors N` dial (#172 chunk 5) | `skills.selection_ratio`, `skills.matched_recall`, `experience_allocation.allocation_correlation` | **partial, now controllable** — the distractor pool decouples haystack size from the true-positive set, so `selection_ratio` is comparable across profile sizes and `MAX_SKILLS` can be made to bind. Still no per-task answer key: `skill_selection_tasks/` holds the only labelled `relevant` set and is **not wired into the tailoring benchmark** |
 | **B** | Grounded inference | Can it use evidence that never names the requirement? | `eval/implicitness.py` — 31 labelled `(requirement, bullet)` pairs across `explicit` / `implicit` / `unrelated` | `is_implicit` (lexical); cosine reported per pair as a diagnostic | **filter yes, tasks no** — the filter ships and is verified (#172 chunk 6), but nothing yet *runs* the pipeline against implicit-only requirements. **β does not exist on this encoder**: explicit and implicit do not separate (AUC 0.918 but overlapping tails), and the evidence floor is too weak to gate on (AUC 0.709, best accuracy 76.2% vs a 52.4% baseline). The shipped filter is lexical only |
 | **C** | Abstention | Does it refuse to fabricate? | — | `llm_judge.faithfulness` (1–5, opt-in, product only); `FAITHFULNESS_MIN` (`agents/tailor.py:93`) is a product guard, not a measurement | **indirect** — no abstention fixture exists; nothing presents a claim the profile cannot support |
 | **D** | Update durability | After a re-tailor, do prior decisions survive? | — | — | **none** — `_run_task` tailors once and never re-tailors (#173 chunk 1) |
@@ -32,6 +32,8 @@ asked for; an ability whose row stays `none` after its issue ships did not ship.
 | `ku_dataset/` | 4 | knowledge-updates eval | **Scripted by default** — the task file supplies the notes *and* the decisions, so the extractor is not under test unless `--live` |
 | `jobcard_dataset/` | 4 | JobCard eval | Cross-job memory, outcome-carrying |
 | `skill_selection_tasks/` | 2 | skill-selection tuning | Carries a labelled `relevant` answer key; unused by the tailoring benchmark |
+| distractor pool (`distractors.py`) | 31 admitted of 56 proposed | tailoring benchmark, via `--distractors N` | Audited against every posting: no shared keyword, and below the matcher's own semantic threshold. Injected as `UserSkill` rows post-ingest, never written into the résumé, so one profile runs with and without |
+| implicitness pairs (`implicitness.py`) | 31 | — | `explicit` / `implicit` / `unrelated` `(requirement, bullet)` pairs; the calibration set, not a task set |
 | `cassettes/` | 1 | replay mode | **Dead until re-recorded** — its three task ids do not exist in the #177 corpus. #172 re-records once its profile set is final; the determinism test drives `--tasks` from the cassette's own task list and skips with a re-record instruction |
 | `tests/memory_evals/` | 5 YAML | chat-memory eval | Recall across compression; not bound to any profile |
 
@@ -387,6 +389,50 @@ One JSON file in `eval/jobcard_dataset/` with `id`, `description`, `prior_job`
 `matched_skills`, and the candidate `items` to plan over), optional
 `recurring_rejected` (item keys the prior user rejected that reappear here), and
 `expect.min_card_quality`.
+
+## Distractor pool (issue #172, chunk 5)
+
+`eval/distractors.py` scales the haystack without moving the answer key.
+`--distractors N` injects `N` audited distractor skills as ingested rows after the
+profile is parsed, so the same profile runs with and without and `N` is a run
+parameter rather than a fixture rebuild.
+
+```bash
+python eval/tailoring_benchmark.py --mode plumbing --limit 3 --distractors 25
+python eval/distractors.py              # audit the bank against the corpus
+python eval/distractors.py --verbose    # show rejections and their reasons
+python eval/distractors.py --emit       # ADMITTED literal to paste back
+```
+
+**Admission is exact, not a similarity judgement.** `SkillMatcherAgent.match`
+iterates over JD skills, so adding a profile skill can only flip one from
+*missing* to *matched*, never the reverse — which reduces "the answer key does not
+move" to "no JD skill becomes matched", and that decomposes onto the matcher's
+channels:
+
+| rule | check | channel it protects |
+|---|---|---|
+| **L** | shares no keyword with any posting, under `ATSScoringEngine._extract_keywords` | `keyword_coverage`; also direct and name matching, since a JD skill name comes from the posting text |
+| **S** | cosine below `SkillMatcherAgent.SEMANTIC_THRESHOLD` against every corpus keyword | the matcher's semantic channel |
+| **G** | project text names no corpus keyword | the indirect (knowledge-graph) channel, whose edges are built by substring match |
+
+Rule S is not in tension with chunk 6's finding below. It does not ask the encoder
+whether something is *relevant*; it asks whether `_check_semantic_match` **would
+fire**, and computes precisely that at the production threshold. The encoder is
+replayed rather than trusted, and its errors run conservative: every semantic
+rejection in the committed audit is an orthographic artefact — `CATIA` blocked by
+*scania*, `QuickBooks` by *playbooks* — so a false block costs a candidate while a
+false admission would corrupt labels.
+
+56 candidates proposed, **31 admitted**, 25 rejected with reasons retained in
+`REJECTED` so the bank records what was tried. Verified end to end: the same
+profile and tasks with and without 25 distractors produce identical `ats_delta`,
+`baseline_composite`, `tailored_composite` and `matched_recall`, while
+`total_profile_skills` goes 15 → 40.
+
+**Report the distractor count with every number.** A `selection_ratio` measured on
+a padded haystack is not comparable with one measured without; the count is
+recorded in the results JSON as `distractors`.
 
 ## Implicitness filter (issue #172, chunk 6)
 
