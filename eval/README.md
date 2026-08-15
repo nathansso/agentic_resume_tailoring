@@ -14,7 +14,7 @@ asked for; an ability whose row stays `none` after its issue ships did not ship.
 | # | Ability | What it asks | Dataset today | Metric | Coverage |
 |---|---|---|---|---|---|
 | **A** | Selection | Do the right items and skills get chosen? | `jd_dataset/` × `profiles/` | `skills.selection_ratio`, `skills.matched_recall`, `experience_allocation.allocation_correlation` | **partial** — reported, but no answer key. `skill_selection_tasks/` holds the only labelled `relevant` set and is **not wired into the tailoring benchmark** |
-| **B** | Grounded inference | Can it use evidence that never names the requirement? | — | — | **none** — `keyword_coverage` is substring matching, so coverage is monotone and no edit can lower it (#127). Needs #172's β-calibrated implicitness filter |
+| **B** | Grounded inference | Can it use evidence that never names the requirement? | `eval/implicitness.py` — 31 labelled `(requirement, bullet)` pairs across `explicit` / `implicit` / `unrelated` | `is_implicit` (lexical); cosine reported per pair as a diagnostic | **filter yes, tasks no** — the filter ships and is verified (#172 chunk 6), but nothing yet *runs* the pipeline against implicit-only requirements. **β does not exist on this encoder**: explicit and implicit do not separate (AUC 0.918 but overlapping tails), and the evidence floor is too weak to gate on (AUC 0.709, best accuracy 76.2% vs a 52.4% baseline). The shipped filter is lexical only |
 | **C** | Abstention | Does it refuse to fabricate? | — | `llm_judge.faithfulness` (1–5, opt-in, product only); `FAITHFULNESS_MIN` (`agents/tailor.py:93`) is a product guard, not a measurement | **indirect** — no abstention fixture exists; nothing presents a claim the profile cannot support |
 | **D** | Update durability | After a re-tailor, do prior decisions survive? | — | — | **none** — `_run_task` tailors once and never re-tailors (#173 chunk 1) |
 | **E** | Locality | Does tailoring job B degrade job A? | — | — | **none** — JobCard injection (#137) is a live cross-job channel, unmeasured |
@@ -387,6 +387,36 @@ One JSON file in `eval/jobcard_dataset/` with `id`, `description`, `prior_job`
 `matched_skills`, and the candidate `items` to plan over), optional
 `recurring_rejected` (item keys the prior user rejected that reappear here), and
 `expect.min_card_quality`.
+
+## Implicitness filter (issue #172, chunk 6)
+
+`eval/implicitness.py` decides whether a `(JD requirement, résumé bullet)` pair is
+**implicit** — the bullet demonstrates the requirement without naming it, so
+`keyword_coverage` can score nothing from it. That is the property ability **B**
+needs, and the filter is what a future implicit-only task set is admitted by.
+
+```bash
+python eval/implicitness.py              # distributions, AUCs, violations
+python eval/implicitness.py --remeasure  # score against the live encoder
+python eval/implicitness.py --emit       # MEASURED literal to paste back
+```
+
+**The filter is lexical, and that is a measured decision rather than a shortcut.**
+#172 specifies a β threshold on encoder cosine, adapted from ImplexConv's 0.4.
+Measured on ART's own `all-MiniLM-L6-v2` over 31 hand-labelled pairs, the
+populations do not separate — explicit's minimum (0.1144) sits below implicit's
+maximum (0.2501), so no threshold classifies the set. Cosine still *ranks*
+explicit above implicit well (AUC 0.918); it is the tails that interleave, and a
+filter operates on tails. A fallback evidence floor was measured against a third
+`unrelated` population and came back too weak to gate on (AUC 0.709, best accuracy
+76.2% against a 52.4% baseline). So `is_implicit` uses zero shared keywords under
+`ATSScoringEngine._extract_keywords` — the metric's own vocabulary — and cosine is
+carried per pair as a reported diagnostic. Full reasoning in the module docstring.
+
+Every pair quotes a real posting and a real profile, and tests assert both quotes
+still appear in their sources. Labels are **re-derived, never trusted**:
+`label_violations` fails any pair whose declared label disagrees with the measured
+overlap, which caught 7 of the first 12 `explicit` pairs.
 
 ## Skill-selection tuning harness (issue #54 Phase 4)
 
