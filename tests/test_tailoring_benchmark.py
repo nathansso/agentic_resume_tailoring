@@ -432,10 +432,13 @@ def test_committed_cassette_is_well_formed_and_covers_every_task():
     path = default_cassette_path(DEFAULT_PROFILE.stem, 3, None)
     if not path.exists():
         pytest.skip(
-            f"no cassette committed at {path.name}. Record one with "
-            "`python eval/tailoring_benchmark.py --mode product --record "
-            "--limit 3` (pass --tasks explicitly: --limit takes an alphabetical "
-            "prefix of the corpus).")
+            f"no cassette committed at {path.name}, and none is due yet: "
+            "recording is gated on #181 (_detect_level mislabels 128/150 "
+            "postings, and role_level is 0.10 of the composite on both sides of "
+            "every match). Once it lands, record with `python "
+            "eval/tailoring_benchmark.py --mode product --record --tasks <id> "
+            "<id> ...` — name the tasks rather than using --limit, which takes "
+            "an alphabetical prefix of the corpus.")
     cassette = Cassette.load(path)
     assert len(cassette) > 0
     # The register/ingest phase plus one scope per recorded task.
@@ -478,10 +481,11 @@ def test_two_replays_are_byte_identical(tmp_path):
         pytest.skip(
             f"no cassette committed at {path.name}, so there is nothing to "
             "replay. The profile set is final now (#172) and #182 deleted the "
-            "dead recording; producing a new one belongs with the next "
-            "product-mode run: `python eval/tailoring_benchmark.py --mode "
-            "product --record --limit 3` (pass --tasks explicitly — --limit "
-            "takes an alphabetical prefix of the corpus).")
+            "dead recording, but a new one is not due yet: recording is gated "
+            "on #181 and belongs with a product-mode run. Then: `python "
+            "eval/tailoring_benchmark.py --mode product --record --tasks <id> "
+            "<id> ...` — name the tasks rather than using --limit, which takes "
+            "an alphabetical prefix of the corpus.")
     recorded = Cassette.load(path).meta["tasks"]
     available = {p.stem for p in DATASET_DIR.glob("*.json")}
     missing = [t for t in recorded if t not in available]
