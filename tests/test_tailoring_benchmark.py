@@ -410,11 +410,23 @@ def test_committed_cassette_is_well_formed_and_covers_every_task():
     model, so it belongs in the integration leg below rather than in the fast
     suite. This still catches a truncated, re-keyed or partially-recorded
     cassette landing in the repo.
+
+    No cassette is committed today — #182 deleted the one #158 recorded, whose
+    task ids came from the 8-posting corpus #177 replaced and whose profile #172
+    retired. Gated on existence *only*: a present-but-corrupt cassette must still
+    fail here rather than skip, which is why this is not a try/except around
+    `Cassette.load` (the silent-retirement defect #175 documents).
     """
     from eval.cassettes import Cassette, SETUP_SCOPE, interaction_key
     from eval.tailoring_benchmark import DEFAULT_PROFILE, default_cassette_path
 
     path = default_cassette_path(DEFAULT_PROFILE.stem, 3, None)
+    if not path.exists():
+        pytest.skip(
+            f"no cassette committed at {path.name}. Record one with "
+            "`python eval/tailoring_benchmark.py --mode product --record "
+            "--limit 3` (pass --tasks explicitly: --limit takes an alphabetical "
+            "prefix of the corpus).")
     cassette = Cassette.load(path)
     assert len(cassette) > 0
     # The register/ingest phase plus one scope per recorded task.
@@ -452,16 +464,23 @@ def test_two_replays_are_byte_identical(tmp_path):
     # corpus change silently re-points this test at tasks the recording never
     # covered — which surfaces as a bare CASSETTE MISS rather than as the real
     # problem (issue #177 replaced the corpus wholesale).
-    recorded = Cassette.load(default_cassette_path(DEFAULT_PROFILE.stem, 3, None)
-                             ).meta["tasks"]
+    path = default_cassette_path(DEFAULT_PROFILE.stem, 3, None)
+    if not path.exists():
+        pytest.skip(
+            f"no cassette committed at {path.name}, so there is nothing to "
+            "replay. The profile set is final now (#172) and #182 deleted the "
+            "dead recording; producing a new one belongs with the next "
+            "product-mode run: `python eval/tailoring_benchmark.py --mode "
+            "product --record --limit 3` (pass --tasks explicitly — --limit "
+            "takes an alphabetical prefix of the corpus).")
+    recorded = Cassette.load(path).meta["tasks"]
     available = {p.stem for p in DATASET_DIR.glob("*.json")}
     missing = [t for t in recorded if t not in available]
     if missing:
         pytest.skip(
             "the committed cassette predates the current JD corpus "
             f"(missing: {', '.join(missing)}). Re-record with "
-            "`--mode product --record --limit 3` once the profile set is final "
-            "(#172) — recording before the fixture stops changing pays twice.")
+            "`--mode product --record --limit 3`.")
 
     runs = []
     for i in (1, 2):
