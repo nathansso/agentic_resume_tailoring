@@ -73,6 +73,10 @@ There is deliberately no second policy system. Issue-resolution steps live in
 the `/start`, `/work`, and `/done` slash commands, not in a checked-in workflow
 document.
 
+Root `AGENTS.md` exists only because Codex reads that filename and does not fall
+back to `CLAUDE.md`. It is a pointer to this file and holds no policy of its own;
+`tests/test_repo_guidance.py` fails if policy regrows there (#182).
+
 ---
 
 ## Work tracking
