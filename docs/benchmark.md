@@ -126,6 +126,12 @@ prompt edit an explicitly re-measured event, at a real if small API cost. A cass
 because several call sites catch every exception and would otherwise turn a miss into a
 silently empty parse. Full contract: [`../eval/README.md`](../eval/README.md#replay-contract).
 
+**No cassette is committed today.** #182 deleted the one #158 recorded — its three task ids
+came from the 8-posting corpus #177 replaced, and its profile was retired by #172 — rather
+than pay to refresh a recording of a retired candidate against postings that no longer
+exist. Replay therefore has nothing to replay until the next product-mode run records one;
+both replay tests skip, with the record command in the skip message.
+
 `--judge` is silently limited to product mode (`judge=judge and mode == MODE_PRODUCT` in
 `run_benchmark`), so asking for it in replay or plumbing yields a `null` judge score rather
 than an error.
@@ -626,9 +632,10 @@ Specified but **not shipped**. Nothing below describes the harness today.
 - **#185** — `select_skills` renders up to `MAX_SKILLS + CORE_FLOOR_K`, found by the
   distractor dial. Until it lands, `skills.within_cap_bounds` can read `false` for a product
   reason rather than a fixture one on any padded run.
-- **The replay cassette is dead and not yet re-recorded.** Its three task ids do not exist in
-  the current corpus. The profile set is final now, so re-recording is unblocked, but it
-  belongs with a product-mode run rather than a dataset change.
+- **No replay cassette is committed.** #182 deleted the dead one rather than leave it
+  advertised. The profile set is final now, so recording is unblocked, but it belongs with a
+  product-mode run rather than a dataset change — and that run should pass `--tasks`
+  explicitly, since `--limit` takes an alphabetical prefix of the corpus.
 - **Ability B has a filter but no tasks.** `eval/implicitness.py` decides whether a pair is
   implicit, and nothing yet *runs* the pipeline against implicit-only requirements. The
   filter is the admission criterion such a task set would be built with.
@@ -641,5 +648,3 @@ Specified but **not shipped**. Nothing below describes the harness today.
   preference recall have profile-bound fixtures.
 - **#181** — will fix `_detect_level`'s substring matching. Until it lands, `role_level`
   (weight 0.10) compares two independently wrong labels on both sides of every match.
-- **#182** — cleanup after #172: collapse the duplicated `AGENTS.md` policy surface and
-  retire the dead cassette, whose three task ids no longer exist in the #177 corpus.

@@ -12,6 +12,32 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 182 — Cleanup after #172: one policy surface, no dead cassette, a live default profile
+**Status:** complete | **Tests:** 1427 pass on SQLite (4 new), 10 skipped
+
+Three loose ends #172 left. None moved a measured number, and all three sat directly in the path of the next product-mode recording run — which is what #172 chunk 7 needs, and which would have been paid for against a retired candidate.
+
+### What shipped
+
+- **One policy surface, guarded.** `AGENTS.md` sat untracked in the repo root as a 230-line copy of root `CLAUDE.md`, which rules the arrangement out in as many words: *"There is deliberately no second policy system."* It could not simply be deleted — `.codex/` exists here, Codex reads `AGENTS.md`, and it does not fall back to `CLAUDE.md` — so the filename is kept and the contents become a pointer. `CLAUDE.md` § Guidance hierarchy documents the arrangement from its own end, so a reader arriving at either file learns the same thing.
+- **`tests/test_repo_guidance.py` (4 tests, new) — the mechanical guard.** `AGENTS.md` must exist, name `CLAUDE.md`, stay inside a 25-line budget, and carry none of `CLAUDE.md`'s policy headings; `CLAUDE.md` must still mention `AGENTS.md`, so the next author neither deletes the file nor fills it. Every failure message says *root `CLAUDE.md` is the single policy surface*, so the reason arrives with the failure rather than from the issue. Proven by appending `## Testing` to `AGENTS.md` and watching it fail.
+- **The dead cassette is deleted, not refreshed.** `eval/cassettes/benchmark_profile_limit3.json` could never replay again: its three task ids came from the 8-posting corpus #177 replaced, and its profile was retired by #172. Re-recording *that* cassette would have paid real API spend to capture a retired mid-level candidate against postings that do not exist. `Cassette.save` already mkdirs its parent, so the directory leaving git costs nothing.
+- **Both replay tests skip rather than fail, and say how to fix it.** Gated on `path.exists()` **only** — deliberately not a `try/except` around `Cassette.load`, which would swallow a *corrupt* cassette and retire the structural check silently, the class of defect #175 documents. Verified: a malformed cassette still fails, only an absent one skips. `test_two_replays_are_byte_identical` already skipped, but on the stale reason "once the profile set is final (#172)"; that condition is met and the blocker is now a missing recording.
+- **`DEFAULT_PROFILE` points at a live profile.** It was still `benchmark_profile.md`, retired by #172, so every unqualified `python eval/tailoring_benchmark.py` measured a retired mid-level candidate and named its cassettes after one. Now `data_science_specialist_priya_raman.md`, chosen for the *absence* of a property: its sidecar declares `specialist / metric_rich / clean` at `data_science / intern`, so it isolates no hazard. Suite discovery is untouched (`benchmark_suite.py` already filters on `load_meta(path).retired`) and `benchmark_profile.md` stays on disk, runnable by name, so every historical figure keeps its fixture.
+- **Docs** — `eval/README.md` datasets table and replay contract, `docs/benchmark.md` §2 and §In flight. A doc advertising a recording that no longer exists is the exact failure this issue cleans up.
+
+### Deviations from spec
+
+- **The issue's coupling table missed `tests/test_profile_fixture.py`.** Seven tests import `DEFAULT_PROFILE` and assert content specific to the retired fixture — `Nimbus Analytics`, `SemanticSearch-Lite`, 32 skills, the `PHP` / `OpenAI API` drift pair, `PyTorch` proficiency 4. They are bound to a module-local `LEGACY_PROFILE` instead. That is the right target, not a workaround: they pin the parser against a hand-written frozen fixture, while the 20 live profiles are *generated* from `profile_banks.py` and change whenever the bank does. Their own stated property — "an arbitrary second profile parses with no Python change" — is carried by the inline `SECOND_PROFILE`, not by whichever profile the harness defaults to.
+- **A fourth coupling was implicit, and not through the constant.** `stub_jd_vocab()` is *the default profile's own skills* plus `_EXTRA_JD_TERMS`, so `test_stub_jd_skill_extraction_is_deterministic_and_jd_sensitive` asserting `"Kubernetes"` reaches the output was an assertion about Alex Rivera, not about the stub. The profile-side term is now read from `fixture()`. Nothing named `DEFAULT_PROFILE`, so no grep would have found it.
+- **A shared-state leak surfaced, of #175's kind.** `test_the_stub_routes_education_and_achievements_to_the_profile` called `bind_fixture` and never restored it. `bind_fixture` writes a module global, so every test running later in the same process saw the wrong fixture — invisible while the bound file and `DEFAULT_PROFILE` were the same one, and a cross-file failure of `test_plumbing_run_renders_only_verbatim_source_bullets` the moment they differed. Restored in a `finally`. #175 itself remains open and untouched.
+- **The guard test is beyond the issue's acceptance criteria**, agreed during planning. The criteria asked only for the pointer; a convention that is cheap to violate and invisible when violated is what produced the duplicate in the first place.
+- **`AGENTS.md` had already drifted before the fix landed.** The issue predicted the failure mode "a matter of weeks" out. `CLAUDE.md` was 244 lines to `AGENTS.md`'s 230, because commit `03a9b26` added a `## Response style` section to `CLAUDE.md` only — a Codex session in this repo was already reading stale policy, and nothing detected it.
+- **`test_llm_judge_scores_real_resume` hardcoded Alex's skills.** `skills_emphasized = ["Python", "PyTorch", "FastAPI"]` against an ML-flavoured JD; Priya carries Python but neither of the others. Left alone, the judge would have scored a résumé claiming skills the candidate does not have — and still returned 1..5, and still passed. Derived from `fixture()`. Integration-marked, so it is not in the fast suite and this was not caught by a run.
+- **No recording was made here.** That belongs with the next product-mode run, which should pass `--tasks` explicitly: `--limit` takes an alphabetical prefix of the corpus, so the task set would otherwise be decided by corpus order.
+
+---
+
 ## Issue 172 (chunks 5–6 of 7) — The distractor dial, and the β that does not exist
 **Status:** chunks 5–6 complete; 7 open | **Tests:** 1424 pass on SQLite (38 new)
 
