@@ -199,14 +199,23 @@ def test_ats_summary_missing_breakdowns():
 # ── stub determinism ───────────────────────────────────────────────────────────
 
 def test_stub_jd_skill_extraction_is_deterministic_and_jd_sensitive():
-    from eval.tailoring_benchmark import _stub_extract_jd_skills
+    """Both halves of the vocabulary reach the output, and nothing else does.
 
-    jd = "Looking for Python and Kubernetes engineers. TensorFlow is a plus."
+    The profile-side term is read from the fixture rather than named: the vocab
+    is the *default profile's* skills plus `_EXTRA_JD_TERMS`, so hardcoding one
+    (this asserted `Kubernetes`, a skill of the retired #51 fixture) silently
+    couples the stub's contract to whichever profile the harness happens to
+    default to — which #182 moved.
+    """
+    from eval.tailoring_benchmark import _stub_extract_jd_skills, fixture
+
+    owned = fixture().skills[0]["name"]          # from the profile's own skills
+    jd = f"Looking for {owned} and Terraform engineers. TensorFlow is a plus."
     a, b = _stub_extract_jd_skills(jd), _stub_extract_jd_skills(jd)
     assert a == b
     names = {s["name"] for s in a}
-    assert {"Python", "Kubernetes", "TensorFlow"} <= names
-    assert "Unity" not in names
+    assert {owned, "Terraform", "TensorFlow"} <= names
+    assert "Unity" not in names                  # in neither half of the vocab
 
 
 def test_stub_embedding_model_is_stable_across_processes():
@@ -550,7 +559,14 @@ def test_llm_judge_rejects_malformed_output(payload):
 
 @pytest.mark.integration
 def test_llm_judge_scores_real_resume():
-    """End-to-end judge call against the real eval model (needs API keys)."""
+    """End-to-end judge call against the real eval model (needs API keys).
+
+    The emphasized skills are derived from the fixture rather than hardcoded:
+    they used to name Alex Rivera's `Python / PyTorch / FastAPI`, which #182's
+    re-pointing of DEFAULT_PROFILE would have turned into a judgment of an
+    incoherent résumé — skills the candidate does not have — while still
+    scoring 1..5 and passing.
+    """
     from eval.llm_judge import judge_resume_quality
     from eval.tailoring_benchmark import DEFAULT_PROFILE, fixture
 
@@ -558,7 +574,7 @@ def test_llm_judge_scores_real_resume():
     content = {
         "experiences": profile.experiences,
         "projects": [{"name": p["name"], "bullets": p["bullets"]} for p in profile.projects],
-        "skills_emphasized": ["Python", "PyTorch", "FastAPI"],
+        "skills_emphasized": [s["name"] for s in profile.skills[:3]],
     }
     jd = "Machine Learning Engineer role: PyTorch, model serving, feature stores, AWS."
     out = judge_resume_quality(content, jd, DEFAULT_PROFILE.read_text(encoding="utf-8"))

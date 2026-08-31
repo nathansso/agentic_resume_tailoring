@@ -66,7 +66,12 @@ from eval.profile_meta import check_projects_exist, load_meta  # noqa: E402
 DATASET_DIR = ROOT / "eval" / "jd_dataset"
 RESULTS_DIR = ROOT / "eval" / "results"
 PROFILES_DIR = ROOT / "eval" / "profiles"
-DEFAULT_PROFILE = PROFILES_DIR / "benchmark_profile.md"
+# The profile every *unqualified* invocation measures. Points at a live,
+# ordinary candidate: priya's sidecar declares specialist / metric_rich /
+# clean at data_science / intern, so it isolates no hazard. The original #51
+# fixture (benchmark_profile.md) was retired by #172 and stays on disk,
+# runnable by name — suite discovery already filters it out on `retired`.
+DEFAULT_PROFILE = PROFILES_DIR / "data_science_specialist_priya_raman.md"
 
 BENCH_EMAIL = "benchmark@example.com"
 BENCH_PASSWORD = "benchmark-pass-123"

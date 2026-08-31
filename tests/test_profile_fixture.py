@@ -16,20 +16,29 @@ from eval.profile_fixture import (
     load_profile,
     parse_profile_text,
 )
-from eval.tailoring_benchmark import DEFAULT_PROFILE
+from eval.tailoring_benchmark import PROFILES_DIR
+
+# Bound to the *legacy* fixture rather than to the benchmark's DEFAULT_PROFILE
+# (#182 re-pointed that at a live profile). This is the right target, not a
+# workaround: these tests pin the parser against a hand-written, frozen fixture,
+# whereas the 20 live profiles are generated from `eval/profile_banks.py` and
+# change whenever the bank does. The property that matters — "an arbitrary
+# second profile parses with no Python change" — is covered below by
+# SECOND_PROFILE, not by whichever profile the harness happens to default to.
+LEGACY_PROFILE = PROFILES_DIR / "benchmark_profile.md"
 
 
 # ── the shipped fixture ────────────────────────────────────────────────────────
 
 def test_benchmark_profile_parses_into_all_three_families():
-    profile = load_profile(DEFAULT_PROFILE)
+    profile = load_profile(LEGACY_PROFILE)
     assert len(profile.experiences) == 4
     assert len(profile.projects) == 4
     assert len(profile.skills) == 32
 
 
 def test_experience_dates_and_bullets_survive_the_parse():
-    profile = load_profile(DEFAULT_PROFILE)
+    profile = load_profile(LEGACY_PROFILE)
     first = profile.experiences[0]
     assert first["company"] == "Nimbus Analytics"
     assert first["title"] == "Machine Learning Engineer"
@@ -42,7 +51,7 @@ def test_experience_dates_and_bullets_survive_the_parse():
 
 
 def test_project_repo_url_and_descriptor_are_parsed():
-    profile = load_profile(DEFAULT_PROFILE)
+    profile = load_profile(LEGACY_PROFILE)
     by_name = {p["name"]: p for p in profile.projects}
     assert by_name["SemanticSearch-Lite"]["repo_url"] == \
         "https://github.com/alexrivera/semsearch"
@@ -52,7 +61,7 @@ def test_project_repo_url_and_descriptor_are_parsed():
 
 
 def test_every_source_bullet_is_reachable():
-    profile = load_profile(DEFAULT_PROFILE)
+    profile = load_profile(LEGACY_PROFILE)
     assert len(profile.bullets) == sum(
         len(i["bullets"]) for i in (*profile.experiences, *profile.projects)
     )
@@ -66,14 +75,14 @@ def test_parse_covers_the_skills_the_constants_had_drifted_from():
     but not in the constants the stub "extracted" from it — the concrete drift
     that motivated deriving the parse instead of maintaining it.
     """
-    names = {s["name"] for s in load_profile(DEFAULT_PROFILE).skills}
+    names = {s["name"] for s in load_profile(LEGACY_PROFILE).skills}
     assert {"PHP", "OpenAI API"} <= names
 
 
 # ── derived skill metadata ─────────────────────────────────────────────────────
 
 def test_skill_categories_come_from_the_shared_dictionary():
-    by_name = {s["name"]: s for s in load_profile(DEFAULT_PROFILE).skills}
+    by_name = {s["name"]: s for s in load_profile(LEGACY_PROFILE).skills}
     assert by_name["Python"]["category"] == "Language"
     assert by_name["PyTorch"]["category"] == "Library"
     assert by_name["Postgres"]["category"] == "Database"
@@ -83,7 +92,7 @@ def test_skill_categories_come_from_the_shared_dictionary():
 
 def test_proficiency_tracks_evidence_density_rather_than_being_constant():
     """A constant would silently retire a scoring dimension (weight 0.10)."""
-    by_name = {s["name"]: s for s in load_profile(DEFAULT_PROFILE).skills}
+    by_name = {s["name"]: s for s in load_profile(LEGACY_PROFILE).skills}
     # Mentioned in two or more bullets / one / none.
     assert by_name["Python"]["proficiency"] == 5
     assert by_name["PyTorch"]["proficiency"] == 4
@@ -251,15 +260,25 @@ def test_a_profile_with_neither_section_still_parses():
 
 
 def test_the_stub_routes_education_and_achievements_to_the_profile():
-    """The canned payload must answer the real prompts, not just parse."""
-    from agents.parser import ResumeParserAgent  # noqa: F401  (import guard)
-    from eval.tailoring_benchmark import _stub_payload, bind_fixture
-    from pathlib import Path
+    """The canned payload must answer the real prompts, not just parse.
 
-    bind_fixture(Path("eval/profiles/benchmark_profile.md"))
-    education_prompt = ("You are an expert resume parser. Extract education "
-                        "entries from the text.")
-    achievement_prompt = ("You are an expert resume parser. Extract achievements, "
-                          "honors, and awards from the text.")
-    assert _stub_payload(education_prompt), "education still compiles to nothing"
-    assert isinstance(_stub_payload(achievement_prompt), list)
+    `bind_fixture` writes a module global in `eval.tailoring_benchmark`, so the
+    binding is restored on the way out. Without that, every test running later
+    in the same process saw this fixture instead of the harness default — which
+    was invisible while the two were the same file, and became a cross-file
+    failure the moment #182 re-pointed DEFAULT_PROFILE.
+    """
+    from agents.parser import ResumeParserAgent  # noqa: F401  (import guard)
+    from eval import tailoring_benchmark as tb
+
+    previous = tb._FIXTURE
+    try:
+        tb.bind_fixture(LEGACY_PROFILE)
+        education_prompt = ("You are an expert resume parser. Extract education "
+                            "entries from the text.")
+        achievement_prompt = ("You are an expert resume parser. Extract achievements, "
+                              "honors, and awards from the text.")
+        assert tb._stub_payload(education_prompt), "education still compiles to nothing"
+        assert isinstance(tb._stub_payload(achievement_prompt), list)
+    finally:
+        tb._FIXTURE = previous
