@@ -199,14 +199,23 @@ def test_ats_summary_missing_breakdowns():
 # ── stub determinism ───────────────────────────────────────────────────────────
 
 def test_stub_jd_skill_extraction_is_deterministic_and_jd_sensitive():
-    from eval.tailoring_benchmark import _stub_extract_jd_skills
+    """Both halves of the vocabulary reach the output, and nothing else does.
 
-    jd = "Looking for Python and Kubernetes engineers. TensorFlow is a plus."
+    The profile-side term is read from the fixture rather than named: the vocab
+    is the *default profile's* skills plus `_EXTRA_JD_TERMS`, so hardcoding one
+    (this asserted `Kubernetes`, a skill of the retired #51 fixture) silently
+    couples the stub's contract to whichever profile the harness happens to
+    default to — which #182 moved.
+    """
+    from eval.tailoring_benchmark import _stub_extract_jd_skills, fixture
+
+    owned = fixture().skills[0]["name"]          # from the profile's own skills
+    jd = f"Looking for {owned} and Terraform engineers. TensorFlow is a plus."
     a, b = _stub_extract_jd_skills(jd), _stub_extract_jd_skills(jd)
     assert a == b
     names = {s["name"] for s in a}
-    assert {"Python", "Kubernetes", "TensorFlow"} <= names
-    assert "Unity" not in names
+    assert {owned, "Terraform", "TensorFlow"} <= names
+    assert "Unity" not in names                  # in neither half of the vocab
 
 
 def test_stub_embedding_model_is_stable_across_processes():
@@ -410,11 +419,26 @@ def test_committed_cassette_is_well_formed_and_covers_every_task():
     model, so it belongs in the integration leg below rather than in the fast
     suite. This still catches a truncated, re-keyed or partially-recorded
     cassette landing in the repo.
+
+    No cassette is committed today — #182 deleted the one #158 recorded, whose
+    task ids came from the 8-posting corpus #177 replaced and whose profile #172
+    retired. Gated on existence *only*: a present-but-corrupt cassette must still
+    fail here rather than skip, which is why this is not a try/except around
+    `Cassette.load` (the silent-retirement defect #175 documents).
     """
     from eval.cassettes import Cassette, SETUP_SCOPE, interaction_key
     from eval.tailoring_benchmark import DEFAULT_PROFILE, default_cassette_path
 
     path = default_cassette_path(DEFAULT_PROFILE.stem, 3, None)
+    if not path.exists():
+        pytest.skip(
+            f"no cassette committed at {path.name}, and none is due yet: "
+            "recording is gated on #181 (_detect_level mislabels 128/150 "
+            "postings, and role_level is 0.10 of the composite on both sides of "
+            "every match). Once it lands, record with `python "
+            "eval/tailoring_benchmark.py --mode product --record --tasks <id> "
+            "<id> ...` — name the tasks rather than using --limit, which takes "
+            "an alphabetical prefix of the corpus.")
     cassette = Cassette.load(path)
     assert len(cassette) > 0
     # The register/ingest phase plus one scope per recorded task.
@@ -452,16 +476,24 @@ def test_two_replays_are_byte_identical(tmp_path):
     # corpus change silently re-points this test at tasks the recording never
     # covered — which surfaces as a bare CASSETTE MISS rather than as the real
     # problem (issue #177 replaced the corpus wholesale).
-    recorded = Cassette.load(default_cassette_path(DEFAULT_PROFILE.stem, 3, None)
-                             ).meta["tasks"]
+    path = default_cassette_path(DEFAULT_PROFILE.stem, 3, None)
+    if not path.exists():
+        pytest.skip(
+            f"no cassette committed at {path.name}, so there is nothing to "
+            "replay. The profile set is final now (#172) and #182 deleted the "
+            "dead recording, but a new one is not due yet: recording is gated "
+            "on #181 and belongs with a product-mode run. Then: `python "
+            "eval/tailoring_benchmark.py --mode product --record --tasks <id> "
+            "<id> ...` — name the tasks rather than using --limit, which takes "
+            "an alphabetical prefix of the corpus.")
+    recorded = Cassette.load(path).meta["tasks"]
     available = {p.stem for p in DATASET_DIR.glob("*.json")}
     missing = [t for t in recorded if t not in available]
     if missing:
         pytest.skip(
             "the committed cassette predates the current JD corpus "
             f"(missing: {', '.join(missing)}). Re-record with "
-            "`--mode product --record --limit 3` once the profile set is final "
-            "(#172) — recording before the fixture stops changing pays twice.")
+            "`--mode product --record --limit 3`.")
 
     runs = []
     for i in (1, 2):
@@ -531,7 +563,14 @@ def test_llm_judge_rejects_malformed_output(payload):
 
 @pytest.mark.integration
 def test_llm_judge_scores_real_resume():
-    """End-to-end judge call against the real eval model (needs API keys)."""
+    """End-to-end judge call against the real eval model (needs API keys).
+
+    The emphasized skills are derived from the fixture rather than hardcoded:
+    they used to name Alex Rivera's `Python / PyTorch / FastAPI`, which #182's
+    re-pointing of DEFAULT_PROFILE would have turned into a judgment of an
+    incoherent résumé — skills the candidate does not have — while still
+    scoring 1..5 and passing.
+    """
     from eval.llm_judge import judge_resume_quality
     from eval.tailoring_benchmark import DEFAULT_PROFILE, fixture
 
@@ -539,7 +578,7 @@ def test_llm_judge_scores_real_resume():
     content = {
         "experiences": profile.experiences,
         "projects": [{"name": p["name"], "bullets": p["bullets"]} for p in profile.projects],
-        "skills_emphasized": ["Python", "PyTorch", "FastAPI"],
+        "skills_emphasized": [s["name"] for s in profile.skills[:3]],
     }
     jd = "Machine Learning Engineer role: PyTorch, model serving, feature stores, AWS."
     out = judge_resume_quality(content, jd, DEFAULT_PROFILE.read_text(encoding="utf-8"))

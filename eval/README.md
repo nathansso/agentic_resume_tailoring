@@ -28,13 +28,13 @@ asked for; an ability whose row stays `none` after its issue ships did not ship.
 | Dataset | Size | Harness | Note |
 |---|---|---|---|
 | `jd_dataset/` | 150 | tailoring benchmark | Intern/entry postings, 30 per role family (#177), replacing the 8 mid-level-and-senior postings every pre-2026-08-11 figure was measured on. Audit its parse fidelity with `python scripts/audit_jd_corpus.py` |
-| `profiles/` | 20 + 1 retired | tailoring benchmark | 15 authored people (5 families × 3 variants) + 5 redundancy-bearing derivatives (#172). Generated from `profile_banks.py`; the mid-level `benchmark_profile.md` is retired but still runnable by name |
+| `profiles/` | 20 + 1 retired | tailoring benchmark | 15 authored people (5 families × 3 variants) + 5 redundancy-bearing derivatives (#172). Generated from `profile_banks.py`; the mid-level `benchmark_profile.md` is retired but still runnable by name. An unqualified run measures `data_science_specialist_priya_raman.md` (#182) — specialist / metric_rich / clean, so it isolates no hazard |
 | `ku_dataset/` | 4 | knowledge-updates eval | **Scripted by default** — the task file supplies the notes *and* the decisions, so the extractor is not under test unless `--live` |
 | `jobcard_dataset/` | 4 | JobCard eval | Cross-job memory, outcome-carrying |
 | `skill_selection_tasks/` | 2 | skill-selection tuning | Carries a labelled `relevant` answer key; unused by the tailoring benchmark |
 | distractor pool (`distractors.py`) | 31 admitted of 56 proposed | tailoring benchmark, via `--distractors N` | Audited against every posting: no shared keyword, and below the matcher's own semantic threshold. Injected as `UserSkill` rows post-ingest, never written into the résumé, so one profile runs with and without |
 | implicitness pairs (`implicitness.py`) | 31 | — | `explicit` / `implicit` / `unrelated` `(requirement, bullet)` pairs; the calibration set, not a task set |
-| `cassettes/` | 1 | replay mode | **Dead until re-recorded** — its three task ids do not exist in the #177 corpus. #172 re-records once its profile set is final; the determinism test drives `--tasks` from the cassette's own task list and skips with a re-record instruction |
+| `cassettes/` | 0 | replay mode | **None committed.** #182 deleted the #158 recording rather than refresh it: its three task ids came from the corpus #177 replaced and its profile was retired by #172. **Not due yet either:** recording is gated on #181 — `_detect_level` mislabels 128/150 postings and `role_level` is 0.10 of the composite on both sides of every match, so recording first would bake a known-wrong component into a paid artifact. Once it lands: `python eval/tailoring_benchmark.py --mode product --record --tasks <id> <id> …`, naming the tasks rather than using `--limit`, which takes an alphabetical prefix of the corpus. Both replay tests skip while the directory is empty, and say so |
 | `tests/memory_evals/` | 5 YAML | chat-memory eval | Recall across compression; not bound to any profile |
 
 **No dataset is bound to a profile except the tailoring benchmark's own.** That is why
@@ -78,9 +78,10 @@ python eval/tailoring_benchmark.py --tasks arizent_data_ai_engineer
 
 ### Replay contract
 
-Cassettes live in `eval/cassettes/` and are committed. A cassette is keyed by
-`(task scope, role, sha256(rendered prompt), occurrence index)` — the occurrence
-counter matters because the tailor runs at `temperature=0.3` with
+Cassettes live in `eval/cassettes/` and are committed — **none is committed
+today** (#182; see the datasets table above for how to record one). A cassette
+is keyed by `(task scope, role, sha256(rendered prompt), occurrence index)` —
+the occurrence counter matters because the tailor runs at `temperature=0.3` with
 `MAX_RETRIES = 2`, so one prompt can legitimately be invoked twice and return
 two different samples.
 
