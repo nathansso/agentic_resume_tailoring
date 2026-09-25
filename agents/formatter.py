@@ -9,7 +9,7 @@ import logging
 import re
 import shutil
 import warnings
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 
 from sqlmodel import Session, select
@@ -160,23 +160,42 @@ def _convert_inline(text: str) -> str:
 
 # ── PDF compilation ───────────────────────────────────────────────────────────
 
-def _compile_tex_to_pdf(tex_str: str) -> bytes:
-    """Compile tex_str to PDF bytes. Prefers tectonic, falls back to pdflatex."""
-    import os
-    import subprocess
-    import tempfile
+def _find_latex_engine() -> Optional[Tuple[str, str]]:
+    """`(name, path)` of the LaTeX engine to use, or None when there is none.
 
-    # Resolve engine: check PATH first, then check alongside this Python executable
+    Tectonic is preferred — on PATH first, then alongside this Python
+    executable — and pdflatex is the fallback. Shared by the PDF compile below
+    and the line measurer in `harness/render_cache.py` (issue #200), so both
+    always run the same engine.
+    """
+    import os
     import sys as _sys
+
     _py_bin = os.path.dirname(_sys.executable)
     tectonic = (
         shutil.which("tectonic")
         or (os.path.join(_py_bin, "tectonic.exe") if os.path.exists(os.path.join(_py_bin, "tectonic.exe")) else None)
         or (os.path.join(_py_bin, "tectonic") if os.path.exists(os.path.join(_py_bin, "tectonic")) else None)
     )
+    if tectonic:
+        return "tectonic", tectonic
     pdflatex = shutil.which("pdflatex")
-    if not tectonic and not pdflatex:
+    if pdflatex:
+        return "pdflatex", pdflatex
+    return None
+
+
+def _compile_tex_to_pdf(tex_str: str) -> bytes:
+    """Compile tex_str to PDF bytes. Prefers tectonic, falls back to pdflatex."""
+    import os
+    import subprocess
+    import tempfile
+
+    found = _find_latex_engine()
+    if not found:
         raise RuntimeError("No LaTeX engine found. Install tectonic or pdflatex.")
+    tectonic = found[1] if found[0] == "tectonic" else None
+    pdflatex = found[1] if found[0] == "pdflatex" else None
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tex_path = os.path.join(tmpdir, "resume.tex")
