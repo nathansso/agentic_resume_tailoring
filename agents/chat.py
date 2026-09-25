@@ -1253,6 +1253,10 @@ class ChatAgent:
             session.add(result)
             session.commit()
 
+        # Tailoring tree (#196): HEAD moves back to the restored version.
+        from harness.tree import record_revert
+        record_revert(latest.user_id, latest.job_id)
+
         return (
             "Reverted to the previous tailored resume. The replaced version is "
             'kept — type "revert" again to swap back.'

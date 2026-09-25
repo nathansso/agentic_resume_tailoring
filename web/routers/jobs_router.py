@@ -94,6 +94,12 @@ def _job_detail(job: JobDescription, result: UserJobResult | None) -> dict:
     return base
 
 
+def _record_edit(user: User, job_id: UUID, note: str) -> None:
+    """An editor change becomes a `source=editor` node in the tailoring tree (#196)."""
+    from harness.tree import record_result
+    record_result(user.user_id, job_id, source="editor", note=note)
+
+
 def _latest_result(session: Session, job_id: UUID) -> UserJobResult | None:
     results = session.exec(
         select(UserJobResult).where(UserJobResult.job_id == job_id)
@@ -425,6 +431,7 @@ async def save_tex(job_id: str, body: TexBody, user: User = Depends(get_current_
         latest.updated_at = datetime.utcnow()
         session.add(latest)
         session.commit()
+        _record_edit(user, job.job_id, "tex edit")
         return {"saved": True, "updated_at": latest.edited_tex_updated_at.isoformat()}
 
 
@@ -440,6 +447,7 @@ async def discard_tex(job_id: str, user: User = Depends(get_current_user)):
             latest.updated_at = datetime.utcnow()
             session.add(latest)
             session.commit()
+            _record_edit(user, job.job_id, "tex discarded")
         return {"discarded": True}
 
 
@@ -541,6 +549,7 @@ def save_layout(job_id: str, body: LayoutBody, user: User = Depends(get_current_
         latest.updated_at = datetime.utcnow()
         session.add(latest)
         session.commit()
+        _record_edit(user, job.job_id, "layout")
         return {"saved": True, "active": bool(overrides)}
 
 
@@ -559,6 +568,7 @@ def clear_layout(job_id: str, user: User = Depends(get_current_user)):
             latest.updated_at = datetime.utcnow()
             session.add(latest)
             session.commit()
+            _record_edit(user, job.job_id, "layout cleared")
         return {"cleared": True}
 
 

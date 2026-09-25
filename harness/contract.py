@@ -139,6 +139,126 @@ class ProfileOutput(_Output):
     portfolio_url: Optional[str] = None
 
 
+# ── tailoring tree (#196) ────────────────────────────────────────────────────
+
+class ListJobsInput(_Model):
+    pass
+
+
+class JobRef(_Model):
+    job_id: str
+    title: str
+    company: str
+    status: Optional[str] = None
+    head: Optional[str] = Field(None, description="Current node id, if the job has history.")
+    created_at: Optional[str] = None
+
+
+class ListJobsOutput(_Output):
+    jobs: List[JobRef] = Field(default_factory=list)
+
+
+class NodeSummary(_Model):
+    node_id: str
+    parent_id: Optional[str] = None
+    job_id: str
+    seq: int
+    source: str
+    note: Optional[str] = None
+    provenance: Dict[str, Any] = Field(default_factory=dict)
+    created_at: str
+
+
+class Node(NodeSummary):
+    content: Dict[str, Any] = Field(default_factory=dict)
+    score_breakdown: Dict[str, Any] = Field(default_factory=dict)
+    program: Optional[Dict[str, Any]] = None
+    metrics: Dict[str, Any] = Field(default_factory=dict)
+    edited_tex: Optional[str] = None
+    layout_overrides: Optional[Dict[str, Any]] = None
+    result_id: Optional[str] = None
+
+
+class TreeEventOut(_Model):
+    event_id: int
+    job_id: str
+    node_id: str
+    kind: str
+    created_at: str
+
+
+class GetHeadInput(_Model):
+    job_id: str
+    since_event: Optional[int] = Field(
+        None, description="Cursor from a previous call; returns what changed after it.")
+
+
+class GetHeadOutput(_Output):
+    job_id: Optional[str] = None
+    head: Optional[Node] = None
+    events: List[TreeEventOut] = Field(default_factory=list)
+    editor_edits: List[NodeSummary] = Field(
+        default_factory=list, description="Edits the user made in the editor since the cursor.")
+    cursor: int = 0
+
+
+class HistoryInput(_Model):
+    job_id: str
+
+
+class HistoryOutput(_Output):
+    nodes: List[NodeSummary] = Field(default_factory=list)
+
+
+class DiffInput(_Model):
+    from_node: str
+    to_node: str
+
+
+class ItemChange(_Model):
+    key: str
+    change: Literal["added", "removed", "revised"]
+    title: str
+    bullets_added: List[str] = Field(default_factory=list)
+    bullets_removed: List[str] = Field(default_factory=list)
+    reordered: bool = False
+
+
+class DiffOutput(_Output):
+    from_node: Optional[str] = None
+    to_node: Optional[str] = None
+    items: List[ItemChange] = Field(default_factory=list)
+    skills_added: List[str] = Field(default_factory=list)
+    skills_removed: List[str] = Field(default_factory=list)
+    tex_changed: bool = False
+    layout_changed: bool = False
+
+
+class CheckoutInput(_Model):
+    job_id: str
+    node_id: str
+
+
+class CheckoutOutput(_Output):
+    head: Optional[Node] = None
+
+
+def _tree():
+    from harness import tree
+    return tree
+
+
+def _tree_call(fn):
+    """Run a tree function; map its NotFound / bad ids to the contract's error shape."""
+    def call(*args, **kwargs):
+        tree = _tree()
+        try:
+            return fn(tree, *args, **kwargs)
+        except (tree.NotFound, ValueError) as exc:
+            return {"error": {"code": "not_found", "message": str(exc)}}
+    return call
+
+
 # ── registry ─────────────────────────────────────────────────────────────────
 
 @dataclass(frozen=True)
@@ -158,6 +278,8 @@ def _tools():
 
 NO_USER = ToolError(code="no_user", message=(
     "No ART user is bound. Pass --user-id (or set ART_MCP_USER_ID) when starting ART."))
+READ_ONLY = ToolError(code="read_only", message=(
+    "This ART process is read-only (a remote database without --allow-writes)."))
 
 TOOLS: List[ToolSpec] = [
     ToolSpec(
@@ -188,6 +310,36 @@ TOOLS: List[ToolSpec] = [
         "The candidate's name and contact details for the resume header.",
         ProfileInput, ProfileOutput,
         lambda uid: _tools().get_profile(uid)),
+    ToolSpec(
+        "list_jobs",
+        "The candidate's jobs with their current tailoring node (HEAD).",
+        ListJobsInput, ListJobsOutput,
+        lambda uid: {"jobs": _tree().list_jobs(uid)}),
+    ToolSpec(
+        "get_head",
+        "A job's current resume version, plus what changed after a cursor — including "
+        "edits the user made in the editor. Call before building on a version.",
+        GetHeadInput, GetHeadOutput,
+        _tree_call(lambda t, uid, job_id, since_event=None: t.get_head(uid, job_id, since_event))),
+    ToolSpec(
+        "history",
+        "Every version of a job's resume, oldest first.",
+        HistoryInput, HistoryOutput,
+        _tree_call(lambda t, uid, job_id: {"nodes": t.history(uid, job_id)})),
+    ToolSpec(
+        "diff_nodes",
+        "What changed between two versions, by item and bullet.",
+        DiffInput, DiffOutput,
+        _tree_call(lambda t, uid, from_node, to_node: {
+            **{k: v for k, v in t.diff_nodes(uid, from_node, to_node).items()
+               if k not in ("from", "to")},
+            "from_node": from_node, "to_node": to_node})),
+    ToolSpec(
+        "checkout",
+        "Make an earlier version current again (revert or branch). Writes.",
+        CheckoutInput, CheckoutOutput,
+        _tree_call(lambda t, uid, job_id, node_id: {"head": t.checkout(uid, job_id, node_id)}),
+        read_only=False),
 ]
 BY_NAME: Dict[str, ToolSpec] = {t.name: t for t in TOOLS}
 
@@ -197,8 +349,8 @@ def _jsonable(value: Any) -> Any:
     return json.loads(json.dumps(value, default=str))
 
 
-def invoke(name: str, user_id: Optional[UUID], args: Optional[Dict[str, Any]] = None
-           ) -> Dict[str, Any]:
+def invoke(name: str, user_id: Optional[UUID], args: Optional[Dict[str, Any]] = None,
+           *, allow_writes: bool = True) -> Dict[str, Any]:
     """Validate `args`, run the tool, validate the output. Returns plain JSON data.
 
     Raises `KeyError` for an unknown tool and `ValidationError` for bad
@@ -208,6 +360,8 @@ def invoke(name: str, user_id: Optional[UUID], args: Optional[Dict[str, Any]] = 
     parsed = spec.input_model.model_validate(args or {})
     if user_id is None:
         out = spec.output_model(error=NO_USER)
+    elif not spec.read_only and not allow_writes:
+        out = spec.output_model(error=READ_ONLY)
     else:
         out = spec.output_model.model_validate(
             _jsonable(spec.fn(user_id, **parsed.model_dump())))
