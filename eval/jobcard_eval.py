@@ -18,10 +18,10 @@ Three nested signals, as #137 specifies:
 2. **Downstream outcome** — the card-informed plan is executed into a resume and
    compared with a memoryless plan on two figures. `ats_composite_delta` uses
    the real `ATSScoringEngine`; `relevance_delta` uses JD-keyword density. Both,
-   because ATS is only one term of the intended objective — #127 defines it as
-   `net(a) = ΔATS − λ·Δcost` — and the composite is provably unable to reward a
-   deletion (see `_relevance_density`). Reporting the composite alone would say
-   the memory did nothing.
+   because the composite is report-only under the harness plan (metrics are kept
+   separate, docs/harness.md § 5) and is provably unable to reward a deletion
+   (see `_relevance_density`). Reporting the composite alone would say the
+   memory did nothing.
 
 3. **Negation guard** — a card that loses a `user-rejected` item which then
    *recurs* in the next job is penalized `NEGATION_WEIGHT` times harder than a
@@ -280,11 +280,11 @@ def _relevance_density(items: List[Dict], plan: Dict[str, str], task: Dict) -> f
     or lower it, so the composite can never reward honouring a rejection.
 
     What a good deletion changes is *precision*: the same signal in fewer words.
-    That is the cost side of #127's `net(a) = ΔATS − λ·Δcost` objective, whose
-    proper cost term is the #122 redundancy suite (semantic duplication,
-    stuffing, dilution). This density figure is a stand-in for that term until
-    #122 lands — reusing `eval/metrics._keyword_relevance`, already on the #51
-    harness — and it is why both numbers are reported rather than one.
+    Under the harness plan relevance density is a **target** metric in its own
+    right (docs/harness.md § 5), judged beside the #122 redundancy guards rather
+    than folded into a λ-weighted objective. It reuses
+    `eval/metrics._keyword_relevance`, already on the #51 harness, and it is why
+    both numbers are reported rather than one.
     """
     from agents.ats_scorer import ATSScoringEngine
     from eval.metrics import _keyword_relevance

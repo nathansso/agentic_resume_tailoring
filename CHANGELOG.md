@@ -12,6 +12,54 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 188 — Record the harness pivot across docs, guidance and the board
+**Status:** complete | **Tests:** 1429 pass on SQLite (1 new), 10 skipped
+
+ART's direction changed: it stops being a hosted web app that calls models for its users and becomes a local, model-free package driven by the user's own coding agent (epic #207). This issue makes every source of truth agree with that plan before any code moves. No runtime behaviour changes.
+
+### What shipped
+
+- **`docs/harness.md` (new), the target architecture.** It covers:
+  - the locked decisions;
+  - the three-way split between ART (deterministic), Jev (bounded judgment) and the host (open-ended);
+  - the component and adapter layout and the seven Jev decision points;
+  - the metric roles and the per-metric acceptance rule;
+  - plan programs, the bullet library and baselines, and the tool surface;
+  - memory and compaction, the tailoring tree, and what is stored locally;
+  - `art ui` with editor–host sync, and offline learning;
+  - host integration, the model-call removal inventory, the H0–H5 roadmap, the evaluation arms, and risks.
+
+  `docs/architecture.md` keeps describing merged behaviour and now points at it.
+- **Guidance.**
+  - Root `CLAUDE.md` names the direction and freezes the hosted app. It adds two invariants: nothing under `harness/` imports a generative client, and the ATS composite is never a gate or an objective.
+  - `web/CLAUDE.md` records that the web layer is becoming `art ui`.
+  - `agents/CLAUDE.md` says new checks must be model-free, new metrics carry a role, and bounded judgments belong in the Jev engine.
+- **Docs.**
+  - `README.md`: a direction banner, the harness doc in the documentation table, and the Roadmap rewritten onto H0–H5.
+  - `INSTALL.md`: an upcoming-install note.
+  - `docs/architecture.md`: a target-architecture pointer, and In flight rewritten.
+  - `docs/benchmark.md`: a pivot banner; the composite described as report-only; #174 and #206 in In flight.
+  - The `agents/redundancy.py` and `eval/jobcard_eval.py` docstrings no longer describe a λ-weighted `net(a)`.
+- **`tests/test_repo_guidance.py` (+1).** `docs/harness.md` must exist and be linked from `CLAUDE.md`, `README.md` and `docs/architecture.md`.
+- **Issues.**
+  - **New:** epic #207, plus #188–#206 across H0–H5.
+  - **Rewritten, with the original body kept in a collapsed block:** #113 (per-metric acceptance rule), #127 (per-guard tolerances, no λ), #152, #174, #119, #51, #117 and #114.
+  - **Annotated:** #172, #173, #123, #124, #126, #151, #163, #87, #84, #82, #136, #147, #60 and #157.
+  - **Closed as not planned:** #161, #63, #42, #33, #31 and #116.
+- **Board.**
+  - Phase options H0–H5 were added, preserving every existing option ID. P3 and P4 are now described as superseded.
+  - The P3/P4 iterations were replaced by H0–H5 iterations, and P2 now ends 2026-09-27.
+  - Every open item is placed in an H phase, a still-valid P phase or the Icebox. Closed items are Done, and nothing is missing from the board.
+
+### Deviations from spec
+
+- **Replacing the iteration configuration wiped every historical P0–P2 iteration assignment, even for iterations resubmitted with unchanged titles.** A snapshot taken beforehand restored all 24. Items that sat on the deleted P3/P4 iterations and were already Done (#42, #48, #63, #83, #102) keep their Phase value but no longer have an iteration, because those iterations no longer exist. The next edit to the iteration field should snapshot and restore the same way.
+- **The plan named #48 and #102 for closing**, but both were already closed and Done. The closures were #161, #63, #42, #33, #31 and #116.
+- **#178 was placed in H4**, alongside the rest of the benchmark arc. The plan's issue table didn't name it.
+- **The hand-run tailoring workflow in the gitignored `personal/` directory** informed the bullet-library and baseline design as practice only; none of its content entered a tracked file. Its local `CLAUDE.md` was amended to allow that.
+
+---
+
 ## Issue 209 — Pin sqlmodel so CI stops drifting to 0.0.47
 **Status:** complete | **Tests:** 1428 pass on SQLite (1 new), 10 skipped
 

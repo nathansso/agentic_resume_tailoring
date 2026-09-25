@@ -11,6 +11,16 @@ the disagreement is stated. Work that is specified but not shipped lives in the
 Companion documents: [`benchmark.md`](benchmark.md) (what the numbers mean),
 [`../eval/README.md`](../eval/README.md) (how to run the harnesses).
 
+> **Target architecture: [`harness.md`](harness.md) (epic #207).** ART is moving to a local,
+> model-free package driven by the user's coding agent. Several things described below are
+> slated to change there:
+> - The generate → evaluate loop (§3.2) becomes host-written plan programs run by an executor.
+> - The ATS composite stops being a reward (§6) and becomes report-only.
+> - Planning prompts give way to `suggest_actions`.
+> - The web app becomes `art ui`.
+>
+> This file keeps describing merged behaviour, and is updated as each harness issue lands.
+
 ---
 
 ## 1. Orientation
@@ -929,30 +939,44 @@ Open issues — specified but **not shipped**. Nothing below describes a capabil
 has. The two entries that use the present tense (#181, #175) report *defects* in code that
 does exist, and are here because their fixes have not landed.
 
+**The harness pivot (epic #207, [`harness.md`](harness.md))** sequences everything below
+into phases H0–H5 and adds the following:
+- The read-only `art-mcp` spike (#189).
+- Model-free checks and the import boundary (#190).
+- Adapters (#191) and host-filled ingestion (#192).
+- The Jev decisions engine (#193).
+- Packaging (#194) and export/import (#195).
+- The tailoring tree (#196) and plan-program executor (#197).
+- The citation gate (#198), bullet library and baselines (#199), and line budget (#200).
+- The host plugins (#201, #203) and the memory gate (#202).
+- `art ui` (#204, #205).
+- The host evaluation (#206).
+
 **Objective and scoring**
-- **#123** will add a deterministic numeric/entity consistency gate over tailored bullets.
-- **#124** will add a calibrated NLI layer; there is no NLI infrastructure in the repo today.
-- **#126** will score requirement coverage by entailment alongside literal term matching, and is blocked on #124.
-- **#127** will replace the early-stop rule with `net(a) = ΔATS − λ·Δcost`, consuming the redundancy suite as `Δcost`. λ has not been calibrated.
-- **#151** will decompose `skill_coverage` into required/preferred components.
-- **#152** will learn every scoring weight against an external target.
-- **#163** will rank keyword-insertion candidates by importance × supportability instead of the current TF-IDF; `agents/keyword_planner.py` is untouched by #125 so its behaviour is byte-identical to pre-#125.
+- **#113** will add the executor's per-metric acceptance rule. Every node must pass the hard gates, may not worsen any guard beyond its tolerance, and must improve a target. It replaces the earlier `net(a)` keep/revert design.
+- **#127** will fit per-guard tolerances on the #172 anchor set. There is no λ and no scalar objective. The ATS composite is monotone in text and becomes report-only.
+- **#123** will add a deterministic numeric/entity consistency check as a hard gate, alongside the citation gate (#198).
+- **#151** will decompose `skill_coverage` into required/preferred components, each a separate target metric.
+- **#152** will learn guard tolerances and ranker weights against the human anchor set. The composite's weights are no longer optimised.
+- **#163** will rank keyword-insertion candidates by importance × supportability instead of the current TF-IDF. `agents/keyword_planner.py` is untouched by #125, so its behaviour is byte-identical to pre-#125.
 - **#181** reports that `_detect_level`'s substring matching mislabels 128 of the 150 corpus postings and the benchmark profile itself; `role_level` (weight 0.10) has been comparing two independently wrong labels.
+- **#124** and **#126** (NLI, entailment coverage) are deferred to the Icebox behind the citation gate.
 
 **Policy and learning**
-- **#113** will add a marginal net-value controller scoring per prefix, with net-value keep/revert.
-- **#114** is the epic sequencing the policy arc (#112 → #113 → #51).
-- **#116** will revise only the planned items instead of regenerating the whole resume.
-- **#117** will bias the planner toward `keep` on revision runs.
-- **#119** covers the training-phase prerequisites for the ε-greedy policy: per-item context, a collection schedule, and coverage targets.
-- **#51 Phase 2** will induce the planner's policy from the logged tuples and evaluate it off-policy before deployment.
+- **#114** is the epic sequencing the policy arc onto H2–H5.
+- **#117** will make revisions minimal-delta through keep-biased suggestions, an edit-distance guard, and plans that branch from HEAD.
+- **#119** covers the training-phase prerequisites, collected only in the benchmark host runner (#206).
+- **#51** is now offline selection over the action space: no online bandit, per-metric off-policy estimates, and conditional on the H4 result.
+- **#174** will build action-ranking pairs labelled by metric dominance, the anchor set and tree siblings.
+- **#116** was closed as not planned: the executor touches only planned items by construction.
 
 **Retrieval and infrastructure**
-- **#60** will add the production write path for `embedding_vec` (dual-write on ingest plus a backfill), which is what would let ranking use pgvector rather than in-memory candidates.
+- **#60** (the pgvector write path) is in the Icebox. The local default is SQLite with an FTS5/numpy fallback (#194).
 - **#175** reports that `conftest`'s `isolated_engine` patches 5 of the 16 modules that bind `engine` at import, so a test touching an unpatched module silently reads the wrong database.
 
 **Surfaces**
-- **#147** will add the inline chat-panel UI for knowledge-artifact suggestions, and carries the deferred UI for #21, #129 and #133 — all of which shipped API-only.
+These issues are retargeted to `art ui` (#204):
+- **#147** will add the inline chat-panel UI for knowledge-artifact suggestions, now in the `art ui` chat panel (#205). It carries the deferred UI for #21, #129 and #133, all of which shipped API-only.
 - **#87** will make the rendered resume view editable.
 - **#136** will add an explorable knowledge-graph visualization.
-- **#157** will log project-selection features and outcomes so the project-scorer weights become learnable.
+- **#157** will log project-selection features and outcomes on tree nodes, so the project-scorer weights become learnable against the anchor set.

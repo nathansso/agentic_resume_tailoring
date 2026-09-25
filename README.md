@@ -7,7 +7,14 @@ graph, then uses a pipeline of LLM agents to plan, generate, and score a
 focused, ATS-friendly one-page resume for a specific job — with a chat
 interface for iterative, reviewable revision.
 
-🔗 **Live demo:** https://web-production-2ead7.up.railway.app/
+> **Direction: the harness pivot ([#207](https://github.com/nathansso/agentic_resume_tailoring/issues/207)).**
+> ART is becoming a local, model-free plugin for the coding agent you already pay for
+> (Claude Code, Codex, pi). Your agent's model does the writing. ART supplies the knowledge
+> graph, an approved-bullet library, your preferences, the gates that enforce them, and a
+> local LaTeX editor (`art ui`). The target design is [`docs/harness.md`](docs/harness.md).
+> Everything below describes the current, merged system.
+
+🔗 **Hosted demo (frozen):** https://web-production-2ead7.up.railway.app/
 📦 **Setup:** [`INSTALL.md`](INSTALL.md) — Docker, local Python, and cloud deploy
 
 ---
@@ -49,7 +56,8 @@ work over time.
 
 | Document | What it covers |
 |---|---|
-| [`docs/architecture.md`](docs/architecture.md) | The full system: memory units, reasoning units, KG retrieval, the preference/persona tier, exploration, and the determinism invariants |
+| [`docs/harness.md`](docs/harness.md) | **Target architecture.** ART as a model-free plugin for the user's coding agent: decisions, Jev decision points, separate metrics, plan programs, bullet library, local storage, `art ui`, and the H0–H5 roadmap |
+| [`docs/architecture.md`](docs/architecture.md) | The current merged system: memory units, reasoning units, KG retrieval, the preference/persona tier, exploration, and the determinism invariants |
 | [`docs/benchmark.md`](docs/benchmark.md) | What the benchmark measures, its three execution modes, a worked run, and what a number may claim |
 | [`eval/README.md`](eval/README.md) | Operational reference for every eval harness — commands, dataset schemas, replay contract |
 | [`INSTALL.md`](INSTALL.md) | Docker, local development, configuration, and cloud deploy |
@@ -227,26 +235,26 @@ board, not in checked-in documents.
 ## Roadmap
 
 Work is sequenced in phases on the board. **P0** (research spikes) and **P1**
-(preferences & knowledge) are complete — the P1 epic #140 closed with the JD
+(preferences & knowledge) are complete: the P1 epic #140 closed with the JD
 profile, layout overrides, the preference and persona tiers, JobCards,
-chat→graph extraction, and KG evidence in the planner all shipped. The current
-front is the **benchmark dataset foundation** (#172) — chunks 1–4 shipped the
-20-profile set, per-stratum reporting and a corpus audit; chunks 5–7 (distractor
-pool, β calibration, human anchor set) are open. Most of P2 and all of P3 depend
-on it for a measurement worth optimising.
+chat→graph extraction, and KG evidence in the planner. **P2** shipped the
+redundancy suite (#122) and weighted keyword scoring (#125).
 
-| Phase | Theme | State |
+From 2026-09-28 the sequence follows the **harness pivot** (epic **#207**,
+[`docs/harness.md`](docs/harness.md)), which replaces P3 and P4.
+
+| Phase | Window | Scope |
 |---|---|---|
-| **P1** | Preferences & Knowledge | **Complete.** JD profile (#121), layout overrides (#118), preference profile arbitrated against JD criticality (#129), codified persona tier (#133), JobCards (#137), chat→KG extraction (#21), KG evidence in the planner (#138). Epic **#140**, closed. |
-| **P2** | Tailoring Policy | **In progress.** The redundancy suite (#122) and weighted keyword scoring (#125) shipped; the objective is still monotone in coverage, so a fabrication gate (#123), entailment-based coverage (#124–#126), and the cost-weighted marginal objective (#127) are what make it worth optimising. |
-| **P3** | Reinforcement Learning | **Not started.** Exploration ships (#112) and the log is RL-ready, but no policy update loop is closed. Induction from the logged tuples is #51 Phase 2; prerequisites are #119. Arc epic **#114**. |
-| **P4** | UI & Migration | **Partial.** The hosting migration (#48) and old-deployment teardown (#102) are complete. Editable rendered resume view (#87) and the UI restructure (#82) remain. |
+| **H0** · Decide & Spike | Sep 28 – Oct 4 | Docs and board (#188); a read-only `art-mcp` spike (#189) |
+| **H1** · Core & Jev | Oct 5 – Oct 18 | Model-free checks and import boundary (#190), adapters (#191), host-filled ingestion (#192), Jev decisions engine (#193), packaging (#194), export/import (#195) |
+| **H2** · Executor & Library | Oct 19 – Nov 8 | Tailoring tree (#196), plan programs (#197), per-metric acceptance (#113) and fitted tolerances (#127), citation and numeric gates (#198, #123), bullet library and baselines (#199), line budget (#200) |
+| **H3** · Plugin & Memory | Nov 9 – Nov 22 | Claude Code plugin (#201), Jev memory gate and pins (#202), Codex and pi (#203) |
+| **H3b** · Editor | Nov 23 – Dec 6 | `art ui` local editor (#204) and chat panel (#205); retargeted UI issues #87, #82, #84, #136, #147 |
+| **H4** · Host Evaluation | Dec 7 – Dec 27 | Host runner with arms A/B/B′/C (#206) on the benchmark (#172, #173, #178, #181) |
+| **H5** · Offline Policy | From Dec 28 | Ranker and tolerances trained offline (#174, #152, #157, #119, #51; arc epic #114). Runs only if H4 says go |
 
-Cross-cutting and unphased: the benchmark arc (#172 → #173 → #174 → #178), which
-adds stratified profiles and a difficulty dial, a re-tailor arm, action-ranking
-preference pairs, and profile-bound conversation fixtures. #181 (a `role_level`
-mislabelling defect) gates the product-mode recordings the arc's later chunks
-need.
+The ATS composite is monotone in text, so it is reported only. Tailoring metrics
+stay separate and are never pooled into one objective.
 
 ---
 

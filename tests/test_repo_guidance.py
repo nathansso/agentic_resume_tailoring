@@ -65,3 +65,17 @@ def test_claude_md_documents_the_pointer_from_its_own_end():
         "root CLAUDE.md no longer mentions `AGENTS.md`; the § Guidance hierarchy "
         "note explaining why that file exists is what stops the next author from "
         "either deleting it or filling it with policy (#182).")
+
+
+def test_target_architecture_is_linked_from_every_entry_point():
+    """`docs/harness.md` is the target architecture (#188); a reader starting
+    from the policy file, the README or the merged-architecture doc must reach it."""
+    assert (ROOT / "docs" / "harness.md").is_file(), (
+        "docs/harness.md is missing; it is the target architecture for the "
+        "harness pivot (#207) that CLAUDE.md, README.md and docs/architecture.md "
+        "point at.")
+    for rel in ("CLAUDE.md", "README.md", "docs/architecture.md"):
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        assert "harness.md" in text, (
+            f"{rel} no longer links docs/harness.md, so a reader starting there "
+            "never learns the architecture is changing (#188).")
