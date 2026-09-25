@@ -31,7 +31,7 @@ import services
 from agents.checks import exp_key, proj_key  # the planner's own keys (#190)
 from agents.job_card import render_cards, select_cards
 from agents.preferences import preferences_in_scope
-from database.models import ProjectBlurb
+from database.models import ProjectBlurb, User
 
 KINDS = ("skill", "experience", "project", "education", "achievement")
 _PREFIX = {"skill": "skill", "experience": "exp", "project": "proj",
@@ -192,5 +192,32 @@ def get_item(user_id: UUID, key: str) -> Dict[str, Any]:
             if it["key"] == norm:
                 return {"key": it["key"], "kind": kind, "record": it["record"]}
     query = norm.split(":", 1)[-1].replace("|", " ")
-    return {"error": "not_found", "key": key,
-            "suggestions": [h["key"] for h in kg_search(user_id, query, limit=5)]}
+    return {"key": key, "error": {
+        "code": "not_found", "message": f"No item with key {key!r}.",
+        "suggestions": [h["key"] for h in kg_search(user_id, query, limit=5)]}}
+
+
+def list_items(user_id: UUID, kind: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Every item's key, kind and title — enumerate without guessing query words.
+
+    The #189 e2e run could not list all experiences without inventing search
+    terms that happened to match; this is that gap (#191).
+    """
+    items = _records(user_id, [kind] if kind else None)
+    return sorted(({"key": it["key"], "kind": it["kind"], "title": it["title"]}
+                   for it in items), key=lambda r: (r["kind"], r["key"]))
+
+
+# Header fields only. Credentials (password hash, GitHub token), auth ids and raw
+# scrape records never leave the store through a tool.
+_PROFILE_FIELDS = ("name", "email", "phone", "location", "linkedin_url",
+                   "github_username", "portfolio_url")
+
+
+def get_profile(user_id: UUID) -> Dict[str, Any]:
+    """Name and contact details for the resume header (#191; missing in #189)."""
+    with Session(services.engine) as session:
+        user = session.get(User, user_id)
+        if user is None:
+            return {"error": {"code": "not_found", "message": f"No user {user_id}."}}
+        return {f: getattr(user, f, None) or None for f in _PROFILE_FIELDS}
