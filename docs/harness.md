@@ -406,6 +406,24 @@ flowchart LR
 
 Hook capabilities for Codex and pi are to be confirmed in #203.
 
+### Running the H0 spike (#189)
+
+`harness/mcp_server.py` serves three read-only tools (`art_briefing`, `kg_search`,
+`get_item`) over stdio, using `mcp==2.2.0`. The 2.x SDK renamed `FastMCP` to `MCPServer`.
+
+```bash
+claude mcp add art -- <repo>/.venv/Scripts/python.exe <repo>/harness/mcp_server.py
+```
+
+- **Database.** It reads local SQLite (`$ART_DATA_DIR/art.db`, default `~/.art/art.db`).
+  A `DATABASE_URL` in `.env` is never used implicitly. To read elsewhere, pass
+  `--database-url <url>`, or `--database-url dotenv` to take `.env`'s `DATABASE_URL`
+  explicitly without putting the secret on the command line. Postgres sessions are
+  forced read-only (`default_transaction_read_only=on`).
+- **User.** Pass `--user-id <uuid>`, or let it fall back to the `~/.art` pointer file.
+- **Search.** `kg_search` is lexical for now: only skills and jobs carry embeddings, and
+  semantic search arrives with #194.
+
 ## 16. Removing model calls
 
 | Module | Today | On the harness path |

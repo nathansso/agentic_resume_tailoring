@@ -12,6 +12,60 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 189 — Spike: read-only art-mcp server over the knowledge graph
+**Status:** complete | **Tests:** 1438 pass on SQLite (9 new), 10 skipped
+
+H0 of the harness pivot (#207). This proves the core shape: can a coding agent tailor a real resume using nothing but three read tools over ART's store? It can produce a clean one-page resume. The gaps it hit are now concrete inputs to H1–H3.
+
+### What shipped
+
+- **`harness/tools.py`** holds pure, read-only functions that take `user_id` explicitly and read through `services`:
+  - `art_briefing` pushes pins (strength-5 preferences, verbatim), scoped preferences, persona traits and rendered JobCards.
+  - `kg_search` is a deterministic lexical search over skills, experiences, projects (including `ProjectBlurb`s), education and achievements.
+  - `get_item` resolves a key to its full record; an unknown key returns suggestions instead of raising.
+
+  Keys follow the planner's convention (`exp:<title>|<company>`, `proj:<name>`, `skill:<name>`), plus new `edu:<institution>|<degree>` and `ach:<title>` keys.
+- **`harness/mcp_server.py`** is a stdio server on `mcp==2.2.0` (2.x renamed `FastMCP` to `MCPServer`), with every tool annotated read-only.
+  - `resolve_database_url` runs before any `config` or `database` import, so a `DATABASE_URL` in `.env` can never be picked up implicitly. Local SQLite is the default. `--database-url dotenv` opts in to `.env` explicitly and keeps the secret off the command line.
+  - Postgres sessions get `default_transaction_read_only=on`.
+  - The server runs by absolute path from any working directory. It never calls `init_db` or `get_or_create_cli_user`.
+- **`agents/preferences.py`, `agents/job_card.py`:** the `llm` import moved into the two functions that call the extractor, so importing the harness loads no generative client. This is a slice of #190; no behaviour changed.
+- **`requirements-core.txt`** adds `mcp==2.2.0`, and **`docs/harness.md` § 15** gains "Running the H0 spike".
+- **`tests/test_harness_mcp.py` (9 new tests):**
+  - briefing pins and role-family scoping;
+  - search ranking, blurbs, the `kinds` filter and determinism;
+  - key round-trips and suggestions on unknown keys;
+  - key parity with `agents/tailor.py`;
+  - no non-SELECT statement while the tools run (a SQLAlchemy listener);
+  - `.env` URL isolation and the forced read-only option;
+  - exactly three read-only tools registered;
+  - a clean interpreter that imports the harness loads no generative client.
+
+### The e2e run
+
+The tailoring target was a real posting, Capital One's MS Data Science Internship (2027). The run used the real profile on Supabase, read-only, and made 24 calls: 1 `art_briefing`, 12 `kg_search`, 11 `get_item`. The result compiled to a clean single page, which lives in gitignored `personal/`.
+
+Checked afterwards against the user's curated notes, it had seven errors, and every one traces to missing data or tooling rather than to the host:
+
+- A wrong graduation date: the posting's eligibility rule wasn't available.
+- A stale end date and a stale metric, both from out-of-date KG records.
+- Superseded wording for one model.
+- A metric that the notes flag for verification before shipping, shipped unflagged.
+- The role family's strongest project, and all achievements, missing from the KG.
+- No name or contact details.
+
+Gaps were posted to #191 (`list_items`, `get_profile`), #192 (stale, missing and noisy KG data; eligibility rules), #194 (synonyms and noise in lexical search), #198 (no evidence IDs to cite), #199 (no project bullets; approved wording lives outside ART), #200 (no render or line feedback; about 25% of the page left empty) and #202 (an empty briefing; existing standing preferences need a one-time import).
+
+### Deviations from spec
+
+- **The e2e run was driven through the MCP stdio client from this session, not interactively in Claude Code.** The user chose this. It uses the same transport, server and tools.
+- **The Postgres leg was not run locally** (Docker isn't available); CI runs it.
+- **`mcp` is pinned only in `requirements-core.txt`.** `requirements.txt` and the lock are untouched, because regenerating the lock is out of scope (#194, #210).
+- **`kg_search` also covers achievements (`ach:` keys)**, which the plan didn't list.
+- **Part of #190 landed here:** the lazy `llm` imports, and an early subprocess form of the boundary test.
+
+---
+
 ## Issue 188 — Record the harness pivot across docs, guidance and the board
 **Status:** complete | **Tests:** 1429 pass on SQLite (1 new), 10 skipped
 
