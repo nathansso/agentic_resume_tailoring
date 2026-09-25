@@ -269,7 +269,9 @@ construction.
 | Context | `art_briefing` | role family → pins, negative pins, persona traits, JobCards with rejections |
 | | `art_pins` | → strength-5 preferences and negative pins, verbatim |
 | Retrieval | `kg_search` | query, kinds → items with keys and evidence IDs |
+| | `list_items` | kind → every key and title, no query needed (#191) |
 | | `get_item` | key → record, evidence, approved variants |
+| | `get_profile` | → name and contact details for the header (#191) |
 | Ingest & library | `ingest_schema` | kind → JSON schema the host fills |
 | | `upsert_items` | records with evidence → keys, merges, conflicts |
 | | `promote_bullet` | node, bullet → draft variant |
@@ -404,13 +406,24 @@ flowchart LR
 ART targets mainstream coding agents: Claude Code and Codex (decided 2026-09-25; pi and
 other harnesses are out of scope). Codex's hook capabilities are to be confirmed in #203.
 
-### Running the H0 spike (#189)
+### Running the harness (#189, #191)
 
-`harness/mcp_server.py` serves three read-only tools (`art_briefing`, `kg_search`,
-`get_item`) over stdio, using `mcp==2.2.0`. The 2.x SDK renamed `FastMCP` to `MCPServer`.
+Every tool is declared once in `harness/contract.py`: name, description, and pydantic
+input and output models, with errors carried as an `error` field in the output. That
+contract is served two ways, and `tests/test_harness_contract.py` holds both to
+identical results:
+
+- **MCP:** `harness/mcp_server.py` serves it over stdio with published input and output
+  schemas, using `mcp==2.2.0`. The 2.x SDK renamed `FastMCP` to `MCPServer`.
+- **CLI:** `harness/cli.py` prints one JSON document per call. It is a separate entry point
+  from `cli.py`, which loads `.env` on import.
+
+The tools are `art_briefing`, `kg_search`, `list_items`, `get_item` and `get_profile`.
 
 ```bash
 claude mcp add art -- <repo>/.venv/Scripts/python.exe <repo>/harness/mcp_server.py
+python -m harness.cli --list
+python -m harness.cli kg_search --args '{"query": "python"}'
 ```
 
 - **Database.** It reads local SQLite (`$ART_DATA_DIR/art.db`, default `~/.art/art.db`).

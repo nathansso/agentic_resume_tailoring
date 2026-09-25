@@ -10,52 +10,8 @@ import pytest
 from sqlalchemy import event
 from sqlmodel import Session
 
-from conftest import _seed_user_and_skill
-from database.models import (
-    Achievement, Education, Experience, Project, ProjectBlurb, UserPreference,
-)
 
 ROOT = Path(__file__).resolve().parent.parent
-
-
-@pytest.fixture()
-def kg(isolated_engine, monkeypatch):
-    """A seeded user: skill, experience, project (+blurb), education, achievement,
-    three preferences in different scopes, and one completed job with a card."""
-    import agents.job_card as jc
-    import services
-
-    user = _seed_user_and_skill(isolated_engine)
-    uid = user.user_id
-    with Session(isolated_engine) as s:
-        s.add(Experience(user_id=uid, title="Data Science Intern", company="IDX Exchange",
-                         description="Forecasting home prices",
-                         bullets=["Built a gradient-boosted ensemble on 200K listings"]))
-        proj = Project(user_id=uid, name="Next-Item Recommendation",
-                       description="Session-based recommendation with a GNN baseline")
-        s.add(proj)
-        s.add(Education(user_id=uid, institution="UC San Diego", degree="M.S. Data Science"))
-        s.add(Achievement(user_id=uid, title="1st Place Overall", issuer="Memory Meets Motion"))
-        s.commit()
-        s.add(ProjectBlurb(project_id=proj.project_id, style="metrics",
-                           content="Compared XGBoost against a graph neural network"))
-        s.add(UserPreference(user_id=uid, text="Never mention coursework projects",
-                             polarity="suppress", target_key="proj:coursework-db",
-                             scope_type="global", strength=5))
-        s.add(UserPreference(user_id=uid, text="Lead with forecasting work",
-                             polarity="emphasize", scope_type="role_family",
-                             scope_value="data_science", strength=3))
-        s.add(UserPreference(user_id=uid, text="Lead with systems work",
-                             polarity="emphasize", scope_type="role_family",
-                             scope_value="swe", strength=4))
-        s.commit()
-
-    from test_job_card import _seed_job_and_result
-    monkeypatch.setattr(jc, "classify_role_family", lambda *a, **k: "data_science")
-    job_id, _ = _seed_job_and_result(isolated_engine, uid, title="Data Scientist",
-                                     company="Rippling")
-    assert services.rebuild_job_card(uid, job_id) is not None
-    return uid
 
 
 @contextmanager
@@ -134,9 +90,9 @@ def test_get_item_unknown_key_returns_suggestions_not_an_exception(kg):
     from harness import tools
 
     out = tools.get_item(kg, "proj:next item recommender")
-    assert out["error"] == "not_found"
-    assert "proj:next-item recommendation" in out["suggestions"]
-    assert tools.get_item(kg, "bogus")["error"] == "not_found"
+    assert out["error"]["code"] == "not_found"
+    assert "proj:next-item recommendation" in out["error"]["suggestions"]
+    assert tools.get_item(kg, "bogus")["error"]["code"] == "not_found"
 
 
 def test_keys_match_the_planner_convention():
@@ -166,19 +122,21 @@ def test_database_url_never_leaks_in_from_the_environment():
         resolve_database_url("dotenv", {}, dotenv_reader=lambda: None)
 
 
-def test_server_registers_exactly_the_three_read_only_tools():
+def test_server_registers_every_contract_tool():
     pytest.importorskip("mcp")
+    from harness.contract import TOOLS
     from harness.mcp_server import TOOL_NAMES, build_server
 
     listed = asyncio.run(build_server(None).list_tools())
-    assert sorted(t.name for t in listed) == sorted(TOOL_NAMES)
-    assert all(t.annotations and t.annotations.read_only_hint for t in listed)
+    assert sorted(t.name for t in listed) == sorted(TOOL_NAMES) == sorted(t.name for t in TOOLS)
+    ro = {t.name: t.read_only for t in TOOLS}
+    assert all(t.annotations.read_only_hint == ro[t.name] for t in listed)
 
 
 def test_harness_imports_no_generative_client():
     """Early form of #190's boundary test, in a clean interpreter."""
     code = (
-        "import sys; import harness.tools, harness.mcp_server, agents.checks; "
+        "import sys; import harness.tools, harness.mcp_server, harness.cli, harness.contract, agents.checks; "
         "bad = sorted({m.split('.')[0] for m in sys.modules} & "
         "{'llm','langchain','langchain_core','langchain_openai','langchain_anthropic',"
         "'openai','anthropic','langgraph'}); print(','.join(bad))"
