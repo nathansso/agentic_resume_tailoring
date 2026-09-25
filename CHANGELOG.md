@@ -59,12 +59,96 @@ The #189 e2e run needed three compile-and-look passes and still left the page ab
   - **Held-out check.** 180 resumes built from real profile bullets, each compiled for its true page count:
     - bias +0.3 lines (conservative), RMSE 0.6, worst 1.3;
     - one page versus overflow predicted correctly on 178 of 180. Both misses were false alarms that fit with under a line to spare.
-  - The § 7 example in `docs/harness.md` still says `53` and was left alone.
+  - The § 7 program example in `docs/harness.md` now uses `60`.
 - **`_OVERFLOW_CONTENT` does not overflow under tectonic 0.16.9.** It fits one page: an estimated 53.6 lines against 52.9 measured. So `test_format_pdf_overflow_fits_one_page` never exercises the trim loop. The integration test asserts the budget matches reality for it, and uses a six-experience variant as the real overflow. `_JAKE_CONTENT` is estimated at 33.4 lines against 32.7 measured.
 - **Found, not fixed (out of scope):**
   - **Achievements break the compile.** The formatter's achievements block opens `\resumeItemListStart` directly inside `\resumeSubHeadingListStart` without an `\item`. Tectonic halts on that ("missing \item"), so any resume with achievements fails to compile to PDF. The budget uses the experience constants for achievements, uncalibrated.
   - **A bullet that exactly fills its line renders an extra empty line.** The space before `\vspace{-2pt}` in `\resumeItem` breaks onto a second line. Two of the 188 profile bullets hit this. The measurer counts that line, and correctly so, because it costs page height.
 - **Not done:** skills lines are counted as one per category, with no wrap measurement. Nothing wires the budget into an MCP tool or the executor yet; that is #197 and the `render` tool. The Postgres leg was not run locally, and CI runs it.
+
+---
+
+## Issue 196 — The tailoring tree: nodes, HEAD, provenance, change feed
+**Status:** complete | **Tests:** 1492 pass on SQLite (27 new), 10 skipped
+
+A job's resume used to have one current version plus a one-level undo, and web re-tailors overwrote even that in place. Now every committed change is a node whose parent is the version it revised, and each job has a HEAD. The executor (#197), `art ui` (#204) and the preference pairs (#174) all build on this.
+
+### What shipped
+
+- **New tables** (created by `create_all`, no ALTERs):
+  - **`TailorNode`:** a full snapshot of content, score, manual `.tex` and layout overrides, plus program, metrics, provenance, source and a per-job `seq`.
+  - **`JobHead`:** one row per job with history.
+  - **`TreeEvent`:** the change feed; its autoincrement `event_id` is the cursor.
+- **`harness/tree.py` (new).** Every query is scoped to the user.
+  - **Committing:** `commit_node` takes `expected_parent` and raises `StaleParent` when HEAD has moved. `record_result` snapshots the current `UserJobResult` after a write and skips no-op saves.
+  - **Checkout:** `checkout` moves HEAD and **materializes** the node back into the latest `UserJobResult`, so every existing reader keeps working unchanged. `record_revert` is used by chat.
+  - **Reads:** `get_head(since_event)` returns HEAD, the events after a cursor, and the editor edits the host hasn't seen. Also `history`, `diff_nodes` (a bullet-level diff by planner item key), `sibling_pairs` (for #174), `events_since` and `list_jobs`.
+  - **Backfill:** `backfill` runs from `init_db()`.
+- **Write hooks.** Every hook swallows its own failures, so a history failure never fails the write it follows:
+  - a `tailor.py` run commits a `pipeline` node;
+  - chat `revert` moves HEAD back to the parent (or records a `revert` node);
+  - web PUT and DELETE on `/tex` and `/layout` commit `editor` nodes.
+- **Job deletion:** `services.delete_job` removes a job's tree rows. The new tables carry real foreign keys to the job, which Postgres enforces.
+- **Contract tools** (#191): `list_jobs`, `get_head`, `history`, `diff_nodes` and `checkout`. `checkout` is the first tool that writes.
+- **Write safety** replaces #189's blanket read-only:
+  - local SQLite is writable;
+  - a remote or Postgres database is forced read-only unless `--allow-writes` is passed (MCP server and CLI);
+  - write tools return a `read_only` error in that case, and report `read_only_hint=false`.
+- **`ART_VERSION = "0.1.0"`** is recorded in each node's provenance.
+- **Tests:**
+  - `tests/test_tailor_tree.py` (15 new tests):
+    - chaining, HEAD movement and provenance;
+    - no-op skip, stale-parent rejection and unknown source;
+    - checkout materializing into the result;
+    - revert moving HEAD, and sibling pairs after branching;
+    - diffs by item key, and feed ordering and cursor resume;
+    - user scoping;
+    - backfill via `init_db`, including idempotency and writing no events;
+    - `delete_job` cleanup, and a real PUT `/tex` producing an editor node;
+    - the read-only refusal and URL rules.
+  - `tests/test_harness_contract.py`: all five tree tools join the cross-adapter test, with identical results through the contract, MCP and the CLI.
+
+### Deviations from spec
+
+- **The backfill recovers at most two versions per result**: the previous and the current. Web re-tailors rewrote one row in place, so older versions were never stored. Backfill writes no feed events, since the feed is for live changes.
+- **`list_jobs` was added here in minimal form** (id, title, company, status, HEAD). The tree tools take a `job_id`, and a host had no way to find one. #192 extends it with status filtering.
+- **Chat revert keeps its own swap logic.** The tree follows it: HEAD moves to the parent when that is the restored version, and a `revert` node is recorded otherwise. The existing revert tests pass unchanged.
+- **The feed is polled.** `events_since(cursor)` is the interface; the SSE transport on top of it is #204's.
+
+---
+
+## Issue 191 — One tool contract, served over MCP and a JSON CLI
+**Status:** complete | **Tests:** 1465 pass on SQLite (20 new), 10 skipped
+
+Hosts now reach ART through one declared contract instead of hand-written MCP closures. The contract also adds the two tools the #189 e2e run was missing.
+
+### What shipped
+
+- **`harness/contract.py` (new)** declares each tool once as a `ToolSpec`: name, description, pydantic input and output models, read-only flag, and function.
+  - `CONTRACT_VERSION = "1"`.
+  - Errors are part of every output as `error: {code, message, suggestions}` (`no_user`, `not_found`), so a host reads one shape whether the call worked or not.
+  - `invoke()` validates the arguments, runs the tool and validates the output. `describe()` returns the whole contract as data.
+- **New tools in `harness/tools.py`:**
+  - `list_items(kind=None)` enumerates every key and title without a query. In #189 the host had to guess search words to find experiences.
+  - `get_profile` returns name, email, phone, location, `linkedin_url`, `github_username` and `portfolio_url` for the header, which #189 had to leave as a placeholder. It never returns the password hash, tokens or raw scrape records.
+  - `get_item`'s `not_found` now uses the contract's error shape.
+- **`harness/mcp_server.py`** registers every tool from the contract. Each MCP function's signature and return type are generated from the contract's models, so the server publishes both input and output schemas and validates every result. The input schemas are identical to the models. The server reports `CONTRACT_VERSION`.
+- **`harness/cli.py` (new)** serves the same contract as a CLI, one JSON document per call: `python -m harness.cli <tool> --args '<json>'`, plus `--list` for the whole contract. Exit code 2 for an unknown tool or invalid arguments.
+- **`harness/runtime.py` (new)** holds the database and user bootstrap that both entry points share: pin `DATABASE_URL` before any `config`/`database` import, never read `.env` implicitly, force Postgres sessions read-only.
+- **`tests/test_harness_contract.py` (20 new tests):**
+  - every tool is called through the contract, MCP `call_tool` and `cli.run` on the seeded store, and all three return identical JSON that validates against the output model;
+  - `no_user` is identical on every adapter;
+  - MCP's input and output schemas equal the contract's;
+  - `--list` matches `TOOLS`;
+  - the CLI rejects unknown tools and bad arguments.
+
+  The `kg` fixture moved to `conftest.py` for reuse.
+
+### Deviations from spec
+
+- **The JSON-RPC mode was not built.** It existed only for pi, which is now out of scope (#190), so the CLI `--json` mode is the second adapter.
+- **The CLI is `harness/cli.py`, not a `--json` flag on `cli.py`.** `cli.py` imports `config` at module level, which loads `.env` and captures a production `DATABASE_URL` before any flag could pin the database. `cli.py` is untouched.
+- **Invalid arguments are reported differently by each adapter.** MCP rejects them at the protocol layer; the CLI returns `invalid_arguments` with exit code 2. The contract tests compare results, not rejection paths.
 
 ---
 

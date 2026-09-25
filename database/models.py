@@ -652,3 +652,56 @@ class BlockLineCache(SQLModel, table=True):
     lines: int
     engine: str = Field(default="")
     measured_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# ── Tailoring tree (issue #196) ───────────────────────────────────────────────
+# Every committed change to a job's resume — a pipeline run, an editor edit, a
+# revert, a host's plan — is a node whose parent is the version it revised. A
+# node is a full snapshot (content, score, manual .tex, layout overrides), so
+# checking one out restores exactly what the user saw. `UserJobResult` stays the
+# materialized current state every existing reader uses; the tree is history.
+
+class TailorNode(SQLModel, table=True):
+    node_id: UUID = Field(default_factory=uuid4, primary_key=True)
+    user_id: UUID = Field(foreign_key="user.user_id", index=True)
+    job_id: UUID = Field(foreign_key="jobdescription.job_id", index=True)
+    parent_id: Optional[UUID] = Field(default=None, index=True)
+    # Per-job commit ordinal: the tree's own total order, independent of clocks.
+    seq: int = Field(default=0, index=True)
+    # host | pipeline | editor | revert | backfill
+    source: str = Field(default="pipeline")
+    content: Dict = Field(default={}, sa_column=Column(JSON))
+    score_breakdown: Dict = Field(default={}, sa_column=Column(JSON))
+    # The plan program that produced this node, when a host submitted one (#197).
+    program: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
+    # The metric vector by role (#113); empty until the executor fills it.
+    metrics: Dict = Field(default={}, sa_column=Column(JSON))
+    # host, host_version, model, art_version, policy_version, briefing_hash.
+    provenance: Dict = Field(default={}, sa_column=Column(JSON))
+    edited_tex: Optional[str] = None
+    layout_overrides: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
+    result_id: Optional[UUID] = Field(default=None)
+    note: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class JobHead(SQLModel, table=True):
+    """Which node a job's resume currently is. One row per job with a tree."""
+    job_id: UUID = Field(foreign_key="jobdescription.job_id", primary_key=True)
+    user_id: UUID = Field(foreign_key="user.user_id", index=True)
+    node_id: UUID
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class TreeEvent(SQLModel, table=True):
+    """Append-only change feed. `event_id` is the cursor a subscriber resumes from.
+
+    Persistent rather than in-memory because the writers (MCP server, web app,
+    CLI) and the reader (`art ui`, #204) are separate processes.
+    """
+    event_id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: UUID = Field(foreign_key="user.user_id", index=True)
+    job_id: UUID = Field(foreign_key="jobdescription.job_id", index=True)
+    node_id: UUID
+    kind: str  # commit | checkout
+    created_at: datetime = Field(default_factory=datetime.utcnow)

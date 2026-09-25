@@ -726,6 +726,12 @@ class ResumeTailorAgent:
                 session.add(result)
                 session.commit()
 
+        # Tailoring tree (#196): record this run as a node under HEAD. Never
+        # fatal — record_result swallows its own failures.
+        from harness.tree import record_result
+        record_result(user_id, job_id, source="pipeline",
+                      note=(revision_notes.strip() or None))
+
         # Event-driven JobCard rebuild (issue #137): the result just changed, so
         # distil it now, off the next turn's critical path. Every surface —
         # web, chat, CLI — reaches tailoring through this method, so hooking it
