@@ -633,6 +633,27 @@ class Persona(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class BlockLineCache(SQLModel, table=True):
+    """Rendered line count of one resume block, measured once (issue #200).
+
+    Keyed by `(text_hash, template_hash)`. `text_hash` is the sha256 of the
+    block's LaTeX exactly as the formatter emits it (after escaping and inline
+    conversion). `template_hash` covers everything else that decides the line
+    breaks: the preamble, the list nesting around the block, and the LaTeX
+    engine's name and version. Change any of those and the old rows stop
+    matching, so nothing ever needs invalidating.
+
+    A pure cache: rows hold hashes and a count, no user data, and losing the
+    table costs one recompile. A new table, so `create_all` picks it up and no
+    ALTER is needed.
+    """
+    text_hash: str = Field(primary_key=True)
+    template_hash: str = Field(primary_key=True)
+    lines: int
+    engine: str = Field(default="")
+    measured_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 # ── Tailoring tree (issue #196) ───────────────────────────────────────────────
 # Every committed change to a job's resume — a pipeline run, an editor edit, a
 # revert, a host's plan — is a node whose parent is the version it revised. A

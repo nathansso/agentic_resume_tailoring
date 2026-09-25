@@ -12,6 +12,62 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 200 — Line budget and block render cache
+**Status:** complete | **Tests:** 1451 pass on SQLite (14 new), 18 skipped (8 of them because the worktree has no frontend build); 2 new integration tests pass locally with tectonic
+
+The #189 e2e run needed three compile-and-look passes and still left the page about 25% empty, because nothing told the host how many lines anything takes. ART now measures each bullet's rendered lines once, caches them by text and template, and turns them into a per-bullet two-line gate and a page line budget with cut hints. All of it is model-free.
+
+### What shipped
+
+- **`harness/render_cache.py` (new).**
+  - `measure_lines(texts)` compiles one document holding every text as a bullet. It uses the formatter's own preamble, the `\resumeSubHeadingListStart` / `\resumeItemListStart` nesting and `_convert_inline` escaping, so the measured text is the rendered text. After each `\resumeItem` it logs `\prevgraf`, the item paragraph's line count.
+  - `bullet_lines(texts, measurer=…)` serves hits from the cache without compiling. It deduplicates the misses, measures them in one call and stores them. Blank bullets count 0, since the formatter drops them. A failed store is logged, not raised, so a read-only database costs only a recompile.
+  - `template_hash()` is a sha256 over the preamble, the probe nesting, and the engine name and version (`Tectonic 0.16.9`).
+  - `content_bullet_lines(content)` and `page_budget(content)` are glue for the future `render` tool.
+- **`BlockLineCache` (new table).** Its key is `(text_hash, template_hash)`, where `text_hash` covers the bullet's emitted LaTeX. It also stores `lines`, `engine` and `measured_at`, and holds no user data. `create_all` picks it up; no ALTER.
+- **`agents/checks.py`: pure budget math, no compiling.**
+  - `bullet_line_violations(lines_by_bullet, max_lines=2)` is the hard gate from `docs/harness.md` § 5.
+  - `page_line_budget(content, lines_by_bullet, budget=60)` returns `{lines_used, budget, over_by, cut_hints}`. `lines_used` is bullet lines plus calibrated overheads (`LINE_COSTS`), and `over_by > 0` predicts a second page.
+  - `cut_hints` walk `_trim_one_bullet`'s ladder: project bullets down to 2, experience bullets down to 2, whole projects (keeping one), then below the floor. They stop once the lines freed cover `over_by`, and each hint gives the lines it frees.
+  - Bullet ids are stable: the planner's item key plus the bullet's index (`exp:swe|acme#b2`). Achievements use their `ach:` key.
+  - `bullet_texts(content)` lists every measurable block.
+- **`agents/formatter.py`:** the engine lookup is factored into `_find_latex_engine()`, so the PDF compile and the measurer always use the same engine. Compile behaviour is unchanged.
+- **`tests/test_line_budget.py` (16 new tests: 14 unit, 2 integration).**
+  - **Unit:**
+    - a three-line bullet is rejected;
+    - cache hits never call a counting fake measurer, misses are batched and deduplicated, and a new template misses;
+    - the template hash tracks the preamble and the engine;
+    - an over-budget draft's hints cover `over_by`, are minimal, and bring a recomputed budget under 60;
+    - the hint order equals `_trim_one_bullet` applied step by step;
+    - an under-budget draft has no hints;
+    - achievement text and keys match the formatter and `harness.tools`.
+  - **Integration (skipped without an engine):**
+    - Measured lines are checked against an independent method on all 188 unique `eval/profiles` bullets plus synthetic 1/2/3-line bullets. That method compiles the formatter's real experience block and reads, with pypdf, where the next bullet glyph lands.
+    - The budget predicts the real page count for `_JAKE_CONTENT`, for `_OVERFLOW_CONTENT` and for a truly overflowing variant, and the second pass is served entirely from the cache.
+
+### Deviations from spec
+
+- **`\prevgraf` works, but not directly inside `\typeout`.** TeX zeroes `\prevgraf` while it expands a `\write` (tex.web § 1370), so `\typeout{\the\prevgraf}` always logs 0. The probe copies it into a count register first: `\par\global\artlines=\prevgraf\typeout{…\the\artlines}`.
+- **The default budget is 60 lines, not 53.** A line is one `\small` bullet line (12pt). The text area is 722.7pt, which is 60.2 lines.
+  - **Calibration.** The overheads were fitted by least squares on 120 random `_build_tex` resumes compiled on a tall page, using TeX's own `\pagetotal − \pageshrink`:
+    - header 3.30;
+    - sections: education 1.65, experience 2.16, projects 1.93, skills 3.18;
+    - entries: education 2.58, experience 2.16, project 1.20;
+    - item list 0.21 and skill line 1.13;
+    - per-bullet overhead of about 0.
+  - **Fit.** RMSE 0.28 lines.
+  - **Held-out check.** 180 resumes built from real profile bullets, each compiled for its true page count:
+    - bias +0.3 lines (conservative), RMSE 0.6, worst 1.3;
+    - one page versus overflow predicted correctly on 178 of 180. Both misses were false alarms that fit with under a line to spare.
+  - The § 7 program example in `docs/harness.md` now uses `60`.
+- **`_OVERFLOW_CONTENT` does not overflow under tectonic 0.16.9.** It fits one page: an estimated 53.6 lines against 52.9 measured. So `test_format_pdf_overflow_fits_one_page` never exercises the trim loop. The integration test asserts the budget matches reality for it, and uses a six-experience variant as the real overflow. `_JAKE_CONTENT` is estimated at 33.4 lines against 32.7 measured.
+- **Found, not fixed (out of scope):**
+  - **Achievements break the compile.** The formatter's achievements block opens `\resumeItemListStart` directly inside `\resumeSubHeadingListStart` without an `\item`. Tectonic halts on that ("missing \item"), so any resume with achievements fails to compile to PDF. The budget uses the experience constants for achievements, uncalibrated.
+  - **A bullet that exactly fills its line renders an extra empty line.** The space before `\vspace{-2pt}` in `\resumeItem` breaks onto a second line. Two of the 188 profile bullets hit this. The measurer counts that line, and correctly so, because it costs page height.
+- **Not done:** skills lines are counted as one per category, with no wrap measurement. Nothing wires the budget into an MCP tool or the executor yet; that is #197 and the `render` tool. The Postgres leg was not run locally, and CI runs it.
+
+---
+
 ## Issue 196 — The tailoring tree: nodes, HEAD, provenance, change feed
 **Status:** complete | **Tests:** 1492 pass on SQLite (27 new), 10 skipped
 

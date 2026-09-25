@@ -216,7 +216,7 @@ code or a cached Jev decision.
     { "id": "drop", "op": "delete", "item_key": "proj:coursework-db",
       "because": "pref:no-coursework" }
   ],
-  "finalize": { "pages": 1, "line_budget": 53, "max_skills": 18 }
+  "finalize": { "pages": 1, "line_budget": 60, "max_skills": 18 }
 }
 ```
 
