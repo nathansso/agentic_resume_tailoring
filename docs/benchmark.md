@@ -9,6 +9,17 @@ coverage map. Everything here links into it rather than restating it.
 
 Companion document: [`architecture.md`](architecture.md) — the system being measured.
 
+> **Harness pivot (#207, [`harness.md`](harness.md) § 5, § 19).** Three things change here:
+> - **The ATS composite becomes report-only.** It is still computed and reported, but it no
+>   longer ranks runs or arms and never gates an edit.
+> - **Metrics are reported separately** by role (hard gates, guards, targets) and never
+>   pooled.
+> - **The benchmark becomes the host evaluation** (#206): arms A/B/B′/C across Claude Code,
+>   Codex and pi, run on this dataset. The #172 anchor set also labels #174's pairs and fits
+>   #127's per-guard tolerances.
+>
+> The sections below describe the harness as it runs today.
+
 ---
 
 ## 1. What the benchmark is for
@@ -222,7 +233,8 @@ Read that carefully, because three of the four components carry a lesson:
   document that names the matched skills explicitly.
 - **`keyword_coverage` went *down* 1.9 points**, and that is not a bug. Coverage is
   monotone non-decreasing *in text added to a given document* — which is why the objective
-  cannot detect over-tailoring, and why #127 exists. But the baseline and tailored sides
+  cannot detect over-tailoring, and why the harness plan makes the composite report-only
+  and judges redundancy as separate guards (#113, #127). But the baseline and tailored sides
   are not the same document: the baseline flattens the entire profile, while
   `flatten_tailored_text` reads only `experience`, `projects` and `skills` from the
   tailored content. Tailoring **drops** content, so this component can fall. "Monotone in
@@ -273,8 +285,11 @@ a matching seniority.
 
 **Gaming:** 0.75 of the composite is coverage, and coverage is monotone non-decreasing in
 text added to the document — so the optimal policy against this objective alone is "edit
-maximally", which is degenerate and trivially saturated. That is why #122 exists (a
-separable cost term) and why #127 will make the objective peaked. Weighted keyword scoring
+maximally", which is degenerate and trivially saturated. That is why #122 exists (four
+separable redundancy modes). It is also why the harness plan stops treating the composite
+as an objective at all. The modes become separate guards with fitted tolerances (#127), and
+an edit must improve a target such as relevance density (#113), rather than the composite
+being made peaked with a λ-weighted cost. Weighted keyword scoring
 (#125) closes the fabrication half of the hole: a term with no candidate evidence weighs
 exactly 0.0, so stuffing an unsupported keyword is not merely a weak strategy but a
 strictly worthless one — pinned by a test that stuffs the keyword and asserts the score
@@ -631,7 +646,9 @@ Specified but **not shipped**. Nothing below describes the harness today.
   agreement between `sign(Δ composite)` and human preference reported as a number whatever
   it turns out to be. Below ~70% agreement the composite is not a valid efficacy proxy and
   every figure keyed on it needs that caveat attached. It wants recorded product-mode runs,
-  so it comes last. *(Chunks 1–4, 5 and 6 have shipped and are described above.)*
+  so it comes last. *(Chunks 1–4, 5 and 6 have shipped and are described above.)* Under the
+  harness plan the same judgments also label #174's pairs where metric dominance doesn't
+  decide, and fit #127's per-guard tolerances.
 - **#185** — `select_skills` renders up to `MAX_SKILLS + CORE_FLOOR_K`, found by the
   distractor dial. Until it lands, `skills.within_cap_bounds` can read `false` for a product
   reason rather than a fixture one on any padded run.
@@ -647,8 +664,17 @@ Specified but **not shipped**. Nothing below describes the harness today.
 - **#173** — the re-tailor arm, plus update-durability, locality (does tailoring job B
   degrade job A?), suppression, and a three-way preference-adherence axis. This is what
   would make §6's structural blind spot go away.
-- **#174** — action-ranking preference pairs: execution-derived labels over the planner's
-  action space, scored by `net(a)`.
+- **#174** — action-ranking preference pairs, labelled three ways:
+  - by metric dominance, where one outcome is at least as good on every target and guard
+    and better on one;
+  - by the anchor set, where neither outcome dominates;
+  - by tailoring-tree siblings.
+
+  They are no longer scored by `net(a)`.
+- **#206** — the host evaluation. A taskground-style runner drives Claude Code, Codex and pi
+  (with two models) through arms A (host alone), B (host + ART), B′ (B with every Jev
+  decision on its fallback) and C (B + learned ranker). Metrics are reported separately, and
+  B vs A comes first.
 - **#178** — a per-profile simulated conversation corpus, so knowledge extraction and
   preference recall have profile-bound fixtures.
 - **#181** — will fix `_detect_level`'s substring matching. Until it lands, `role_level`

@@ -8,6 +8,12 @@ Use this file for work under `agents/`.
 - This file adds only `agents/`-specific implementation guidance.
 - Use the active GitHub issue and its board card for task acceptance and sequencing.
 
+## Harness direction (#207)
+
+- New checks on the tailoring path must be model-free and live where `harness/` can import them without reaching `llm.py`. Pure checks move to `agents/checks.py` (#190); don't add new ones to `agents/tailor.py`.
+- Metrics stay separate. Add a new metric with its role (hard gate, guard, target, finalize or report), not as a weight in the ATS composite. See [`docs/harness.md`](../docs/harness.md) § 5.
+- Any new model call that makes a bounded, enumerable judgment belongs in the Jev decisions engine (#193), not in an LLM prompt.
+
 ## Routing and prompts
 
 - Prefer deterministic parsing over LLM routing when intent is cheap and safe to detect locally.

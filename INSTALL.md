@@ -1,5 +1,10 @@
 # Installing ART
 
+> **Coming with the harness pivot (#207):** `uvx art-mcp` plus a Claude Code plugin, with
+> optional extras `[embed]`, `[pdf]` and `[ui]` (#194, #201). The options below install the
+> current web app and CLI. The hosted deploy (Option C / Railway) is frozen and gets no new
+> features. See [`docs/harness.md`](docs/harness.md).
+
 ## Option A — Docker (recommended, no Python setup needed)
 
 **Requirements:** Docker Desktop installed and running.

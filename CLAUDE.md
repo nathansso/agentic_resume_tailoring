@@ -1,26 +1,27 @@
 # ART — Repository Guidelines
 
 ## Project overview
-ART is a resume-tailoring platform that ingests resume, GitHub, and LinkedIn data into a knowledge graph, then tailors resumes to job descriptions through chat and workflow tools. The **web app** is the primary and only actively maintained implementation.
+ART is a resume-tailoring platform that ingests resume, GitHub, and LinkedIn data into a knowledge graph, then tailors resumes to job descriptions through chat and workflow tools.
 
-**Web app (primary):** https://web-production-2ead7.up.railway.app/  
-Deployed on Railway. React + TypeScript frontend served as static files by a FastAPI backend. Supabase Postgres in production (via the `DATABASE_URL` secret); falls back to SQLite locally. Supabase Auth used for JWT session tokens when env vars are present; falls back to local signed cookies.
+**Direction: the harness pivot (epic #207, [`docs/harness.md`](docs/harness.md)).** ART is becoming a local, model-free package that the user's own coding agent (Claude Code, Codex, pi) drives through tools: MCP, a JSON-RPC mode, and the CLI. The host's model does the open-ended reading and writing. ART keeps the knowledge graph, an approved-bullet library, preferences, the gates that enforce them, and the tailoring history, and it makes bounded judgment calls through TypeSafe's Jev. `docs/harness.md` is the target architecture; `docs/architecture.md` describes what is merged today.
 
-A `cli.py` command surface mirrors the core ingestion/tailoring pipeline for scripting and tests. The web app is the only user-facing product; a Textual TUI existed previously and was removed — its shared service layer now lives in `services.py`.
+**Web app (frozen, becoming `art ui`):** the hosted deploy at https://web-production-2ead7.up.railway.app/ gets no new hosted features. The React editor and its routers become `art ui`, a local companion editor in local mode (SQLite, no login), under #204 and #205. Until then the web app still runs as before: React + TypeScript served by FastAPI, Supabase Postgres via `DATABASE_URL` with a SQLite fallback, and Supabase Auth with a local signed-cookie fallback.
+
+A `cli.py` command surface mirrors the core ingestion/tailoring pipeline for scripting and tests, and becomes one of the harness adapters (#191). A Textual TUI existed previously and was removed; its shared service layer now lives in `services.py`.
 
 **Stack:**
 - Frontend: React 18, TypeScript, Vite — lives in `web/frontend/`
 - Backend API: FastAPI (Python), routers in `web/routers/`
 - Database: SQLModel ORM — Supabase Postgres in production (via the `DATABASE_URL` secret); falls back to SQLite locally when `DATABASE_URL` is unset
 - Auth: Supabase Auth (JWT) with local `itsdangerous` cookie fallback
-- AI: LangGraph, LangChain, OpenAI / Anthropic
+- AI: LangGraph, LangChain, OpenAI / Anthropic on the legacy web/CLI path; harness path: no generative calls, TypeSafe Jev for classification only
 
 **Entry points:**
 - `uvicorn web.app:app --port 8000` — web server (production uses the Railway Docker deploy)
 - `npm run dev` (in `web/frontend/`) — Vite dev server on port 5173, proxies `/api` to port 8000
 - `python cli.py <command>` — CLI surface
 
-**Deploy:** `railway up` from repo root — builds the Docker image (Node 24 → Python 3.12), pushes to Railway.
+**Deploy:** `railway up` from repo root — builds the Docker image (Node 24 → Python 3.12), pushes to Railway. The hosted app is frozen under the harness pivot; the target distribution is `uvx art-mcp` (#194).
 
 **Environment:**
 ```bash
@@ -188,9 +189,12 @@ gh api graphql -f query='mutation($proj:ID!,$item:ID!,$field:ID!,$opt:String!){
 - Use `database/user_utils.py::get_active_profile()` for active user lookups. `get_or_create_default_user()` exists only as backward-compat support.
 - Keep schema changes backward-compatible with defaults so existing local DBs still load.
 - Keep chat/router changes aligned with actual product capabilities. Do not teach prompts a capability that code does not expose.
+- Nothing under `harness/` may import a generative model client (`llm`, `langchain_*`, `anthropic`, `openai`). The Jev client under `harness/decisions/` is the only model call there, and every Jev call goes through its cache. `tests/test_harness_boundary.py` enforces this once #190 lands.
+- Never gate or optimise on the ATS composite. It is monotone non-decreasing in text, so it is reported only. Tailoring metrics stay separate (hard gates, guards, targets) and are never combined into one scalar. See [`docs/harness.md`](docs/harness.md) § 5.
 - Prefer adding focused local guidance instead of expanding this file with volatile implementation details.
 
 For folder-specific rules:
+- See `docs/harness.md` for the target architecture every new tailoring feature should fit.
 - See `web/CLAUDE.md` for FastAPI routers, React components, auth flow, and deploy.
 - See `agents/CLAUDE.md` for chat routing, prompt, and tool-calling work.
 

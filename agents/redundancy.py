@@ -15,16 +15,18 @@ it; it needs embeddings.
 
 Why this lives in `agents/` and not `eval/`
 -------------------------------------------
-These are eval metrics today, but #127 consumes them as the `Δcost` term of
-`net(a) = ΔATS − λ·Δcost` **inside the tailoring controller**, per prefix. That
-makes them runtime scoring, not reporting. Putting them in `eval/` would force
-`agents/` to import from `eval/` — a dependency inversion the repo has nowhere.
-Same reasoning that produced `agents/skill_selection.py` in #150.
+These are eval metrics today, but the harness executor (#113, #197) consumes
+them **inside the tailoring controller**, per plan node, as four separate guards
+whose tolerances #127 fits. They are not a single `Δcost` in a λ-weighted sum
+(docs/harness.md § 5). That makes them runtime scoring, not reporting. Putting
+them in `eval/` would force `agents/` to import from `eval/` — a dependency
+inversion the repo has nowhere. Same reasoning that produced
+`agents/skill_selection.py` in #150.
 
-The cost term matters because the ATS composite cannot detect over-tailoring:
+The guards matter because the ATS composite cannot detect over-tailoring:
 0.75 of it is coverage, and coverage is monotone non-decreasing in edits. A
 monotone reward makes "edit maximally" optimal, which any learner will happily
-saturate. This penalty is what makes the objective peaked.
+saturate. That is why the composite is report-only and these modes gate edits.
 
 Purity
 ------
@@ -310,12 +312,12 @@ def semantic_duplication(vectors) -> Dict:
     }
 
 
-# ── incremental path (built for #127's per-prefix caller) ──────────────────────
+# ── incremental path (built for the executor's per-node caller, #113) ──────────
 
 class BulletSimilarityCache:
     """Bullet-text → vector cache, so a per-prefix caller re-encodes only edits.
 
-    #127 evaluates `Δcost` after every action in a plan. Recomputing every
+    The executor evaluates the guards after every node in a plan. Recomputing every
     bullet's embedding per prefix would make the controller's dominant cost the
     encoder, and the issue calls this out as the thing to design for up front
     rather than retrofit.

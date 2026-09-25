@@ -1,5 +1,13 @@
 # Web Layer — Implementation Guide
 
+> **Status (harness pivot, #207):** the hosted deploy is frozen, so don't add hosted-only
+> features (landing, sign-up, SMTP, per-user quotas). This layer is becoming `art ui`, a local
+> companion editor: local mode with SQLite and no login (#204), a change feed over SSE, editor
+> edits committed as tailoring-tree nodes, and a chat panel driven by a Claude Agent SDK
+> session with `art-mcp`, plus an API-key fallback (#205). The editor itself (`texStructure`,
+> `layoutOverride`, drag reorder, auto-compile) carries over unchanged. Target design:
+> [`docs/harness.md`](../docs/harness.md) § 13.
+
 ## Architecture overview
 
 The web layer is a single-page React app served by FastAPI as static files.
