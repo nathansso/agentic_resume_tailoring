@@ -12,6 +12,23 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 209 — Pin sqlmodel so CI stops drifting to 0.0.47
+**Status:** complete | **Tests:** 1428 pass on SQLite (1 new), 10 skipped
+
+Every PR's CI went red with about 490 `Datetime values must have timezone information` errors on both legs, and no code had changed; #208 was docs-only. CI and the Dockerfile install `requirements-core.txt`, where `sqlmodel` was unpinned. They picked up sqlmodel 0.0.47, which rejects naive datetimes. The lock and every local environment run 0.0.38, so the suite still passed locally.
+
+### What shipped
+
+- **`requirements-core.txt` pins `sqlmodel==0.0.38`**, the lock's version. CI and the production Docker image now install what local environments run.
+- **`tests/test_deps_split.py::test_sqlmodel_pin_matches_the_lock` (new).** The core pin must equal the lock's version, and the failure message names #209 and #210.
+
+### Deviations from spec
+
+- **`requirements.txt` stays unpinned.** #209 said to pin it too, but it is the input `scripts/generate_lockfile.py` resolves, and `tests/test_lockfile.py` expects bare names there. Pinning it failed `test_all_requirements_txt_packages_in_lockfile`.
+- **Timezone-aware datetimes, and constraining CI's whole install by the lock, are deferred to #210.** This entry only buys time.
+
+---
+
 ## Issue 182 — Cleanup after #172: one policy surface, no dead cassette, a live default profile
 **Status:** complete | **Tests:** 1427 pass on SQLite (4 new), 10 skipped
 
