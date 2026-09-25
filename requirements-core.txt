@@ -7,7 +7,7 @@
 pypdf
 openai
 python-dotenv
-sqlmodel
+sqlmodel==0.0.38
 langchain
 langchain-openai
 # Anthropic provider for llm.py::get_llm (LLM_PROVIDER=anthropic in prod)
