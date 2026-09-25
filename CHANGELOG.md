@@ -13,7 +13,7 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 ---
 
 ## Issue 188 — Record the harness pivot across docs, guidance and the board
-**Status:** complete | **Tests:** 1428 pass on SQLite (1 new), 10 skipped
+**Status:** complete | **Tests:** 1429 pass on SQLite (1 new), 10 skipped
 
 ART's direction changed: it stops being a hosted web app that calls models for its users and becomes a local, model-free package driven by the user's own coding agent (epic #207). This issue makes every source of truth agree with that plan before any code moves. No runtime behaviour changes.
 
@@ -57,6 +57,23 @@ ART's direction changed: it stops being a hosted web app that calls models for i
 - **The plan named #48 and #102 for closing**, but both were already closed and Done. The closures were #161, #63, #42, #33, #31 and #116.
 - **#178 was placed in H4**, alongside the rest of the benchmark arc. The plan's issue table didn't name it.
 - **The hand-run tailoring workflow in the gitignored `personal/` directory** informed the bullet-library and baseline design as practice only; none of its content entered a tracked file. Its local `CLAUDE.md` was amended to allow that.
+
+---
+
+## Issue 209 — Pin sqlmodel so CI stops drifting to 0.0.47
+**Status:** complete | **Tests:** 1428 pass on SQLite (1 new), 10 skipped
+
+Every PR's CI went red with about 490 `Datetime values must have timezone information` errors on both legs, and no code had changed; #208 was docs-only. CI and the Dockerfile install `requirements-core.txt`, where `sqlmodel` was unpinned. They picked up sqlmodel 0.0.47, which rejects naive datetimes. The lock and every local environment run 0.0.38, so the suite still passed locally.
+
+### What shipped
+
+- **`requirements-core.txt` pins `sqlmodel==0.0.38`**, the lock's version. CI and the production Docker image now install what local environments run.
+- **`tests/test_deps_split.py::test_sqlmodel_pin_matches_the_lock` (new).** The core pin must equal the lock's version, and the failure message names #209 and #210.
+
+### Deviations from spec
+
+- **`requirements.txt` stays unpinned.** #209 said to pin it too, but it is the input `scripts/generate_lockfile.py` resolves, and `tests/test_lockfile.py` expects bare names there. Pinning it failed `test_all_requirements_txt_packages_in_lockfile`.
+- **Timezone-aware datetimes, and constraining CI's whole install by the lock, are deferred to #210.** This entry only buys time.
 
 ---
 

@@ -109,6 +109,23 @@ def test_core_covers_all_requirements_txt_packages():
         )
 
 
+def test_sqlmodel_pin_matches_the_lock():
+    """CI and the Dockerfile install requirements-core.txt, not the lock (#209).
+
+    An unpinned `sqlmodel` let CI pick up 0.0.47, which rejects naive datetimes,
+    and ~490 tests failed with no code change. The core file must pin the exact
+    version the lock (and every local environment) runs. `requirements.txt`
+    stays bare: it is the input `scripts/generate_lockfile.py` resolves.
+    """
+    lock = re.search(r"^sqlmodel==(\S+)$", (ROOT / "requirements-lock.txt").read_text(encoding="utf-8"), re.M)
+    assert lock, "requirements-lock.txt no longer pins sqlmodel"
+    pin = re.search(r"^sqlmodel==(\S+)$", REQ_CORE.read_text(encoding="utf-8"), re.M)
+    assert pin and pin.group(1) == lock.group(1), (
+        f"requirements-core.txt must pin sqlmodel=={lock.group(1)} to match the lock; "
+        "an unpinned install drifts to whatever PyPI ships (#209, #210)."
+    )
+
+
 # ---------------------------------------------------------------------------
 # Behaviour: matcher degrades gracefully when sentence-transformers is absent
 # ---------------------------------------------------------------------------
