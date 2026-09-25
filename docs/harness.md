@@ -2,7 +2,7 @@
 
 ART is moving from a hosted web app that calls models on its users' behalf to a **local,
 model-free package that a coding agent the user already pays for drives through tools**
-(Claude Code, Codex, pi). The host's model does the open-ended reading and writing on the
+(Claude Code, Codex). The host's model does the open-ended reading and writing on the
 user's own plan. ART keeps the knowledge graph, an approved-bullet library, standing
 preferences, the gates that enforce them, and the history the offline policy learns from.
 It makes bounded judgment calls with TypeSafe's Jev, and the web app's LaTeX editor
@@ -44,7 +44,7 @@ flowchart LR
         AG --> SB[(Supabase)]
     end
     subgraph Proposed
-        H[User's coding agent<br/>Claude Code · Codex · pi] -->|user pays| MP2[Model provider]
+        H[User's coding agent<br/>Claude Code · Codex] -->|user pays| MP2[Model provider]
         H -->|tool calls| MCP[art-mcp adapter]
         MCP --> CORE[art-core<br/>no generative calls]
         CORE --> DB[(~/.art/art.db)]
@@ -73,8 +73,7 @@ with probabilities and never writes resume text.
 flowchart TB
     CC[Claude Code] --> MCP[MCP server<br/>art-mcp · stdio]
     CX[Codex] --> MCP
-    PI[pi] --> PIE[pi extension<br/>spawns art rpc]
-    SC[Scripts · CI · benchmark] --> CLI[CLI / JSON-RPC]
+    SC[Scripts · CI · benchmark] --> CLI[CLI · --json]
     BR[Browser editor] --> UI[art ui server<br/>local FastAPI · SSE]
     subgraph core[art-core · no generative calls]
         SVC[Service API · services.py]
@@ -88,14 +87,13 @@ flowchart TB
         SVC --> DEC[Decisions<br/>Jev client · cache · replay]
     end
     MCP --> SVC
-    PIE --> SVC
     CLI --> SVC
     UI --> SVC
     core --> DB[(~/.art/art.db)]
     DEC -->|cache miss only| JEV[TypeSafe Jev API]
 ```
 
-Four adapters sit on one service layer; `services.py` already plays that role for the web
+Three adapters sit on one service layer; `services.py` already plays that role for the web
 app and CLI. A contract test runs the same calls through every adapter on both the SQLite
 and Postgres legs (#191).
 
@@ -376,7 +374,7 @@ There are three ways to chat-edit:
 
 ```mermaid
 flowchart LR
-    T[Benchmark tasks #172] --> R[Host runner #206<br/>Claude Code · Codex · pi]
+    T[Benchmark tasks #172] --> R[Host runner #206<br/>Claude Code · Codex]
     R --> L[Logs + trees<br/>metric vectors]
     L --> TR[Offline training<br/>pairs · tolerances · ranker]
     AN[Human anchor set] -->|labels| TR
@@ -401,10 +399,10 @@ flowchart LR
 |---|---|---|---|---|---|
 | Claude Code (#201) | MCP, stdio | Plugin skills, `/art:*` | `UserPromptSubmit` | `SessionStart`, source `compact` | Desktop browser pane or tab |
 | Codex (#203) | MCP, stdio | Skills + `AGENTS.md` snippet | None assumed; skill calls `observe` | None assumed; skill re-fetches briefing | Browser tab |
-| pi (#203) | Extension spawning `art rpc` | pi skill, prompt templates | Extension input event | Extension context hook | Browser tab |
 | Cursor, others | MCP | Rules file | None | None | Browser tab |
 
-Hook capabilities for Codex and pi are to be confirmed in #203.
+ART targets mainstream coding agents: Claude Code and Codex (decided 2026-09-25; pi and
+other harnesses are out of scope). Codex's hook capabilities are to be confirmed in #203.
 
 ### Running the H0 spike (#189)
 
@@ -448,10 +446,10 @@ agents/  database/  services.py      # unchanged homes; pure checks split out
 harness/
   contract.py  executor.py  metrics.py  library.py  tree.py  render_cache.py
   decisions/                         # Jev client, cache, fallbacks
-  mcp_server.py  rpc.py
+  mcp_server.py
 web/                                 # becomes art ui (local mode, SSE, SDK chat)
 plugin/                              # Claude Code plugin: skills, commands, hooks
-integrations/pi/  integrations/codex/
+integrations/codex/
 eval/hosts/                          # taskground-style host runner
 pyproject.toml                       # art, art-mcp · extras [embed] [pdf] [ui]
 ```
@@ -477,8 +475,8 @@ pyproject.toml                       # art, art-mcp · extras [embed] [pdf] [ui]
 | B′ | B with every Jev point on its fallback | What does Jev add; is the no-key path acceptable? |
 | C | B + learned ranker | Does the learned policy add anything? |
 
-The hosts are Claude Code, Codex, and pi with two models; pi holds the scaffold fixed so
-the model's effect can be isolated. The metrics are reported separately and never pooled:
+The hosts are Claude Code and Codex, each run with two of its own models, so the model's
+effect can be separated from the scaffold's within a host. The metrics are reported separately and never pooled:
 
 - hard-gate violations at the final PDF (target: zero in B, B′ and C);
 - each guard and target;
@@ -508,8 +506,8 @@ reason to exist. That comparison is reported first.
 
 - [Jive](https://github.com/merijjeyn/jive): graph calls, JSON-pointer patching, stable
   candidate IDs, verbatim pins, context provenance, taskground.
-- [pi](https://github.com/earendil-works/pi): session trees, one core with several run
-  modes, a minimal scaffold for evaluation.
+- [pi](https://github.com/earendil-works/pi): the tree-structured session idea behind the
+  tailoring tree. (pi is not a supported host.)
 - [TypeSafe: System One models and Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev);
   [a technical deep dive](https://flaviocopes.com/jev/).
 - [Use the Claude Agent SDK with your Claude plan](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan).

@@ -15,7 +15,7 @@ Companion document: [`architecture.md`](architecture.md) — the system being me
 > - **Metrics are reported separately** by role (hard gates, guards, targets) and never
 >   pooled.
 > - **The benchmark becomes the host evaluation** (#206): arms A/B/B′/C across Claude Code,
->   Codex and pi, run on this dataset. The #172 anchor set also labels #174's pairs and fits
+>   Codex (each with two models), run on this dataset. The #172 anchor set also labels #174's pairs and fits
 >   #127's per-guard tolerances.
 >
 > The sections below describe the harness as it runs today.
@@ -671,8 +671,8 @@ Specified but **not shipped**. Nothing below describes the harness today.
   - by tailoring-tree siblings.
 
   They are no longer scored by `net(a)`.
-- **#206** — the host evaluation. A taskground-style runner drives Claude Code, Codex and pi
-  (with two models) through arms A (host alone), B (host + ART), B′ (B with every Jev
+- **#206** — the host evaluation. A taskground-style runner drives Claude Code and Codex
+  (each with two models) through arms A (host alone), B (host + ART), B′ (B with every Jev
   decision on its fallback) and C (B + learned ranker). Metrics are reported separately, and
   B vs A comes first.
 - **#178** — a per-profile simulated conversation corpus, so knowledge extraction and

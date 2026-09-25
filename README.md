@@ -9,7 +9,7 @@ interface for iterative, reviewable revision.
 
 > **Direction: the harness pivot ([#207](https://github.com/nathansso/agentic_resume_tailoring/issues/207)).**
 > ART is becoming a local, model-free plugin for the coding agent you already pay for
-> (Claude Code, Codex, pi). Your agent's model does the writing. ART supplies the knowledge
+> (Claude Code, Codex). Your agent's model does the writing. ART supplies the knowledge
 > graph, an approved-bullet library, your preferences, the gates that enforce them, and a
 > local LaTeX editor (`art ui`). The target design is [`docs/harness.md`](docs/harness.md).
 > Everything below describes the current, merged system.
@@ -248,7 +248,7 @@ From 2026-09-28 the sequence follows the **harness pivot** (epic **#207**,
 | **H0** · Decide & Spike | Sep 28 – Oct 4 | Docs and board (#188); a read-only `art-mcp` spike (#189) |
 | **H1** · Core & Jev | Oct 5 – Oct 18 | Model-free checks and import boundary (#190), adapters (#191), host-filled ingestion (#192), Jev decisions engine (#193), packaging (#194), export/import (#195) |
 | **H2** · Executor & Library | Oct 19 – Nov 8 | Tailoring tree (#196), plan programs (#197), per-metric acceptance (#113) and fitted tolerances (#127), citation and numeric gates (#198, #123), bullet library and baselines (#199), line budget (#200) |
-| **H3** · Plugin & Memory | Nov 9 – Nov 22 | Claude Code plugin (#201), Jev memory gate and pins (#202), Codex and pi (#203) |
+| **H3** · Plugin & Memory | Nov 9 – Nov 22 | Claude Code plugin (#201), Jev memory gate and pins (#202), Codex (#203) |
 | **H3b** · Editor | Nov 23 – Dec 6 | `art ui` local editor (#204) and chat panel (#205); retargeted UI issues #87, #82, #84, #136, #147 |
 | **H4** · Host Evaluation | Dec 7 – Dec 27 | Host runner with arms A/B/B′/C (#206) on the benchmark (#172, #173, #178, #181) |
 | **H5** · Offline Policy | From Dec 28 | Ranker and tolerances trained offline (#174, #152, #157, #119, #51; arc epic #114). Runs only if H4 says go |
