@@ -34,3 +34,5 @@ itsdangerous
 psycopg2-binary
 # Supabase client — Auth + Realtime (Phase 2 cloud features)
 supabase
+# MCP server for the harness spike (issue #189); pinned because 2.x broke 1.x's API
+mcp==2.2.0

@@ -50,7 +50,6 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from agents.extraction_schemas import RoleFamily, RoleFamilyClassification
 from agents.skill_scorer import _env_float, _env_int
 from database.vector_search import search_similar
-from llm import ModelRole, get_extractor
 
 logger = logging.getLogger(__name__)
 
@@ -189,6 +188,10 @@ def classify_role_family(
     """
     if not (title or description or "").strip():
         return RoleFamily.OTHER.value
+    # Imported here, not at module level, so the model-free readers in this
+    # module (e.g. for the harness, #189/#190) never load the LLM stack.
+    from llm import ModelRole, get_extractor
+
     extractor = extractor or get_extractor(
         role=ModelRole.EXTRACT, schema=RoleFamilyClassification)
     prompt = (

@@ -46,7 +46,6 @@ from agents.extraction_schemas import (
     PreferenceScopeType,
     PreferenceTargetType,
 )
-from llm import ModelRole, get_extractor
 
 logger = logging.getLogger(__name__)
 
@@ -248,6 +247,10 @@ def extract_preference_notes(
     """
     if not (transcript or "").strip():
         return []
+    # Imported here, not at module level, so the model-free readers in this
+    # module (e.g. for the harness, #189/#190) never load the LLM stack.
+    from llm import ModelRole, get_extractor
+
     extractor = extractor or get_extractor(
         role=ModelRole.EXTRACT, schema=PreferenceNoteList)
     prompt = (
