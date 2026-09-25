@@ -35,6 +35,8 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--list", action="store_true", help="Print the tool contract.")
     p.add_argument("--user-id", help="ART user id (default: ~/.art pointer file)")
     p.add_argument("--database-url", help="DB URL, or 'dotenv' to use .env's DATABASE_URL")
+    p.add_argument("--allow-writes", action="store_true",
+                   help="Let write tools run against a remote database.")
     return p
 
 
@@ -42,7 +44,7 @@ def _emit(doc) -> None:
     sys.stdout.write(json.dumps(doc, sort_keys=True, ensure_ascii=False) + "\n")
 
 
-def run(argv, *, user_id=None) -> int:
+def run(argv, *, user_id=None, allow_writes: bool = True) -> int:
     """Execute against an already-configured database. Tests call this directly."""
     args = _parser().parse_args(argv)
     if args.list:
@@ -59,7 +61,7 @@ def run(argv, *, user_id=None) -> int:
         if args.user_id:
             from uuid import UUID
             user_id = UUID(args.user_id)
-        _emit(invoke(args.tool, user_id, tool_args))
+        _emit(invoke(args.tool, user_id, tool_args, allow_writes=allow_writes))
         return 0
     except (ValueError, ValidationError) as exc:
         _emit({"error": {"code": "invalid_arguments", "message": str(exc),
@@ -69,11 +71,11 @@ def run(argv, *, user_id=None) -> int:
 
 def main(argv=None) -> int:
     args = _parser().parse_args(argv)
-    user_id = None
+    user_id, writes = None, False
     if not args.list:
         from harness.runtime import bootstrap
-        user_id = bootstrap(args.database_url, args.user_id)
-    return run(argv, user_id=user_id)
+        user_id, writes = bootstrap(args.database_url, args.user_id, args.allow_writes)
+    return run(argv, user_id=user_id, allow_writes=writes)
 
 
 if __name__ == "__main__":

@@ -12,6 +12,55 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 196 — The tailoring tree: nodes, HEAD, provenance, change feed
+**Status:** complete | **Tests:** 1492 pass on SQLite (27 new), 10 skipped
+
+A job's resume used to have one current version plus a one-level undo, and web re-tailors overwrote even that in place. Now every committed change is a node whose parent is the version it revised, and each job has a HEAD. The executor (#197), `art ui` (#204) and the preference pairs (#174) all build on this.
+
+### What shipped
+
+- **New tables** (created by `create_all`, no ALTERs):
+  - **`TailorNode`:** a full snapshot of content, score, manual `.tex` and layout overrides, plus program, metrics, provenance, source and a per-job `seq`.
+  - **`JobHead`:** one row per job with history.
+  - **`TreeEvent`:** the change feed; its autoincrement `event_id` is the cursor.
+- **`harness/tree.py` (new).** Every query is scoped to the user.
+  - **Committing:** `commit_node` takes `expected_parent` and raises `StaleParent` when HEAD has moved. `record_result` snapshots the current `UserJobResult` after a write and skips no-op saves.
+  - **Checkout:** `checkout` moves HEAD and **materializes** the node back into the latest `UserJobResult`, so every existing reader keeps working unchanged. `record_revert` is used by chat.
+  - **Reads:** `get_head(since_event)` returns HEAD, the events after a cursor, and the editor edits the host hasn't seen. Also `history`, `diff_nodes` (a bullet-level diff by planner item key), `sibling_pairs` (for #174), `events_since` and `list_jobs`.
+  - **Backfill:** `backfill` runs from `init_db()`.
+- **Write hooks.** Every hook swallows its own failures, so a history failure never fails the write it follows:
+  - a `tailor.py` run commits a `pipeline` node;
+  - chat `revert` moves HEAD back to the parent (or records a `revert` node);
+  - web PUT and DELETE on `/tex` and `/layout` commit `editor` nodes.
+- **Job deletion:** `services.delete_job` removes a job's tree rows. The new tables carry real foreign keys to the job, which Postgres enforces.
+- **Contract tools** (#191): `list_jobs`, `get_head`, `history`, `diff_nodes` and `checkout`. `checkout` is the first tool that writes.
+- **Write safety** replaces #189's blanket read-only:
+  - local SQLite is writable;
+  - a remote or Postgres database is forced read-only unless `--allow-writes` is passed (MCP server and CLI);
+  - write tools return a `read_only` error in that case, and report `read_only_hint=false`.
+- **`ART_VERSION = "0.1.0"`** is recorded in each node's provenance.
+- **Tests:**
+  - `tests/test_tailor_tree.py` (15 new tests):
+    - chaining, HEAD movement and provenance;
+    - no-op skip, stale-parent rejection and unknown source;
+    - checkout materializing into the result;
+    - revert moving HEAD, and sibling pairs after branching;
+    - diffs by item key, and feed ordering and cursor resume;
+    - user scoping;
+    - backfill via `init_db`, including idempotency and writing no events;
+    - `delete_job` cleanup, and a real PUT `/tex` producing an editor node;
+    - the read-only refusal and URL rules.
+  - `tests/test_harness_contract.py`: all five tree tools join the cross-adapter test, with identical results through the contract, MCP and the CLI.
+
+### Deviations from spec
+
+- **The backfill recovers at most two versions per result**: the previous and the current. Web re-tailors rewrote one row in place, so older versions were never stored. Backfill writes no feed events, since the feed is for live changes.
+- **`list_jobs` was added here in minimal form** (id, title, company, status, HEAD). The tree tools take a `job_id`, and a host had no way to find one. #192 extends it with status filtering.
+- **Chat revert keeps its own swap logic.** The tree follows it: HEAD moves to the parent when that is the restored version, and a `revert` node is recorded otherwise. The existing revert tests pass unchanged.
+- **The feed is polled.** `events_since(cursor)` is the interface; the SSE transport on top of it is #204's.
+
+---
+
 ## Issue 191 — One tool contract, served over MCP and a JSON CLI
 **Status:** complete | **Tests:** 1465 pass on SQLite (20 new), 10 skipped
 

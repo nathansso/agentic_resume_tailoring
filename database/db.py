@@ -399,6 +399,12 @@ def _backfill_result_seq() -> None:
             session.commit()
 
 
+def _backfill_tailor_tree() -> None:
+    """Chain pre-#196 tailoring results into tree nodes, once per job."""
+    from harness.tree import backfill
+    backfill(engine)
+
+
 def init_db():
     SQLModel.metadata.create_all(engine)
     _migrate_db()
@@ -407,6 +413,7 @@ def init_db():
     _backfill_chat_seq()
     _backfill_document_seq()
     _backfill_result_seq()
+    _backfill_tailor_tree()
 
 def get_session():
     with Session(engine) as session:

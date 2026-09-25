@@ -4,3 +4,6 @@ Nothing in this package may import a generative model client (`llm`,
 `langchain_*`, `anthropic`, `openai`); see root CLAUDE.md § Architecture
 invariants.
 """
+
+# Recorded in every tailoring-tree node's provenance (#196).
+ART_VERSION = "0.1.0"

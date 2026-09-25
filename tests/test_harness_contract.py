@@ -24,7 +24,45 @@ CALLS = {
     "get_item": [{"key": "exp:data science intern|idx exchange"},
                  {"key": "proj:next item recommender"}],   # not found → suggestions
     "get_profile": [{}],
+    # Tailoring tree (#196). $JOB/$N0/$N1 are filled from the `tree_kg` fixture.
+    "list_jobs": [{}],
+    "get_head": [{"job_id": "$JOB"}, {"job_id": "$JOB", "since_event": 0}],
+    "history": [{"job_id": "$JOB"}],
+    "diff_nodes": [{"from_node": "$N0", "to_node": "$N1"}],
+    "checkout": [{"job_id": "$JOB", "node_id": "$N0"},
+                 {"job_id": "$JOB", "node_id": "00000000-0000-0000-0000-000000000000"}],
 }
+_DUMMY = {"$JOB": "00000000-0000-0000-0000-000000000001",
+          "$N0": "00000000-0000-0000-0000-000000000002",
+          "$N1": "00000000-0000-0000-0000-000000000003"}
+
+
+def _fill(args, ids):
+    return {k: ids.get(v, v) if isinstance(v, str) else v for k, v in args.items()}
+
+
+@pytest.fixture()
+def tree_kg(kg, isolated_engine):
+    """`kg` plus a two-node history on its one tailored job."""
+    from sqlmodel import Session, select
+
+    from database.models import UserJobResult
+    from harness import tree
+
+    with Session(isolated_engine) as s:
+        result = s.exec(select(UserJobResult).where(UserJobResult.user_id == kg)).first()
+        job_id, result_id = result.job_id, result.result_id
+    n0 = tree.record_result(kg, job_id, source="pipeline")
+    with Session(isolated_engine) as s:
+        r = s.get(UserJobResult, result_id)
+        r.tailored_resume_content = {**r.tailored_resume_content, "skills_emphasized": ["SQL"],
+                                     "experiences": [{"title": "Data Scientist",
+                                                      "company": "Rippling",
+                                                      "bullets": ["Forecast churn"]}]}
+        s.add(r)
+        s.commit()
+    n1 = tree.record_result(kg, job_id, source="editor")
+    return kg, {"$JOB": str(job_id), "$N0": n0["node_id"], "$N1": n1["node_id"]}
 
 
 def _via_mcp(name, user_id, args):
@@ -48,11 +86,13 @@ def test_every_contract_tool_has_a_representative_call():
 
 
 @pytest.mark.parametrize("name,args", [(n, a) for n, calls in CALLS.items() for a in calls])
-def test_all_adapters_return_identical_valid_json(kg, capsys, name, args):
-    direct = invoke(name, kg, args)
+def test_all_adapters_return_identical_valid_json(tree_kg, capsys, name, args):
+    uid, ids = tree_kg
+    args = _fill(args, ids)
+    direct = invoke(name, uid, args)
     BY_NAME[name].output_model.model_validate(direct)
-    assert _via_mcp(name, kg, args) == direct
-    assert _via_cli(name, kg, args, capsys) == direct
+    assert _via_mcp(name, uid, args) == direct
+    assert _via_cli(name, uid, args, capsys) == direct
 
 
 def test_list_items_enumerates_without_a_query(kg):
@@ -71,7 +111,7 @@ def test_get_profile_returns_header_fields_and_nothing_secret(kg):
 
 @pytest.mark.parametrize("name", sorted(CALLS))
 def test_no_user_is_the_same_result_on_every_adapter(isolated_engine, capsys, name):
-    args = CALLS[name][0]
+    args = _fill(CALLS[name][0], _DUMMY)
     direct = invoke(name, None, args)
     assert direct["error"]["code"] == "no_user"
     assert _via_mcp(name, None, args) == direct

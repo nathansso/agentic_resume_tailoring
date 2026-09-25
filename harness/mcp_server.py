@@ -36,7 +36,7 @@ TOOL_NAMES = tuple(t.name for t in TOOLS)
 log = logging.getLogger("art-mcp")
 
 
-def _adapter(spec: ToolSpec, user_id):
+def _adapter(spec: ToolSpec, user_id, allow_writes: bool = True):
     """An MCP-shaped function for one contract tool.
 
     MCP derives the input schema from the function signature and the output
@@ -44,7 +44,8 @@ def _adapter(spec: ToolSpec, user_id):
     models rather than written a second time.
     """
     def call(**kwargs):
-        return spec.output_model.model_validate(invoke(spec.name, user_id, kwargs))
+        return spec.output_model.model_validate(
+            invoke(spec.name, user_id, kwargs, allow_writes=allow_writes))
 
     params = []
     for name, field in spec.input_model.model_fields.items():
@@ -61,8 +62,9 @@ def _adapter(spec: ToolSpec, user_id):
     return call
 
 
-def build_server(user_id=None):
-    """Register every contract tool. `user_id` None → tools return `no_user`."""
+def build_server(user_id=None, allow_writes: bool = True):
+    """Register every contract tool. `user_id` None → tools return `no_user`;
+    `allow_writes` False → write tools return `read_only`."""
     from mcp.server.mcpserver import MCPServer
     from mcp.types import ToolAnnotations
 
@@ -78,7 +80,8 @@ def build_server(user_id=None):
     )
     for spec in TOOLS:
         server.add_tool(
-            _adapter(spec, user_id), name=spec.name, description=spec.description,
+            _adapter(spec, user_id, allow_writes), name=spec.name,
+            description=spec.description,
             annotations=ToolAnnotations(read_only_hint=spec.read_only,
                                         destructive_hint=False,
                                         idempotent_hint=spec.read_only),
@@ -90,16 +93,19 @@ def main(argv=None) -> None:
     parser = argparse.ArgumentParser(prog="art-mcp", description=__doc__.splitlines()[0])
     parser.add_argument("--database-url", help="DB URL, or 'dotenv' to use .env's DATABASE_URL")
     parser.add_argument("--user-id", help="ART user id (default: ~/.art pointer file)")
+    parser.add_argument("--allow-writes", action="store_true",
+                        help="Let write tools run against a remote database.")
     args = parser.parse_args(argv)
 
     logging.basicConfig(stream=sys.stderr, level=logging.INFO,
                         format="art-mcp %(levelname)s %(message)s")
-    user_id = bootstrap(args.database_url, args.user_id)
+    user_id, writes = bootstrap(args.database_url, args.user_id, args.allow_writes)
     import os
     scheme = os.environ["DATABASE_URL"].split(":", 1)[0]
-    log.info("contract v%s: serving %s (%s), user %s", CONTRACT_VERSION,
-             ", ".join(TOOL_NAMES), scheme, user_id or "UNBOUND")
-    build_server(user_id).run("stdio")
+    log.info("contract v%s: serving %s (%s, %s), user %s", CONTRACT_VERSION,
+             ", ".join(TOOL_NAMES), scheme, "read-write" if writes else "read-only",
+             user_id or "UNBOUND")
+    build_server(user_id, allow_writes=writes).run("stdio")
 
 
 if __name__ == "__main__":

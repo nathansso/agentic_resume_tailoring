@@ -283,7 +283,8 @@ construction.
 | | `patch_plan` | base node, pointer edits → same |
 | | `checkout` | node → moves HEAD |
 | | `diff_nodes` | two nodes → bullet-level diff with rationale |
-| | `get_head` | job → HEAD and editor edits since the host last looked |
+| | `get_head` | job, cursor → HEAD, events and editor edits since the cursor |
+| | `history` | job → every version, oldest first |
 | Check & render | `check_draft` | node → metric vector by role |
 | | `render` | node, format → path, page count, lines used |
 | Feedback & memory | `observe` | user text → gate decision |
@@ -418,7 +419,13 @@ identical results:
 - **CLI:** `harness/cli.py` prints one JSON document per call. It is a separate entry point
   from `cli.py`, which loads `.env` on import.
 
-The tools are `art_briefing`, `kg_search`, `list_items`, `get_item` and `get_profile`.
+The tools are `art_briefing`, `kg_search`, `list_items`, `get_item` and `get_profile`,
+plus the tailoring-tree tools from #196: `list_jobs`, `get_head`, `history`, `diff_nodes`
+and `checkout`.
+
+**Writes.** `checkout` is the first tool that writes. Local SQLite is writable. A remote or
+Postgres database is read-only, and write tools return a `read_only` error, unless the
+process is started with `--allow-writes`.
 
 ```bash
 claude mcp add art -- <repo>/.venv/Scripts/python.exe <repo>/harness/mcp_server.py
