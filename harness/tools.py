@@ -14,8 +14,8 @@ Three tools, and the whole of what a host agent can see in this spike:
 - `get_item` resolves one stable key to its full record.
 
 Every function takes `user_id` explicitly, reads through `services` (whose
-`engine` the test fixture isolates), and never writes. Keys follow the
-planner's convention in `agents/tailor.py` so a host can hand them straight
+`engine` the test fixture isolates), and never writes. Keys are the
+planner's own (`agents.checks.exp_key`/`proj_key`) so a host can hand them straight
 to the executor later (#197).
 """
 
@@ -28,6 +28,7 @@ from uuid import UUID
 from sqlmodel import Session, select
 
 import services
+from agents.checks import exp_key, proj_key  # the planner's own keys (#190)
 from agents.job_card import render_cards, select_cards
 from agents.preferences import preferences_in_scope
 from database.models import ProjectBlurb
@@ -51,14 +52,6 @@ _TITLE_WEIGHT = 3.0
 
 def _k(value: Any) -> str:
     return (str(value or "")).strip().lower()
-
-
-def exp_key(e: Dict) -> str:
-    return f"exp:{_k(e.get('title'))}|{_k(e.get('company'))}"
-
-
-def proj_key(p: Dict) -> str:
-    return f"proj:{_k(p.get('name'))}"
 
 
 def skill_key(s: Dict) -> str:

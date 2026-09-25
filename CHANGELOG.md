@@ -12,6 +12,42 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 190 — Model-free checks, and the harness import boundary
+**Status:** complete | **Tests:** 1445 pass on SQLite (7 new), 10 skipped
+
+The H2 executor and gates (#197, #198, #200) need tailor's pure checks without loading the LLM stack. Those checks lived in `agents/tailor.py`, which imports `llm`, `langchain_core` and `langgraph` at module level. They now live in a module the harness can import, and a static test holds the line.
+
+### What shipped
+
+- **`agents/checks.py` (new).** These moved verbatim from `ResumeTailorAgent`:
+  - item keys: `exp_key`, `proj_key`, `label_for_key`;
+  - text checks: `rendered_by_key`, `faithfulness_drift`, `over_repeated_terms`;
+  - bullet budgets: `score_and_budget_experiences`, `enforce_bullet_budgets`;
+  - section and plan helpers: `expected_sections`, `annotate_with_action`, `apply_plan_to_inputs`, `enforce_plan`;
+  - their constants: `FAITHFULNESS_MIN`, `MAX_TERM_MENTIONS`, `MAX/MIN_EXP_BULLETS`, and the section lists.
+
+  The only changes are that internal `cls._x(...)` calls became direct calls. The module imports only `agents.ats_scorer` and `agents.skill_scorer`.
+- **`agents/tailor.py` keeps every old name.** Each former static or class method is now a `staticmethod` alias of the same function, and the constants are re-exported from `checks` rather than recomputed. So `ResumeTailorAgent._enforce_plan(...)`, `self._faithfulness_drift(...)`, `from agents.tailor import MAX_EXP_BULLETS` and `jobs_router`'s `_expected_sections` all behave exactly as before, and **no existing test changed**.
+- **`harness/tools.py`** now takes `exp_key` and `proj_key` from `agents.checks`, so the harness's keys match the planner's by construction.
+- **`tests/test_harness_boundary.py` (7 new tests).** It walks the import graph statically with `ast`:
+  - **Rule 1:** code under `harness/` may not name `llm`, `langchain*`, `langgraph`, `openai` or `anthropic`, even inside a function.
+  - **Rule 2:** module-level imports followed transitively from every `harness` module and from `agents.checks` may not reach one of those.
+  - Meta-tests on synthetic trees prove the checker catches a lazy import, a transitive chain and a relative import, and ignores function-level imports outside `harness/`.
+  - Verified by planting a lazy `import llm` in `harness/tools.py`: the test failed, and passed again once the import was reverted.
+  - A further test pins every alias as the *same object* as its `checks` function.
+
+### Deviations from spec
+
+- **Scope change: pi is dropped (user decision, 2026-09-25).** ART targets mainstream coding agents, Claude Code and Codex. `docs/harness.md`, `README.md`, root `CLAUDE.md` and `docs/benchmark.md` were updated:
+  - The pi adapter and the JSON-RPC mode (`art rpc`, which existed only for pi) are gone; scripts use CLI `--json`.
+  - The evaluation now separates model from scaffold by running each host with two of its own models.
+  - pi keeps a sources credit for the tree-structured session idea.
+  - #203 is now Codex only, and #191 and #206 were updated to match.
+- **Rule 2 skips function-level imports outside `harness/`, deliberately.** `agents/preferences.py` and `agents/job_card.py` import `llm` inside their extractor calls (#189), and the harness never calls those paths. A future harness change that starts calling such a function is caught in review, not by this test.
+- **Not moved:** `tailor_planner.apply_constraints`, `decision_log_entry` and `_suppress_skills`. Each lazily imports `agents.arbitration`, which reaches `llm` through `agents/jd_profile.py`. The executor (#197) will need arbitration without that chain.
+
+---
+
 ## Issue 189 — Spike: read-only art-mcp server over the knowledge graph
 **Status:** complete | **Tests:** 1438 pass on SQLite (9 new), 10 skipped
 

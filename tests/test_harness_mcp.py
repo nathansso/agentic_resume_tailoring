@@ -178,7 +178,7 @@ def test_server_registers_exactly_the_three_read_only_tools():
 def test_harness_imports_no_generative_client():
     """Early form of #190's boundary test, in a clean interpreter."""
     code = (
-        "import sys; import harness.tools, harness.mcp_server; "
+        "import sys; import harness.tools, harness.mcp_server, agents.checks; "
         "bad = sorted({m.split('.')[0] for m in sys.modules} & "
         "{'llm','langchain','langchain_core','langchain_openai','langchain_anthropic',"
         "'openai','anthropic','langgraph'}); print(','.join(bad))"
