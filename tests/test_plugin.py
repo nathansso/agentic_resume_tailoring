@@ -28,7 +28,9 @@ def _json(path):
 
 
 def _frontmatter(path):
-    text = path.read_text(encoding="utf-8")
+    text = path.read_text(encoding="utf-8").replace("
+", "
+")   # CRLF checkouts
     m = re.match(r"---\n(.*?)\n---\n", text, re.S)
     assert m, f"{path.name} has no frontmatter"
     return dict(line.split(":", 1) for line in m.group(1).splitlines() if ":" in line), text
