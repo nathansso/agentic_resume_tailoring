@@ -12,6 +12,29 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 175 — `isolated_engine` reaches every module that binds the engine
+**Status:** complete | **Tests:** 1627 pass on SQLite (3 new), 12 skipped
+
+A module level `from database.db import engine` copies the engine object, so patching `database.db.engine` never reached it. `isolated_engine` patched 6 of the 17 modules that do this. The other 11 read whichever store they were bound to first: the developer's real database, or the first test's temp store. Their queries came back empty and assertions passed vacuously. This session hit it twice, in the render tool's header and in the contract test's render call in CI.
+
+### What shipped
+
+- **`tests/conftest.py`: an `ENGINE_BINDERS` list of all 17 binders.** They are imported eagerly at collection, so none binds a test's engine late, and `isolated_engine` patches every one. The 17 are:
+  - agents: `chat`, `enhancer`, `formatter`, `job_analyzer`, `matcher`, `parser` and `tailor`;
+  - `database.user_utils`, `graph.pipeline`, `knowledge_graph.builder` and `services`;
+  - `web.auth` and five routers.
+- **`tests/test_engine_isolation.py` (3 new):**
+  - an AST scan of the repo fails when a module binds the engine at module level but isn't in `ENGINE_BINDERS`, or when the list names a module that no longer does;
+  - `isolated_engine` reaches every binder;
+  - a binder reads the seeded store.
+
+### Deviations from spec
+
+- **No test turned out to be passing vacuously.** The full suite passes unchanged with every binder patched. The per-test `monkeypatch.setattr(<module>, "engine", …)` lines some tests carry are now redundant but harmless; they were left alone.
+- **The binders were not converted to read `database.db.engine` at call time.** That is the production-side fix, and it would touch 17 modules on the legacy web path. The guard test names that as the alternative for any new module.
+
+---
+
 ## Issue 201 — Claude Code plugin: skills, /art commands, hooks
 **Status:** complete | **Tests:** 1624 pass on SQLite (21 new), 12 skipped
 
