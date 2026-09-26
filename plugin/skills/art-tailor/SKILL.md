@@ -78,7 +78,9 @@ Call `execute_plan({program})`. Read the result:
   - `accepted` and `kept` went in.
   - `reverted` failed ART's acceptance rule; `reason` says which gate, guard or target.
   - `refused` never ran: an unknown key, an unresolvable cite, or a crossed hard
-    preference.
+    preference. It also covers `tombstoned`, which names or cites an item the user
+    deleted (don't bring it back), and `negative_pin`, a bullet that mentions a fact the
+    user said must never appear, even when cited.
   - Tell the user about anything reverted or refused. Don't silently resubmit the
     same text.
 - `committed: false` with `violations`: nothing was saved. Fix the plan with

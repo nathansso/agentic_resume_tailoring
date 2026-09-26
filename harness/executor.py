@@ -47,7 +47,9 @@ from agents.preferences import preferences_in_scope
 from agents.skill_scorer import rank_and_select_skills
 from database.models import JobDescription, PlanProgram, UserJobResult
 from harness import ART_VERSION, tree
-from harness.acceptance import Context, accept, metric_vector, preference_violations
+from harness.acceptance import (
+    Context, accept, metric_vector, preference_violations, term_pattern,
+)
 from harness.ingest import apply_job_rules, resolve_rules
 from harness.program import Program, apply_patch, program_id
 from harness.tools import _records, skill_key
@@ -78,6 +80,7 @@ class _KG:
     def __init__(self, user_id: UUID):
         self.records = _records(user_id)
         self.by_key = {r["key"]: r for r in self.records}
+        self.tombstones = _tombstones(user_id)
         self.source_bullets: Dict[str, List[str]] = {}
         for r in self.records:
             if r["kind"] == "experience":
@@ -93,12 +96,15 @@ class _KG:
     def item(self, key: str) -> Dict:
         """A page item for a KG experience/project, with its source bullets."""
         rec = self.by_key[key]["record"]
+        bullets = list(self.source_bullets.get(key, []))
+        # Each source bullet cites itself (#198), keyed by its text.
+        cites = {b: [f"{key}#b{n}"] for n, b in enumerate(bullets)}
         if key.startswith("exp:"):
             return {"title": rec["title"], "company": rec["company"],
                     "start_date": "" if rec.get("start") == "?" else rec.get("start") or "",
                     "end_date": "" if rec.get("end") == "?" else rec.get("end") or "",
-                    "bullets": list(self.source_bullets.get(key, []))}
-        return {"name": rec["name"], "bullets": list(self.source_bullets.get(key, []))}
+                    "bullets": bullets, "cites": cites}
+        return {"name": rec["name"], "bullets": bullets, "cites": cites}
 
     def resolves(self, cite: str) -> bool:
         cite = (cite or "").strip().lower()
@@ -107,9 +113,51 @@ class _KG:
         key, sep, idx = cite.rpartition("#b")
         return bool(sep) and idx.isdigit() and int(idx) < len(self.source_bullets.get(key, []))
 
+    def tombstoned(self, key: str) -> bool:
+        """Whether `key` names an item the user deleted (and has not re-added)."""
+        key = (key or "").strip().lower().rpartition("#b")[0] or (key or "").strip().lower()
+        if key in self.by_key:
+            return False
+        return _matches_tombstone(key, self.tombstones)
+
+    def cite_status(self, cite: str) -> Optional[str]:
+        """None when `cite` resolves; else `tombstoned` or `unresolved` (#198)."""
+        if self.resolves(cite):
+            return None
+        base = (cite or "").strip().lower()
+        base = base.rpartition("#b")[0] if "#b" in base else base
+        return "tombstoned" if self.tombstoned(base) else "unresolved"
+
+
     def skill(self, name: str) -> Optional[Dict]:
         r = self.by_key.get(skill_key({"name": name}))
         return r["record"] if r else None
+
+
+def _tombstones(user_id: UUID) -> List[Tuple[str, str, Optional[str]]]:
+    """The user's deletions as `(entity type, key_a, key_b)` (#92)."""
+    from database.models import DeletedEntry
+
+    with Session(_db.engine) as session:
+        rows = session.exec(select(DeletedEntry).where(DeletedEntry.user_id == user_id)).all()
+    return [(r.entity_type, r.key_a, r.key_b) for r in rows]
+
+
+def _matches_tombstone(key: str, tombs) -> bool:
+    """The deleted-row matchers the ingest path uses, so a tombstone catches the
+    same variants (`agents/kg_store.KGStoreMixin`)."""
+    from agents.kg_store import KGStoreMixin as M
+
+    prefix, _, rest = key.partition(":")
+    a, _, b = rest.partition("|")
+    for kind, ka, kb in tombs:
+        if prefix == "exp" and kind == "experience" and M._experiences_match(ka, kb, a, b):
+            return True
+        if prefix == "proj" and kind == "project" and M._projects_match(ka, kb, rest, None):
+            return True
+        if prefix == "edu" and kind == "education" and M._education_match(ka, kb, a, b):
+            return True
+    return False
 
 
 def _int(value) -> Optional[int]:
@@ -180,6 +228,13 @@ def _page_budget(content: Dict, budget: float) -> Optional[Dict]:
         return None
 
 
+def _negative_terms(skills: Dict[str, Dict]) -> Dict[str, Dict]:
+    """Negative pins (#198): a hard suppression by term, not by key, names a
+    fact that must never render, in bullets as well as skills."""
+    return {t: p for t, p in skills.items()
+            if not (p.get("target_key") or "").strip().lower().startswith("skill:")}
+
+
 def _hard_preferences(user_id: UUID, job_id: UUID) -> Tuple[Dict[str, Dict], Dict[str, Dict], Dict[str, Dict]]:
     """Strength-5 preferences in scope: suppressed items, emphasized items,
     suppressed skills — each keyed to the preference that set it."""
@@ -222,11 +277,15 @@ def _context(user_id: UUID, job: JobDescription, kg: _KG, max_bullet_lines: int)
         # (#129), so it cannot demand an item that does not exist.
         hard_emphasize={k for k in emphasize if k in kg.by_key},
         suppressed_skills=set(skills),
+        negative_terms=set(_negative_terms(skills)),
+        source_bullets=kg.source_bullets,
+        cite_status=kg.cite_status,
         matched_skills=matched,
         line_counter=_line_counter(),
         max_bullet_lines=max_bullet_lines,
     )
-    return ctx, {"suppress": suppress, "emphasize": emphasize}
+    return ctx, {"suppress": suppress, "emphasize": emphasize,
+                 "negative_terms": _negative_terms(skills)}
 
 
 # ── nodes ────────────────────────────────────────────────────────────────────
@@ -248,6 +307,8 @@ def _refusal(node: Dict, content: Dict, kg: _KG, prefs: Dict, pref_ids: set) -> 
     key = node["item_key"].strip().lower()
     op = node["op"]
     if key not in kg.by_key:
+        if kg.tombstoned(key):
+            return f"tombstoned: the user deleted {node['item_key']}"
         return f"unknown_key: {node['item_key']} is not in the knowledge graph"
     loc = _locate(content, key)
     if loc is None:
@@ -259,6 +320,8 @@ def _refusal(node: Dict, content: Dict, kg: _KG, prefs: Dict, pref_ids: set) -> 
     if op == "replace":
         rep = node["replacement_key"].strip().lower()
         if rep not in kg.by_key:
+            if kg.tombstoned(rep):
+                return f"tombstoned: the user deleted {node['replacement_key']}"
             return f"unknown_key: {node['replacement_key']} is not in the knowledge graph"
         if _locate(content, rep) is not None:
             return f"already_on_page: {node['replacement_key']}"
@@ -271,9 +334,17 @@ def _refusal(node: Dict, content: Dict, kg: _KG, prefs: Dict, pref_ids: set) -> 
     for i, bullet in enumerate(node.get("bullets") or []):
         if not bullet["cites"]:
             return f"uncited_bullet: bullet {i} cites nothing"
+        gone = [c for c in bullet["cites"] if kg.cite_status(c) == "tombstoned"]
+        if gone:
+            return (f"tombstoned_cite: bullet {i} cites {', '.join(gone)}, which the user "
+                    "deleted")
         bad = [c for c in bullet["cites"] if not kg.resolves(c)]
         if bad:
             return f"unresolved_cite: bullet {i} cites {', '.join(bad)}"
+        for term, pref in sorted(prefs.get("negative_terms", {}).items()):
+            if term_pattern(term).search(bullet["text"].lower()):
+                return (f"negative_pin: bullet {i} mentions {term!r}, which "
+                        f"{pref.get('text')!r} says must never appear")
     because = node.get("because") or ""
     if because.startswith("pref:") and because[5:].strip().lower() not in pref_ids:
         return f"unknown_preference: {because}"
@@ -288,11 +359,22 @@ def _apply(node: Dict, content: Dict, kg: _KG) -> Dict:
         items.pop(i)
     elif node["op"] == "revise":
         items[i]["bullets"] = [b["text"] for b in node["bullets"]]
+        items[i]["cites"] = _cites_of(node["bullets"])
     elif node["op"] == "replace":
         new = kg.item(node["replacement_key"].strip().lower())
         if node.get("bullets"):
             new["bullets"] = [b["text"] for b in node["bullets"]]
+            new["cites"] = _cites_of(node["bullets"])
         items[i] = new
+    return out
+
+
+def _cites_of(bullets: List[Dict]) -> Dict[str, List[str]]:
+    """What each written bullet rests on, keyed by its text (#198)."""
+    out: Dict[str, List[str]] = {}
+    for b in bullets:
+        out.setdefault(b["text"], [])
+        out[b["text"]] += [c for c in b["cites"] if c not in out[b["text"]]]
     return out
 
 
@@ -310,8 +392,12 @@ def _finalize(content: Dict, program: Dict, ctx: Context, kg: _KG,
     fin = program["finalize"]
     violations: List[Dict] = []
     for v in preference_violations(content, ctx):
-        violations.append({"check": "preferences", "detail": v,
-                           "hint": "delete it" if v.startswith("suppressed:") else "restore it"})
+        if v.startswith("negative_pin:"):
+            term, _, where = v[len("negative_pin:"):].partition("@")
+            hint = f"revise {where.split(' :: ', 1)[0]} so it no longer mentions {term!r}"
+        else:
+            hint = "delete it" if v.startswith("suppressed:") else "restore it"
+        violations.append({"check": "preferences", "detail": v, "hint": hint})
     for section, kind in (("experiences", "experience"), ("projects", "project")):
         if kg.of(kind) and not content.get(section):
             violations.append({"check": "non_empty_sections", "detail": section,
