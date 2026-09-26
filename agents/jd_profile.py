@@ -51,6 +51,7 @@ from agents.ats_scorer import ATSScoringEngine, _detect_level
 from agents.extraction_schemas import (
     JDProfileExtraction, JDRequirementItem, RequirementType,
 )
+from agents.jd_payload import iter_requirements, text_digest  # noqa: F401 (re-exported)
 from llm import ModelRole, get_extractor
 
 logger = logging.getLogger(__name__)
@@ -111,9 +112,7 @@ def extraction_key(description: str, version: int = PROFILE_VERSION) -> str:
     of the code. Whitespace is normalized so a reflowed paste is not treated as
     a new posting.
     """
-    normalized = " ".join((description or "").split())
-    raw = f"{version}\x00{normalized}"
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return text_digest(description, version)
 
 
 def payload_digest(payload: Dict) -> str:
@@ -330,25 +329,6 @@ def merge_edits(old_payload: Optional[Dict], new_payload: Dict) -> Dict:
 
 
 # ── Read path ────────────────────────────────────────────────────────────────
-
-def iter_requirements(
-    payload: Optional[Dict], types: Optional[List[str]] = None,
-) -> List[Dict]:
-    """Requirements in source order, optionally filtered by type.
-
-    The read path downstream consumers use. Returns a list rather than a
-    generator so callers can count without exhausting it, and always in source
-    order — filtering never reorders.
-    """
-    rows = [
-        r for r in ((payload or {}).get("requirements") or [])
-        if isinstance(r, dict)
-    ]
-    if types is not None:
-        wanted = set(types)
-        rows = [r for r in rows if r.get("type") in wanted]
-    return rows
-
 
 def profile_terms(payload: Optional[Dict], types: Optional[List[str]] = None) -> List[str]:
     """Every term across the selected requirements, deduped, in source order."""

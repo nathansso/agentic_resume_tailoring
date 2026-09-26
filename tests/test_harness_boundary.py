@@ -15,8 +15,10 @@ with `ast` so nothing is imported to test it:
    a harness change that starts calling such a function is caught in review,
    not here.
 
-`agents/checks.py` is held to rule 2 as well: it exists so the executor can use
-tailor's checks without the LLM stack.
+The modules the executor (#197) reuses from `agents/` are held to rule 2 as
+well: `checks` (tailor's checks without the LLM stack), `arbitration` and
+`tailor_planner` (which reached `llm` through `jd_profile` until the pure JD
+readers moved to `jd_payload`), and `keyword_weights`.
 """
 
 import ast
@@ -26,7 +28,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 BANNED_EXACT = {"llm", "langgraph", "openai", "anthropic"}
 BANNED_PREFIX = ("langchain",)
-EXTRA_ENTRIES = ("agents.checks",)
+EXTRA_ENTRIES = ("agents.checks", "agents.arbitration", "agents.tailor_planner",
+                 "agents.keyword_weights", "agents.jd_payload")
 
 
 def _banned(module: str) -> bool:
