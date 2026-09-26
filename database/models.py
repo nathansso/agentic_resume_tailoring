@@ -705,3 +705,18 @@ class TreeEvent(SQLModel, table=True):
     node_id: UUID
     kind: str  # commit | checkout
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class PlanProgram(SQLModel, table=True):
+    """Every plan program a host submitted (issue #197), committed or not.
+
+    Keyed by the hash of its canonical JSON, so resubmitting the same program is
+    one row. Kept even when finalize refused it: `patch_plan` edits a saved
+    program by JSON pointer, and the program most worth patching is the one that
+    just failed. The committed ones are also on their `TailorNode.program`.
+    """
+    program_id: str = Field(primary_key=True)
+    user_id: UUID = Field(foreign_key="user.user_id", index=True)
+    job_id: UUID = Field(foreign_key="jobdescription.job_id", index=True)
+    program: Dict = Field(default={}, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=datetime.utcnow)

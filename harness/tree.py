@@ -115,6 +115,28 @@ def _latest_result(session, user_id: UUID, job_id: UUID) -> Optional[UserJobResu
     return _db.latest_result(rows)
 
 
+def _materialize(session, user_id: UUID, job_id: UUID, node: TailorNode,
+                 create: bool = False) -> Optional[UserJobResult]:
+    """Write `node` into the job's current `UserJobResult`, the row every
+    existing reader (web, chat, CLI, export) uses. With `create`, a job that has
+    never been analyzed gets its first row, so a host-built version shows up in
+    the editor too."""
+    result = _latest_result(session, user_id, job_id)
+    if result is None:
+        if not create:
+            return None
+        result = UserJobResult(user_id=user_id, job_id=job_id, seq=0)
+    now = datetime.utcnow()
+    result.tailored_resume_content = _json(node.content, {})
+    result.tailored_score_breakdown = _json(node.score_breakdown, {})
+    result.edited_tex = node.edited_tex
+    result.edited_tex_updated_at = now if node.edited_tex else None
+    result.layout_overrides = node.layout_overrides
+    result.updated_at = now
+    session.add(result)
+    return result
+
+
 # ── writes ───────────────────────────────────────────────────────────────────
 
 def commit_node(user_id, job_id, *, content: Dict, source: str,
@@ -122,12 +144,17 @@ def commit_node(user_id, job_id, *, content: Dict, source: str,
                 metrics: Optional[Dict] = None, provenance: Optional[Dict] = None,
                 edited_tex: Optional[str] = None, layout_overrides: Optional[Dict] = None,
                 result_id=None, note: Optional[str] = None, expected_parent=_UNSET,
-                event: bool = True, session: Optional[Session] = None) -> Dict[str, Any]:
+                event: bool = True, materialize: bool = False,
+                session: Optional[Session] = None) -> Dict[str, Any]:
     """Append a node under HEAD and move HEAD to it.
 
     `expected_parent`: pass the node id the caller built on (or None for "no
     history yet"). If HEAD is anything else, `StaleParent` is raised and nothing
     is written. Omit it to commit on whatever HEAD is (pipeline hooks do).
+
+    `materialize`: also write the node into the job's current result (creating
+    one if the job has none). Hooks that commit *after* writing the result leave
+    it off; the executor (#197), which writes nothing else, turns it on.
     """
     if source not in SOURCES:
         raise ValueError(f"unknown source {source!r}")
@@ -153,6 +180,11 @@ def commit_node(user_id, job_id, *, content: Dict, source: str,
         session.add(node)
         session.flush()
         _set_head(session, user_id, job_id, node.node_id)
+        if materialize:
+            result = _materialize(session, user_id, job_id, node, create=True)
+            session.flush()
+            node.result_id = result.result_id
+            session.add(node)
         if event:
             session.add(TreeEvent(user_id=user_id, job_id=job_id, node_id=node.node_id,
                                   kind="commit"))
@@ -177,15 +209,7 @@ def checkout(user_id, job_id, node_id, *, materialize: bool = True,
             raise NotFound(f"node {node_id} is not in job {job_id}")
         _set_head(session, user_id, job_id, node.node_id)
         if materialize:
-            result = _latest_result(session, user_id, job_id)
-            if result is not None:
-                result.tailored_resume_content = _json(node.content, {})
-                result.tailored_score_breakdown = _json(node.score_breakdown, {})
-                result.edited_tex = node.edited_tex
-                result.edited_tex_updated_at = datetime.utcnow() if node.edited_tex else None
-                result.layout_overrides = node.layout_overrides
-                result.updated_at = datetime.utcnow()
-                session.add(result)
+            _materialize(session, user_id, job_id, node)
         session.add(TreeEvent(user_id=user_id, job_id=job_id, node_id=node.node_id,
                               kind="checkout"))
         if own:

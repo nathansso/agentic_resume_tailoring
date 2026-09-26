@@ -22,6 +22,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from harness.program import Program
+
 CONTRACT_VERSION = "1"
 
 Kind = Literal["skill", "experience", "project", "education", "achievement"]
@@ -243,6 +245,62 @@ class CheckoutOutput(_Output):
     head: Optional[Node] = None
 
 
+# ── plan programs (#197) ─────────────────────────────────────────────────────
+
+class ExecuteInput(_Model):
+    program: Program
+    dry_run: bool = Field(False, description="Evaluate everything, commit nothing.")
+
+
+class PatchEdit(_Model):
+    op: Literal["add", "remove", "replace"]
+    path: str = Field(description="JSON pointer into the saved program, e.g. /nodes/0/bullets.")
+    value: Any = None
+
+
+class PatchInput(_Model):
+    program_id: str = Field(description="From a previous execute_plan or patch_plan result.")
+    edits: List[PatchEdit]
+    dry_run: bool = False
+
+
+class NodeResult(_Model):
+    id: str
+    op: str
+    item_key: str
+    status: Literal["accepted", "reverted", "refused", "kept"]
+    reason: Optional[str] = None
+    improved: List[str] = Field(default_factory=list)
+    deltas: Dict[str, Optional[float]] = Field(default_factory=dict)
+
+
+class Violation(_Model):
+    check: str
+    detail: Any = None
+    hint: Optional[str] = None
+
+
+class ExecuteOutput(_Output):
+    program_id: Optional[str] = None
+    parent: Optional[str] = None
+    dry_run: bool = False
+    committed: bool = False
+    node_id: Optional[str] = None
+    nodes: List[NodeResult] = Field(default_factory=list)
+    skills: Dict[str, List[str]] = Field(default_factory=dict)
+    metrics: Dict[str, Any] = Field(
+        default_factory=dict, description="Metric vectors by role (gates, guards, targets, "
+                                          "report) for the base and the final version.")
+    line_budget: Dict[str, Any] = Field(default_factory=dict)
+    violations: List[Violation] = Field(default_factory=list)
+    cut_hints: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+def _executor():
+    from harness import executor
+    return executor
+
+
 def _tree():
     from harness import tree
     return tree
@@ -339,6 +397,23 @@ TOOLS: List[ToolSpec] = [
         "Make an earlier version current again (revert or branch). Writes.",
         CheckoutInput, CheckoutOutput,
         _tree_call(lambda t, uid, job_id, node_id: {"head": t.checkout(uid, job_id, node_id)}),
+        read_only=False),
+    ToolSpec(
+        "execute_plan",
+        "Run a whole tailoring plan as one program: arbitration, each node under the "
+        "per-metric acceptance rule, then finalize (preferences, sections, skills cap, line "
+        "budget). Commits one version unless a check fails or dry_run is set. Writes.",
+        ExecuteInput, ExecuteOutput,
+        lambda uid, program, dry_run=False:
+            _executor().execute_plan(uid, program, dry_run=dry_run),
+        read_only=False),
+    ToolSpec(
+        "patch_plan",
+        "Amend a saved program by JSON pointer and run it again (e.g. apply a cut hint, or "
+        "replace /parent to rebase on a new HEAD). Writes.",
+        PatchInput, ExecuteOutput,
+        lambda uid, program_id, edits, dry_run=False:
+            _executor().patch_plan(uid, program_id, edits, dry_run=dry_run),
         read_only=False),
 ]
 BY_NAME: Dict[str, ToolSpec] = {t.name: t for t in TOOLS}

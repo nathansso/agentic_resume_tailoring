@@ -12,6 +12,71 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 197 — Plan programs and the executor
+**Status:** complete | **Tests:** __TOTAL__ pass on SQLite (30 new), __SKIP__ skipped
+
+A host now submits a whole tailoring plan as one program, and ART runs it with no model:
+- arbitration refuses nodes that name unknown keys, cite nothing resolvable or cross a hard preference;
+- every other node is kept only if it passes the per-metric acceptance rule (#113);
+- finalize checks the page;
+- one tree node is committed.
+
+This is the core loop of the harness (docs/harness.md § 6–7). A scripted, model-free host runs benchmark tasks end to end through it.
+
+### What shipped
+
+- **`harness/program.py` (new):** the program schema.
+  - Nodes use the planner's own ops (keep, revise, replace, delete). `keyword_weave` and the other rewrites are `revise` strategies.
+  - Nodes carry `from_variant`, bullets with `cites`, `because` (`pref:<id>` / `user:<text>`), and `accept {improves, tolerances}`. A node may tighten a guard tolerance but never loosen one.
+  - Also here: a content-hash `program_id`, and RFC 6902 `add` / `remove` / `replace` by JSON pointer.
+- **`harness/acceptance.py` (new):** the #113 rule, with metrics kept separate.
+  - **Hard gates:** hard-preference compliance, faithfulness drift, and bullet lines ≤ 2. A node fails only if it *adds* a violation.
+  - **Guards, each with a tolerance:** stuffed terms, leading-verb entropy, MTLD (relative), and max pairwise token Jaccard.
+  - **Targets:** supportable weighted coverage and relevance density. A node must improve one unless it is a requested delete.
+  - **Report only:** the ATS composite.
+- **`harness/executor.py` (new).**
+  - `execute_plan` runs the steps in order: base, arbitration, nodes in section order (a failing node is reverted and the rest continue), skills, finalize, commit.
+  - **Finalize** checks hard preferences, non-empty sections, the skills cap and floor, section order, the per-bullet line gate and the #200 page line budget. Any violation commits nothing and returns violations and cut hints.
+  - **The commit** is a `source=host` node carrying the program, metric vectors and provenance. It keeps the parent's layout overrides and is **materialized** into `UserJobResult`, so the web app and `art ui` show it.
+  - `patch_plan` amends any saved program and reruns it.
+  - `dry_run` evaluates everything and commits nothing.
+- **Contract tools:** `execute_plan` and `patch_plan` join the #191 contract as write tools and the cross-adapter parity test.
+- **`PlanProgram` table (new):** every submitted program, by id, including those finalize refused. `services.delete_job` removes them.
+- **`tree.commit_node(materialize=True)`:** commit and write the result in one event, creating the job's first result row if it has none.
+- **`eval/scripted_host.py` (new):** a deterministic host policy driven only through `harness.contract.invoke`:
+  - tighten experiences to their three most relevant bullets;
+  - keep the two most relevant projects;
+  - put posting terms first in skills.
+
+  `python -m eval.scripted_host` runs benchmark tasks against a throwaway store.
+- **Purity fixes for the import boundary:**
+  - `iter_requirements` and the JD digest moved into `agents/jd_payload.py` (re-exported by `jd_profile`), so `agents.arbitration`, `agents.tailor_planner` and `agents.keyword_weights` no longer load `llm`. All three are now held to the boundary test's rule 2.
+  - `relevance_density` was promoted from `eval/metrics` into `agents/checks.py`.
+- **Tests: `tests/test_executor.py` (25 new):**
+  - schema and patch rules;
+  - the acceptance rule on content (stuffing reverted while a target rises, requested deletes, gates counting only new violations, ATS never deciding);
+  - refusals that never execute;
+  - finalize blocking with hints;
+  - the unmeasured budget;
+  - stale parent and rebase by `patch_plan`;
+  - layout overrides surviving a host plan;
+  - #113's criteria: a clean supported-keyword revise is kept, and permuting independent nodes changes nothing;
+  - **the acceptance tests:** a replayed program is byte-identical, and three benchmark tasks run through the scripted host on two independent stores with identical results.
+
+  The contract test adds 5 cases.
+
+### Deviations from spec
+
+- **There is no page-count check at finalize.** Pages come from compiling, and #200's line budget is the model-free predictor (178 of 180 held-out pages correct). Rendering is the `render` tool's job.
+- **`from_variant` and `use_variant` are recorded, not resolved.** The bullet library that gives variant ids meaning is #199; the edit-distance-from-variant guard arrives with it.
+- **Only hard (strength-5) preferences are enforced here.** Soft preferences stay the host's to weigh, from `art_briefing`. A delete that a hard preference requires overrides guard objections, since compliance is itself a hard gate. Otherwise such a plan could never commit.
+- **The citation gate checks that cites resolve, not that they support the text.** Semantic citation faithfulness is #198. Faithfulness drift (#72) still guards experiences.
+- **The MTLD tolerance is relative (10%), not in points.** MTLD scales with text length, so a points tolerance reverted every deletion on real profiles. All tolerances are provisional until #127 fits them.
+- **Semantic duplication uses the token-Jaccard fallback.** Neither Jev (#193) nor the embedding encoder is in the harness yet.
+- **Byte-identity across stores is modulo ids.** Job and node ids are fresh UUIDs per store, and `program_id` hashes the job id. Replays in one store are byte-identical, apart from the new node's id.
+
+---
+
 ## Issue 200 — Line budget and block render cache
 **Status:** complete | **Tests:** 1451 pass on SQLite (14 new), 18 skipped (8 of them because the worktree has no frontend build); 2 new integration tests pass locally with tectonic
 
