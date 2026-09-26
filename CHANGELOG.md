@@ -12,6 +12,58 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 204 — art ui: local editor mode with a live change feed
+**Status:** complete | **Tests:** 1505 pass on SQLite (13 new), 10 skipped; frontend 106 pass (8 new)
+
+The React editor now runs as `art ui`: a local, login-free app on 127.0.0.1 that a coding agent opens next to its conversation. When the host commits a version, the open editor reloads by itself. When the user edits or drags, that change is already a tree node the host reads on its next turn.
+
+### What shipped
+
+- **Local mode (`web/local_mode.py`, new).** It is on only when `ART_LOCAL_UI=1`, which only the launcher sets.
+  - `get_current_user` returns the bound user (`ART_LOCAL_UI_USER_ID`) without a cookie. With the flag off, a cookieless request still gets a 401.
+  - Quota checks pass in local mode (`_has_quota`).
+  - `/api/auth/capabilities` reports `auth_mode: "none"`.
+  - Guards for a server with no login: a `TrustedHostMiddleware` allowing only `127.0.0.1` / `localhost`, and a pure-ASGI guard refusing a non-GET request whose `Origin` is not the server's own (403).
+  - A read-only store skips `init_db` at startup.
+- **Launcher `python -m web.local_ui` (new)**, with `--job`, `--port` (8765), `--database-url`, `--user-id`, `--allow-writes` and `--no-open`.
+  - It pins `DATABASE_URL` through `harness.runtime` before importing `config`, `database` or `web.app`: `~/.art/art.db` by default, and Postgres read-only unless `--allow-writes`.
+  - It resolves the user from `--user-id`, else the active profile, else `get_or_create_cli_user` (writable stores only).
+  - It exits with the build command when `web/static/index.html` is missing.
+  - It serves uvicorn on 127.0.0.1, prints the URL and opens `/?job=<id>` in a browser.
+- **SSE change feed:** `GET /api/jobs/{id}/events`.
+  - Each event is `event: tree`, `id: <event_id>`, data `{event_id, kind, node_id, source}`; the source is read from the node.
+  - It resumes from `?since=` or `Last-Event-ID`. With neither, it starts at the newest event, so opening the editor replays nothing.
+  - It polls `events_since` through `asyncio.to_thread` every second and sends a heartbeat comment every 15 s.
+  - Someone else's job returns 404.
+- **Frontend:**
+  - `MainPage` opens the job named in `?job=`.
+  - `useTreeEvents` subscribes to the feed, in local mode only. `JobWorkspace` refreshes the job and remounts `ResumeSplit` (a `revision` in its key) on any event that is not the editor's own commit.
+  - When the buffer has unsaved keystrokes, a "New version from your agent" banner offers Reload or Keep my edits instead, and auto-save pauses until the user chooses.
+  - Sign-out, the login pages and the landing page are hidden or redirected when `auth_mode === "none"`.
+  - The decision is the pure `lib/treeEvents.ts::reloadAction`.
+- **Tests:**
+  - `tests/test_local_ui.py` (13 new):
+    - a cookieless request is local-user only in local mode, and 401 otherwise;
+    - capabilities and quotas in local mode;
+    - a foreign Host and a cross-origin write are refused, and a same-origin write is not;
+    - the feed yields a host commit after its cursor, resumes from `Last-Event-ID`, starts at "now" and sees a commit made while the stream is open, and is scoped to its owner;
+    - a local-mode `PUT /layout` appears in `get_head(...)["editor_edits"]`;
+    - the launcher refuses without a built editor.
+  - `lib/treeEvents.test.ts` (8 new).
+- **Verified by hand** against a scratch SQLite store. A `harness.cli checkout` reloaded the open editor without a refresh. With a dirty buffer, the same checkout raised the banner instead.
+
+### Deviations from spec
+
+- **The launcher is `python -m web.local_ui`**, not `art ui`, until #194 packages the `art` console script. It lives under `web/`, because `harness/` may not import the routers (#190).
+- **Checkouts always reload.** A checkout event carries the source of the node it lands on, which may be `editor`, so the rule is "not your own *commit*". Filtering on source alone would have missed a host reverting to an editor version.
+- **The feed is subscribed only in local mode.** The endpoint also works on the hosted app, but a per-tab one-second DB poll against the frozen Supabase deploy was not worth adding.
+- **Auto-save pauses while the banner is up.** Otherwise the stale buffer would have been saved over the agent's version before the user chose. "Keep my edits" resumes it, and the user's text wins.
+- **No separate local-mode re-tailor test for layout overrides.** The pipeline tests in `test_layout_overrides.py` already prove an override survives a re-tailor, and the local-mode `PUT /layout` test proves the override is stored by the same route.
+- **The build hint says `npm install`, not `npm ci`.** The checked-in lockfile does not satisfy `npm ci` on npm 11.6 today.
+- **The Postgres leg was not run locally** (Docker was not running). CI runs it.
+
+---
+
 ## Issue 196 — The tailoring tree: nodes, HEAD, provenance, change feed
 **Status:** complete | **Tests:** 1492 pass on SQLite (27 new), 10 skipped
 

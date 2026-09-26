@@ -373,6 +373,28 @@ There are three ways to chat-edit:
 | Faithful keep | Nodes branch from HEAD |
 | Drag reorder → layout override | Unchanged, and each drag is also a node |
 
+### Running `art ui` (#204)
+
+```bash
+npm --prefix web/frontend install && npm --prefix web/frontend run build   # once
+python -m web.local_ui --job <job_id>        # opens http://127.0.0.1:8765/?job=<job_id>
+```
+
+- **Database and user** are pinned as for the harness (§ 15): local SQLite by default,
+  `--database-url` to read elsewhere, Postgres read-only unless `--allow-writes`. The
+  user is `--user-id`, else the active profile, else the CLI's default profile.
+- **Local mode** (`ART_LOCAL_UI=1`, set only by the launcher) replaces login with the
+  bound user and skips the per-user quotas. It binds 127.0.0.1 only, serves only a
+  `localhost` / `127.0.0.1` Host (DNS-rebinding guard) and refuses a write whose `Origin`
+  is not its own. With the flag off the hosted app is unchanged.
+- **Change feed.** `GET /api/jobs/{id}/events` streams the job's `TreeEvent`s as SSE
+  (`event: tree`, `id: <event_id>`, data `{event_id, kind, node_id, source}`), resuming
+  from `?since=` or `Last-Event-ID`. The editor reloads on any commit that is not its own
+  `editor` commit and on every checkout. With unsaved keystrokes it pauses auto-save and
+  asks before reloading.
+- **Edits reach the host.** Every `.tex` save and drag commits an `editor` node, so the
+  host's next `get_head(since_event=...)` lists it under `editor_edits`.
+
 ## 14. Learning offline
 
 ```mermaid
