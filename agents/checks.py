@@ -220,6 +220,20 @@ def faithfulness_drift(tailored_content: Dict, source_experiences: List[Dict]) -
     return drifted
 
 
+def relevance_density(text: str, jd_keywords: set) -> float:
+    """Fraction of the text's content tokens that appear in the JD keyword set.
+
+    Not monotone in text, unlike the ATS composite: padding a bullet with words
+    the posting never uses lowers it, and cutting an irrelevant item raises it.
+    That is why it is a tailoring *target* (docs/harness.md § 5). Promoted from
+    `eval/metrics._keyword_relevance` for the executor (#197).
+    """
+    tokens = ATSScoringEngine._extract_keywords(text)
+    if not tokens:
+        return 0.0
+    return len(tokens & jd_keywords) / len(tokens)
+
+
 def over_repeated_terms(tailored_content: Dict) -> Dict[str, int]:
     """
     Skill terms mentioned more than MAX_TERM_MENTIONS times across the whole

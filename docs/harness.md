@@ -201,22 +201,24 @@ code or a cached Jev decision.
 
 ```json
 {
-  "job_id": "job_8f2c",
-  "parent": "node_14",
+  "job_id": "8f2c…",
+  "parent": "5b1e…",
   "nodes": [
-    { "id": "exp1", "op": "revise", "item_key": "exp:acme-analytics",
+    { "id": "exp1", "op": "revise", "item_key": "exp:data scientist|acme analytics",
       "from_variant": "var:acme-analytics#model-default",
       "strategy": "keyword_weave", "keywords": ["causal inference"],
       "bullets": [{ "text": "Designed a CUPED-adjusted A/B framework ...",
-                    "cites": ["ev:acme-analytics#b2", "skill:experimentation"] }],
+                    "cites": ["exp:data scientist|acme analytics#b2", "skill:experimentation"] }],
       "accept": { "improves": ["coverage", "relevance_density"] } },
-    { "id": "swap", "op": "replace", "item_key": "proj:todo-app",
-      "replacement_key": "proj:recsys-gnn", "use_variant": "var:recsys-gnn#ml",
+    { "id": "swap", "op": "replace", "item_key": "proj:todo app",
+      "replacement_key": "proj:recsys gnn",
       "accept": { "improves": ["relevance_density"] } },
-    { "id": "drop", "op": "delete", "item_key": "proj:coursework-db",
-      "because": "pref:no-coursework" }
+    { "id": "drop", "op": "delete", "item_key": "proj:coursework db",
+      "because": "pref:3f0a…" }
   ],
-  "finalize": { "pages": 1, "line_budget": 60, "max_skills": 18 }
+  "skills": ["Python", "SQL", "PyTorch"],
+  "finalize": { "line_budget": 60, "max_skills": 18, "min_skills": 8, "max_bullet_lines": 2 },
+  "host": { "name": "claude-code", "version": "2.1", "model": "claude-opus-5-5" }
 }
 ```
 
@@ -234,6 +236,26 @@ Execution:
 
 Stable IDs do the faithfulness work. The host names item keys, variant IDs and evidence
 IDs, and ART resolves them without parsing display text.
+
+**As built (#197).** `harness/program.py` holds the schema, `harness/acceptance.py` the
+metric vector and the rule, and `harness/executor.py` runs it. The details:
+
+- **IDs.** Evidence IDs are `<item key>#b<n>`, the n-th source bullet (0-based). A cite may
+  also be any item key. `because` is `pref:<preference id>` or `user:<what they asked>`.
+- **No parent yet.** A job with no history starts from the whole KG with skills ranked
+  (`kg_default_content`) until track baselines land (#199).
+- **Gates compare sets.** A node fails only if it *adds* a violation. Finalize is where
+  what remains stops a commit.
+- **Hard-preference deletes.** A delete that a hard preference requires is accepted even
+  if a guard objects, since compliance is itself a hard gate.
+- **Line budget.** It is measured by #200's render cache. Without a LaTeX engine it
+  reports `unmeasured` and doesn't block.
+- **Saving and replay.** Every program is saved (`PlanProgram`), so `patch_plan` can
+  amend one that finalize refused. `dry_run` evaluates everything and commits nothing.
+- **Visible in the editor.** A commit materializes into the job's current result, so
+  the web app and `art ui` show it.
+- **Scripted host.** `python -m eval.scripted_host` drives benchmark tasks through the
+  contract with a fixed, model-free policy.
 
 ## 8. Bullets and baselines (#199, #200)
 
@@ -280,7 +302,7 @@ construction.
 | | `list_jobs` | filter → jobs with status, HEAD, last score |
 | | `suggest_actions` | job, node → per item: variant, ranked actions, propensities |
 | Execute & history | `execute_plan` | program → node results, metric vectors, refusals, violations |
-| | `patch_plan` | base node, pointer edits → same |
+| | `patch_plan` | saved program id, pointer edits → same |
 | | `checkout` | node → moves HEAD |
 | | `diff_nodes` | two nodes → bullet-level diff with rationale |
 | | `get_head` | job, cursor → HEAD, events and editor edits since the cursor |

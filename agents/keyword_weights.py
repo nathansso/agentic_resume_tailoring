@@ -52,6 +52,7 @@ from typing import Dict, Iterable, List, Optional, Set
 from agents.ats_scorer import (
     _MIN_WORD_LEN, _PURE_NUMBER, _SPLIT_PATTERN, _STOP_WORDS, ATSScoringEngine,
 )
+from agents.jd_payload import text_digest
 
 logger = logging.getLogger(__name__)
 
@@ -316,8 +317,6 @@ def compute_weights(
     the *adjacent* tier is directly actionable for the planner — it is precisely
     where `reframe` / `keyword_weave` have positive expected value.
     """
-    from agents.jd_profile import extraction_key
-
     importance = importance_map(payload, jd_text)
     support = supportability_map(importance.keys(), support_index)
     terms = {
@@ -330,7 +329,7 @@ def compute_weights(
         # Ties the map to the exact JD text it was computed over, so a consumer
         # can refuse a stale map instead of silently zero-weighting every token
         # the posting has gained since.
-        "jd_digest": extraction_key(jd_text, version=WEIGHTS_VERSION),
+        "jd_digest": text_digest(jd_text, WEIGHTS_VERSION),
         "terms": terms,
         "importance": importance,
         "supportability": support,

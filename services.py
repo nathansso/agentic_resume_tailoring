@@ -2426,8 +2426,9 @@ def delete_job(job_uuid: str) -> str:
         from database.models import JDProfile, JobCard
         jid = _UUID(job_uuid)
         with Session(engine) as session:
-            from database.models import JobHead, TailorNode, TreeEvent
-            # Tailoring tree (#196): FK'd to the job like JobCard/JDProfile.
+            from database.models import JobHead, PlanProgram, TailorNode, TreeEvent
+            # Tailoring tree (#196) and saved plan programs (#197): FK'd to the job.
+            session.exec(delete(PlanProgram).where(PlanProgram.job_id == jid))
             session.exec(delete(TreeEvent).where(TreeEvent.job_id == jid))
             session.exec(delete(JobHead).where(JobHead.job_id == jid))
             session.exec(delete(TailorNode).where(TailorNode.job_id == jid))

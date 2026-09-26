@@ -31,6 +31,15 @@ CALLS = {
     "diff_nodes": [{"from_node": "$N0", "to_node": "$N1"}],
     "checkout": [{"job_id": "$JOB", "node_id": "$N0"},
                  {"job_id": "$JOB", "node_id": "00000000-0000-0000-0000-000000000000"}],
+    # Plan programs (#197). Dry runs, so all three adapters see the same HEAD.
+    "execute_plan": [
+        {"program": {"job_id": "$JOB", "parent": "$N1", "nodes": [
+            {"id": "k", "op": "keep", "item_key": "exp:data scientist|rippling"},
+            {"id": "gone", "op": "delete", "item_key": "proj:no such project"}]},
+         "dry_run": True},
+        {"program": {"job_id": "$JOB", "parent": None}, "dry_run": True}],   # stale parent
+    "patch_plan": [{"program_id": "prog_missing", "edits": [
+        {"op": "replace", "path": "/parent", "value": "$N1"}]}],
 }
 _DUMMY = {"$JOB": "00000000-0000-0000-0000-000000000001",
           "$N0": "00000000-0000-0000-0000-000000000002",
@@ -38,7 +47,11 @@ _DUMMY = {"$JOB": "00000000-0000-0000-0000-000000000001",
 
 
 def _fill(args, ids):
-    return {k: ids.get(v, v) if isinstance(v, str) else v for k, v in args.items()}
+    if isinstance(args, dict):
+        return {k: _fill(v, ids) for k, v in args.items()}
+    if isinstance(args, list):
+        return [_fill(v, ids) for v in args]
+    return ids.get(args, args) if isinstance(args, str) else args
 
 
 @pytest.fixture()

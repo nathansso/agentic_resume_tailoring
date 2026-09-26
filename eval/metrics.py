@@ -16,6 +16,7 @@ import re
 from typing import Dict, List, Optional
 
 from agents.ats_scorer import ATSScoringEngine
+from agents.checks import relevance_density
 from agents.redundancy import redundancy_report
 from agents.skill_selection import skill_names
 from agents.skill_scorer import MAX_SKILLS, MIN_SKILLS
@@ -61,12 +62,8 @@ def _word_count(text: str) -> int:
     return len(text.split())
 
 
-def _keyword_relevance(text: str, jd_keywords: set) -> float:
-    """Fraction of the text's content tokens that appear in the JD keyword set."""
-    tokens = ATSScoringEngine._extract_keywords(text)
-    if not tokens:
-        return 0.0
-    return len(tokens & jd_keywords) / len(tokens)
+# Promoted to agents/checks.py for the executor (#197); the alias keeps callers.
+_keyword_relevance = relevance_density
 
 
 # ── experience allocation ──────────────────────────────────────────────────────

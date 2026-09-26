@@ -44,7 +44,7 @@ reproduced on the candidate side.
 import logging
 from typing import Dict, List, Optional, Sequence
 
-from agents.jd_profile import iter_requirements
+from agents.jd_payload import iter_requirements
 from agents.preferences import terms_of
 
 logger = logging.getLogger(__name__)
