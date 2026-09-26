@@ -398,7 +398,7 @@ There are three ways to chat-edit:
 ### Running `art ui` (#204)
 
 ```bash
-npm --prefix web/frontend install && npm --prefix web/frontend run build   # once
+npm --prefix web/frontend ci && npm --prefix web/frontend run build   # once
 python -m web.local_ui --job <job_id>        # opens http://127.0.0.1:8765/?job=<job_id>
 ```
 

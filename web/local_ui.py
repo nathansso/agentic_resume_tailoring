@@ -27,7 +27,7 @@ from typing import Optional, Sequence
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 DEFAULT_PORT = 8765
 HOST = "127.0.0.1"
-BUILD_HINT = "npm --prefix web/frontend install && npm --prefix web/frontend run build"
+BUILD_HINT = "npm --prefix web/frontend ci && npm --prefix web/frontend run build"
 
 
 def missing_static(static_dir: Path = STATIC_DIR) -> Optional[str]:
