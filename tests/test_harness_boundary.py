@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parent.parent
 BANNED_EXACT = {"llm", "langgraph", "openai", "anthropic"}
 BANNED_PREFIX = ("langchain",)
 EXTRA_ENTRIES = ("agents.checks", "agents.arbitration", "agents.tailor_planner",
-                 "agents.keyword_weights", "agents.jd_payload")
+                 "agents.keyword_weights", "agents.jd_payload", "agents.kg_store")
 
 
 def _banned(module: str) -> bool:

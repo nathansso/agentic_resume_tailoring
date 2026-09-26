@@ -129,6 +129,11 @@ def _migrate_db() -> None:
         # decided by the run that produced it. Backfilled by
         # _backfill_result_seq below.
         "ALTER TABLE userjobresult ADD COLUMN seq INTEGER",
+        # issue 192: application status (drafting/applied/interview/closed),
+        # separate from the pipeline `status`; and a posting's answers to the
+        # user's job-scoped rules. Both nullable, so existing rows load.
+        "ALTER TABLE jobdescription ADD COLUMN application_status TEXT DEFAULT 'drafting'",
+        "ALTER TABLE jdprofile ADD COLUMN eligibility JSON",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

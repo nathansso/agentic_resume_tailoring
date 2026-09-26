@@ -12,6 +12,68 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 192 — Host-filled ingestion and jobs: ingest_schema, upsert_items, open_job, list_jobs
+**Status:** complete | **Tests:** 1586 pass on SQLite (27 new), 12 skipped
+
+On the harness path the host's own model reads the resume, repos and posting. ART now takes what it extracts, validates it, deduplicates it and stores it, with no model call. This closes four gaps from the #189 run: stale facts the host could not correct, missing items it could not add, duplicate skills, and a graduation-date eligibility rule that no tool carried. That last gap is why the resume in that run shipped the wrong date.
+
+### What shipped
+
+- **`agents/kg_store.py` (new): the parser's persistence, moved verbatim.**
+  - Moved: `_save_*`, `_merge_*`, `_heal_*`, the fuzzy matchers, the degree helpers, tombstones, `_clean_date` and the placeholder sets. They move into a `KGStoreMixin`, which reads `database.db.engine` at call time.
+  - `ResumeParserAgent` inherits the mixin, so every name, test and `services._supersede_*` caller is unchanged.
+  - One addition: each `_save_*` returns a `(status, row)` outcome per item (`created`, `merged`, `unchanged`, `skipped_manual`, `skipped_tombstone`, `skipped_empty`). The parser ignores them.
+- **`agents/jd_payload.py` holds the rest of the pure JD profile:** `compile_profile_payload`, `merge_edits`, `extraction_key`, `payload_digest`, `profile_terms`, the clamps and `PROFILE_VERSION`. `jd_profile` re-exports all of it and keeps only the LLM extraction.
+- **`harness/ingest.py` (new) and three contract tools:**
+  - **`ingest_schema(kind)`** returns the JSON schema from `agents/extraction_schemas.py` for experience, education, project, skill, achievement and requirement, plus the `rule` schema. The schemas forbid unknown fields, so a host's typo surfaces.
+  - **`upsert_items(records, source)`** takes records of the form `{kind, data, correct}`.
+    - Records are stored in the parser's order, then the parser's four heal passes run, so the rows match `parse_and_save` for the same extraction.
+    - Skills go through `postprocess_skills`, and a name that normalizes to one the user already has (`Time-Series Analysis` against `Time series analysis`) lands on the stored skill.
+    - `correct: true` overwrites the given fields on a matched row, for example an ended role still reading `Present`, instead of only filling blanks. It never touches a `manually_edited` row.
+    - The result has one entry per record: key, status and message. Invalid records come back as `invalid` with the pydantic message and never block the valid ones.
+  - **`open_job(jd_text, requirements, metadata, rule_answers, job_id)`**:
+    - creates the `JobDescription`, or updates it when `job_id` is passed or the same posting is reopened;
+    - compiles the host's requirements into a `JDProfile` with the parser's own compile and edit-preserving merge;
+    - persists keyword weights (`services.resolve_keyword_weights`);
+    - resolves job-scoped rules.
+
+    Bad requirements and unknown rule ids come back in `schema_errors`.
+  - **`list_jobs(status)`** filters on the new application status. `JobRef` gains `application_status` and `url`.
+- **Job-scoped rules (the #189 graduation-date gap).** A new `JobRule` table holds `item_key`, `field`, a yes/no `question`, `value_if_yes`, and an optional `value_if_no`.
+  - Rules are recorded with `upsert_items` (kind `rule`), limited to education and experience fields of items that exist.
+  - `art_briefing` lists them as `job_rules`.
+  - `open_job` stores the answers on `JDProfile.eligibility` and returns each rule as `answered` (with its value) or `needs_answer`.
+  - The executor writes the resolved values into its base content on every run and reports them as `rules_applied`.
+- **Schema, backward-compatible:**
+  - `JobDescription.application_status` (default `drafting`);
+  - `JDProfile.eligibility` (nullable JSON);
+  - both added by `ALTER` in `_migrate_db`;
+  - a new `JobRule` table from `create_all`.
+
+  The pipeline `status` column is unchanged, since JobCards read it.
+- **`eval/scripted_host.py`** opens each task with `open_job`, passing the requirements a fixed reader finds under the posting's requirement and qualification headings. `create_job` is gone.
+- **Tests:**
+  - `tests/test_host_ingest.py` (18 new):
+    - **Parity:** on three benchmark profiles, `parse_and_save` with stubbed extractors and `upsert_items` of the same records store identical rows, and a second upsert changes nothing.
+    - **Upserts:** a `manually_edited` row survives a re-ingest with and without `correct`, `correct` fixes a stale end date, tombstones hold, schema errors are structured, and skills dedupe on normalized names.
+    - **Jobs:** `ingest_schema` works; `open_job` persists the profile and weights and reopens the same job; bad requirements are reported; `list_jobs` filters by status.
+    - **Rules:** a rule flows from `art_briefing` to `open_job` to the executor, answered yes and then no; rule targets are validated.
+    - **Migration:** `init_db` adds both columns to a database that lacks them.
+  - `tests/test_harness_contract.py`: the three new tools join the cross-adapter test.
+  - `tests/test_harness_boundary.py`: `agents.kg_store` is added as an entry.
+
+### Deviations from spec
+
+- **The host answers eligibility rules, not Jev.** Jev is #193, which needs a TypeSafe key. That matches the fallback in docs/harness.md § 4: the host asks the user. An unanswered rule is `needs_answer`, and the host calls `open_job` again with `job_id` and `rule_answers`.
+- **The status is a new column, `application_status`.** `JobDescription.status` already holds the pipeline state (created, analyzed, tailored, exported) that JobCards read, so it could not be reused.
+- **No per-record evidence storage.** The call's `source` becomes a skill's `evidence_source`, as it does for the parser. Nothing else in the KG has an evidence column, so file-and-line citations wait for #198.
+- **Project bullets are not ingestible yet.** `ProjectItem` has no bullets and the parser never stored any, so the scripted host still seeds its profile directly.
+- **`AWS SageMaker` and `SageMaker` still land as two skills.** Normalized-name dedup catches case, spacing and hyphens only. Semantic duplicates wait for Jev (#193) or embeddings (#194).
+- **A reweighted executor test.** `test_a_clean_revise_adding_a_supported_keyword_is_kept` wove in "architecture". With a real profile the job now has #125 weights, and that term is unsupported by the candidate's graph, so it weighs zero. The test now weaves "integrate", which is supported.
+- **The Postgres leg was not run locally** (Docker was not running). CI runs it.
+
+---
+
 ## Issue 219 — Frontend lockfile back in sync, and a CI drift check
 **Status:** complete | **Tests:** 1559 pass on SQLite (0 new; 1 tightened), 12 skipped; frontend 106 pass
 

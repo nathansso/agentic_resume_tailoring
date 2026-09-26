@@ -2,12 +2,15 @@
 
 It plays the part Claude Code or Codex plays in production, with a fixed
 policy instead of a model, and talks to ART only through the tool contract
-(`harness.contract.invoke`) — the same calls a real host makes over MCP. Two
-things are done directly because no tool covers them yet: seeding a profile
-fixture into the store (ingest is the host's job, #194) and creating the job
-record (`open_job` is #192).
+(`harness.contract.invoke`) — the same calls a real host makes over MCP. One
+thing is done directly: seeding a profile fixture into the store, because the
+fixture's project bullets have no field in the ingest schema that
+`upsert_items` (#192) fills.
 
 The policy, per task:
+
+- **Open the job** with `open_job`, passing the requirements a fixed reader
+  finds under the posting's requirement and qualification headings.
 
 - **Experiences:** revise each one to its three source bullets with the most
   posting overlap (in their original order, `tighten`), citing each by its
@@ -27,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -45,7 +49,7 @@ KEEP_PROJECTS = 2
 HOST = {"name": "scripted-host", "version": "1", "model": None}
 
 
-# ── store setup (no tool for these yet) ──────────────────────────────────────
+# ── store setup (no tool for this yet) ───────────────────────────────────────
 
 def seed_profile(fixture, name: str = "Benchmark Candidate",
                  email: str = "candidate@example.com") -> UUID:
@@ -91,21 +95,60 @@ def seed_profile(fixture, name: str = "Benchmark Candidate",
         return uid
 
 
-def create_job(user_id: UUID, task: Dict) -> str:
-    from sqlmodel import Session
-
-    import services
-    from database.models import JobDescription
-
-    with Session(services.engine) as s:
-        job = JobDescription(user_id=user_id, title=task["title"], company=task["company"],
-                             description=task["description"], source_url=task.get("url"))
-        s.add(job)
-        s.commit()
-        return str(job.job_id)
-
-
 # ── the policy ───────────────────────────────────────────────────────────────
+
+_BULLET = re.compile(r"^\s*(?:[-*•·▪◦]|\d+[.)])\s*")
+_PREFERRED = ("prefer", "nice to have", "bonus", "plus", "desired")
+_REQUIRED = ("require", "qualification", "must", "what you bring", "you have",
+             "what we're looking for", "skills")
+MAX_REQUIREMENTS = 25
+
+
+def _heading(line: str) -> Optional[str]:
+    """A line that reads as a section heading: short, no sentence punctuation."""
+    text = line.strip().strip("#*:").strip()
+    if not text or len(text) > 60 or len(text.split()) > 8 or text.endswith("."):
+        return None
+    return text if not _BULLET.match(line) else None
+
+
+def extract_requirements(jd_text: str) -> List[Dict]:
+    """Lines under requirement and qualification headings, typed by heading.
+
+    The scripted host's stand-in for a model reading the posting: a fixed rule,
+    so a rerun sends `open_job` the same requirements.
+    """
+    reqs: List[Dict] = []
+    kind, section = None, None
+    for line in (jd_text or "").splitlines():
+        if not line.strip():
+            continue
+        head = _heading(line)
+        if head is not None:
+            low = head.lower()
+            kind = ("preferred" if any(w in low for w in _PREFERRED) else
+                    "required" if any(w in low for w in _REQUIRED) else None)
+            section = head
+            continue
+        text = _BULLET.sub("", line).strip()
+        if kind is None or len(text.split()) < 3:
+            continue
+        reqs.append({"text": text, "type": kind, "criticality": 4 if kind == "required" else 2,
+                     "terms": sorted(ATSScoringEngine._extract_keywords(text)),
+                     "source_section": section})
+        if len(reqs) >= MAX_REQUIREMENTS:
+            break
+    return reqs
+
+
+def open_task_job(user_id: UUID, task: Dict) -> str:
+    """`open_job` for one benchmark task; returns the job id."""
+    return _call("open_job", user_id, {
+        "jd_text": task["description"],
+        "requirements": extract_requirements(task["description"]),
+        "metadata": {"title": task["title"], "company": task["company"],
+                     "url": task.get("url")}})["job_id"]
+
 
 def _overlap(text: str, jd_terms: set) -> int:
     return len(ATSScoringEngine._extract_keywords(text or "") & jd_terms)
@@ -158,7 +201,7 @@ def build_program(user_id: UUID, job_id: str, jd_text: str) -> Dict:
 
 def run_task(user_id: UUID, task: Dict) -> Dict:
     """Create the job, plan it, execute it. Returns `{job_id, program, result}`."""
-    job_id = create_job(user_id, task)
+    job_id = open_task_job(user_id, task)
     program = build_program(user_id, job_id, task["description"])
     result = invoke("execute_plan", user_id, {"program": program})
     return {"task": task["id"], "job_id": job_id, "program": program, "result": result}

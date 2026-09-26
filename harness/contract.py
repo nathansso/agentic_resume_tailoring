@@ -70,6 +70,15 @@ class Preference(_Model):
     strength: Optional[int] = None
 
 
+class JobRuleRef(_Model):
+    rule_id: str
+    item_key: str
+    field: str
+    question: str
+    value_if_yes: str
+    value_if_no: Optional[str] = None
+
+
 class BriefingOutput(_Output):
     role_family: Optional[str] = None
     pins: List[Pin] = Field(default_factory=list,
@@ -77,6 +86,9 @@ class BriefingOutput(_Output):
     preferences: List[Preference] = Field(default_factory=list)
     persona_traits: List[Dict[str, Any]] = Field(default_factory=list)
     job_cards: str = ""
+    job_rules: List[JobRuleRef] = Field(
+        default_factory=list, description="Yes/no questions to answer for each posting in "
+                                          "open_job's rule_answers.")
     counts: Dict[str, int] = Field(default_factory=dict)
 
 
@@ -143,15 +155,21 @@ class ProfileOutput(_Output):
 
 # ── tailoring tree (#196) ────────────────────────────────────────────────────
 
+ApplicationStatus = Literal["drafting", "applied", "interview", "closed"]
+
+
 class ListJobsInput(_Model):
-    pass
+    status: Optional[ApplicationStatus] = Field(
+        None, description="Only jobs whose application status is this.")
 
 
 class JobRef(_Model):
     job_id: str
     title: str
     company: str
-    status: Optional[str] = None
+    status: Optional[str] = Field(None, description="Pipeline state (created, tailored, ...).")
+    application_status: ApplicationStatus = "drafting"
+    url: Optional[str] = None
     head: Optional[str] = Field(None, description="Current node id, if the job has history.")
     created_at: Optional[str] = None
 
@@ -245,6 +263,114 @@ class CheckoutOutput(_Output):
     head: Optional[Node] = None
 
 
+# ── host-filled ingestion and jobs (#192) ────────────────────────────────────
+
+SchemaKind = Literal["experience", "education", "project", "skill", "achievement",
+                     "requirement", "rule"]
+RecordKind = Literal["experience", "education", "project", "skill", "achievement", "rule"]
+
+
+class IngestSchemaInput(_Model):
+    kind: SchemaKind
+
+
+class IngestSchemaOutput(_Output):
+    kind: Optional[str] = None
+    json_schema: Dict[str, Any] = Field(default_factory=dict,
+                                        description="JSON schema of one record's `data`.")
+    required: List[str] = Field(default_factory=list)
+    note: Optional[str] = None
+
+
+class UpsertRecord(_Model):
+    kind: RecordKind
+    data: Dict[str, Any] = Field(description="Fields per ingest_schema(kind).")
+    correct: bool = Field(False, description="Overwrite the matched item's given fields "
+                                             "instead of only filling blanks. Never "
+                                             "changes an item the user edited by hand.")
+
+
+class UpsertInput(_Model):
+    records: List[UpsertRecord] = Field(min_length=1, max_length=500)
+    source: str = Field("host", description="Where the records came from, e.g. resume.pdf "
+                                            "or github:<repo>. Stored as skill evidence.")
+
+
+class UpsertResult(_Model):
+    index: int
+    kind: str
+    key: Optional[str] = None
+    status: Literal["created", "merged", "unchanged", "corrected", "skipped_manual",
+                    "skipped_tombstone", "skipped_empty", "filtered", "invalid"]
+    message: Optional[str] = None
+
+
+class UpsertOutput(_Output):
+    results: List[UpsertResult] = Field(default_factory=list)
+    counts: Dict[str, int] = Field(default_factory=dict)
+
+
+class JobMetadata(_Model):
+    title: str = ""
+    company: str = ""
+    url: Optional[str] = None
+    status: Optional[ApplicationStatus] = None
+    title_terms: List[str] = []
+
+
+class RuleAnswer(_Model):
+    rule_id: str
+    answer: bool
+    quote: Optional[str] = Field(None, description="The posting's words the answer rests on.")
+
+
+class OpenJobInput(_Model):
+    jd_text: str = Field("", description="The posting's full text. Required for a new job.")
+    requirements: List[Dict[str, Any]] = Field(
+        [], description="Atomic requirements per ingest_schema('requirement').")
+    metadata: JobMetadata = Field(JobMetadata(), description="title and company are required for a new job.")
+    rule_answers: List[RuleAnswer] = Field(
+        [], description="Answers to art_briefing's job_rules for this posting.")
+    job_id: Optional[str] = Field(None, description="Update this job instead of opening one.")
+
+
+class TermWeight(_Model):
+    term: str
+    weight: float
+
+
+class RuleResult(JobRuleRef):
+    status: Literal["answered", "needs_answer"]
+    answer: Optional[bool] = None
+    quote: Optional[str] = None
+    value: Optional[str] = None
+
+
+class SchemaError(_Model):
+    where: str
+    message: str
+
+
+class OpenJobOutput(_Output):
+    job_id: Optional[str] = None
+    created: bool = False
+    title: Optional[str] = None
+    company: Optional[str] = None
+    application_status: Optional[ApplicationStatus] = None
+    requirements: int = 0
+    top_terms: List[TermWeight] = Field(default_factory=list)
+    rules: List[RuleResult] = Field(
+        default_factory=list, description="needs_answer: ask the user, then call open_job "
+                                          "again with job_id and rule_answers.")
+    schema_errors: List[SchemaError] = Field(default_factory=list)
+    baseline: Optional[str] = Field(None, description="Track baseline node (#199).")
+
+
+def _ingest():
+    from harness import ingest
+    return ingest
+
+
 # ── plan programs (#197) ─────────────────────────────────────────────────────
 
 class ExecuteInput(_Model):
@@ -294,6 +420,8 @@ class ExecuteOutput(_Output):
     line_budget: Dict[str, Any] = Field(default_factory=dict)
     violations: List[Violation] = Field(default_factory=list)
     cut_hints: List[Dict[str, Any]] = Field(default_factory=list)
+    rules_applied: List[Dict[str, Any]] = Field(
+        default_factory=list, description="Job-scoped rule values written into the base.")
 
 
 def _executor():
@@ -369,10 +497,34 @@ TOOLS: List[ToolSpec] = [
         ProfileInput, ProfileOutput,
         lambda uid: _tools().get_profile(uid)),
     ToolSpec(
+        "ingest_schema",
+        "The JSON schema of one record you fill for upsert_items (a KG item or a job-scoped "
+        "rule) or open_job (a requirement).",
+        IngestSchemaInput, IngestSchemaOutput,
+        lambda uid, kind: _ingest().ingest_schema(kind)),
+    ToolSpec(
+        "upsert_items",
+        "Store knowledge-graph records you extracted from the user's resume, repos or "
+        "LinkedIn export, or job-scoped rules. ART validates, deduplicates and merges; it "
+        "never changes an item the user edited by hand. Writes.",
+        UpsertInput, UpsertOutput,
+        lambda uid, records, source="host": _ingest().upsert_items(uid, records, source),
+        read_only=False),
+    ToolSpec(
+        "open_job",
+        "Open a job from a posting: its text, the requirements you extracted, and answers "
+        "to the user's job-scoped rules (from art_briefing). Returns the job id, weighted "
+        "terms, and any rule still needing an answer. Re-opening updates the job. Writes.",
+        OpenJobInput, OpenJobOutput,
+        lambda uid, jd_text="", requirements=(), metadata=None, rule_answers=(), job_id=None:
+            _ingest().open_job(uid, jd_text, requirements, metadata or {}, rule_answers, job_id),
+        read_only=False),
+    ToolSpec(
         "list_jobs",
-        "The candidate's jobs with their current tailoring node (HEAD).",
+        "The candidate's jobs with their application status and current tailoring node "
+        "(HEAD), optionally filtered by status.",
         ListJobsInput, ListJobsOutput,
-        lambda uid: {"jobs": _tree().list_jobs(uid)}),
+        lambda uid, status=None: {"jobs": _tree().list_jobs(uid, status)}),
     ToolSpec(
         "get_head",
         "A job's current resume version, plus what changed after a cursor — including "

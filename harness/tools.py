@@ -143,6 +143,8 @@ def art_briefing(user_id: UUID, role_family: Optional[str] = None) -> Dict[str, 
     cards = services.load_job_cards(user_id)
     if role_family:
         cards = select_cards(cards, role_family=role_family)
+    from harness.ingest import list_rules  # harness/ingest imports this module
+    rules = list_rules(user_id)
     return {
         "role_family": role_family,
         "pins": pins,
@@ -153,7 +155,9 @@ def art_briefing(user_id: UUID, role_family: Optional[str] = None) -> Dict[str, 
         ],
         "persona_traits": persona.get("traits", []),
         "job_cards": render_cards(cards),
-        "counts": {"pins": len(pins), "preferences": len(prefs), "job_cards": len(cards)},
+        "job_rules": rules,
+        "counts": {"pins": len(pins), "preferences": len(prefs), "job_cards": len(cards),
+                   "job_rules": len(rules)},
     }
 
 
