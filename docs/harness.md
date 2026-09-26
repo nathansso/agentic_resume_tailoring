@@ -465,7 +465,21 @@ identical results:
 
 The tools are `art_briefing`, `kg_search`, `list_items`, `get_item` and `get_profile`,
 plus the tailoring-tree tools from #196: `list_jobs`, `get_head`, `history`, `diff_nodes`
-and `checkout`.
+and `checkout`; the executor's `execute_plan` and `patch_plan` (#197); and the ingestion
+and job tools from #192: `ingest_schema`, `upsert_items` and `open_job`.
+
+**Ingestion and jobs (#192).** The host fills `ingest_schema(kind)` and calls
+`upsert_items`, which stores records through the resume parser's own dedup, merge, heal
+and tombstone code (moved to the model-free `agents/kg_store.py`), so a host-filled payload
+lands as the rows the parser would write. A row the user edited by hand is never changed;
+`correct: true` overwrites a stale field on any other matched row. `open_job` stores the
+posting and the host's requirements as a `JDProfile` with keyword weights, and resolves
+**job-scoped rules**: yes/no questions about a posting that set a profile field (a
+graduation date that depends on post-internship enrollment). Rules are recorded with
+`upsert_items` (kind `rule`), listed in `art_briefing`, answered in `open_job`'s
+`rule_answers` (Jev takes this over in #193), and applied to the executor's base content.
+Each job has an application status (drafting, applied, interview, closed) that
+`list_jobs(status)` filters on.
 
 **Writes.** `checkout` is the first tool that writes. Local SQLite is writable. A remote or
 Postgres database is read-only, and write tools return a `read_only` error, unless the

@@ -381,8 +381,9 @@ def diff_nodes(user_id, a, b) -> Dict[str, Any]:
             "tex_changed": tex_changed, "layout_changed": layout_changed}
 
 
-def list_jobs(user_id) -> List[Dict[str, Any]]:
-    """The user's jobs with their HEAD, newest first. Minimal: #192 extends it."""
+def list_jobs(user_id, status: Optional[str] = None) -> List[Dict[str, Any]]:
+    """The user's jobs with their HEAD, newest first, optionally only those whose
+    application status is `status` (#192). A NULL status reads as drafting."""
     user_id = _uuid(user_id)
     with Session(_db.engine) as session:
         jobs = session.exec(select(JobDescription).where(
@@ -390,9 +391,14 @@ def list_jobs(user_id) -> List[Dict[str, Any]]:
         heads = {h.job_id: h.node_id for h in session.exec(
             select(JobHead).where(JobHead.user_id == user_id)).all()}
         rows = [{"job_id": str(j.job_id), "title": j.title, "company": j.company,
-                 "status": j.status, "head": str(heads[j.job_id]) if j.job_id in heads else None,
+                 "status": j.status,
+                 "application_status": j.application_status or "drafting",
+                 "url": j.source_url,
+                 "head": str(heads[j.job_id]) if j.job_id in heads else None,
                  "created_at": j.created_at.isoformat() if j.created_at else None}
                 for j in jobs]
+    if status:
+        rows = [r for r in rows if r["application_status"] == status]
     return sorted(rows, key=lambda r: (r["created_at"] or "", r["job_id"]), reverse=True)
 
 

@@ -48,6 +48,7 @@ from agents.skill_scorer import rank_and_select_skills
 from database.models import JobDescription, PlanProgram, UserJobResult
 from harness import ART_VERSION, tree
 from harness.acceptance import Context, accept, metric_vector, preference_violations
+from harness.ingest import apply_job_rules, resolve_rules
 from harness.program import Program, apply_patch, program_id
 from harness.tools import _records, skill_key
 
@@ -391,6 +392,9 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     pref_ids = {str(p.get("preference_id")).lower()
                 for p in services.load_preferences(user_id)}
     base = head["content"] if head else kg_default_content(user_id, job.description or "", kg)
+    # Job-scoped rules answered for this posting (#192), e.g. the graduation
+    # date a post-internship enrollment requirement calls for.
+    rules_applied = apply_job_rules(base, resolve_rules(user_id, job_id))
     working = copy.deepcopy(base)
     base_vector = metric_vector(working, ctx)
     current = base_vector
@@ -440,7 +444,7 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
         "nodes": results, "skills": skill_notes,
         "metrics": {"base": base_vector, "final": final_vector},
         "line_budget": budget or {"status": "unmeasured"},
-        "violations": violations, "cut_hints": cut_hints,
+        "violations": violations, "cut_hints": cut_hints, "rules_applied": rules_applied,
     }
     if violations or dry_run:
         return out

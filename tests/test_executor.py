@@ -28,14 +28,14 @@ def env(isolated_engine, monkeypatch):
     """The benchmark profile seeded as one user, one job, a one-line measurer."""
     from eval.profile_fixture import load_profile
     from eval.tailoring_benchmark import PROFILES_DIR
-    from eval.scripted_host import create_job, seed_profile
+    from eval.scripted_host import open_task_job, seed_profile
     from eval.tailoring_benchmark import load_tasks
     from harness import executor
 
     monkeypatch.setattr(executor, "MEASURER", _one_line_each)
     uid = seed_profile(load_profile(PROFILES_DIR / BENCH_PROFILE))
     task = load_tasks(limit=5)[3]
-    job_id = create_job(uid, task)
+    job_id = open_task_job(uid, task)
     return uid, job_id, task
 
 
@@ -309,9 +309,13 @@ def test_a_plan_keeps_the_users_layout_overrides(isolated_engine, env):
 
 
 def _woven(kg_bullets):
-    """EXP2's source bullets, with one reworded to use a posting term the page lacks."""
+    """EXP2's source bullets, with one reworded to use a posting term the page lacks.
+
+    The job is opened through `open_job` (#192), so coverage uses real keyword
+    weights: the term must be one the candidate's graph supports (weight > 0).
+    """
     out = [{"text": b, "cites": [f"{EXP2}#b{i}"]} for i, b in enumerate(kg_bullets)]
-    out[3]["text"] = "Led the migration from a monolith to an event-driven architecture using Kafka."
+    out[3]["text"] = "Led the migration from a monolith to event-driven services using Kafka to integrate billing and search."
     return out
 
 
@@ -321,7 +325,7 @@ def test_a_clean_revise_adding_a_supported_keyword_is_kept(env):
     uid, job_id, _ = env
     out = _run(uid, {"job_id": job_id, "nodes": [
         {"id": "weave", "op": "revise", "item_key": EXP2, "strategy": "keyword_weave",
-         "keywords": ["architecture"], "bullets": _woven(_KG(uid).source_bullets[EXP2])}]})
+         "keywords": ["integrate"], "bullets": _woven(_KG(uid).source_bullets[EXP2])}]})
     node = out["nodes"][0]
     assert node["status"] == "accepted", node
     assert node["deltas"]["coverage"] > 0 and out["committed"]

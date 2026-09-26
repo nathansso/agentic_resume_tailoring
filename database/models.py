@@ -200,6 +200,10 @@ class JobDescription(SQLModel, table=True):
     description: str = Field(default="")  # Raw text
     source_url: Optional[str] = None
     status: str = Field(default="created")  # created, analyzed, tailored, exported
+    # Where the application stands, set by the user or host (issue #192):
+    # drafting, applied, interview, closed. Separate from `status`, which is the
+    # pipeline state JobCards read. NULL on rows older than the column = drafting.
+    application_status: Optional[str] = Field(default="drafting")
     chat_summary: Optional[str] = None
     # issue 70: lifetime count of tailor runs for this job (capped by JOB_TAILOR_LIMIT)
     retailor_count: int = Field(default=0)
@@ -448,6 +452,11 @@ class JDProfile(SQLModel, table=True):
 
     # The computed w(t) map. This issue owns the slot only; #125 populates it.
     weights: Dict = Field(default={}, sa_column=Column(JSON))
+
+    # Answers to the user's job-scoped rules for this posting (issue #192):
+    # {rule_id: {"answer": bool, "quote": str|None, "source": "host"}}. NULL when
+    # no rule has been answered. The host answers today; Jev will (#193).
+    eligibility: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
 
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
@@ -720,3 +729,23 @@ class PlanProgram(SQLModel, table=True):
     job_id: UUID = Field(foreign_key="jobdescription.job_id", index=True)
     program: Dict = Field(default={}, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class JobRule(SQLModel, table=True):
+    """A profile field whose value depends on the posting (issue #192).
+
+    E.g. an education row's `end_date` is one date by default and another when a
+    posting requires enrollment after the internship. The rule is a yes/no
+    `question` about a posting; `open_job` records the answer per job (on
+    `JDProfile.eligibility`) and the executor writes the matching value into the
+    job's base content. `value_if_no` NULL means "leave the field as stored".
+    """
+    rule_id: UUID = Field(default_factory=uuid4, primary_key=True)
+    user_id: UUID = Field(foreign_key="user.user_id", index=True)
+    item_key: str  # a harness item key, e.g. edu:<institution>|<degree>
+    field: str  # a content field on that item, e.g. end_date
+    question: str
+    value_if_yes: str
+    value_if_no: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)

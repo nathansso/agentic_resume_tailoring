@@ -25,7 +25,18 @@ CALLS = {
                  {"key": "proj:next item recommender"}],   # not found → suggestions
     "get_profile": [{}],
     # Tailoring tree (#196). $JOB/$N0/$N1 are filled from the `tree_kg` fixture.
-    "list_jobs": [{}],
+    "list_jobs": [{}, {"status": "applied"}],
+    # Host-filled ingestion (#192). Writes that change nothing on a second call, so
+    # all three adapters see the same store.
+    "ingest_schema": [{"kind": "education"}, {"kind": "rule"}],
+    "upsert_items": [{"records": [
+        {"kind": "experience", "data": {"title": "Data Science Intern", "company": "IDX Exchange"}},
+        {"kind": "education", "data": {"institution": "UC San Diego", "degree": "M.S. Data Science"}},
+        {"kind": "project", "data": {"name": "Next-Item Recommendation", "stars": 3}},
+        {"kind": "achievement", "data": {"title": ""}}]}],
+    "open_job": [{"job_id": "$JOB"},
+                 {"job_id": "$JOB", "requirements": [{"text": "SQL", "criticality": "high"}],
+                  "rule_answers": [{"rule_id": "nope", "answer": True}]}],
     "get_head": [{"job_id": "$JOB"}, {"job_id": "$JOB", "since_event": 0}],
     "history": [{"job_id": "$JOB"}],
     "diff_nodes": [{"from_node": "$N0", "to_node": "$N1"}],
