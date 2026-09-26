@@ -39,6 +39,51 @@ jobs:
         working-directory: web/frontend
         run: npm ci --dry-run --ignore-scripts
 
+  package:
+    # The #194 acceptance test: build the wheel the way a release does (editor
+    # first, so `art ui` ships), install it with no extras into a venv that
+    # holds nothing else, and drive `art-mcp` over stdio as a host would. The
+    # smoke script also fails if torch or an LLM client is importable.
+    name: package (uvx art-mcp)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Build the editor
+        run: |
+          npm --prefix web/frontend ci
+          npm --prefix web/frontend run build
+
+      - name: Build the wheel
+        run: uv build
+
+      - name: The wheel ships the editor and no frontend sources
+        run: |
+          python3 - <<'EOF'
+          import glob, zipfile
+          names = zipfile.ZipFile(glob.glob("dist/*.whl")[0]).namelist()
+          assert "web/static/index.html" in names, "editor not shipped"
+          assert not [n for n in names if n.startswith("web/frontend/")], "frontend sources shipped"
+          assert not [n for n in names if n.startswith(("tests/", "eval/"))], "tests shipped"
+          print(len(names), "files")
+          EOF
+
+      - name: Clean install, no extras, driven over MCP
+        run: |
+          uv venv /tmp/clean --python 3.12
+          uv pip install --python /tmp/clean/bin/python dist/*.whl
+          cd /tmp
+          /tmp/clean/bin/python "$GITHUB_WORKSPACE/scripts/smoke_art_mcp.py"
+          ART_DATA_DIR=/tmp/art-list /tmp/clean/bin/art --list > /dev/null
+
   test:
     name: tests (${{ matrix.engine }})
     runs-on: ubuntu-latest

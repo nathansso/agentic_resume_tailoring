@@ -95,3 +95,36 @@ def test_pg_vector_migration_is_noop_on_sqlite(monkeypatch):
     cols = {c["name"] for c in inspect(engine).get_columns("skill")}
     assert "embedding_vec" not in cols
     assert "embedding" in cols  # the JSON source-of-truth column stays
+
+
+# ── full-text search (#194) ──────────────────────────────────────────────────
+
+DOCS = [
+    ("exp:analyst|acme", "Data Analyst @ Acme", "Forecasted weekly demand with gradient-boosted models"),
+    ("exp:engineer|beta", "Software Engineer @ Beta", "Built REST services in Go"),
+    ("skill:forecasting", "", "Forecasting Technique resume"),
+]
+
+
+def test_fts_search_stems_and_ranks_by_bm25_with_title_weight():
+    from database.vector_search import fts_search
+
+    hits = fts_search(DOCS, "forecasts")                 # stem of "forecasted"/"forecasting"
+    assert {k for k, _ in hits} == {"exp:analyst|acme", "skill:forecasting"}
+    # A word most documents share still scores above zero (the IDF padding).
+    assert all(score > 0 for _, score in hits)
+    # A title match outweighs the same word in body text.
+    titled = fts_search(DOCS, "engineer")
+    assert titled[0][0] == "exp:engineer|beta"
+    both = fts_search([("a", "Go", ""), ("b", "", "Go")], "go")
+    assert [k for k, _ in both] == ["a", "b"] and both[0][1] > both[1][1]
+
+
+def test_fts_search_is_deterministic_and_handles_empty_and_odd_queries():
+    from database.vector_search import fts_search
+
+    assert fts_search(DOCS, "demand models") == fts_search(list(reversed(DOCS)), "models demand")
+    assert fts_search(DOCS, "") == [] and fts_search(DOCS, "!!!") == []
+    assert fts_search(DOCS, 'go" OR "x') == fts_search(DOCS, "go x")   # no query injection
+    assert fts_search(DOCS, "kubernetes") == []
+    assert len(fts_search(DOCS, "forecasting go", limit=1)) == 1

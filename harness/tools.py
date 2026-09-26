@@ -8,9 +8,10 @@ Three tools, and the whole of what a host agent can see in this spike:
   their user rejections. Push, not search, because the dominant preference
   signal is negation and similarity search cannot represent "not this"
   (#109, docs/harness.md § 10).
-- `kg_search` **pulls** items by a deterministic lexical match. Only `Skill`
-  and `JobDescription` carry embeddings, so semantic search over experiences
-  and projects does not exist yet; that is #194's FTS/embedding work.
+- `kg_search` **pulls** items by full-text search (SQLite FTS5 with stemming,
+  #194), falling back to a plain token match. Only `Skill` and
+  `JobDescription` carry embeddings, so there is no semantic search over
+  experiences and projects.
 - `get_item` resolves one stable key to its full record.
 
 Every function takes `user_id` explicitly, reads through `services` (whose
@@ -31,6 +32,7 @@ import services
 from agents.checks import exp_key, proj_key  # the planner's own keys (#190)
 from agents.job_card import render_cards, select_cards
 from agents.preferences import preferences_in_scope
+from database.vector_search import fts_search
 from database.models import ProjectBlurb, User
 
 KINDS = ("skill", "experience", "project", "education", "achievement")
@@ -166,22 +168,44 @@ def _tokens(text: str) -> List[str]:
             if t.rstrip(".") and t.rstrip(".") not in _STOP]
 
 
+def _snippet(it: Dict) -> str:
+    return (it["text"] or it["title"]).strip().replace("\n", " ")[:200]
+
+
 def kg_search(user_id: UUID, query: str, kinds: Optional[Sequence[str]] = None,
               limit: int = 10) -> List[Dict[str, Any]]:
-    """Lexical search over the KG. Deterministic: score desc, then key asc."""
+    """Full-text search over the KG (#194): SQLite FTS5 with stemming and BM25,
+    item names weighted over body text. A skill's name is indexed as body text:
+    it is the skill's whole document, and at title weight every one-word skill
+    outranked the experiences that use it (#189). Falls back to a plain token
+    match when FTS5 is unavailable. Deterministic: score desc, then key asc."""
     q = sorted(set(_tokens(query)))
     if not q:
         return []
+    items = _records(user_id, kinds)
+    docs = [(it["key"], "" if it["kind"] == "skill" else it["title"],
+             f"{it['title']} {it['text']}" if it["kind"] == "skill" else it["text"])
+            for it in items]
+    ranked = fts_search(docs, " ".join(q), weights=(_TITLE_WEIGHT, 1.0))
+    if ranked is not None:
+        by_key = {it["key"]: it for it in items}
+        return [{"key": k, "kind": by_key[k]["kind"], "title": by_key[k]["title"],
+                 "score": score, "snippet": _snippet(by_key[k])}
+                for k, score in ranked[: max(1, int(limit))]]
+    return _lexical_search(items, q, limit)
+
+
+def _lexical_search(items: List[Dict], q: List[str], limit: int) -> List[Dict[str, Any]]:
+    """The pre-#194 scorer: title tokens count `_TITLE_WEIGHT`, body tokens 1."""
     hits = []
-    for it in _records(user_id, kinds):
+    for it in items:
         title = set(_tokens(it["title"]))
         body = set(_tokens(it["text"]))
         score = sum(_TITLE_WEIGHT if t in title else 1.0 if t in body else 0.0 for t in q)
         if score <= 0:
             continue
-        snippet = (it["text"] or it["title"]).strip().replace("\n", " ")
         hits.append({"key": it["key"], "kind": it["kind"], "title": it["title"],
-                     "score": round(score, 3), "snippet": snippet[:200]})
+                     "score": round(score, 3), "snippet": _snippet(it)})
     hits.sort(key=lambda h: (-h["score"], h["key"]))
     return hits[: max(1, int(limit))]
 

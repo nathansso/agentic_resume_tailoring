@@ -12,6 +12,64 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 194 — Packaging: `art-mcp` without torch, extras, FTS5 search
+**Status:** complete | **Tests:** 1600 pass on SQLite (14 new), 12 skipped
+
+ART now installs as a package. The default install is exactly what the harness imports: no torch, no LLM clients. A clean install creates its own store and profile on first start, and a host can drive it immediately. `kg_search` moves from token matching to SQLite FTS5 with stemming and BM25.
+
+### What shipped
+
+- **`pyproject.toml` (new, hatchling), package `art-mcp`:**
+  - **Base:** `mcp==2.2.0`, `sqlmodel==0.0.38`, `pydantic`, `numpy`, `networkx`, `requests` and `python-dotenv`. They were found by tracing the harness import graph, module level and first tool calls.
+  - **Extras:** `[embed]` (sentence-transformers), `[pdf]` (docling, pypdf, python-docx), `[ui]` (fastapi, uvicorn, python-multipart, itsdangerous), `[postgres]` and `[all]`.
+  - **Scripts:** `art-mcp` (`harness.mcp_server:main`) and `art` (`harness/entry.py`, new).
+  - **Wheel contents:** the flat layout as it is, excluding `web/frontend`, tests, eval, the legacy `cli.py` and `tui/`.
+  - **The built editor ships.** `web/static` is gitignored, so it is listed as a hatch artifact.
+  - The version is read from `harness.ART_VERSION`.
+- **`art`** runs any contract tool (`art --list`, `art <tool> --args …`). `art ui` hands off to `web.local_ui`, and without the `[ui]` extra it prints how to install it.
+- **First run:**
+  - `harness.runtime.bootstrap(prepare=True)` is used by both scripts. For a local SQLite store it creates the directory, runs `init_db` (idempotent, and migrates older stores), and binds the default profile when none is bound. Remote stores are untouched.
+  - The profile pointer now lives in the data directory (`database/user_utils.ART_DIR` follows `ART_DATA_DIR`).
+  - `database/db._migrate_db_location` no longer copies a checkout's `art.db` into a store named by `ART_DATA_DIR`, so a fresh or benchmark data directory starts empty.
+- **`database/vector_search.fts_search` (new):**
+  - An in-memory FTS5 index per call, using `porter unicode61` tokens and BM25 with per-column weights. It returns None when SQLite lacks FTS5.
+  - The index is padded with N + 1 empty rows. Without that, a term shared by half the documents or more scores zero on a small KG, because FTS5 clamps a non-positive IDF.
+  - It is quote-safe against FTS query syntax.
+- **`kg_search`** uses `fts_search`, with names at 3× body text. It falls back to the old token scorer without FTS5.
+  - A skill's name is indexed as body text, so one-word skills stop outranking the experiences that use them (#189).
+  - Stemming finds "forecasting" from "forecasts".
+- **CI job `package (uvx art-mcp)`** is the acceptance test:
+  - builds the editor, then the wheel;
+  - checks that the wheel ships `web/static/index.html` and no frontend sources or tests;
+  - installs it with **no extras** into an empty venv;
+  - runs `scripts/smoke_art_mcp.py`. The script fails if torch, sentence-transformers, docling or an LLM client is importable. It drives `art-mcp` over stdio through `upsert_items`, `kg_search` (a stemmed hit), `list_items`, `open_job` and an `execute_plan` dry run.
+- **Tests:**
+  - `tests/test_packaging.py` (9 new):
+    - no heavy package in the base dependencies, and each one in its extra;
+    - pins equal to the requirements files;
+    - scripts resolve;
+    - the harness import graph (every entry module) stays inside the wheel's file list and loads none of torch, sentence-transformers, docling, transformers, langchain, openai, anthropic, sklearn, nltk, fastapi or supabase;
+    - a first `art list_items` on a clean data directory creates the store and one profile and returns `[]`, and the next call reuses it;
+    - `art` dispatch and the `[ui]` hint;
+    - the version.
+  - FTS: 2 in `tests/test_vector_search.py` and 3 in `tests/test_harness_mcp.py` (stemming, skill-vs-experience ranking, the lexical fallback).
+- **Verified by hand:**
+  - the clean-venv smoke test on Windows (Python 3.12);
+  - `art ui` from a `[ui]` wheel install, serving the editor with `auth_mode: none`;
+  - `uvx --from . art list_items` resolving 40 packages.
+
+### Deviations from spec
+
+- **Not on PyPI yet.** `uvx art-mcp` needs a published package, so the documented install is `uvx --from git+https://github.com/nathansso/agentic_resume_tailoring art-mcp`. A git install has no built editor, since `web/static` is not committed, so `art ui` needs a wheel built from a checkout (INSTALL.md). Publishing is a release step for the user.
+- **The flat layout is shipped as is.** Top-level `config`, `services`, `web`, `agents` and the rest are not moved under one `art/` package; that would touch every import. uvx installs into an isolated environment, where the generic names don't collide.
+- **`[postgres]` and `[all]` extras were added** beyond the three the issue names. `psycopg2` is only needed to read a Postgres store with `--database-url`.
+- **No embedding search over experiences and projects.** They carry no stored vectors, and `[embed]` is optional. FTS5 is the retrieval path; skill embeddings still refresh on `upsert_items` when `[embed]` is installed.
+- **The legacy app still installs from `requirements-*.txt`** (Dockerfile, CI test legs). `tests/test_packaging.py` pins the shared versions to those files.
+- **`--database-url dotenv` reads the checkout's `.env`**, so it does nothing from an installed package. Pass the URL explicitly there.
+- **The Postgres leg was not run locally** (Docker was not running). CI runs it.
+
+---
+
 ## Issue 192 — Host-filled ingestion and jobs: ingest_schema, upsert_items, open_job, list_jobs
 **Status:** complete | **Tests:** 1586 pass on SQLite (27 new), 12 skipped
 

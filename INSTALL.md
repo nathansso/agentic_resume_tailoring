@@ -1,9 +1,37 @@
 # Installing ART
 
-> **Coming with the harness pivot (#207):** `uvx art-mcp` plus a Claude Code plugin, with
-> optional extras `[embed]`, `[pdf]` and `[ui]` (#194, #201). The options below install the
-> current web app and CLI. The hosted deploy (Option C / Railway) is frozen and gets no new
+> **The harness pivot (#207):** ART is becoming a package your coding agent drives. The
+> harness install is below; a Claude Code plugin follows in #201. Options A–C install the
+> legacy web app and CLI. The hosted deploy (Option C / Railway) is frozen and gets no new
 > features. See [`docs/harness.md`](docs/harness.md).
+
+## The harness: `art-mcp` (#194)
+
+The package is `art-mcp`. Its default install is model-free and light (no torch, no LLM
+clients); extras add `[embed]` (sentence-transformers), `[pdf]` (docling, pypdf,
+python-docx), `[ui]` (`art ui`, the local editor) and `[postgres]`. It is not on PyPI yet,
+so install it from the repository:
+
+```bash
+# Register the MCP server with Claude Code
+claude mcp add art -- uvx --from git+https://github.com/nathansso/agentic_resume_tailoring art-mcp
+
+# The same tools as a JSON CLI
+uvx --from git+https://github.com/nathansso/agentic_resume_tailoring art --list
+```
+
+On first start it creates `~/.art/art.db` (or `$ART_DATA_DIR/art.db`) and a default
+profile. A git install has no built editor, since `web/static` is not committed. For
+`art ui`, build a wheel from a checkout:
+
+```bash
+npm --prefix web/frontend ci && npm --prefix web/frontend run build
+uv build                                   # dist/art_mcp-<version>-py3-none-any.whl
+uvx --from "dist/art_mcp-0.1.0-py3-none-any.whl[ui]" art ui
+```
+
+CI builds that wheel, installs it with no extras into an empty venv, and drives `art-mcp`
+over stdio (`scripts/smoke_art_mcp.py`).
 
 ## Option A — Docker (recommended, no Python setup needed)
 
