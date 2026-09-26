@@ -784,9 +784,13 @@ class ResumeFormatterAgent:
         if not items:
             return ""
         label = _escape_tex(self._resolve_label("achievements"))
+        # The inner list must sit inside an item of the outer one: a bare
+        # \resumeItemListStart there is TeX's "missing \item" and the page
+        # never compiles (#217). The empty \item is invisible (label={}).
         lines = [
             rf"\section{{{label}}}",
             r"  \resumeSubHeadingListStart",
+            r"    \item",
             r"    \resumeItemListStart",
         ]
         for a in items:

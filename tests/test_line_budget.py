@@ -339,3 +339,78 @@ def test_page_budget_predicts_the_real_page_count(isolated_engine, monkeypatch):
     def boom(texts):
         raise AssertionError("cache miss on an already-measured bullet")
     assert content_bullet_lines(_REAL_OVERFLOW, measurer=boom)
+
+
+# ── achievements (#217) ───────────────────────────────────────────────────────
+
+_ACHIEVEMENTS = [{"title": "1st Place Overall", "issuer": "HackX", "date": "2025",
+                  "description": "Best of 60 teams"},
+                 {"title": "Dean's List", "issuer": "State University", "date": "2024"}]
+
+
+def test_the_achievements_list_sits_inside_an_outer_item():
+    """A bare inner list directly in the outer one is TeX's "missing \\item"."""
+    agent = ResumeFormatterAgent.__new__(ResumeFormatterAgent)
+    agent._style = None
+    lines = agent._build_tex_achievements(_ACHIEVEMENTS).splitlines()
+    start = lines.index(r"  \resumeSubHeadingListStart")
+    assert lines[start + 1].strip() == r"\item"
+    assert lines[start + 2].strip() == r"\resumeItemListStart"
+
+
+_PAGETOTAL = r"\par\typeout{ARTPT:\the\pagetotal:\the\pageshrink}"
+
+
+def _height_lines(body: str) -> float:
+    """Needed page height of `body` in 12pt lines, read from TeX's own log."""
+    import re
+    import subprocess
+    import tempfile
+
+    kind, engine = fmt_module._find_latex_engine()
+    with tempfile.TemporaryDirectory() as tmp:
+        tex = Path(tmp) / "h.tex"
+        tex.write_text("\n".join([_JAKE_PREAMBLE, r"\begin{document}", body, _PAGETOTAL,
+                                  r"\end{document}", ""]), encoding="utf-8")
+        cmd = ([engine, "--keep-logs", tex.name] if kind == "tectonic"
+               else [engine, "-interaction=nonstopmode", tex.name])
+        subprocess.run(cmd, cwd=tmp, capture_output=True, text=True, timeout=120)
+        log = (Path(tmp) / "h.log").read_text(encoding="utf-8", errors="replace")
+    m = re.search(r"ARTPT:([\d.]+)pt:([\d.]+)pt", log)
+    assert m, log[-2000:]
+    return (float(m.group(1)) - float(m.group(2))) / 12.0
+
+
+@pytest.mark.integration
+def test_a_resume_with_achievements_compiles_to_one_pdf_page(isolated_engine, monkeypatch):
+    if _no_latex_engine():
+        pytest.skip("no LaTeX engine (tectonic/pdflatex) installed")
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    agent = ResumeFormatterAgent(user.user_id)
+    content = dict(_JAKE_CONTENT, achievements=_ACHIEVEMENTS)
+    pdf = _compile_tex_to_pdf(agent._build_tex(content))
+    assert _pdf_page_count(pdf) == 1
+    lines = content_bullet_lines(content)
+    est = page_line_budget(content, lines, skill_lines=len(agent._get_skill_categories(None)),
+                           education_entries=0)
+    assert est["over_by"] <= 0
+
+
+@pytest.mark.integration
+def test_the_achievements_overhead_is_calibrated():
+    """The section costs what LINE_COSTS says, measured the way #200 fitted the
+    other sections: needed height with and without it, in 12pt lines."""
+    if _no_latex_engine():
+        pytest.skip("no LaTeX engine (tectonic/pdflatex) installed")
+    agent = ResumeFormatterAgent.__new__(ResumeFormatterAgent)
+    agent._style = None
+    base = agent._build_tex_experiences([{"title": "Analyst", "company": "Acme",
+                                          "start_date": "2024", "end_date": "2025",
+                                          "bullets": ["Did a thing"]}])
+    without = _height_lines(base)
+    for n in (1, 4):
+        achs = [{"title": f"Award {i}", "issuer": "Org", "date": "2024"} for i in range(n)]
+        delta = _height_lines(base + "\n" + agent._build_tex_achievements(achs)) - without
+        expected = LINE_COSTS["section:achievements"] + LINE_COSTS["item_list"] + n
+        assert abs(delta - expected) < 0.05, (n, delta, expected)
