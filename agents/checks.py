@@ -464,11 +464,10 @@ def enforce_plan(tailored: Dict, state: "TailorState") -> Dict:
 #   overflow correctly on 178 of 180; both misses were false alarms that fit
 #   with under a line to spare.
 #
-# Achievements are not calibrated — the
-# formatter's achievements block does not compile under tectonic today (a bare
-# `\resumeItemListStart` directly inside `\resumeSubHeadingListStart` is a
-# "missing \item" error) — so they reuse the experience section and list
-# constants.
+# Achievements were calibrated once the block compiled (#217): the same
+# `\pagetotal - \pageshrink` difference with and without the section, for 1-8
+# one-line achievements, is 2.081 + 1.000 per item with zero residual. That is
+# the section cost plus `item_list` (0.21), hence 1.87.
 MAX_BULLET_LINES = 2
 PAGE_LINE_BUDGET = 60
 
@@ -478,7 +477,7 @@ LINE_COSTS: Dict[str, float] = {
     "section:experience": 2.16,
     "section:projects": 1.93,
     "section:skills": 3.18,
-    "section:achievements": 2.16,  # uncalibrated, see above
+    "section:achievements": 1.87,  # \section rule + the one-item outer list (#217)
     "entry:education": 2.58,     # two-line \resumeSubheading
     "entry:experience": 2.16,    # two-line \resumeSubheading
     "entry:project": 1.20,       # one-line \resumeProjectHeading

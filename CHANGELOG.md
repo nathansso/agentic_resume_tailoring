@@ -12,6 +12,28 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 217 — Achievements compile to PDF, and their line cost is calibrated
+**Status:** complete | **Tests:** 1603 pass on SQLite (3 new; 2 need a LaTeX engine and skip in CI), 12 skipped
+
+Any resume with achievements failed PDF export under tectonic with "missing \item". The formatter opened the inner bullet list directly inside the outer section list. The page line budget (#200) had borrowed the experience constants for the section, because nothing could be compiled to measure it.
+
+### What shipped
+
+- **`agents/formatter._build_tex_achievements`** puts the bullet list inside an empty outer `\item`. The label is `{}`, so it is invisible, and the achievements render with the same indent as experience bullets. Verified by compiling and rasterizing a page with experience and achievements.
+- **`LINE_COSTS["section:achievements"]` changes from 2.16 (borrowed) to 1.87 (measured).** The measurement is the needed page height (`\pagetotal − \pageshrink`, the #200 method) with and without the section, for 1 to 8 one-line achievements. It fits 2.081 lines plus 1.000 per item, with zero residual. That is the section cost plus the existing `item_list` 0.21.
+- **Tests:** `tests/test_line_budget.py` has 3 new:
+  - a unit test that the inner list sits inside an outer `\item`;
+  - an integration test that a resume with achievements compiles to one PDF page, with the budget agreeing;
+  - an integration test that re-measures the overhead against `LINE_COSTS` within 0.05 lines, for 1 and 4 items.
+
+  The integration tests skip without a LaTeX engine, as the #200 ones do.
+
+### Deviations from spec
+
+- **The stray space in `\resumeItem` is left alone** (the optional part of the issue). A bullet that exactly fills its line still renders an extra empty line. Fixing it changes the template hash and every cached measurement, and the measurer already counts that line, so the budget stays correct.
+
+---
+
 ## Issue 194 — Packaging: `art-mcp` without torch, extras, FTS5 search
 **Status:** complete | **Tests:** 1600 pass on SQLite (14 new), 12 skipped
 
