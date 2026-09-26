@@ -1,10 +1,11 @@
 import asyncio
+import json
 import re
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import Response
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
@@ -570,6 +571,97 @@ def clear_layout(job_id: str, user: User = Depends(get_current_user)):
             session.commit()
             _record_edit(user, job.job_id, "layout cleared")
         return {"cleared": True}
+
+
+# ── Change feed (issue #204) ─────────────────────────────────
+
+# Module-level so tests can shorten the poll and bound the stream.
+EVENTS_POLL_SECONDS = 1.0
+EVENTS_HEARTBEAT_SECONDS = 15.0
+EVENTS_MAX_SECONDS: float | None = None
+
+
+def _feed_tail(user_id: UUID, job_id: UUID) -> int:
+    """The newest event id for this job, so a fresh stream starts at "now"."""
+    from sqlalchemy import func
+    import database.db as _db
+    from database.models import TreeEvent
+    with Session(_db.engine) as session:
+        latest = session.exec(select(func.max(TreeEvent.event_id)).where(
+            TreeEvent.user_id == user_id, TreeEvent.job_id == job_id)).one()
+    return int(latest or 0)
+
+
+def _feed(user_id: UUID, job_id: UUID, cursor: int) -> list[dict]:
+    """Tree events after `cursor`, each with the source of the node it names.
+    The editor ignores its own `editor` commits and reloads on everything else."""
+    import database.db as _db
+    from database.models import TailorNode
+    from harness.tree import events_since
+    events = events_since(user_id, cursor, job_id)
+    if not events:
+        return []
+    ids = {UUID(e["node_id"]) for e in events}
+    with Session(_db.engine) as session:
+        sources = {str(n.node_id): n.source for n in session.exec(
+            select(TailorNode).where(TailorNode.node_id.in_(ids))).all()}
+    return [{"event_id": e["event_id"], "kind": e["kind"], "node_id": e["node_id"],
+             "source": sources.get(e["node_id"])} for e in events]
+
+
+def _parse_cursor(value: str | None) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Cursor must be an integer event id")
+
+
+@router.get("/{job_id}/events")
+async def job_events(job_id: str, request: Request, since: str | None = None,
+                     user: User = Depends(get_current_user)):
+    """Server-sent events for this job's tailoring tree (`art ui`, #204).
+
+    Each event is `event: tree`, `id: <event_id>`, data
+    `{event_id, kind, node_id, source}`. Resume with `?since=<cursor>` or the
+    browser's automatic `Last-Event-ID`; with neither, the stream starts at the
+    newest event, so opening the editor never replays history.
+    """
+    try:
+        job, session = _get_owned_job(job_id, user)
+    except HTTPException as e:
+        # Someone else's job is indistinguishable from no job here.
+        raise HTTPException(status_code=404, detail="Job not found") from e
+    session.close()
+    uid, jid = user.user_id, job.job_id
+    cursor = _parse_cursor(since)
+    if cursor is None:
+        cursor = _parse_cursor(request.headers.get("last-event-id"))
+    if cursor is None:
+        cursor = await asyncio.to_thread(_feed_tail, uid, jid)
+
+    async def stream():
+        nonlocal cursor
+        loop = asyncio.get_running_loop()
+        started = beat = loop.time()
+        yield ": connected\n\n"
+        while True:
+            for event in await asyncio.to_thread(_feed, uid, jid, cursor):
+                cursor = event["event_id"]
+                yield f"event: tree\nid: {cursor}\ndata: {json.dumps(event)}\n\n"
+            now = loop.time()
+            if EVENTS_MAX_SECONDS is not None and now - started >= EVENTS_MAX_SECONDS:
+                return
+            if now - beat >= EVENTS_HEARTBEAT_SECONDS:
+                beat = now
+                yield ": heartbeat\n\n"
+            if await request.is_disconnected():
+                return
+            await asyncio.sleep(EVENTS_POLL_SECONDS)
+
+    return StreamingResponse(stream(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @router.post("/{job_id}/preview")
