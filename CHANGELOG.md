@@ -12,6 +12,23 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 219 — Frontend lockfile back in sync, and a CI drift check
+**Status:** complete | **Tests:** 1559 pass on SQLite (0 new; 1 tightened), 12 skipped; frontend 106 pass
+
+`npm ci` refused `web/frontend/package-lock.json` (`EUSAGE`): the lock was missing the `@emnapi/*` entries and pinned `@esbuild/*` 0.28.1 where the manifest resolves 0.28.2. The Dockerfile runs `npm ci`, so the image build was broken, and `art ui` (#204) had to tell users to run `npm install` instead.
+
+### What shipped
+
+- **`package-lock.json` regenerated** with `npm install --package-lock-only`, so only the drifted entries changed. On a clean copy of the tracked files, `npm ci`, `tsc` and the 106 frontend tests pass.
+- **CI drift check:** a `frontend lockfile` job in `tests.yml` runs `npm ci --dry-run --ignore-scripts` under Node 24, so a lock that drifts from `package.json` fails the PR instead of the deploy.
+- **`art ui`'s build hint is `npm ci` again** (`web/local_ui.py`, `docs/harness.md` § 13), and `test_the_launcher_refuses_without_a_built_editor` asserts it.
+
+### Deviations from spec
+
+- **The lockfile is hand-merged across two npm versions.** The first regeneration (npm 11.6) failed the new CI check on Linux under npm 11.19: 11.19 requires the optional peer `@emnapi/runtime`, which 11.6 never writes, while 11.6 requires the nested `@esbuild/*` 0.28.2 entries that 11.19 drops. The committed lock carries both, and `npm ci --dry-run` passes on npm 11.6.2, 11.10 and 11.19 (not 11.0). A future `npm install` on one version may drop the other's entries; the CI job is what catches that.
+
+---
+
 ## Issue 197 — Plan programs and the executor
 **Status:** complete | **Tests:** 1559 pass on SQLite (30 new), 12 skipped
 
