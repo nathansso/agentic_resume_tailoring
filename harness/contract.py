@@ -371,6 +371,36 @@ def _ingest():
     return ingest
 
 
+# ── render and the profile header (#201) ─────────────────────────────────────
+
+class RenderInput(_Model):
+    job_id: str
+    node_id: Optional[str] = Field(None, description="A version from history; HEAD if omitted.")
+    format: Literal["pdf", "tex"] = "pdf"
+
+
+class RenderOutput(_Output):
+    job_id: Optional[str] = None
+    node_id: Optional[str] = None
+    source: Optional[Literal["generated", "edited"]] = Field(
+        None, description="edited: the user's own .tex from the editor was rendered.")
+    tex_path: Optional[str] = None
+    pdf_path: Optional[str] = None
+    pages: Optional[int] = None
+    line_budget: Dict[str, Any] = Field(default_factory=dict)
+    hint: Optional[str] = None
+
+
+class UpdateProfileInput(_Model):
+    fields: Dict[str, Optional[str]] = Field(
+        description="Header fields to set, e.g. {\"name\": \"Ada Lovelace\", \"email\": ...}.")
+
+
+def _render():
+    from harness import render
+    return render
+
+
 # ── plan programs (#197) ─────────────────────────────────────────────────────
 
 class ExecuteInput(_Model):
@@ -566,6 +596,22 @@ TOOLS: List[ToolSpec] = [
         PatchInput, ExecuteOutput,
         lambda uid, program_id, edits, dry_run=False:
             _executor().patch_plan(uid, program_id, edits, dry_run=dry_run),
+        read_only=False),
+    ToolSpec(
+        "render",
+        "Write a job's version (HEAD by default) as .tex and PDF under the ART data "
+        "directory. Returns the paths, the page count and the line budget with cut hints. "
+        "The user's own .tex edits win. Writes files.",
+        RenderInput, RenderOutput,
+        lambda uid, job_id, node_id=None, format="pdf":
+            _render().render(uid, job_id, node_id, format),
+        read_only=False),
+    ToolSpec(
+        "update_profile",
+        "Set the resume header: name, email, phone, location, linkedin_url, "
+        "github_username, portfolio_url. Only what the user gave you. Writes.",
+        UpdateProfileInput, ProfileOutput,
+        lambda uid, fields: _tools().update_profile(uid, fields),
         read_only=False),
 ]
 BY_NAME: Dict[str, ToolSpec] = {t.name: t for t in TOOLS}

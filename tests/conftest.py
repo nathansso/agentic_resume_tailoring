@@ -153,6 +153,10 @@ def isolated_engine(tmp_path, monkeypatch, _pg_ready):
     monkeypatch.setattr(user_utils_module, "engine", engine)
     monkeypatch.setattr(user_utils_module, "ACTIVE_PROFILE_FILE", profile_file)
     monkeypatch.setattr(user_utils_module, "ART_DIR", tmp_path)
+    # Files the harness writes (rendered resumes, hook cursors, #201) go under
+    # the data dir; keep them out of the developer's ~/.art.
+    import config as config_module
+    monkeypatch.setattr(config_module, "APP_DATA_DIR", tmp_path)
 
     # Clear any request-user binding left by a previous test in this thread
     # (issue #73): the ContextVar would otherwise shadow the profile file.
