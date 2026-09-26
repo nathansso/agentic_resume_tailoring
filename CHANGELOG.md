@@ -54,6 +54,7 @@ ART now has a Claude Code plugin, the reference host integration. It registers t
   - `tests/test_render_tool.py` (7 new, 1 of them integration): tex written under the data dir without an engine; edited `.tex` wins; the rule date reaches the page and the stored row is untouched; errors; a real one-page compile; `update_profile`; write flags.
   - The contract test adds 6 cases for the two tools.
   - `conftest.isolated_engine` now also points `config.APP_DATA_DIR` at the test's tmp dir, so rendered files and hook cursors never land in `~/.art`.
+  - `isolated_engine` also patches `agents.formatter.engine` (#175). Otherwise `render`'s header query, reached from every contract adapter, read whichever store was imported first. CI caught this as "unable to open database file".
   - `scripts/smoke_art_mcp.py`, run by the CI `package` job, now also calls `update_profile`, commits a version and renders it.
 - **Verified by hand:**
   - Against a scratch store seeded with the benchmark profile, a pin and a job-scoped rule, the art-tailor tool sequence ran over MCP stdio from the local package: briefing, `open_job` (15 requirements, rule answered), `list_items`, `execute_plan`, then `render`. It committed and rendered a one-page PDF (48.6 of 60 lines). I rasterized the page and checked it.

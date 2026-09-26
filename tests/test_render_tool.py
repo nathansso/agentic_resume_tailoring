@@ -18,14 +18,9 @@ CONTENT = {"experiences": [{"title": "Data Science Intern", "company": "IDX Exch
 
 
 @pytest.fixture()
-def job(kg, isolated_engine, monkeypatch):
+def job(kg, isolated_engine):
     """The `kg` user's job, with one committed host version."""
-    import agents.formatter as fmt
     from harness import tree
-
-    # The formatter binds `engine` at import (#175), so the header query would
-    # read whichever store the first test to import it used.
-    monkeypatch.setattr(fmt, "engine", isolated_engine)
 
     with Session(isolated_engine) as s:
         job_id = s.exec(select(UserJobResult).where(UserJobResult.user_id == kg)).first().job_id
