@@ -398,8 +398,9 @@ There are three ways to chat-edit:
 ### Running `art ui` (#204)
 
 ```bash
-npm --prefix web/frontend ci && npm --prefix web/frontend run build   # once
-python -m web.local_ui --job <job_id>        # opens http://127.0.0.1:8765/?job=<job_id>
+art ui --job <job_id>                        # installed with [ui]; opens http://127.0.0.1:8765/?job=<job_id>
+npm --prefix web/frontend ci && npm --prefix web/frontend run build   # from a checkout, once
+python -m web.local_ui --job <job_id>        # from a checkout
 ```
 
 - **Database and user** are pinned as for the harness (§ 15): local SQLite by default,
@@ -485,10 +486,17 @@ Each job has an application status (drafting, applied, interview, closed) that
 Postgres database is read-only, and write tools return a `read_only` error, unless the
 process is started with `--allow-writes`.
 
+**Installed (#194).** The package is `art-mcp` (`pyproject.toml`, hatchling). Its default
+install is what the harness imports: `mcp`, `sqlmodel`, `pydantic`, `numpy`, `networkx`,
+`requests`, `python-dotenv`. There is no torch and no LLM client. The extras are `[embed]`,
+`[pdf]`, `[ui]` and `[postgres]`. It provides two scripts: `art-mcp` (the server) and `art`
+(the JSON CLI, plus `art ui`). INSTALL.md has the commands; a checkout still works as before:
+
 ```bash
-claude mcp add art -- <repo>/.venv/Scripts/python.exe <repo>/harness/mcp_server.py
-python -m harness.cli --list
-python -m harness.cli kg_search --args '{"query": "python"}'
+claude mcp add art -- uvx --from git+https://github.com/nathansso/agentic_resume_tailoring art-mcp
+claude mcp add art -- <repo>/.venv/Scripts/python.exe <repo>/harness/mcp_server.py   # checkout
+art --list                                   # or python -m harness.cli --list
+art kg_search --args '{"query": "python"}'
 ```
 
 - **Database.** It reads local SQLite (`$ART_DATA_DIR/art.db`, default `~/.art/art.db`).
@@ -496,9 +504,17 @@ python -m harness.cli kg_search --args '{"query": "python"}'
   `--database-url <url>`, or `--database-url dotenv` to take `.env`'s `DATABASE_URL`
   explicitly without putting the secret on the command line. Postgres sessions are
   forced read-only (`default_transaction_read_only=on`).
-- **User.** Pass `--user-id <uuid>`, or let it fall back to the `~/.art` pointer file.
-- **Search.** `kg_search` is lexical for now: only skills and jobs carry embeddings, and
-  semantic search arrives with #194.
+- **First run.** `art-mcp` and `art` create and migrate a local SQLite store on start and
+  bind a default profile when none is bound, so a clean install answers tools instead of
+  returning `no_user`. A store named by `ART_DATA_DIR` starts empty; only the default
+  `~/.art` still adopts a checkout's legacy `art.db`.
+- **User.** Pass `--user-id <uuid>`, or let it fall back to the pointer file in the data
+  directory.
+- **Search.** `kg_search` uses SQLite FTS5: an in-memory index per call with porter
+  stemming and BM25, where names count 3× body text (`database/vector_search.fts_search`).
+  A skill's name is indexed as body text, so one-word skills no longer outrank the
+  experiences that use them. Without FTS5 it falls back to token matching. Only skills
+  and jobs carry embeddings, so there is still no semantic search over experiences.
 
 ## 16. Removing model calls
 

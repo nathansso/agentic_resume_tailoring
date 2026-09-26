@@ -70,6 +70,34 @@ def test_kg_search_searches_project_blurbs_and_filters_by_kind(kg):
     assert tools.kg_search(kg, "the and of") == []
 
 
+def test_kg_search_uses_fts_stemming(kg):
+    """#194: the #189 run's lexical match missed inflections."""
+    from harness import tools
+
+    hits = tools.kg_search(kg, "forecasts listing")
+    assert hits[0]["key"] == "exp:data science intern|idx exchange"
+
+
+def test_kg_search_does_not_let_bare_skill_names_outrank_the_experience(kg):
+    """#189: a skill's whole text is its name, so at title weight every
+    one-word skill outranked the experience that used it."""
+    from harness import tools
+    from harness.ingest import upsert_items
+
+    upsert_items(kg, [{"kind": "skill", "data": {"name": "Forecasting"}}])
+    keys = [h["key"] for h in tools.kg_search(kg, "forecasting home prices")]
+    assert keys.index("exp:data science intern|idx exchange") < keys.index("skill:forecasting")
+
+
+def test_kg_search_falls_back_to_the_lexical_scorer_without_fts5(kg, monkeypatch):
+    from harness import tools
+
+    monkeypatch.setattr(tools, "fts_search", lambda *a, **k: None)
+    hits = tools.kg_search(kg, "gradient boosted forecasting")
+    assert hits[0]["key"] == "exp:data science intern|idx exchange"
+    assert hits[0]["score"] == 3.0        # the old scorer: three body-token matches
+
+
 # ── get_item ─────────────────────────────────────────────────────────────────
 
 def test_every_search_key_round_trips_through_get_item(kg, isolated_engine):

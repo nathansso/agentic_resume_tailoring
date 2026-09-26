@@ -15,8 +15,16 @@ only path SQLite ever uses; the pgvector column is a Postgres-only accelerator
 added by the guarded migration in ``database/db.py``. On SQLite ``search_similar``
 never emits vector SQL — with a ``model_cls`` and no candidates it simply returns
 ``[]``.
+
+**Full-text fallback (#194).** Without embeddings (the default install has no
+torch), ``fts_search`` ranks documents with SQLite FTS5: porter stemming, BM25,
+per-column weights. It builds an in-memory index per call, so it works whatever
+the store is and needs no index maintenance; it returns None when this Python's
+SQLite lacks FTS5, and callers fall back to their own matching.
 """
 import logging
+import re
+import sqlite3
 from typing import Any, List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -154,3 +162,56 @@ def search_similar(
             )
         return _search_numpy(query_vec, candidates or [], k)
     return _search_pgvector(session, query_vec, k, model_cls, vector_column)
+
+
+# ── full-text search (#194) ─────────────────────────────────────────────────────
+
+_FTS_TERM = re.compile(r"[a-z0-9]+")
+
+
+def fts_search(
+    docs: Sequence[Tuple[str, str, str]],
+    query: str,
+    *,
+    weights: Tuple[float, float] = (3.0, 1.0),
+    limit: Optional[int] = None,
+) -> Optional[List[Tuple[str, float]]]:
+    """Rank `(key, title, body)` documents against `query` with SQLite FTS5.
+
+    Any query term may match (the terms are OR-ed), each stemmed by the porter
+    tokenizer, so "forecasts" finds "forecasting". The score is BM25 with the
+    title weighted `weights[0]` and the body `weights[1]`, negated so higher is
+    better; ties break by key, so the order is deterministic. Returns
+    `[(key, score)]` for matching documents only, or None when FTS5 is
+    unavailable.
+    """
+    terms = sorted(set(_FTS_TERM.findall((query or "").lower())))
+    if not terms:
+        return []
+    try:
+        con = sqlite3.connect(":memory:")
+    except sqlite3.Error:
+        return None
+    try:
+        try:
+            con.execute("CREATE VIRTUAL TABLE docs USING fts5("
+                        "key UNINDEXED, title, body, tokenize='porter unicode61')")
+        except sqlite3.OperationalError:
+            return None
+        con.executemany("INSERT INTO docs (key, title, body) VALUES (?, ?, ?)",
+                        [(k, t or "", b or "") for k, t, b in docs])
+        # Pad with one more empty row than there are documents. BM25's IDF is
+        # zero or negative for a term in half the corpus or more, and FTS5 clamps
+        # it to ~0, so on a small knowledge graph a word most items share scored
+        # nothing. With N' = 2N + 1 every IDF is positive; empty rows never match.
+        con.executemany("INSERT INTO docs (key, title, body) VALUES (NULL, '', '')",
+                        [()] * (len(docs) + 1))
+        match = " OR ".join(f'"{t}"' for t in terms)
+        rows = con.execute(
+            "SELECT key, bm25(docs, 0.0, ?, ?) AS rank FROM docs WHERE docs MATCH ? "
+            "ORDER BY rank, key", (weights[0], weights[1], match)).fetchall()
+    finally:
+        con.close()
+    hits = [(key, round(-rank, 3)) for key, rank in rows]
+    hits.sort(key=lambda h: (-h[1], h[0]))
+    return hits[:limit] if limit else hits
