@@ -5,6 +5,18 @@
 > legacy web app and CLI. The hosted deploy (Option C / Railway) is frozen and gets no new
 > features. See [`docs/harness.md`](docs/harness.md).
 
+## The Claude Code plugin (#201)
+
+The simplest way to use ART is the plugin. It registers the MCP server, the `/art:*`
+commands and the hooks:
+
+```
+/plugin marketplace add nathansso/agentic_resume_tailoring
+/plugin install art@art
+```
+
+It needs `uv`, plus tectonic or pdflatex for PDFs. See [`plugin/README.md`](plugin/README.md).
+
 ## The harness: `art-mcp` (#194)
 
 The package is `art-mcp`. Its default install is model-free and light (no torch, no LLM

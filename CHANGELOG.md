@@ -12,6 +12,65 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 201 — Claude Code plugin: skills, /art commands, hooks
+**Status:** complete | **Tests:** 1624 pass on SQLite (21 new), 12 skipped
+
+ART now has a Claude Code plugin, the reference host integration. It registers the MCP server and teaches the tailoring workflow: briefing, open the job, a plan shown for approval, execute, render. Its hooks keep the user's own editor edits and their pinned preferences in front of the model across the session and across compaction. Two tools were added so a fresh install can go from posting to PDF: `render` and `update_profile`.
+
+### What shipped
+
+- **`plugin/`** (validates with `claude plugin validate`) and a repo-root `.claude-plugin/marketplace.json`. Install with `/plugin marketplace add nathansso/agentic_resume_tailoring`, then `/plugin install art@art`.
+  - `.mcp.json` runs `uvx --from git+… art-mcp`.
+  - **Skills:**
+    - `art-tailor`: `art_briefing` (pins, job rules, header) → `open_job` with extracted requirements and rule answers → `list_items` / `get_item` / `get_head` → a plan program **shown for approval** → `execute_plan`, fixing with `patch_plan` and cut hints → `render`, re-cutting if it runs over a page. It forbids stating facts the tools don't return.
+    - `art-setup`: find the resume, LinkedIn export and repos → `ingest_schema` / `upsert_items`, using `correct` for stale facts → `update_profile` → job-scoped rules → confirm.
+  - **Commands:** `/art:tailor`, `/art:setup`, `/art:open` (prints the `art ui` command for the user to run), `/art:history`, `/art:revert` (shows the diff and asks before `checkout`) and `/art:prefs` (read-only).
+  - `plugin/README.md`.
+- **Hooks** (`harness/hooks.py`, run as `art hook <event>`) answer in Claude Code's `hookSpecificOutput.additionalContext` JSON, and on any failure stay silent and exit 0.
+  - **`UserPromptSubmit`:**
+    - Keeps a per-session event cursor in `$ART_DATA_DIR/sessions/<session>.json`. A session's first prompt only sets it.
+    - After that, it reports each job the user changed in `art ui` since the last message: the new HEAD, and a `diff_nodes` summary against its parent (bullets added and removed, skills, `.tex` or layout edits). It tells the host to build on that HEAD.
+    - Host commits are not reported.
+  - **`SessionStart` (matcher `compact`):** the strength-5 pins verbatim, plus the job the session was on.
+- **`render` tool (`harness/render.py`, new):**
+  - Takes a job's HEAD, or a named node, and writes `resume.tex` plus `resume.pdf` to `$ART_DATA_DIR/applications/<Company>_<Role>/`.
+  - Returns the page count and the #200 line budget with cut hints.
+  - The user's own `.tex` edits win.
+  - Education values from a job-scoped rule are laid over the stored rows, since the formatter reads education from the store. Before this, a rule's graduation date never reached the page. The stored rows are not modified.
+  - Nothing is trimmed silently.
+  - With no LaTeX engine it writes the `.tex` and says how to get a PDF.
+- **`update_profile` tool:** sets only the header fields `get_profile` returns, and refuses unknown fields and a blank name.
+- **Packaging:** `pypdf` joins the base dependencies (pure Python) for `render`'s page count. `art hook` is routed by `harness/entry.py`.
+- **Tests:**
+  - `tests/test_plugin.py` (8 new):
+    - the manifests;
+    - hooks wired to `art hook` events from the same package source as the server;
+    - skill and command frontmatter;
+    - **every tool a skill or command names exists, and none of the not-yet-built tools is taught** (`observe`, `record_preference`, `record_feedback`, `suggest_actions`, ...);
+    - the command set;
+    - the prompt hook reports only new editor edits, once;
+    - the compact hook restores pins verbatim;
+    - `art hook` JSON over stdin, silent on bad input.
+  - `tests/test_render_tool.py` (7 new, 1 of them integration): tex written under the data dir without an engine; edited `.tex` wins; the rule date reaches the page and the stored row is untouched; errors; a real one-page compile; `update_profile`; write flags.
+  - The contract test adds 6 cases for the two tools.
+  - `conftest.isolated_engine` now also points `config.APP_DATA_DIR` at the test's tmp dir, so rendered files and hook cursors never land in `~/.art`.
+  - `scripts/smoke_art_mcp.py`, run by the CI `package` job, now also calls `update_profile`, commits a version and renders it.
+- **Verified by hand:**
+  - Against a scratch store seeded with the benchmark profile, a pin and a job-scoped rule, the art-tailor tool sequence ran over MCP stdio from the local package: briefing, `open_job` (15 requirements, rule answered), `list_items`, `execute_plan`, then `render`. It committed and rendered a one-page PDF (48.6 of 60 lines). I rasterized the page and checked it.
+  - `art hook session-start` returned the pin verbatim.
+
+### Deviations from spec
+
+- **The acceptance runs inside Claude Code itself were not done.** A fresh install tailoring through the plugin, and a forced `/compact` showing the pins, both need a logged-in `claude`, and headless `claude` was not authenticated on this machine. The same tool sequence was driven over MCP, and the hooks are tested as functions and through `art hook`.
+- **`UserPromptSubmit` does not run `observe`.** The memory gate is #202, which adds it to this hook.
+- **`/art:library` and a feedback step are not shipped.** The library is #199, and no feedback tool exists. `/art:prefs` is read-only until #202 adds `record_preference`.
+- **`render` and `update_profile` were added here.** No issue owned them, and the acceptance (a fresh install tailoring end to end) needs both.
+- **`/art:open` prints the `art ui` command instead of launching it,** because the editor is a long-running server the user runs.
+- **The plugin runs ART from git (`uvx --from git+…`) until `art-mcp` is on PyPI** (#194). uvx may re-check the remote on each hook call, so switch the plugin to `uvx art-mcp` once it is published.
+- **The Postgres leg was not run locally** (Docker was not running). CI runs it.
+
+---
+
 ## Issue 217 — Achievements compile to PDF, and their line cost is calibrated
 **Status:** complete | **Tests:** 1603 pass on SQLite (3 new; 2 need a LaTeX engine and skip in CI), 12 skipped
 
