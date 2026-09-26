@@ -12,6 +12,55 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 198 — Citation faithfulness gate, with negative pins
+**Status:** complete | **Tests:** 1637 pass on SQLite (10 new), 12 skipped
+
+Every bullet on a host-built page now rests on live evidence, and a fact the user said must never appear can't reach the page even with a valid citation. #197 already refused a revise bullet with no cite or an unresolvable cite, but the page didn't remember what each bullet rested on, a cite to a deleted item was reported only as "unresolved", and a hard suppression by term dropped only the matching skill.
+
+### What shipped
+
+- **Citations on the page** (`harness/executor.py`). Content items carry `cites`, a map from bullet text to evidence ids:
+  - `_KG.item` makes each source bullet cite itself (`<key>#b<n>`);
+  - a revise or replace records the program's cites (`_cites_of`).
+
+  They are keyed by text, so a drag reorder never misattributes them. The committed node and the materialized result keep them, and the formatter and web app ignore the key.
+- **The `citations` hard gate** (`harness/acceptance.citation_violations`; `GATES` gains it). It flags any experience or project bullet on the page that:
+  - is neither verbatim one of its item's KG source bullets nor cited (`uncited`);
+  - cites an id that doesn't resolve (`unresolved:<cite>`);
+  - cites an item the user deleted (`tombstoned:<cite>`).
+
+  As with every gate, a node fails only if it adds a violation, so the user's own editor bullets (uncited) never block a plan. A context built outside the executor has no checker, and there the gate is off.
+- **Tombstones:**
+  - `_KG` loads the user's `DeletedEntry` rows and matches them with the ingest path's own fuzzy matchers (`KGStoreMixin`). An item that was re-added is live, not tombstoned.
+  - Arbitration now refuses a node that cites a deleted item with `tombstoned_cite: … which the user deleted`, ahead of the generic unresolved reason.
+  - A node that names a deleted item, or uses one as a replacement, is refused with `tombstoned: the user deleted …`.
+- **Negative pins:**
+  - A strength-5 suppression by `target_term` (not keyed `skill:`) is now also a fact that must never render (`_negative_terms`).
+  - `preference_violations` flags any bullet, title, company, project name or description containing the term, on word boundaries (`negative_pin:<term>@<key> :: …`).
+  - Arbitration refuses a revise or replace whose bullets mention it, even when cited.
+  - Finalize reports a pinned term already on the page with the hint "revise <key> so it no longer mentions '<term>'".
+- **Fix, found while testing:** `services.delete_project` failed on any project with `ProjectBlurb` rows. The relationship nulled their NOT NULL `project_id` instead of deleting them. The blurbs are now deleted with the project, and a regression test in `tests/test_kg_editing.py` covers it.
+- The `art-tailor` skill names the two new refusal reasons. `docs/harness.md` § 7 is updated.
+- **Tests:** `tests/test_citations.py` (9 new):
+  - an uncited bullet is refused;
+  - a cite to a deleted project is refused as `tombstoned_cite`, and keeping that project as `tombstoned`, while a never-existing key is still `unknown_key`;
+  - cites persist on the committed version, and its citations gate is empty;
+  - verbatim source bullets count as cited, and an editor-authored uncited bullet doesn't block a plan;
+  - the gate flags uncited, unresolved and tombstoned bullets, is unchanged by a reorder, and is off without a checker;
+  - a cited bullet mentioning a negative pin is refused;
+  - a pinned fact already on the page blocks finalize with hints naming the items, and the same program with it cut commits;
+  - negative pins match whole words only (Java, not JavaScript);
+  - a `skill:`-keyed suppression is not a negative pin.
+
+### Deviations from spec
+
+- **Lexical drift stays a hard gate** (user decision). The issue says faithfulness "moves" to citations. Citations prove the host named real evidence, not that the text says what the evidence says, so drift keeps guarding that until #123's numeric and entity gate lands.
+- **Negative pins come from the existing hard term suppressions.** A dedicated negative-pin record, and capturing pins from conversation, is #202's memory gate.
+- **Term matching is literal:** whole words, case-insensitive, with no stemming or synonyms. "Kafka" catches "Kafka-based", but a paraphrase that avoids the word escapes. Semantic matching would need Jev (#193) or embeddings.
+- **The Postgres leg was not run locally.** CI runs it.
+
+---
+
 ## Issue 175 — `isolated_engine` reaches every module that binds the engine
 **Status:** complete | **Tests:** 1627 pass on SQLite (3 new), 12 skipped
 

@@ -248,6 +248,20 @@ metric vector and the rule, and `harness/executor.py` runs it. The details:
   what remains stops a commit.
 - **Hard-preference deletes.** A delete that a hard preference requires is accepted even
   if a guard objects, since compliance is itself a hard gate.
+- **Citations (#198).**
+  - Content items carry `cites`, keyed by bullet text: KG text cites itself, and a
+    revise or replace records the program's cites.
+  - The `citations` hard gate flags any bullet on the page that is neither a verbatim
+    source bullet nor cited, or that cites something that doesn't resolve or that the
+    user deleted.
+  - Arbitration refuses a `tombstoned_cite` or `tombstoned` item with that reason.
+  - Lexical drift (`faithfulness`) stays a hard gate alongside it until #123 lands.
+- **Negative pins (#198).** A strength-5 suppression by term (not by key) is a fact that
+  must never render.
+  - A revise or replace whose bullets mention it is refused, even when cited.
+  - A pinned term already on the page (from KG text) fails finalize with a "revise …"
+    hint.
+  - A suppression keyed `skill:` still only drops the skill.
 - **Line budget.** It is measured by #200's render cache. Without a LaTeX engine it
   reports `unmeasured` and doesn't block.
 - **Saving and replay.** Every program is saved (`PlanProgram`), so `patch_plan` can

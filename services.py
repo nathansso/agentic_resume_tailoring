@@ -643,6 +643,10 @@ def delete_project(user_id: Optional[UUID], project_id: str) -> bool:
         if not row or row.user_id != user_id:
             return False
         _record_tombstone(session, user_id, "project", row.name, row.repo_url)
+        # Its bullet variants go with it: the relationship would otherwise null
+        # their NOT NULL project_id and fail the delete (#198).
+        for blurb in list(row.blurbs):
+            session.delete(blurb)
         session.delete(row)
         session.commit()
         return True

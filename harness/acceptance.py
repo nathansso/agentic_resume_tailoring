@@ -3,8 +3,8 @@
 Tailoring metrics stay separate and are never combined into one number. Each
 has a role:
 
-- **Hard gates** (`preferences`, `faithfulness`, `bullet_lines`): an action may
-  not *introduce* a violation. Gates are compared as sets, so a parent that
+- **Hard gates** (`preferences`, `faithfulness`, `citations`, `bullet_lines`): an
+  action may not *introduce* a violation. Gates are compared as sets, so a parent that
   already violates one does not block every later node; the finalize step is
   where remaining violations stop a commit.
 - **Guards** (`stuffing`, `verb_entropy`, `mtld`, `duplication`): may not
@@ -21,6 +21,7 @@ Deterministic: every float is rounded, every list sorted. Model-free by rule
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set
 
@@ -35,7 +36,7 @@ from agents.redundancy import (
 
 TARGETS = ("coverage", "relevance_density")
 GUARDS = ("stuffing", "verb_entropy", "mtld", "duplication")
-GATES = ("preferences", "faithfulness", "bullet_lines")
+GATES = ("preferences", "faithfulness", "citations", "bullet_lines")
 
 # How far each guard may move in its bad direction before an action is
 # reverted. Provisional: #127 fits these per guard on the human anchor set and
@@ -71,6 +72,14 @@ class Context:
     hard_suppress: Set[str] = field(default_factory=set)
     hard_emphasize: Set[str] = field(default_factory=set)
     suppressed_skills: Set[str] = field(default_factory=set)
+    # Negative pins (#198): terms a hard preference says must never render, in
+    # any bullet or item name, cited or not.
+    negative_terms: Set[str] = field(default_factory=set)
+    # Citations (#198): each item's KG source bullets (a verbatim source bullet
+    # cites itself), and `cite -> None | "unresolved" | "tombstoned"`. With no
+    # checker the citation gate is off (a context built outside the executor).
+    source_bullets: Dict[str, List[str]] = field(default_factory=dict)
+    cite_status: Optional[Callable[[str], Optional[str]]] = None
     matched_skills: Dict = field(default_factory=dict)
     # `{bullet id: lines}` source, or None when no LaTeX engine is available.
     line_counter: Optional[Callable[[Dict], Dict[str, int]]] = None
@@ -95,7 +104,71 @@ def preference_violations(content: Dict, ctx: Context) -> List[str]:
     skills = {str(s.get("name", "")).strip().lower()
               for s in content.get("skills_ranked") or []}
     out += [f"suppressed:skill:{s}" for s in sorted(skills & ctx.suppressed_skills)]
+    out += negative_pin_violations(content, ctx.negative_terms)
     return out
+
+
+def _short(text: str, n: int = 60) -> str:
+    text = " ".join((text or "").split())
+    return text if len(text) <= n else text[: n - 1] + "…"
+
+
+def term_pattern(term: str) -> "re.Pattern":
+    """`term` as a whole word or phrase, case-insensitive."""
+    return re.compile(r"(?<![a-z0-9])" + re.escape(term.lower()) + r"(?![a-z0-9])")
+
+
+def _page_items(content: Dict):
+    for section, key_fn in (("experiences", exp_key), ("projects", proj_key)):
+        for item in content.get(section) or []:
+            yield key_fn(item), item
+
+
+def negative_pin_violations(content: Dict, terms: Iterable[str]) -> List[str]:
+    """A negative pin (#198) is a fact that must never render: any bullet,
+    title, company, project name or description containing the term, whatever
+    it cites."""
+    out = []
+    for term in sorted({t.strip().lower() for t in terms if t and t.strip()}):
+        pat = term_pattern(term)
+        for key, item in _page_items(content):
+            for field_ in ("title", "company", "name", "description"):
+                if pat.search(str(item.get(field_) or "").lower()):
+                    out.append(f"negative_pin:{term}@{key} :: {field_}")
+            for b in item.get("bullets") or []:
+                if b and pat.search(b.lower()):
+                    out.append(f'negative_pin:{term}@{key} :: "{_short(b)}"')
+    return out
+
+
+def citation_violations(content: Dict, ctx: Context) -> List[str]:
+    """Bullets on the page that rest on no live evidence (#198).
+
+    A bullet is cited when it is verbatim one of its item's KG source bullets,
+    or when `item["cites"][bullet text]` lists evidence ids. It violates the
+    gate when it is neither (`uncited`), or when a cite does not resolve or
+    names an item the user deleted. Keyed by bullet text, not position, so a
+    reorder never looks like a new violation.
+    """
+    if ctx.cite_status is None:
+        return []
+    out = []
+    for key, item in _page_items(content):
+        sources = {" ".join(b.split()) for b in ctx.source_bullets.get(key, [])}
+        cites = item.get("cites") if isinstance(item.get("cites"), dict) else {}
+        for b in item.get("bullets") or []:
+            if not (b or "").strip():
+                continue
+            named = cites.get(b) or []
+            if not named:
+                if " ".join(b.split()) not in sources:
+                    out.append(f'{key}: uncited: "{_short(b)}"')
+                continue
+            for cite in named:
+                status = ctx.cite_status(cite)
+                if status:
+                    out.append(f'{key}: {status}:{cite}: "{_short(b)}"')
+    return sorted(set(out))
 
 
 def _max_pair_jaccard(bullets: Sequence[str]) -> float:
@@ -126,6 +199,7 @@ def metric_vector(content: Dict, ctx: Context) -> Dict[str, Any]:
     gates = {
         "preferences": preference_violations(content, ctx),
         "faithfulness": sorted(faithfulness_drift(content, ctx.source_experiences)),
+        "citations": citation_violations(content, ctx),
         "bullet_lines": (None if lines is None else sorted(
             v["bullet"] for v in bullet_line_violations(lines, ctx.max_bullet_lines))),
     }

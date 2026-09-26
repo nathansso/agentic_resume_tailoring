@@ -236,6 +236,25 @@ def test_experience_edit_delete_http_roundtrip(isolated_engine, monkeypatch):
     assert ca.get("/api/profile/experiences").json() == []
 
 
+def test_deleting_a_project_with_bullet_variants_deletes_them_too(isolated_engine):
+    """#198 found `delete_project` failing on any project with ProjectBlurb rows:
+    the relationship nulled their NOT NULL project_id instead of deleting them."""
+    from database.models import ProjectBlurb
+
+    user = _make_user(isolated_engine, "pr0@example.com")
+    with Session(isolated_engine) as s:
+        row = Project(user_id=user.user_id, name="StreamBoard")
+        s.add(row); s.commit(); s.refresh(row)
+        s.add(ProjectBlurb(project_id=row.project_id, style="b00", content="Kafka dashboard."))
+        s.commit()
+        pid = str(row.project_id)
+
+    assert services.delete_project(user.user_id, pid) is True
+    with Session(isolated_engine) as s:
+        assert s.exec(select(ProjectBlurb)).all() == []
+        assert s.exec(select(DeletedEntry).where(DeletedEntry.key_a == "StreamBoard")).one()
+
+
 def test_project_edit_delete_and_tombstone(isolated_engine, monkeypatch):
     user = _make_user(isolated_engine, "pr1@example.com")
     with Session(isolated_engine) as s:
