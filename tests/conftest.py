@@ -37,6 +37,7 @@ from sqlalchemy import text
 from sqlmodel import SQLModel, Session, create_engine
 
 import agents.chat as chat_module
+import agents.formatter as formatter_module
 import database.db as db_module
 import database.user_utils as user_utils_module
 import knowledge_graph.builder as kg_builder_module
@@ -151,8 +152,15 @@ def isolated_engine(tmp_path, monkeypatch, _pg_ready):
     monkeypatch.setattr(kg_builder_module, "engine", engine)
     monkeypatch.setattr(services_module, "engine", engine)
     monkeypatch.setattr(user_utils_module, "engine", engine)
+    # The formatter reads the header and education with its import-time engine;
+    # the `render` tool (#201) reaches it from every harness adapter (#175).
+    monkeypatch.setattr(formatter_module, "engine", engine)
     monkeypatch.setattr(user_utils_module, "ACTIVE_PROFILE_FILE", profile_file)
     monkeypatch.setattr(user_utils_module, "ART_DIR", tmp_path)
+    # Files the harness writes (rendered resumes, hook cursors, #201) go under
+    # the data dir; keep them out of the developer's ~/.art.
+    import config as config_module
+    monkeypatch.setattr(config_module, "APP_DATA_DIR", tmp_path)
 
     # Clear any request-user binding left by a previous test in this thread
     # (issue #73): the ContextVar would otherwise shadow the profile file.

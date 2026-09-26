@@ -249,3 +249,25 @@ def get_profile(user_id: UUID) -> Dict[str, Any]:
         if user is None:
             return {"error": {"code": "not_found", "message": f"No user {user_id}."}}
         return {f: getattr(user, f, None) or None for f in _PROFILE_FIELDS}
+
+
+def update_profile(user_id: UUID, fields: Dict[str, Any]) -> Dict[str, Any]:
+    """Set header fields (#201): a fresh install's profile is "Default User".
+    Only the fields `get_profile` returns; an empty string clears one, and a
+    blank name is refused. Returns the profile as `get_profile` does."""
+    unknown = sorted(set(fields) - set(_PROFILE_FIELDS))
+    if unknown:
+        return {"error": {"code": "invalid_arguments",
+                          "message": f"Not a profile field: {', '.join(unknown)}.",
+                          "suggestions": list(_PROFILE_FIELDS)}}
+    if "name" in fields and not str(fields["name"] or "").strip():
+        return {"error": {"code": "invalid_arguments", "message": "name cannot be blank."}}
+    with Session(services.engine) as session:
+        user = session.get(User, user_id)
+        if user is None:
+            return {"error": {"code": "not_found", "message": f"No user {user_id}."}}
+        for field, value in fields.items():
+            setattr(user, field, (str(value).strip() or None) if value is not None else None)
+        session.add(user)
+        session.commit()
+    return get_profile(user_id)

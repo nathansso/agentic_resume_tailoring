@@ -51,6 +51,11 @@ CALLS = {
         {"program": {"job_id": "$JOB", "parent": None}, "dry_run": True}],   # stale parent
     "patch_plan": [{"program_id": "prog_missing", "edits": [
         {"op": "replace", "path": "/parent", "value": "$N1"}]}],
+    # Render and the header (#201): same file, same fields, on every adapter.
+    "render": [{"job_id": "$JOB", "format": "tex"},
+               {"job_id": "00000000-0000-0000-0000-000000000000"}],
+    "update_profile": [{"fields": {"location": "San Diego, CA"}},
+                       {"fields": {"nickname": "x"}}],
 }
 _DUMMY = {"$JOB": "00000000-0000-0000-0000-000000000001",
           "$N0": "00000000-0000-0000-0000-000000000002",

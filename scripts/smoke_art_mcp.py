@@ -73,6 +73,16 @@ async def _run(data_dir: str) -> None:
                 "job_id": job["job_id"], "nodes": [
                     {"id": "k", "op": "keep", "item_key": "exp:data analyst|acme"}]}})
             assert run["nodes"][0]["status"] == "kept", run
+            # The plugin's last steps (#201): the header, a committed version, a render.
+            prof = await call("update_profile", {"fields": {"name": "Smoke Test"}})
+            assert prof["name"] == "Smoke Test", prof
+            done = await call("execute_plan", {"program": {
+                "job_id": job["job_id"], "nodes": [
+                    {"id": "k", "op": "keep", "item_key": "exp:data analyst|acme"}]}})
+            assert done["committed"], done
+            page = await call("render", {"job_id": job["job_id"], "format": "tex"})
+            assert Path(page["tex_path"]).is_file(), page
+            assert "Smoke Test" in Path(page["tex_path"]).read_text(encoding="utf-8")
             print(json.dumps({"tools": len(tools), "items": [i["key"] for i in items],
                               "search": hits[0]["key"], "job": job["requirements"]}))
 

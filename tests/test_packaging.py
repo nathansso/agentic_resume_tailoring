@@ -77,7 +77,8 @@ import json, sys
 from pathlib import Path
 root = Path(sys.argv[1]).resolve()
 for m in ("harness.mcp_server", "harness.cli", "harness.entry", "harness.tools",
-          "harness.tree", "harness.ingest", "harness.executor", "harness.render_cache"):
+          "harness.tree", "harness.ingest", "harness.executor", "harness.render_cache",
+          "harness.render", "harness.hooks"):
     __import__(m)
 tops = set()
 for mod in list(sys.modules.values()):

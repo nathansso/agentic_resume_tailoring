@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "art": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/nathansso/agentic_resume_tailoring", "art-mcp"]
+    }
+  }
+}

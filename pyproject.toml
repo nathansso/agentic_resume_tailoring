@@ -24,6 +24,8 @@ dependencies = [
     "networkx>=3.2",
     "requests>=2.31",
     "python-dotenv>=1.0",
+    # PDF page counts for the render tool (pure Python).
+    "pypdf>=4.0",
 ]
 
 [project.optional-dependencies]

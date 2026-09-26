@@ -452,6 +452,36 @@ flowchart LR
 ART targets mainstream coding agents: Claude Code and Codex (decided 2026-09-25; pi and
 other harnesses are out of scope). Codex's hook capabilities are to be confirmed in #203.
 
+### The Claude Code plugin (#201)
+
+`plugin/` is the plugin, and the repo root's `.claude-plugin/marketplace.json` lists it,
+so `/plugin marketplace add nathansso/agentic_resume_tailoring` then `/plugin install
+art@art` installs it.
+
+- **Server.** `.mcp.json` runs `art-mcp` through `uvx --from git+…`.
+- **Skills.**
+  - `art-tailor`: briefing → `open_job` (with requirements and rule answers) → read the
+    graph → a plan program **shown for approval** → `execute_plan` / `patch_plan` →
+    `render`.
+  - `art-setup`: read the user's sources → `upsert_items`, using `correct` for stale
+    facts → `update_profile` → job-scoped rules.
+- **Commands.** `/art:tailor`, `/art:setup`, `/art:open`, `/art:history`,
+  `/art:revert` and `/art:prefs` (read-only).
+- **Hooks** (`art hook <event>`, `harness/hooks.py`), local and model-free:
+  - `UserPromptSubmit` tells the host which jobs the user edited in `art ui` since the
+    last message, and what changed. It keeps a per-session event cursor in
+    `$ART_DATA_DIR/sessions/`.
+  - `SessionStart` with matcher `compact` re-injects the pins verbatim, plus the
+    session's current job.
+- **Two tools added for the plugin:**
+  - `render` writes a node's `.tex` and PDF to `$ART_DATA_DIR/applications/<Company>_<Role>/`
+    and reports the pages and the line budget. The user's `.tex` edits win, job-rule
+    education values are laid over the stored rows, and nothing is trimmed silently.
+  - `update_profile` sets the header fields `get_profile` returns.
+- **Not yet taught to the model:** `observe` / `record_preference` (#202), the library
+  (#199) and `record_feedback`. `tests/test_plugin.py` fails if a skill or command names
+  a tool the contract lacks.
+
 ### Running the harness (#189, #191)
 
 Every tool is declared once in `harness/contract.py`: name, description, and pydantic

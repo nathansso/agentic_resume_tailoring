@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uvx --from git+https://github.com/nathansso/agentic_resume_tailoring art hook user-prompt",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uvx --from git+https://github.com/nathansso/agentic_resume_tailoring art hook session-start",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
