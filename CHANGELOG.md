@@ -59,7 +59,7 @@ The React editor now runs as `art ui`: a local, login-free app on 127.0.0.1 that
 - **The feed is subscribed only in local mode.** The endpoint also works on the hosted app, but a per-tab one-second DB poll against the frozen Supabase deploy was not worth adding.
 - **Auto-save pauses while the banner is up.** Otherwise the stale buffer would have been saved over the agent's version before the user chose. "Keep my edits" resumes it, and the user's text wins.
 - **No separate local-mode re-tailor test for layout overrides.** The pipeline tests in `test_layout_overrides.py` already prove an override survives a re-tailor, and the local-mode `PUT /layout` test proves the override is stored by the same route.
-- **The build hint says `npm install`, not `npm ci`.** The checked-in lockfile does not satisfy `npm ci` on npm 11.6 today.
+- **The build hint says `npm install`, not `npm ci`.** The checked-in lockfile does not satisfy `npm ci` on npm 11.6 today; #219 tracks the fix.
 - **The Postgres leg was not run locally** (Docker was not running). CI runs it.
 
 ---
