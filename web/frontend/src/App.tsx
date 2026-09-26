@@ -29,19 +29,39 @@ function RequireAuth({ children }: { children: ReactNode }) {
  * app shell for signed-in ones — a returning user never sees marketing.
  */
 function Root() {
-  const { user, loading } = useAuth();
+  const { user, loading, localMode } = useAuth();
   if (loading) return <Splash />;
-  return user ? <MainPage /> : <LandingPage />;
+  if (user) return <MainPage />;
+  // `art ui` (#204) has no login and no marketing page to fall back to.
+  return localMode ? <LocalUnavailable /> : <LandingPage />;
+}
+
+function LocalUnavailable() {
+  return (
+    <div className="grid min-h-screen place-items-center bg-background px-4 text-center text-muted-foreground">
+      The local ART server has no profile bound. Restart it with{" "}
+      <code className="font-mono">python -m web.local_ui --user-id &lt;id&gt;</code>.
+    </div>
+  );
+}
+
+/** Signed-out pages. In local mode there is nothing to sign in to. */
+function SignedOut({ children }: { children: ReactNode }) {
+  // Render straight away while capabilities load, as before #204; only a
+  // confirmed local mode redirects.
+  const { loading, localMode } = useAuth();
+  if (!loading && localMode) return <Navigate to="/" replace />;
+  return <>{children}</>;
 }
 
 function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Root />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/login" element={<SignedOut><LoginPage /></SignedOut>} />
+      <Route path="/register" element={<SignedOut><RegisterPage /></SignedOut>} />
+      <Route path="/forgot-password" element={<SignedOut><ForgotPasswordPage /></SignedOut>} />
+      <Route path="/reset-password" element={<SignedOut><ResetPasswordPage /></SignedOut>} />
       <Route
         path="/*"
         element={

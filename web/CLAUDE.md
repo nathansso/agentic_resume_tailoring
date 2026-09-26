@@ -137,6 +137,10 @@ cd web/frontend && npm run dev -- --port 5173
 
 App is at http://localhost:5173.
 
+`art ui` (#204): `python -m web.local_ui --job <id>` serves the built SPA on 127.0.0.1 in
+local mode (`web/local_mode.py`: no login, no quotas, Host and Origin guards) with a live
+SSE change feed at `/api/jobs/{id}/events`. See `docs/harness.md` § 13.
+
 ---
 
 ## Local database

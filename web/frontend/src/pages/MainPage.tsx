@@ -21,13 +21,18 @@ function githubConnectRedirect(): boolean {
   return new URLSearchParams(window.location.search).get("github_connected") === "1";
 }
 
+// `art ui --job <id>` (#204) opens the editor on /?job=<id>.
+function jobFromUrl(): string | null {
+  return new URLSearchParams(window.location.search).get("job");
+}
+
 export function MainPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, localMode } = useAuth();
   const [jobs, setJobs] = useState<JobListItem[]>([]);
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(jobFromUrl);
   const [selectedJob, setSelectedJob] = useState<JobDetail | null>(null);
   const [activeView, setActiveView] = useState<ActiveView>(() =>
-    githubConnectRedirect() ? "ingest" : "chat"
+    githubConnectRedirect() ? "ingest" : jobFromUrl() ? "job" : "chat"
   );
   const [ingestTab] = useState<IngestTab | undefined>(() =>
     githubConnectRedirect() ? "github" : undefined
@@ -66,9 +71,14 @@ export function MainPage() {
   }, []);
 
   // Fetch job detail when selection changes
+  const [jobMissing, setJobMissing] = useState(false);
   useEffect(() => {
+    setJobMissing(false);
     if (!selectedJobId) { setSelectedJob(null); return; }
-    getJob(selectedJobId).then(setSelectedJob).catch(() => setSelectedJob(null));
+    getJob(selectedJobId).then(setSelectedJob).catch(() => {
+      setSelectedJob(null);
+      setJobMissing(true);
+    });
   }, [selectedJobId]);
 
   // Jobs created this session with a pasted JD — the workspace auto-runs
@@ -126,7 +136,7 @@ export function MainPage() {
               onJobUpdate={handleJobUpdate}
               onViewChange={v => setActiveView(v as ActiveView)}
             />
-          : <p className="p-4 text-sm text-muted-foreground">Loading job…</p>;
+          : <p className="p-4 text-sm text-muted-foreground">{jobMissing ? "Job not found." : "Loading job…"}</p>;
       default:
         if (!welcomeDismissed && !selectedJobId && jobs.length === 0 && !jobsLoading) {
           return <WelcomePanel onViewChange={v => { setWelcomeDismissed(true); setActiveView(v as ActiveView); }} />;
@@ -211,14 +221,19 @@ export function MainPage() {
               >
                 Profile
               </button>
-              <div className="my-1 border-t border-border" />
-              <button
-                className="px-3 py-2 text-left text-sm transition-colors hover:bg-secondary"
-                role="menuitem"
-                onClick={logout}
-              >
-                Sign out
-              </button>
+              {/* `art ui` (#204) has no session to end. */}
+              {!localMode && (
+                <>
+                  <div className="my-1 border-t border-border" />
+                  <button
+                    className="px-3 py-2 text-left text-sm transition-colors hover:bg-secondary"
+                    role="menuitem"
+                    onClick={logout}
+                  >
+                    Sign out
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
