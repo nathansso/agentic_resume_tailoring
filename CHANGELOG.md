@@ -13,7 +13,7 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 ---
 
 ## Issue 197 — Plan programs and the executor
-**Status:** complete | **Tests:** __TOTAL__ pass on SQLite (30 new), __SKIP__ skipped
+**Status:** complete | **Tests:** 1559 pass on SQLite (30 new), 12 skipped
 
 A host now submits a whole tailoring plan as one program, and ART runs it with no model:
 - arbitration refuses nodes that name unknown keys, cite nothing resolvable or cross a hard preference;
