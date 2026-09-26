@@ -5,10 +5,13 @@ from uuid import UUID
 
 from sqlmodel import Session, select
 
+from config import APP_DATA_DIR
 from database.db import engine
 from database.models import User
 
-ART_DIR = Path.home() / ".art"
+# The store's own directory, so ART_DATA_DIR moves the profile pointer with the
+# database (#194); ~/.art by default.
+ART_DIR = Path(APP_DATA_DIR)
 ACTIVE_PROFILE_FILE = ART_DIR / "active_profile_id"
 
 # Request-scoped acting user for the multi-user web server (issue #73).

@@ -1,0 +1,66 @@
+# ART as an installable package (issue #194): `uvx art-mcp`.
+#
+# The default install is what the harness imports and nothing more: no torch,
+# no LLM clients. Heavy or optional pieces sit behind extras. The legacy web
+# app and CLI still install from requirements-core.txt / requirements-full.txt
+# (Dockerfile, CI); tests/test_packaging.py keeps the two in step.
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "art-mcp"
+dynamic = ["version"]
+description = "ART: a local, model-free resume-tailoring toolkit your coding agent drives over MCP."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+dependencies = [
+    "mcp==2.2.0",
+    "sqlmodel==0.0.38",
+    "pydantic>=2.7",
+    "numpy>=1.26",
+    "networkx>=3.2",
+    "requests>=2.31",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+# Embedding search and skill embeddings (pulls torch).
+embed = ["sentence-transformers>=3.0"]
+# Reading resume files (PDF, DOCX) on the legacy ingest path.
+pdf = ["docling>=2.0", "pypdf>=4.0", "python-docx>=1.1"]
+# `art ui`, the local editor.
+ui = ["fastapi>=0.110", "uvicorn[standard]>=0.29", "python-multipart>=0.0.9", "itsdangerous>=2.1"]
+# Reading a Postgres store with --database-url.
+postgres = ["psycopg2-binary>=2.9"]
+all = ["art-mcp[embed,pdf,ui,postgres]"]
+
+[project.scripts]
+art-mcp = "harness.mcp_server:main"
+art = "harness.entry:main"
+
+[tool.hatch.version]
+path = "harness/__init__.py"
+pattern = 'ART_VERSION = "(?P<version>[^"]+)"'
+
+# The code is a flat layout of top-level modules and packages (`database/` is a
+# namespace package), shipped as is. `web/static` is the built editor: it is
+# gitignored, so it is listed as an artifact; build it before `uv build`
+# (see INSTALL.md).
+[tool.hatch.build.targets.wheel]
+only-include = [
+    "agents", "database", "harness", "web", "knowledge_graph", "ingestion", "graph",
+    "config.py", "services.py", "institution.py", "llm.py",
+]
+exclude = ["web/frontend", "**/__pycache__", "**/CLAUDE.md"]
+artifacts = ["web/static"]
+
+[tool.hatch.build.targets.sdist]
+only-include = [
+    "agents", "database", "harness", "web", "knowledge_graph", "ingestion", "graph",
+    "config.py", "services.py", "institution.py", "llm.py", "README.md", "pyproject.toml",
+]
+exclude = ["web/frontend/node_modules", "**/__pycache__", "**/CLAUDE.md"]
+artifacts = ["web/static"]

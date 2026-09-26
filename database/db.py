@@ -4,11 +4,19 @@ from database.models import * # Import all models to register them
 
 
 def _migrate_db_location() -> None:
-    """One-time, non-destructive copy of art.db from project root → ~/.art/art.db."""
+    """One-time, non-destructive copy of art.db from project root → ~/.art/art.db.
+
+    Only into the default ~/.art: a store named by ART_DATA_DIR (a benchmark
+    workdir, a clean-install test, Docker) starts empty rather than as a copy
+    of whatever database sits in the checkout (#194).
+    """
+    import os
     import shutil
     import logging
     from config import APP_DATA_DIR, BASE_DIR
 
+    if os.getenv("ART_DATA_DIR"):
+        return
     old_db = BASE_DIR / "art.db"
     new_db = APP_DATA_DIR / "art.db"
     if old_db.exists() and not new_db.exists():

@@ -1,9 +1,16 @@
 """`art-mcp`: the stdio MCP server over the harness tool contract (#189, #191).
 
-Run it as `python -m harness.mcp_server` from the repo root, or by absolute
-script path from anywhere (the repo root is put on `sys.path`):
+Installed, it is the `art-mcp` script (#194):
+
+    claude mcp add art -- uvx art-mcp
+
+From a checkout, run `python -m harness.mcp_server` from the repo root, or the
+script by absolute path from anywhere (the repo root is put on `sys.path`):
 
     claude mcp add art -- <repo>/.venv/Scripts/python.exe <repo>/harness/mcp_server.py
+
+On start, a local SQLite store is created and migrated if needed, and an
+unbound one gets the default profile (`harness.runtime.bootstrap(prepare=True)`).
 
 Every tool comes from `harness.contract.TOOLS`; this module only adapts them to
 MCP, so the server publishes each tool's input *and* output JSON schema and
@@ -99,7 +106,7 @@ def main(argv=None) -> None:
 
     logging.basicConfig(stream=sys.stderr, level=logging.INFO,
                         format="art-mcp %(levelname)s %(message)s")
-    user_id, writes = bootstrap(args.database_url, args.user_id, args.allow_writes)
+    user_id, writes = bootstrap(args.database_url, args.user_id, args.allow_writes, prepare=True)
     import os
     scheme = os.environ["DATABASE_URL"].split(":", 1)[0]
     log.info("contract v%s: serving %s (%s, %s), user %s", CONTRACT_VERSION,

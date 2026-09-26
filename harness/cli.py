@@ -74,7 +74,8 @@ def main(argv=None) -> int:
     user_id, writes = None, False
     if not args.list:
         from harness.runtime import bootstrap
-        user_id, writes = bootstrap(args.database_url, args.user_id, args.allow_writes)
+        user_id, writes = bootstrap(args.database_url, args.user_id, args.allow_writes,
+                                    prepare=True)
     return run(argv, user_id=user_id, allow_writes=writes)
 
 

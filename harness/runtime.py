@@ -62,24 +62,47 @@ def force_read_only(url: str) -> str:
     return urlunsplit(parts._replace(query=urlencode(query, quote_via=quote)))
 
 
+def local_sqlite_path(url: str) -> Optional[Path]:
+    """The file behind a `sqlite:///<path>` URL, or None for anything else."""
+    return Path(url[len("sqlite:///"):]) if url.startswith("sqlite:///") else None
+
+
+def prepare_local_store(url: str) -> bool:
+    """First run on a clean machine (#194): for a local SQLite store only, create
+    its directory and tables (`init_db` is idempotent, and migrates an older
+    store). Returns whether it did anything; remote stores are never touched."""
+    path = local_sqlite_path(url)
+    if path is None:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    from database.db import init_db
+    init_db()
+    return True
+
+
 def bootstrap(database_url: Optional[str], user_id: Optional[str],
-              allow_writes: bool = False):
+              allow_writes: bool = False, prepare: bool = False):
     """Pin the database, then resolve and bind the user.
 
     Returns `(user_id or None, writes_allowed)`.
 
-    The user is `--user-id` / `ART_MCP_USER_ID`, else the `~/.art` pointer file
-    read through `get_active_profile()`. Nothing here writes: no `init_db`, no
-    `get_or_create_cli_user`.
+    The user is `--user-id` / `ART_MCP_USER_ID`, else the pointer file in the
+    data dir read through `get_active_profile()`. With `prepare` (the `art-mcp`
+    and `art` entry points), a local SQLite store is created and migrated
+    first, and an unbound one gets the default profile, so a clean install
+    answers tools instead of `no_user`. Without it nothing here writes.
     """
     url = resolve_database_url(database_url, os.environ, allow_writes=allow_writes)
     os.environ["DATABASE_URL"] = url
+    local = prepare and prepare_local_store(url)
 
     from uuid import UUID
 
-    from database.user_utils import get_active_profile, set_request_user
+    from database.user_utils import get_active_profile, get_or_create_cli_user, set_request_user
 
     raw = user_id or os.environ.get("ART_MCP_USER_ID")
     uid = UUID(raw) if raw else getattr(get_active_profile(), "user_id", None)
+    if uid is None and local:
+        uid = get_or_create_cli_user().user_id
     set_request_user(uid)
     return uid, writes_allowed(url, allow_writes)

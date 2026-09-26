@@ -11,7 +11,8 @@ same way the harness entry points pin it (`harness.runtime`): local SQLite
 `--allow-writes`. That pinning must happen before anything imports `config`,
 `database` or `web.app`, so every such import below is deferred.
 
-Until #194 packages an `art` console script, this module is the entry point.
+Installed, this is `art ui` (`harness/entry.py`, #194); the wheel ships the built
+editor. From a checkout, build it once with the command in `BUILD_HINT`.
 """
 
 from __future__ import annotations
