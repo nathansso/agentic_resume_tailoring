@@ -36,13 +36,28 @@ import pytest
 from sqlalchemy import text
 from sqlmodel import SQLModel, Session, create_engine
 
-import agents.chat as chat_module
-import agents.formatter as formatter_module
+import importlib
+
 import database.db as db_module
 import database.user_utils as user_utils_module
-import knowledge_graph.builder as kg_builder_module
-import services as services_module
 from database.models import User, Skill, UserSkill
+
+# Every module that binds the engine at import (`from database.db import engine`
+# at module level). Such a binding is a copy of the object, so patching
+# `database.db.engine` never reaches it and the module silently reads another
+# store (#175). `isolated_engine` patches all of them;
+# tests/test_engine_isolation.py fails when a module in the repo binds the
+# engine and is missing here. Imported eagerly: a module first imported inside a
+# test would bind that test's engine for the rest of the session.
+ENGINE_BINDERS = (
+    "agents.chat", "agents.enhancer", "agents.formatter", "agents.job_analyzer",
+    "agents.matcher", "agents.parser", "agents.tailor",
+    "database.user_utils", "graph.pipeline", "knowledge_graph.builder", "services",
+    "web.auth", "web.routers.auth_router", "web.routers.chat_router",
+    "web.routers.jobs_router", "web.routers.preferences_router",
+    "web.routers.profile_router",
+)
+_ENGINE_BINDER_MODULES = [importlib.import_module(name) for name in ENGINE_BINDERS]
 
 # Set → Postgres leg. Unset → SQLite leg (historical default).
 ART_TEST_DATABASE_URL = os.getenv("ART_TEST_DATABASE_URL") or None
@@ -148,13 +163,8 @@ def isolated_engine(tmp_path, monkeypatch, _pg_ready):
     profile_file = tmp_path / "active_profile_id"
 
     monkeypatch.setattr(db_module, "engine", engine)
-    monkeypatch.setattr(chat_module, "engine", engine)
-    monkeypatch.setattr(kg_builder_module, "engine", engine)
-    monkeypatch.setattr(services_module, "engine", engine)
-    monkeypatch.setattr(user_utils_module, "engine", engine)
-    # The formatter reads the header and education with its import-time engine;
-    # the `render` tool (#201) reaches it from every harness adapter (#175).
-    monkeypatch.setattr(formatter_module, "engine", engine)
+    for module in _ENGINE_BINDER_MODULES:
+        monkeypatch.setattr(module, "engine", engine)
     monkeypatch.setattr(user_utils_module, "ACTIVE_PROFILE_FILE", profile_file)
     monkeypatch.setattr(user_utils_module, "ART_DIR", tmp_path)
     # Files the harness writes (rendered resumes, hook cursors, #201) go under
