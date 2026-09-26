@@ -56,13 +56,19 @@ ART now has a Claude Code plugin, the reference host integration. It registers t
   - `conftest.isolated_engine` now also points `config.APP_DATA_DIR` at the test's tmp dir, so rendered files and hook cursors never land in `~/.art`.
   - `isolated_engine` also patches `agents.formatter.engine` (#175). Otherwise `render`'s header query, reached from every contract adapter, read whichever store was imported first. CI caught this as "unable to open database file".
   - `scripts/smoke_art_mcp.py`, run by the CI `package` job, now also calls `update_profile`, commits a version and renders it.
-- **Verified by hand:**
-  - Against a scratch store seeded with the benchmark profile, a pin and a job-scoped rule, the art-tailor tool sequence ran over MCP stdio from the local package: briefing, `open_job` (15 requirements, rule answered), `list_items`, `execute_plan`, then `render`. It committed and rendered a one-page PDF (48.6 of 60 lines). I rasterized the page and checked it.
+- **Acceptance, verified live in Claude Code 2.1.281.** The runs used headless `claude -p --plugin-dir`, with the plugin pointed at this branch, sonnet, and only the ART tools allowed. The scratch store held the benchmark profile, a strength-5 pin ("Never list more than two projects") and a job-scoped graduation-date rule.
+  - **A fresh install tailors a benchmark task end to end.** `/art:tailor` ran on the AEG Associate Data Scientist posting, with the plan pre-approved in the prompt. It took 20 turns and about $0.32.
+    - The host loaded the `art-tailor` skill and followed it: `art_briefing` → `get_profile` → `list_items` → `get_item` ×9 → `open_job` (12 requirements; it answered the rule "no" and quoted the posting) → `get_head` → `execute_plan` → `render`.
+    - The plan had three revisions, every bullet citing its own source bullet, which were accepted. It kept one experience and two projects, and deleted two projects with `because: pref:<the pin>`.
+    - It committed and rendered a one-page PDF (49 of 60 lines). I rasterized the page and checked it.
+  - **A forced compaction shows the pins surviving.**
+    - `/compact` on that session fired `SessionStart:compact`. The hook injected the pin verbatim, plus the job being tailored.
+    - Asked afterwards, with ART tools blocked, the model quoted the pin verbatim from the hook message. It noted that the compaction summary had only paraphrased it ("no more than two projects"), which is the loss the hook exists to prevent.
+- **Verified by hand, before that:**
+  - The same tool sequence ran over MCP stdio from the local package, driven by a script, and rendered a one-page PDF.
   - `art hook session-start` returned the pin verbatim.
 
 ### Deviations from spec
-
-- **The acceptance runs inside Claude Code itself were not done.** A fresh install tailoring through the plugin, and a forced `/compact` showing the pins, both need a logged-in `claude`, and headless `claude` was not authenticated on this machine. The same tool sequence was driven over MCP, and the hooks are tested as functions and through `art hook`.
 - **`UserPromptSubmit` does not run `observe`.** The memory gate is #202, which adds it to this hook.
 - **`/art:library` and a feedback step are not shipped.** The library is #199, and no feedback tool exists. `/art:prefs` is read-only until #202 adds `record_preference`.
 - **`render` and `update_profile` were added here.** No issue owned them, and the acceptance (a fresh install tailoring end to end) needs both.
