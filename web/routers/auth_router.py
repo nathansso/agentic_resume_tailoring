@@ -209,6 +209,9 @@ class ResetPasswordRequest(BaseModel):
 @router.get("/capabilities")
 def auth_capabilities():
     """Public: tells the frontend which auth features are available."""
+    from web import local_mode
+    if local_mode.enabled():  # `art ui` (#204): no login, no sign-out
+        return {"password_reset_enabled": False, "auth_mode": "none"}
     enabled = supabase_configured()
     return {
         "password_reset_enabled": enabled,

@@ -15,6 +15,9 @@ import {
 } from "../lib/paneResize";
 import { jobInsightMessages } from "../lib/insightMessages";
 import { jobWelcome } from "../lib/welcome";
+import { reloadAction } from "../lib/treeEvents";
+import { useTreeEvents } from "../hooks/useTreeEvents";
+import { useAuth } from "../context/AuthContext";
 
 const CHAT_WIDTH_KEY = "art:jobs:chatWidth";
 
@@ -61,10 +64,31 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
     readStoredNumber(localStorage.getItem(CHAT_WIDTH_KEY)),
   );
   const [dragging, setDragging] = useState(false);
+  // `art ui` change feed (#204): a new version from the agent bumps `revision`,
+  // which remounts the editor so it reloads .tex and layout. With unsaved
+  // keystrokes in the buffer it raises `agentVersion` and asks instead.
+  const { localMode } = useAuth();
+  const [revision, setRevision] = useState(0);
+  const [agentVersion, setAgentVersion] = useState(false);
+  const editorDirty = useRef(false);
 
   useEffect(() => {
     setPaneView("preview");
+    setAgentVersion(false);
   }, [job.job_id]);
+
+  useTreeEvents(job.job_id, event => {
+    const action = reloadAction(event, editorDirty.current);
+    if (action === "ignore") return;
+    refreshJob();
+    if (action === "reload") reloadEditor();
+    else setAgentVersion(true);
+  }, localMode);
+
+  function reloadEditor() {
+    setAgentVersion(false);
+    setRevision(r => r + 1);
+  }
 
   function handleChatDrag(clientX: number) {
     const el = columnsRef.current;
@@ -293,14 +317,32 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
 
           {phase !== "idle" && <ProgressBar label={phaseLabel} />}
 
+          {tailored && agentVersion && (
+            <div
+              className="flex flex-shrink-0 flex-wrap items-center gap-2 rounded-md border border-warning/60 bg-card px-3 py-2 text-sm"
+              role="status"
+            >
+              <span className="flex-1">
+                New version from your agent. Reload to see it; your unsaved edits will be discarded.
+              </span>
+              <button className={actionBtn} onClick={reloadEditor}>Reload</button>
+              <button className={actionBtn} onClick={() => setAgentVersion(false)}>
+                Keep my edits
+              </button>
+            </div>
+          )}
+
           {tailored && (
-            // Remount after each re-tailor so the editor reseeds from the fresh output
+            // Remount after each re-tailor, or a new version from the agent,
+            // so the editor reseeds from the fresh output
             <ResumeSplit
-              key={`${job.job_id}:${job.retailor_count}`}
+              key={`${job.job_id}:${job.retailor_count}:${revision}`}
               jobId={job.job_id}
               view={paneView}
               onViewChange={handlePaneView}
               onEditsChanged={refreshJob}
+              onDirtyChange={d => { editorDirty.current = d; }}
+              holdSave={agentVersion}
             />
           )}
 

@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from config import ensure_app_dirs
 from database.db import init_db
+from web import local_mode
 from web.routers import (
     auth_router, jobs_router, chat_router, profile_router, ingest_router,
     preferences_router,
@@ -24,7 +25,14 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     def _startup() -> None:
         ensure_app_dirs()
-        init_db()
+        # A read-only `art ui` (remote Postgres without --allow-writes) must not
+        # attempt the schema DDL and backfill that init_db runs (#204).
+        if not local_mode.read_only():
+            init_db()
+
+    # `art ui` (#204): no login, so guard Host and cross-origin writes instead.
+    if local_mode.enabled():
+        local_mode.install(app)
 
     # CORS — only needed when running the Vite dev server alongside uvicorn locally
     if os.getenv("DEV_MODE"):

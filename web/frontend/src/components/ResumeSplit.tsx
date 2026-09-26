@@ -25,6 +25,12 @@ interface Props {
   onViewChange: (view: ResumeView) => void;
   /** Fires after save/discard so the workspace can resync has_manual_edits. */
   onEditsChanged: () => void;
+  /** Reports whether the buffer holds unsaved keystrokes, so the workspace
+   *  can ask before a new version from the agent replaces them (#204). */
+  onDirtyChange?: (dirty: boolean) => void;
+  /** Pause auto-save while the user decides about a new version from the
+   *  agent, so a stale buffer is not saved over it in the meantime (#204). */
+  holdSave?: boolean;
 }
 
 const SAVE_DEBOUNCE_MS = 1800;
@@ -36,7 +42,9 @@ const btn =
  *  the right. Edits auto-save and auto-compile a moment after typing stops
  *  (issues #70/#71 follow-up). The buffer seeds from the AI-tailored source
  *  or the last saved edit. */
-export function ResumeSplit({ jobId, view, onViewChange, onEditsChanged }: Props) {
+export function ResumeSplit({
+  jobId, view, onViewChange, onEditsChanged, onDirtyChange, holdSave = false,
+}: Props) {
   const [tex, setTex] = useState("");
   const [savedTex, setSavedTex] = useState("");
   const [source, setSource] = useState<"edited" | "generated">("generated");
@@ -87,6 +95,14 @@ export function ResumeSplit({ jobId, view, onViewChange, onEditsChanged }: Props
   const dirty = tex !== savedTex;
   const ready = !loading && !loadError && tex !== "";
   const compile = useAutoCompile(jobId, tex, ready);
+
+  const dirtyCallback = useRef(onDirtyChange);
+  dirtyCallback.current = onDirtyChange;
+  useEffect(() => {
+    dirtyCallback.current?.(dirty);
+  }, [dirty]);
+  // An unmounted editor holds no unsaved work.
+  useEffect(() => () => dirtyCallback.current?.(false), []);
 
   async function load() {
     setLoading(true);
@@ -141,7 +157,7 @@ export function ResumeSplit({ jobId, view, onViewChange, onEditsChanged }: Props
   // Auto-save on the debounce trailing edge (Overleaf-style persistence).
   // Skips blank buffers (the server rejects them) — those stay dirty.
   useEffect(() => {
-    if (!ready || !dirty || !tex.trim()) return;
+    if (!ready || !dirty || !tex.trim() || holdSave) return;
     const timer = setTimeout(() => {
       const gen = ++saveGen.current;
       setSaving(true);
@@ -165,7 +181,7 @@ export function ResumeSplit({ jobId, view, onViewChange, onEditsChanged }: Props
     }, SAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tex, ready, dirty]);
+  }, [tex, ready, dirty, holdSave]);
 
   // Unsettled keystrokes (not yet auto-saved) would be lost on refresh.
   useEffect(() => {

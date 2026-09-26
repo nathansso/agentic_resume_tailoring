@@ -45,6 +45,9 @@ def _increment(user_id: UUID, session: Session, kind: str) -> None:
 
 
 def _has_quota(session: Session, user_id: UUID, email: str, kind: str, limit: int) -> bool:
+    from web import local_mode
+    if local_mode.enabled():  # `art ui` (#204): the user's own machine, no quotas
+        return True
     if OWNER_EMAIL and email == OWNER_EMAIL:
         return True
     usage = _usage_row(session, user_id, kind)
