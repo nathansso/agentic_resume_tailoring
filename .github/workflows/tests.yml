@@ -21,6 +21,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  frontend-lock:
+    # The Dockerfile and the `art ui` build both run `npm ci`, which refuses a
+    # package-lock.json that has drifted from package.json (#219). Check it
+    # here so drift fails the PR instead of the deploy. Node 24 bundles npm 11,
+    # the version the Dockerfile uses; npm 10 writes optional deps differently.
+    name: frontend lockfile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: npm ci accepts the lockfile
+        working-directory: web/frontend
+        run: npm ci --dry-run --ignore-scripts
+
   test:
     name: tests (${{ matrix.engine }})
     runs-on: ubuntu-latest

@@ -231,7 +231,7 @@ def test_a_drag_in_local_mode_appears_in_the_hosts_next_turn(
 def test_the_launcher_refuses_without_a_built_editor(tmp_path, capsys, monkeypatch):
     from web import local_ui
     monkeypatch.delenv("ART_LOCAL_UI", raising=False)
-    assert "npm --prefix web/frontend" in local_ui.missing_static(tmp_path)
+    assert "npm --prefix web/frontend ci" in local_ui.missing_static(tmp_path)
     assert local_ui.main(["--no-open"], static_dir=tmp_path) == 2
     assert "has not been built" in capsys.readouterr().err
     # It refused before touching the environment it would otherwise pin.
