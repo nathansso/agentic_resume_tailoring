@@ -12,6 +12,51 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 203 — Codex integration
+**Status:** complete | **Tests:** 1642 pass on SQLite (5 new), 12 skipped
+
+Codex is the second supported host. It uses the same `plugin/` directory as Claude Code (server, skills, one hook implementation) and tailors a benchmark posting end to end.
+
+### What shipped
+
+- **One plugin directory, two manifests.**
+  - `plugin/.codex-plugin/plugin.json` sits next to the Claude manifest and shares `skills/` and `.mcp.json`.
+  - `.agents/plugins/marketplace.json` lists it. Install with `codex plugin marketplace add nathansso/agentic_resume_tailoring`, then `codex plugin add art@art`. The install was verified against a throwaway `CODEX_HOME`: Codex installs both skills and the MCP config.
+  - Codex ignores the Claude-only `commands/` directory.
+- **Host-neutral skills.** `art-tailor` no longer names `/art:*` commands. It gives the `art ui` command, `history` / `diff_nodes` and `checkout` instead.
+  - It now says to leave `finalize` out. In the first Codex run the host invented `line_budget: 22` and had to patch it.
+- **Hooks for Codex.** Codex plugins can't carry hooks, so `art hooks codex [--project] [--write] [--from SOURCE]` installs them.
+  - It prints the hooks, or merges them into `$CODEX_HOME/hooks.json` (or `.codex/hooks.json`). It never drops or edits the user's own hooks, is idempotent, and refuses to rewrite a file that isn't valid JSON.
+  - Codex reads the same hook JSON Claude Code does. `harness/hooks.hook_config` now generates it for both hosts, and a test holds `plugin/hooks/hooks.json` equal to it.
+- **`integrations/codex/`:** a README (install, hook trust, write approvals) and an `AGENTS.md` snippet.
+- **Docs.** docs/harness.md § 15 records Codex's capabilities:
+  - hooks exist, but outside plugins;
+  - project hooks load only in trusted projects;
+  - write tools need approval;
+  - `exec` won't compact on demand.
+
+  INSTALL.md is updated too.
+- **Tests:** `tests/test_plugin.py` (5 new):
+  - the Codex manifest shares the skills and server, and the marketplace resolves to `./plugin`;
+  - one hook config serves both hosts from the same source;
+  - no skill names a host-specific slash command;
+  - `art hooks codex --write` merges without touching existing hooks, is idempotent, and prints by default;
+  - it refuses a broken `hooks.json`.
+- **Verified live in Codex CLI 0.149.** The runs used `codex exec`, a scratch store seeded with the benchmark profile, a pin and a job rule, and the ART server from this branch.
+  - **The benchmark task tailors end to end.** `$art-tailor` on the AEG posting made 17 ART calls: briefing, `open_job` (rule answered "no"), `get_head`, items, `execute_plan`, `patch_plan`, `render`.
+    - `execute_plan` stopped at finalize because of the invented line budget. One `patch_plan` fixed it, cut the projects to honour the pin, and committed.
+    - Every bullet cited its source. The one-page PDF was rasterized and checked.
+  - **The prompt hook works in Codex.** A user-level `UserPromptSubmit` hook ran in `codex exec`. After an editor commit, the model quoted the hook's "the user edited their resume in the editor" message.
+
+### Deviations from spec
+
+- **No `observe` call in the Codex skill.** The issue suggested the skill call `observe` where Codex lacks hooks. `observe` doesn't exist yet (#202), and Codex turned out to have the hooks, so it uses the same `art hook` path as Claude Code.
+- **The post-compaction hook was not verified in Codex.** `codex exec` has no `/compact`, and a low `model_auto_compact_token_limit` didn't trigger compaction on resume. The hook is the same code and JSON verified live in Claude Code (#201).
+- **Codex asks before every write tool.** Its default policy requires approval for ART's write tools. With `approval_policy="never"`, `open_job` fails ("requires approval"). The live run used `--approve-for-me`, and the README tells users to approve or always-allow the server. No config key to pre-approve one server's tools could be confirmed.
+- **The Postgres leg was not run locally.** CI runs it.
+
+---
+
 ## Issue 198 — Citation faithfulness gate, with negative pins
 **Status:** complete | **Tests:** 1637 pass on SQLite (10 new), 12 skipped
 

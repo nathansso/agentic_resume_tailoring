@@ -460,11 +460,40 @@ flowchart LR
 | Host | Tools via | Workflow via | Per-message hook | After compaction | Editor |
 |---|---|---|---|---|---|
 | Claude Code (#201) | MCP, stdio | Plugin skills, `/art:*` | `UserPromptSubmit` | `SessionStart`, source `compact` | Desktop browser pane or tab |
-| Codex (#203) | MCP, stdio | Skills + `AGENTS.md` snippet | None assumed; skill calls `observe` | None assumed; skill re-fetches briefing | Browser tab |
+| Codex (#203) | MCP, stdio | Plugin skills (`$art-tailor`) + `AGENTS.md` snippet | `UserPromptSubmit`, installed separately | `SessionStart`, source `compact`, installed separately | Browser tab |
 | Cursor, others | MCP | Rules file | None | None | Browser tab |
 
 ART targets mainstream coding agents: Claude Code and Codex (decided 2026-09-25; pi and
-other harnesses are out of scope). Codex's hook capabilities are to be confirmed in #203.
+other harnesses are out of scope).
+
+### Codex (#203)
+
+Codex CLI (0.149) was checked against its docs and live runs.
+
+- **Plugin.** `plugin/` carries a second manifest, `.codex-plugin/plugin.json`, which shares
+  the skills and `.mcp.json`. The repo's `.agents/plugins/marketplace.json` lists it:
+  `codex plugin marketplace add nathansso/agentic_resume_tailoring`, then
+  `codex plugin add art@art`. The Claude-only `commands/` directory is ignored, and the
+  skills are host-neutral.
+- **Hooks.**
+  - Codex has `UserPromptSubmit` and `SessionStart` (source `compact`), with the same stdin
+    and `hookSpecificOutput.additionalContext` JSON as Claude Code, so `art hook` serves both.
+  - It also has `PreCompact` / `PostCompact`, which ART doesn't use.
+  - **Plugins can't carry hooks** (`plugin_hooks` was removed). `art hooks codex --write`
+    merges them into `$CODEX_HOME/hooks.json`, and the user trusts them with `/hooks`.
+  - A project's `.codex/hooks.json` loads only in a trusted project. In live runs a
+    user-level hook fired in `codex exec`, and the project file in an untrusted directory
+    did not.
+- **Write approval.** ART's write tools need approval under Codex's default policy. With
+  `approval_policy="never"`, `open_job` fails ("requires approval"). Users approve them or
+  always-allow the server; `--approve-for-me` works headless.
+- **Verified live** (`codex exec`):
+  - A benchmark posting tailored end to end through `$art-tailor`: 17 ART calls, one
+    `patch_plan`, a committed version and a one-page PDF.
+  - The prompt hook's editor-edit message reached the model.
+  - `codex exec` would not compact on demand (no `/compact`, and a low
+    `model_auto_compact_token_limit` didn't trigger it), so the post-compaction hook was
+    verified in Claude Code only.
 
 ### The Claude Code plugin (#201)
 

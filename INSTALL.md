@@ -17,6 +17,19 @@ commands and the hooks:
 
 It needs `uv`, plus tectonic or pdflatex for PDFs. See [`plugin/README.md`](plugin/README.md).
 
+## Codex (#203)
+
+The same plugin works in Codex:
+
+```bash
+codex plugin marketplace add nathansso/agentic_resume_tailoring
+codex plugin add art@art
+uvx --from git+https://github.com/nathansso/agentic_resume_tailoring art hooks codex --write
+```
+
+Codex plugins can't carry hooks, which is why the last command is needed. Trust the
+hooks with `/hooks` in Codex. See [`integrations/codex/README.md`](integrations/codex/README.md).
+
 ## The harness: `art-mcp` (#194)
 
 The package is `art-mcp`. Its default install is model-free and light (no torch, no LLM

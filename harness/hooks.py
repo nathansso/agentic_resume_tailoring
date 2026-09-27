@@ -199,3 +199,81 @@ def main(argv: Sequence[str]) -> int:
     except Exception as exc:                          # never block the prompt
         print(f"art hook: {exc}", file=sys.stderr)
     return 0
+
+
+# ── installing the hooks (Codex, #203) ───────────────────────────────────────
+#
+# Claude Code loads these hooks from the plugin (plugin/hooks/hooks.json). Codex
+# cannot: its plugins no longer carry hooks (`plugin_hooks` was removed), so they
+# go in the user's `$CODEX_HOME/hooks.json` or a repo's `.codex/hooks.json`, and
+# Codex asks the user to trust them (`/hooks`). Both hosts read the same JSON.
+
+SOURCE = "git+https://github.com/nathansso/agentic_resume_tailoring"
+_WIRING = (("UserPromptSubmit", None, "user-prompt"), ("SessionStart", "compact", "session-start"))
+
+
+def hook_config(source: str = SOURCE) -> Dict[str, Any]:
+    """The hooks JSON both hosts read, running `art hook` from `source`."""
+    hooks: Dict[str, Any] = {}
+    for event, matcher, arg in _WIRING:
+        group: Dict[str, Any] = {} if matcher is None else {"matcher": matcher}
+        group["hooks"] = [{"type": "command", "timeout": 30,
+                           "command": f"uvx --from {source} art hook {arg}"}]
+        hooks[event] = [group]
+    return {"hooks": hooks}
+
+
+def merge_hooks(existing: Dict[str, Any], new: Dict[str, Any]) -> int:
+    """Add `new`'s hook groups to `existing` in place, skipping any command
+    already configured. Never removes or edits the user's own hooks. Returns
+    how many groups were added."""
+    added = 0
+    table = existing.setdefault("hooks", {})
+    for event, groups in new["hooks"].items():
+        have = {h.get("command") for g in table.get(event, []) for h in g.get("hooks", [])}
+        for group in groups:
+            if all(h["command"] in have for h in group["hooks"]):
+                continue
+            table.setdefault(event, []).append(group)
+            added += 1
+    return added
+
+
+def codex_hooks_path(project: bool = False) -> Path:
+    import os
+    if project:
+        return Path.cwd() / ".codex" / "hooks.json"
+    return Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "hooks.json"
+
+
+def codex_main(argv: Sequence[str]) -> int:
+    """`art hooks codex [--project] [--write] [--from SOURCE]`."""
+    import argparse
+
+    p = argparse.ArgumentParser(prog="art hooks codex", description=(
+        "Print the ART hooks for Codex, or merge them into its hooks.json."))
+    p.add_argument("--project", action="store_true",
+                   help="this repo's .codex/hooks.json instead of $CODEX_HOME/hooks.json")
+    p.add_argument("--write", action="store_true", help="merge into the file (else print)")
+    p.add_argument("--from", dest="source", default=SOURCE,
+                   help="where uvx gets ART (default: the GitHub repo)")
+    args = p.parse_args(list(argv))
+    config = hook_config(args.source)
+    if not args.write:
+        sys.stdout.write(json.dumps(config, indent=2) + "\n")
+        return 0
+    path = codex_hooks_path(args.project)
+    existing: Dict[str, Any] = {}
+    if path.is_file():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8") or "{}")
+        except ValueError:
+            print(f"art hooks: {path} is not valid JSON; not touching it.", file=sys.stderr)
+            return 2
+    added = merge_hooks(existing, config)
+    if added:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+    print(f"art hooks: {added} hook group(s) added to {path}. In Codex, run /hooks to review "
+          "and trust them.", file=sys.stderr)
+    return 0
