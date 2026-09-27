@@ -153,3 +153,61 @@ def test_art_hook_speaks_claude_codes_json_and_never_fails(job, monkeypatch, cap
     assert hooks.main(["user-prompt"]) == 0
     assert capsys.readouterr().out == ""
     assert hooks.run("user-prompt", {}, None) is None             # no bound user: silent
+
+
+# ── Codex (#203) ─────────────────────────────────────────────────────────────
+
+def test_codex_shares_the_plugin_directory_and_its_skills():
+    codex = _json("plugin/.codex-plugin/plugin.json")
+    claude = _json("plugin/.claude-plugin/plugin.json")
+    assert codex["name"] == claude["name"] == "art" and codex["version"] == claude["version"]
+    assert (PLUGIN / codex["skills"]).resolve() == (PLUGIN / "skills").resolve()
+    assert (PLUGIN / codex["mcpServers"]).is_file()
+    [entry] = _json(".agents/plugins/marketplace.json")["plugins"]
+    assert entry["name"] == "art" and entry["source"] == {"source": "local", "path": "./plugin"}
+
+
+def test_one_hook_config_serves_both_hosts():
+    from harness.hooks import SOURCE, hook_config
+
+    assert _json("plugin/hooks/hooks.json") == hook_config()
+    assert SOURCE == _json("plugin/.mcp.json")["mcpServers"]["art"]["args"][1]
+
+
+def test_skills_name_no_host_specific_slash_command():
+    for path in PLUGIN.glob("skills/*/SKILL.md"):
+        assert "/art:" not in path.read_text(encoding="utf-8"), path
+
+
+def test_art_hooks_codex_merges_without_touching_existing_hooks(tmp_path, monkeypatch, capsys):
+    from harness import entry
+    from harness.hooks import hook_config
+
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    mine = {"hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": "my-lint"}]}],
+                      "Stop": [{"hooks": [{"type": "command", "command": "notify"}]}]}}
+    (tmp_path / "hooks.json").write_text(json.dumps(mine), encoding="utf-8")
+
+    assert entry.main(["hooks", "codex", "--write", "--from", "art-mcp"]) == 0
+    got = json.loads((tmp_path / "hooks.json").read_text(encoding="utf-8"))["hooks"]
+    ours = hook_config("art-mcp")["hooks"]
+    assert got["Stop"] == mine["hooks"]["Stop"]
+    assert got["UserPromptSubmit"] == mine["hooks"]["UserPromptSubmit"] + ours["UserPromptSubmit"]
+    assert got["SessionStart"] == ours["SessionStart"]
+    assert "/hooks" in capsys.readouterr().err
+
+    entry.main(["hooks", "codex", "--write", "--from", "art-mcp"])    # idempotent
+    again = json.loads((tmp_path / "hooks.json").read_text(encoding="utf-8"))["hooks"]
+    assert again == got
+
+    assert entry.main(["hooks", "codex"]) == 0                       # print only
+    assert json.loads(capsys.readouterr().out) == hook_config()
+
+
+def test_art_hooks_codex_refuses_to_rewrite_a_broken_file(tmp_path, monkeypatch):
+    from harness import entry
+
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    (tmp_path / "hooks.json").write_text("{not json", encoding="utf-8")
+    assert entry.main(["hooks", "codex", "--write"]) == 2
+    assert (tmp_path / "hooks.json").read_text(encoding="utf-8") == "{not json"

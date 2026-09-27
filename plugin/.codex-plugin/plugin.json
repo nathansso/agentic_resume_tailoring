@@ -1,0 +1,14 @@
+{
+  "name": "art",
+  "version": "0.1.0",
+  "description": "ART: tailor your resume to a job posting from your own knowledge graph. Model-free tools over MCP; your agent does the reading and writing, ART keeps the facts, the rules and the history.",
+  "author": {
+    "name": "Nathaniel Oliver",
+    "url": "https://github.com/nathansso"
+  },
+  "homepage": "https://github.com/nathansso/agentic_resume_tailoring",
+  "repository": "https://github.com/nathansso/agentic_resume_tailoring",
+  "keywords": ["resume", "tailoring", "mcp", "knowledge-graph"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}

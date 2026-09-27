@@ -65,6 +65,9 @@ Draft a plan program for `execute_plan`. Its input schema is published with the 
     `relevance_density`).
 - **skills**: an ordered list of skill names from the graph, with posting terms first.
 - Keep each bullet to two rendered lines and the whole page to one.
+- **Leave `finalize` out.** Its defaults are ART's calibrated one-page budget: 60 lines,
+  plus the skills cap and floor. Don't invent a smaller budget; cut content instead when
+  finalize reports `line_budget`.
 
 **Show the user the plan before you execute it.** Show which items lead, what each
 revision says, what is cut and why, and the skills line. Then wait for approval.
@@ -97,11 +100,21 @@ Call `execute_plan({program})`. Read the result:
 - If `pages` > 1, cut using `line_budget.cut_hints` through `patch_plan`, then render
   again.
 - If `pdf_path` is null, give the user the `.tex` path and the `hint`.
-- Tell the user where the PDF is. If they want to edit by hand, suggest `/art:open`.
-  Their edits come back to you automatically on their next message.
+- Tell the user where the PDF is.
+- If they want to edit by hand, give them the editor command to run in a terminal,
+  with the job id filled in:
+
+  ```
+  uvx --from "art-mcp[ui] @ git+https://github.com/nathansso/agentic_resume_tailoring" art ui --job <job_id>
+  ```
+
+  Their saves come back to you: through the prompt hook if it's installed, and
+  otherwise under `editor_edits` in `get_head`. Read `get_head` before building on
+  the job again.
 
 ## Afterwards
 
-- Use `/art:history` to see versions and `/art:revert` to go back.
+- To see versions, use `history` and `diff_nodes`. To go back, use `checkout`: show
+  the diff and confirm with the user first.
 - If the user states a lasting preference ("never list coursework"), tell them it
   will be remembered once ART's memory gate ships. For now, follow it in this session.

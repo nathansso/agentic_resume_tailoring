@@ -1,0 +1,13 @@
+{
+  "name": "art",
+  "interface": { "displayName": "ART" },
+  "plugins": [
+    {
+      "name": "art",
+      "description": "Tailor your resume to a job posting from your own knowledge graph, with model-free tools over MCP.",
+      "source": { "source": "local", "path": "./plugin" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Productivity"
+    }
+  ]
+}
