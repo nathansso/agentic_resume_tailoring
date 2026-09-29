@@ -12,6 +12,39 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 233 — Skill retrieval without a model: word-boundary links, bullet provenance, requirement keywords
+**Status:** complete | **Tests:** 1761 pass on SQLite (44 new), 18 skipped
+
+Skill retrieval improves with no model call. The host's requirement keywords plus the alias map find most skills, so this replaces the retrieval half of the Jev discussion on #193.
+
+### What shipped
+
+- **Word-boundary links** (`agents/skill_matching.py`, used by `SkillGraphBuilder._connect_entities`). The old rule was a substring test, so Java linked to any JavaScript text.
+  - A skill is named on boundaries that treat `+`, `#` and `.` as part of a name: C++, C#, .NET and Node.js link, and `C` is not inside `C++`, `NET` is not inside `.NET`, and `Java` is not inside `JavaScript`. A hyphen is not a name character, so "Java-based" names Java.
+  - The alias map applies on both sides: a bullet naming "torch" links PyTorch, and "sklearn" links scikit-learn. Whitespace and hyphens inside a name are interchangeable.
+  - **Short names** (at most 2 characters: R, C, Go) match only in their own capitalization, never beside `&` (R&D), and "Go" never opens a sentence. Short aliases such as `tf` are not expanded, since they are fragments (TF-IDF).
+  - Patterns are compiled once per build.
+- **Bullet provenance.** Each `USES` / `DEMONSTRATES` edge carries `bullets`, the indices of the bullets that name the skill, numbered as the harness numbers its cites. A role's bullets are its non-empty `bullets`. A project's are its stored blurbs, or its description as bullet 0 when it has none. A link that rests only on a role's title or description, or a project's name, has `bullets == []`.
+- **`evidence_for_skills`** gains, each only when non-empty:
+  - `bullets`: `{key, index, cite}` with `key` from `agents.checks.exp_key` / `proj_key` and `cite` as `<key>#b<n>`, which `_KG.resolves` accepts;
+  - `education_via_projects`: `{institution, degree, project}` for degrees reached through a project done under them.
+
+  It also looks a skill up through the alias map, so a JD's "torch" finds the user's PyTorch. `SkillGraphBuilder.bullet_evidence_for_skill` is the underlying reader.
+- **Requirement keywords to skills.** `match_requirement_terms` maps each required and preferred requirement's `terms` to the user's skills, exactly or through the alias map, most critical first and required before preferred.
+  - `kg_default_content(..., requirements=...)` ranks matched skills first: required, then preferred, then the TF-IDF order. A matched skill the TF-IDF cap dropped is brought back, and the list is held to the skills cap. `execute_plan` passes the job's stored requirements.
+  - `open_job` returns `skill_matches` and `unmatched_terms`. The host resolves an unmatched term (`kg_search`, or ask the user) instead of ART guessing. The `art-tailor` skill says so.
+- **Tests:** `tests/test_skill_retrieval.py` covers the matcher table (Java/JavaScript, C++, C#, .NET, Node.js, R, Go, aliases), the corrected links, provenance and cite resolution, degrees via projects, the priority ranking, the cap, and `open_job`'s new fields. With no requirements, or none that match, `kg_default_content` output is unchanged (asserted equal).
+
+### Deviations from spec
+
+- **The link fix changes which links exist.** No existing link expectation changed, but `test_role_evidences_skill_through_its_project` pinned the exact shape of `evidence_for_skills`. It now includes the additive `bullets` key.
+- **Project blurbs count as project text.** A blurb naming a skill now links its project, since a bullet index is meaningless for a bullet that creates no link. Previously only the name and description linked.
+- **"Go" is the only English-word guard.** Short names are case-sensitive, which excludes lowercase "go" in prose. A capitalized "Go" mid-sentence in a title-cased heading still links. `C` links in "Vitamin C" for the same reason.
+- **Matching is literal.** No stemming or synonyms beyond the alias map, which is small. A term outside the map is reported unmatched, not guessed; broader coverage is a matter for the host or #193.
+- **Only required and preferred requirements** take part in ranking and in `unmatched_terms`. Incidental ones are ignored.
+- **Not consumed yet:** the legacy tailor path does not read `bullets` or `education_via_projects`, and no harness tool exposes them. They are for #199 and for citations.
+- **The Postgres leg was not run locally** (Docker not running). CI runs it.
+
 ## Issue 123 — Numeric and entity consistency gate
 **Status:** complete | **Tests:** 1717 pass on SQLite (62 new), 18 skipped
 
