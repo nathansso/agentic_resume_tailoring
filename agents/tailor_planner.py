@@ -434,6 +434,13 @@ class TailorPlanner:
             # leaves the planning payload byte-for-byte unchanged.
             if i.get("graph_evidence"):
                 line["graph_evidence"] = list(i["graph_evidence"])
+            # Project context: where the item was done, and skills a role shows
+            # only through its projects. Same conditional inclusion, so a user
+            # who has confirmed no project links gets an unchanged payload.
+            if i.get("context"):
+                line["context"] = dict(i["context"])
+            if i.get("graph_evidence_via_projects"):
+                line["graph_evidence_via_projects"] = list(i["graph_evidence_via_projects"])
             return line
 
         payload = {
@@ -512,6 +519,20 @@ class TailorPlanner:
                     "better than proposing one that has to be overridden."
                 )
 
+        # Project context rule, only when an item carries context: otherwise the
+        # prompt is byte-for-byte what it was before project links existed.
+        context_rule = ""
+        if any(i.get("context") or i.get("graph_evidence_via_projects") for i in items):
+            context_rule = (
+                "- A project may carry `context`: where it was done — `work` (under "
+                "the named role), `coursework` (under the named degree) or "
+                "`personal`. Work outranks coursework as evidence of a skill; say "
+                "where a project was done rather than implying it was a job. An "
+                "experience may carry `graph_evidence_via_projects`: JD skills the "
+                "role shows only through a project done in it — real evidence, but "
+                "weaker than `graph_evidence`, so credit the project, not the role.\n"
+            )
+
         allowed_ops = ["keep", "revise"]
         if knobs["allow_delete"]:
             allowed_ops.append("delete")
@@ -537,6 +558,7 @@ class TailorPlanner:
             "them. Treat it as strong evidence the item is relevant to this job: "
             "prefer keep/revise over delete, and do NOT replace an item that "
             "uniquely evidences a required skill.\n"
+            f"{context_rule}"
             "- Every action needs a one-sentence rationale.\n\n"
             f"JOB DESCRIPTION:\n{(jd_text or '')[:2000]}\n\n"
             f"PLANNING INPUT:\n{json.dumps(payload, indent=1)}"

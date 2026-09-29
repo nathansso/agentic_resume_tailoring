@@ -24,6 +24,14 @@ CALLS = {
     "get_item": [{"key": "exp:data science intern|idx exchange"},
                  {"key": "proj:next item recommender"}],   # not found → suggestions
     "get_profile": [{}],
+    # Project context. The writes are idempotent, so all three adapters agree.
+    "suggest_project_contexts": [{}, {"include_reviewed": True}],
+    "set_project_context": [{"project": "proj:next-item recommendation",
+                             "context": "exp:data science intern|idx exchange"},
+                            {"project": "proj:nope", "context": "personal"}],
+    "link_achievement": [{"achievement": "ach:1st place overall",
+                          "project": "proj:next-item recommendation"},
+                         {"achievement": "ach:nope"}],
     # Tailoring tree (#196). $JOB/$N0/$N1 are filled from the `tree_kg` fixture.
     "list_jobs": [{}, {"status": "applied"}],
     # Host-filled ingestion (#192). Writes that change nothing on a second call, so

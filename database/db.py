@@ -142,6 +142,14 @@ def _migrate_db() -> None:
         # user's job-scoped rules. Both nullable, so existing rows load.
         "ALTER TABLE jobdescription ADD COLUMN application_status TEXT DEFAULT 'drafting'",
         "ALTER TABLE jdprofile ADD COLUMN eligibility JSON",
+        # Project context: Project -PART_OF-> Experience/Education and
+        # Achievement -AWARDED_FOR-> Project. Nullable (status defaults to
+        # 'unreviewed'), so existing rows load unlinked. Typed UUID so Postgres
+        # compares them with uuid params (see _migrate_pg_uuid_columns).
+        "ALTER TABLE project ADD COLUMN experience_id UUID",
+        "ALTER TABLE project ADD COLUMN education_id UUID",
+        "ALTER TABLE project ADD COLUMN context_status TEXT DEFAULT 'unreviewed'",
+        "ALTER TABLE achievement ADD COLUMN project_id UUID",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

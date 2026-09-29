@@ -111,6 +111,29 @@ The durable half lives in the database. `UserSkill` carries the evidence:
 many distinct skills evidence a project — is one of its complexity sub-signals, so a
 project that anchors many skills ranks above one that anchors none.
 
+**Project context.** The graph also holds `Education:` and `Achievement:` nodes and two
+stored edges: `Project --PART_OF--> Experience | Education` (where the project was done)
+and `Achievement --AWARDED_FOR--> Project` (a hackathon placing). They live on the rows —
+`Project.experience_id` / `education_id` (at most one) and `Achievement.project_id` —
+and `Project.context_status` (`unreviewed` / `linked` / `personal`) separates a project
+the user confirmed as their own from one nobody has reviewed; two null ids cannot.
+
+- **Written by** `agents/project_context.py` only: `set_project_context` and
+  `link_achievement`, reached through the `set_project_context` and `link_achievement`
+  harness tools on an explicit user confirmation. `suggest_project_contexts` proposes
+  links from two deterministic rules (an employer's distinctive name word in the repo
+  name or its full name in the description; a course code, mapped to the degree at the
+  matching level, graduate at 200+) and never writes — the same write barrier as §2.2
+  and §2.5.
+- **Kept valid** by heal and delete: a merge repoints links onto the surviving row; deleting
+  a role or degree returns its projects to `unreviewed`; deleting a project unties its
+  award.
+- **Read by** the builder (edges), `harness/tools.py` (a project's `context`, a role's or
+  degree's `projects`, an award's `project`; a role is findable by its projects' names),
+  and `agents/tailor.py` (§4.1).
+- **When missing** — no stored links means the Skill/Project/Experience subgraph, the
+  evidence, and the planner payload and prompt are byte-for-byte what they were before.
+
 ### 2.2 Chat → knowledge graph (issue #21)
 
 `agents/knowledge_extractor.py` is a **Chain-of-Note** pipeline composed as a small
@@ -560,6 +583,17 @@ Promotion is **projects-only**, and that is deliberate: all experiences already 
 planner (they are budgeted, not pooled), so for experiences the graph's value is
 annotation. The whole step is wrapped in `try/except → {}`; a sparse graph means no
 promotion, no `graph_evidence` keys, and a byte-identical payload.
+
+Project context (§2.1) adds two things, both only where the user has confirmed a link:
+
+- **A role evidences a skill through its projects.** `evidence_for_skills` adds
+  `experiences_via_projects` (`Experience <-PART_OF- Project -USES-> Skill`), kept apart
+  from `experiences` because it is weaker than the role's own text naming the skill. The
+  experience reaches the planner with `graph_evidence_via_projects: [{skill, project}]`.
+- **A project says where it was done.** It carries `context`: `{"kind": "work" |
+  "coursework", "under": <role or degree>}` or `{"kind": "personal"}`. The planner prompt
+  gains one rule, only when some item carries either field: work outranks coursework, and a
+  skill shown through a project is credited to the project, not the role.
 
 ### 4.2 The dual-path retrieval seam (issue #142)
 

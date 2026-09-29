@@ -13,6 +13,13 @@ Three tools, and the whole of what a host agent can see in this spike:
   `JobDescription` carry embeddings, so there is no semantic search over
   experiences and projects.
 - `get_item` resolves one stable key to its full record.
+- `suggest_project_contexts` proposes where each project was done (a role, a
+  degree); `set_project_context` and `link_achievement` record the user's
+  answer. The only writes here, and only on the user's confirmation.
+
+Records carry the stored links: a project's `context` and `context_status`, a
+role's or degree's `projects`, an award's `project`. A role or degree is also
+findable by the names of the projects done under it.
 
 Every function takes `user_id` explicitly, reads through `services` (whose
 `engine` the test fixture isolates), and never writes. Keys are the
@@ -29,11 +36,12 @@ from uuid import UUID
 from sqlmodel import Session, select
 
 import services
+from agents import project_context
 from agents.checks import exp_key, proj_key  # the planner's own keys (#190)
 from agents.job_card import render_cards, select_cards
 from agents.preferences import preferences_in_scope
 from database.vector_search import fts_search
-from database.models import ProjectBlurb, User
+from database.models import Achievement, Project, ProjectBlurb, User
 
 KINDS = ("skill", "experience", "project", "education", "achievement")
 _PREFIX = {"skill": "skill", "experience": "exp", "project": "proj",
@@ -127,7 +135,47 @@ def _records(user_id: UUID, kinds: Optional[Sequence[str]] = None) -> List[Dict]
                           "text": f"{a.get('issuer', '')} {a.get('description', '')}"})
     for it in items:
         it["key"] = _KEY_FN[it["kind"]](it["record"])
+    _attach_links(user_id, items)
     return items
+
+
+def _attach_links(user_id: UUID, items: List[Dict]) -> None:
+    """Stored project links onto the records, in place. A role's or degree's
+    search text gains the names of its projects, so "recommender" finds the
+    job the recommender was built in."""
+    if not any(it["kind"] in ("project", "experience", "education", "achievement")
+               for it in items):
+        return
+    with Session(services.engine) as session:
+        index = project_context.context_index(session, user_id)
+        names = {p.project_id: p.name for p in session.exec(
+            select(Project).where(Project.user_id == user_id)).all()}
+        awards = {project_context.ach_key({"title": a.title}): names[a.project_id]
+                  for a in session.exec(select(Achievement).where(
+                      Achievement.user_id == user_id)).all()
+                  if a.project_id in names}
+    under: Dict[str, List[str]] = {}
+    for pid, c in index.items():
+        if c["key"]:
+            under.setdefault(c["key"], []).append(names[pid])
+    for it in items:
+        record = it["record"]
+        if it["kind"] == "project":
+            try:
+                c = index.get(UUID(str(record.get("id"))))
+            except ValueError:
+                c = None
+            record["context_status"] = c["status"] if c else project_context.UNREVIEWED
+            record["context"] = ({"key": c["key"], "kind": c["kind"], "title": c["title"]}
+                                 if c and c["key"] else None)
+        elif it["kind"] in ("experience", "education"):
+            projects = sorted(under.get(it["key"], []))
+            record["projects"] = [proj_key({"name": n}) for n in projects]
+            if projects:
+                it["text"] = f"{it['text']} {' '.join(projects)}"
+        elif it["kind"] == "achievement":
+            name = awards.get(it["key"])
+            record["project"] = proj_key({"name": name}) if name else None
 
 
 # ── tools ─────────────────────────────────────────────────────────────────────
@@ -189,10 +237,19 @@ def kg_search(user_id: UUID, query: str, kinds: Optional[Sequence[str]] = None,
     ranked = fts_search(docs, " ".join(q), weights=(_TITLE_WEIGHT, 1.0))
     if ranked is not None:
         by_key = {it["key"]: it for it in items}
-        return [{"key": k, "kind": by_key[k]["kind"], "title": by_key[k]["title"],
-                 "score": score, "snippet": _snippet(by_key[k])}
+        return [_with_context({"key": k, "kind": by_key[k]["kind"], "title": by_key[k]["title"],
+                               "score": score, "snippet": _snippet(by_key[k])}, by_key[k])
                 for k, score in ranked[: max(1, int(limit))]]
     return _lexical_search(items, q, limit)
+
+
+def _with_context(hit: Dict[str, Any], item: Dict) -> Dict[str, Any]:
+    """A project hit names the role or degree it was done under, so the host
+    can follow the edge with get_item instead of searching again."""
+    context = item["record"].get("context") if item["kind"] == "project" else None
+    if context:
+        hit["context"] = context["key"]
+    return hit
 
 
 def _lexical_search(items: List[Dict], q: List[str], limit: int) -> List[Dict[str, Any]]:
@@ -204,8 +261,8 @@ def _lexical_search(items: List[Dict], q: List[str], limit: int) -> List[Dict[st
         score = sum(_TITLE_WEIGHT if t in title else 1.0 if t in body else 0.0 for t in q)
         if score <= 0:
             continue
-        hits.append({"key": it["key"], "kind": it["kind"], "title": it["title"],
-                     "score": round(score, 3), "snippet": _snippet(it)})
+        hits.append(_with_context({"key": it["key"], "kind": it["kind"], "title": it["title"],
+                                   "score": round(score, 3), "snippet": _snippet(it)}, it))
     hits.sort(key=lambda h: (-h["score"], h["key"]))
     return hits[: max(1, int(limit))]
 
@@ -234,6 +291,24 @@ def list_items(user_id: UUID, kind: Optional[str] = None) -> List[Dict[str, Any]
     items = _records(user_id, [kind] if kind else None)
     return sorted(({"key": it["key"], "kind": it["kind"], "title": it["title"]}
                    for it in items), key=lambda r: (r["kind"], r["key"]))
+
+
+def suggest_project_contexts(user_id: UUID, include_reviewed: bool = False) -> Dict[str, Any]:
+    """Where each unreviewed project was probably done, from deterministic rules
+    (employer names in repo names, course codes). Never writes."""
+    return {"projects": project_context.suggest_for_user(services.engine, user_id,
+                                                          include_reviewed)}
+
+
+def set_project_context(user_id: UUID, project: str, context: str) -> Dict[str, Any]:
+    """Record the user's answer for one project. Writes."""
+    return project_context.set_project_context(services.engine, user_id, project, context)
+
+
+def link_achievement(user_id: UUID, achievement: str,
+                     project: Optional[str] = None) -> Dict[str, Any]:
+    """Tie an award to the project it was won for (None unties it). Writes."""
+    return project_context.link_achievement(services.engine, user_id, achievement, project)
 
 
 # Header fields only. Credentials (password hash, GitHub token), auth ids and raw
