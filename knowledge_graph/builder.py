@@ -5,7 +5,10 @@ from sqlmodel import Session, select
 from typing import List, Dict, Any, Optional
 
 from database.db import engine
-from database.models import User, Skill, UserSkill, Project, Experience, Education, Achievement
+from agents.skill_matching import SkillMatcher, canonical_key
+from database.models import (
+    User, Skill, UserSkill, Project, ProjectBlurb, Experience, Education, Achievement,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +20,8 @@ class SkillGraphBuilder:
 
     Nodes: Skill, Project, Experience, Education, Achievement. Edges:
     Project -USES-> Skill and Experience -DEMONSTRATES-> Skill (derived from
-    text); Project -PART_OF-> Experience | Education and Achievement
+    text, on word boundaries, through the alias map; each edge carries the
+    indices of the bullets that name the skill, see `_connect_entities`); Project -PART_OF-> Experience | Education and Achievement
     -AWARDED_FOR-> Project (stored links the user confirmed, see
     agents/project_context.py). With no stored links, the Skill/Project/
     Experience subgraph is exactly what it was before those edges existed.
@@ -46,7 +50,8 @@ class SkillGraphBuilder:
                 self._add_experiences(experiences)
                 self._add_education(education)
                 self._add_achievements(achievements)
-                self._connect_entities(skills, projects, experiences)
+                self._connect_entities(skills, projects, experiences,
+                                       self._project_blurbs(session, projects))
                 self._connect_contexts(projects, experiences, education, achievements)
 
             logger.info(f"Graph built with {self.graph.number_of_nodes()} nodes and {self.graph.number_of_edges()} edges.")
@@ -122,39 +127,60 @@ class SkillGraphBuilder:
                 self.graph.add_edge(f"Achievement:{a.title}", proj_nodes[a.project_id],
                                     relation="AWARDED_FOR")
 
-    def _connect_entities(self, skills: List[Skill], projects: List[Project], experiences: List[Experience]):
-        # 1. Connect Skills to Projects/Experiences
+    @staticmethod
+    def _project_blurbs(session, projects: List[Project]) -> Dict[Any, List[str]]:
+        """Stored bullet variants per project, in the order `harness.tools`
+        lists them, so a bullet index here is the index a `proj:<name>#b<n>`
+        cite resolves to."""
+        ids = [p.project_id for p in projects]
+        if not ids:
+            return {}
+        rows = session.exec(select(ProjectBlurb).where(ProjectBlurb.project_id.in_(ids))).all()
+        out: Dict[Any, List[str]] = {}
+        for b in sorted(rows, key=lambda r: (str(r.project_id), r.style or "", str(r.blurb_id))):
+            out.setdefault(b.project_id, []).append(b.content)
+        return out
 
-        # Helper for matching
-        def normalize(t): return t.lower().strip() if t else ""
+    def _connect_entities(self, skills: List[Skill], projects: List[Project],
+                          experiences: List[Experience],
+                          blurbs: Optional[Dict[Any, List[str]]] = None):
+        """Link each skill to the roles and projects whose text names it.
 
-        valid_skills = {normalize(s.name): s for s in skills if s.name and len(s.name) < 50}
+        A skill is named on word boundaries that treat `+`, `#` and `.` as part
+        of a name, through the alias map (`agents/skill_matching.SkillMatcher`),
+        so Java is not JavaScript, C++ and Node.js link, and "torch" reaches
+        PyTorch. Patterns are compiled once per build.
 
-        # Link Projects -> Skills
+        Each edge records `bullets`: the indices of the bullets that name the
+        skill, numbered as the harness numbers its cites (`<key>#b<n>`).
+        - An experience's bullets are its non-empty `bullets`.
+        - A project's bullets are its stored blurbs when it has any, otherwise
+          its description as the single bullet 0.
+        A link that rests only on a role's title or description, or on a
+        project's name, has `bullets == []`: the skill is tied to the item, not
+        to a bullet, and no `#b<n>` cite can name it.
+        """
+        blurbs = blurbs or {}
+        matchers = [(s, SkillMatcher(s.name)) for s in skills if s.name and len(s.name) < 50]
+
         for p in projects:
-            p_text = normalize(p.description) + " " + normalize(p.name)
-            for s_norm, s_obj in valid_skills.items():
-                # Match if skill name is in text (word boundary aware would be better, but simple subset is ok for MVP)
-                # Avoid matching short words like "C" or "Go" too aggressively without boundaries?
-                # For now, simplistic check.
-                if len(s_norm) < 3 and f" {s_norm} " not in p_text:
-                    continue
+            desc = (p.description or "").strip()
+            source = [b for b in blurbs.get(p.project_id, []) if b] or ([desc] if desc else [])
+            texts = [p.description, p.name]
+            for s, matcher in matchers:
+                bullets = [i for i, b in enumerate(source) if matcher.mentions(b)]
+                if bullets or any(matcher.mentions(t) for t in texts):
+                    self.graph.add_edge(f"Project:{p.name}", f"Skill:{s.name}",
+                                        relation="USES", bullets=bullets)
 
-                if s_norm in p_text:
-                    self.graph.add_edge(f"Project:{p.name}", f"Skill:{s_obj.name}", relation="USES")
-
-        # Link Experience -> Skills
         for e in experiences:
-            # Join bullets with space
-            bullets_text = " ".join([str(b) for b in e.bullets]) if e.bullets else ""
-            e_text = normalize(e.description) + " " + normalize(e.title) + " " + normalize(bullets_text)
-
-            for s_norm, s_obj in valid_skills.items():
-                if len(s_norm) < 3 and f" {s_norm} " not in e_text:
-                     continue
-
-                if s_norm in e_text:
-                    self.graph.add_edge(f"Experience:{e.company} - {e.title}", f"Skill:{s_obj.name}", relation="DEMONSTRATES")
+            source = [str(b) for b in (e.bullets or []) if b]
+            texts = [e.description, e.title]
+            for s, matcher in matchers:
+                bullets = [i for i, b in enumerate(source) if matcher.mentions(b)]
+                if bullets or any(matcher.mentions(t) for t in texts):
+                    self.graph.add_edge(f"Experience:{e.company} - {e.title}", f"Skill:{s.name}",
+                                        relation="DEMONSTRATES", bullets=bullets)
 
     def get_skills_for_project(self, project_name: str) -> List[str]:
         node = f"Project:{project_name}"
@@ -218,6 +244,43 @@ class SkillGraphBuilder:
                 out.append({"title": node.get("name"), "company": node.get("company")})
         return out
 
+    def _resolve_skill(self, name: str) -> str:
+        """The graph's own name for a skill: `name` when the graph holds it,
+        else the held skill with the same canonical (alias-mapped) name."""
+        if f"Skill:{name}" in self.graph:
+            return name
+        want = canonical_key(name)
+        for _, data in self.graph.nodes(data=True):
+            if data.get("type") == "Skill" and canonical_key(data["name"]) == want:
+                return data["name"]
+        return name
+
+    def bullet_evidence_for_skill(self, skill_name: str) -> List[Dict[str, Any]]:
+        """The bullets that name a skill, as `{"key", "index", "cite"}`.
+
+        `key` is the planner's own item key (`agents.checks.exp_key` /
+        `proj_key`), `index` the 0-based source bullet, and `cite` the evidence
+        id `<key>#b<index>` the harness resolves. Roles and projects that name
+        the skill only outside a bullet (a title, a project's name) contribute
+        nothing: there is no bullet to point at."""
+        from agents.checks import exp_key, proj_key
+
+        target = f"Skill:{skill_name}"
+        if target not in self.graph:
+            return []
+        out: List[Dict[str, Any]] = []
+        for n in self.graph.predecessors(target):
+            node = self.graph.nodes[n]
+            if node.get("type") == "Project":
+                key = proj_key({"name": node.get("name")})
+            elif node.get("type") == "Experience":
+                key = exp_key({"title": node.get("name"), "company": node.get("company")})
+            else:
+                continue
+            for i in self.graph.edges[n, target].get("bullets") or []:
+                out.append({"key": key, "index": i, "cite": f"{key}#b{i}"})
+        return out
+
     def evidence_for_skills(self, skill_names: List[str]) -> Dict[str, Dict[str, List]]:
         """Graph evidence tying each given (JD) skill to this user's work.
 
@@ -231,12 +294,22 @@ class SkillGraphBuilder:
         This is the single evidence-traversal surface shared by the matcher and
         the tailoring planner — neither reimplements graph traversal on top of
         the raw networkx graph.
+
+        Beyond `projects` and `experiences`, an entry may carry (each only when
+        non-empty, so a sparse graph is unchanged):
+        - `bullets`: the source bullets that name the skill, see
+          `bullet_evidence_for_skill`;
+        - `experiences_via_projects` / `education_via_projects`: the roles and
+          degrees reached through a project done under them.
         """
         evidence: Dict[str, Dict[str, List]] = {}
         # dict.fromkeys de-dupes while preserving caller order.
         for name in dict.fromkeys(n for n in (skill_names or []) if n):
-            projects = self.get_projects_using_skill(name)
-            experiences = self.get_experiences_using_skill(name)
+            # Keyed by the name asked for; looked up under the name the graph
+            # holds, so a JD's "torch" finds the user's PyTorch.
+            held = self._resolve_skill(name)
+            projects = self.get_projects_using_skill(held)
+            experiences = self.get_experiences_using_skill(held)
             if projects or experiences:
                 evidence[name] = {"projects": projects, "experiences": experiences}
                 # A role also evidences a skill through the projects done in it
@@ -254,4 +327,15 @@ class SkillGraphBuilder:
                                     "project": pname})
                 if via:
                     evidence[name]["experiences_via_projects"] = via
+                degrees = []
+                for pname in projects:
+                    ctx = self.get_project_context(pname)
+                    if ctx and ctx["type"] == "Education":
+                        degrees.append({"institution": ctx["institution"],
+                                        "degree": ctx["degree"], "project": pname})
+                if degrees:
+                    evidence[name]["education_via_projects"] = degrees
+                bullets = self.bullet_evidence_for_skill(held)
+                if bullets:
+                    evidence[name]["bullets"] = bullets
         return evidence

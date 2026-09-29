@@ -395,6 +395,19 @@ class TermWeight(_Model):
     weight: float
 
 
+class SkillMatch(_Model):
+    skill: str = Field(description="The user's skill the term names.")
+    term: str
+    requirement: int = Field(description="Ordinal of the requirement that lists the term.")
+    type: str
+
+
+class UnmatchedTerm(_Model):
+    term: str
+    requirement: int
+    type: str
+
+
 class RuleResult(JobRuleRef):
     status: Literal["answered", "needs_answer"]
     answer: Optional[bool] = None
@@ -415,6 +428,16 @@ class OpenJobOutput(_Output):
     application_status: Optional[ApplicationStatus] = None
     requirements: int = 0
     top_terms: List[TermWeight] = Field(default_factory=list)
+    skill_matches: List[SkillMatch] = Field(
+        default_factory=list,
+        description="Required and preferred requirement terms that name a skill the user has, "
+                    "exactly or through the alias map, most important first.")
+    unmatched_terms: List[UnmatchedTerm] = Field(
+        default_factory=list,
+        description="Required and preferred requirement terms that match none of the user's "
+                    "skills. ART does not guess: search the KG (kg_search) for evidence "
+                    "under another name, or ask the user, and never claim the skill "
+                    "without it.")
     rules: List[RuleResult] = Field(
         default_factory=list, description="needs_answer: ask the user, then call open_job "
                                           "again with job_id and rule_answers.")

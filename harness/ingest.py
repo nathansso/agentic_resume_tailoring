@@ -44,10 +44,11 @@ from agents.extraction_schemas import (
     ProjectItem, SkillItem,
 )
 from agents.jd_payload import (
-    PROFILE_VERSION, compile_profile_payload, extraction_key, merge_edits, payload_digest,
-    text_digest,
+    PROFILE_VERSION, compile_profile_payload, extraction_key, iter_requirements, merge_edits,
+    payload_digest, text_digest,
 )
 from agents.kg_store import KGStoreMixin, _clean_date
+from agents.skill_matching import match_requirement_terms
 from agents.skill_postprocessor import normalize_skill_name, postprocess_skills
 from database.models import (
     Achievement, Education, Experience, JDProfile, JobDescription, JobRule, Project, Skill,
@@ -500,10 +501,18 @@ def open_job(user_id: UUID, jd_text: str, requirements: Sequence[Dict], metadata
         session.add(profile)
         session.commit()
         n_reqs = len((profile.payload or {}).get("requirements") or [])
+        stored_reqs = iter_requirements(profile.payload)
+
+    # Requirement keywords against the user's skills (#233): what they name, and
+    # the terms no skill matches, left for the host to resolve rather than guessed.
+    terms_to_skills = match_requirement_terms(
+        [s["name"] for s in services.get_skills(user_id)], stored_reqs)
 
     terms = services.resolve_keyword_weights(jid, user_id, text, persist=True) or {}
     top = sorted(terms.items(), key=lambda kv: (-kv[1], kv[0]))[:TOP_TERMS]
     return {**summary, "requirements": n_reqs,
             "top_terms": [{"term": t, "weight": w} for t, w in top],
+            "skill_matches": terms_to_skills["matches"],
+            "unmatched_terms": terms_to_skills["unmatched"],
             "rules": resolve_rules(user_id, jid), "schema_errors": schema_errors,
             "baseline": None}
