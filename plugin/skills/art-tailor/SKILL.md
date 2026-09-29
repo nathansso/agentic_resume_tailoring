@@ -97,6 +97,11 @@ Call `execute_plan({program})`. Read the result:
     user said must never appear, even when cited.
   - Tell the user about anything reverted or refused. Don't silently resubmit the
     same text.
+  - A `reverted` reason of `faithfulness` naming `unsupported:` or `contradicts:` means
+    an independent check found the bullet claims more than (or the opposite of) the
+    evidence it cites. Reword it to what the cited bullets say, or cite better evidence.
+- `nodes[].review` (and `support.review`): bullets that were kept but that the same check
+  could not clearly call supported (`label`, `p`). Show them to the user; don't drop them.
 - `committed: false` with `violations`: nothing was saved. Fix the plan with
   `patch_plan(program_id, edits)`, which takes JSON-pointer edits to the saved program.
   `cut_hints` say which bullets or projects to cut to fit the page. `stale_parent`
