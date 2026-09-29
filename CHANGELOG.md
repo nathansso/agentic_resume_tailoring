@@ -13,7 +13,7 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 ---
 
 ## Issue 123 — Numeric and entity consistency gate
-**Status:** complete | **Tests:** 1683 pass on SQLite (62 new), 18 skipped
+**Status:** complete | **Tests:** 1717 pass on SQLite (62 new), 18 skipped
 
 A cited bullet may no longer assert a number, date, duration, money figure or name that its evidence doesn't contain. It is the numeral half of faithfulness: #193's Jev check owns semantics and is documented weak on numbers, so this one is regex and word lists, with no model.
 
@@ -51,7 +51,7 @@ A cited bullet may no longer assert a number, date, duration, money figure or na
 
   Both were tuned during development, so treat them as a regression floor, not a production estimate. The first pass flagged `Dockerized` (from Docker) and `50GB/day` (against `50GB of daily data`), and both are now handled. Real host output will find more; the gate stays strict until it does.
 - **Injected fabrications on the 21 profiles:** an invented `by 37%` and `using Cassandra` were caught in 238 of 238 bullets each, a number lifted from another item in 507 of 507, and a shifted figure in 139 of 140. The one miss is a coincidence: the shifted value was already in the item's evidence.
-- **Derivations are flagged, as the issue said to start.** "200 to 800 users" does not license "4x growth". Nothing is whitelisted.
+- **Derivations are flagged, as the issue said to start.** "200 to 800 users" does not license "4x growth". Nothing is whitelisted, by decision; revisit once live host output exists.
 - **The item's own header counts as evidence, and so do its uncited source bullets.** The issue says to compare with the source item's evidence, so a title, company, project name or date in a bullet is supported, and a revision of an item may reuse any of that item's own figures without citing each one.
 - **Known limits, all on the side of missing a fabrication rather than blocking a true bullet:**
   - `one` and `zero` as words, and number words hyphenated into compounds (`three-tier`, `zero-downtime`), are not read as claims in a bullet;
@@ -59,7 +59,7 @@ A cited bullet may no longer assert a number, date, duration, money figure or na
   - the period on a data-size rate (`50GB/day`) is not compared;
   - "a dozen", "half" and fractions in words are not read.
 - **Lexical drift (`faithfulness`) is left in place.** Removing it is a separate decision.
-- **The `finalize` step does not re-check the gate.** A pre-existing violation on the base page (say, a bullet a previous plan committed) does not block later plans, by the same only-new-violations rule as every other gate.
+- **The `finalize` step does not re-check the gate** (a decision, not an omission). Finalize re-checks neither citations nor faithfulness either, and base-page source bullets are verbatim, so the gate skips them anyway. A pre-existing violation on the base page does not block later plans, by the same only-new-violations rule as every other gate.
 - **`_run_task` in the legacy benchmark path does not pass `source_bullets`.** That path records no cites, so there is nothing to check; the metric is for host-built pages.
 - **The Postgres leg was not run locally.** The change touches no storage. CI runs it.
 
