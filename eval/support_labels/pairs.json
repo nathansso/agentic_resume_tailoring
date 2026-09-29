@@ -1,0 +1,1262 @@
+{
+  "_comment": "Hand-proposed labelled (evidence, original, bullet) pairs for fitting the support check's thresholds (issue #237). Built only from the synthetic benchmark profiles in eval/profiles/ (never personal/); every evidence string is a verbatim source bullet. `label` is a PROPOSED label awaiting user review: supported | adds_unsupported | contradicts. `original` is the bullet being revised (shown to Jev as context, never evidence) and is null on some pairs. `negation` marks evidence that hinges on a negation (did not / without / rather than / no-op). `touches_numbers` marks pairs whose change touches a figure, which #123's regex gate also sees. Regenerate the report with `python eval/fit_support_threshold.py analyze`.",
+  "version": 1,
+  "labels": [
+    "supported",
+    "adds_unsupported",
+    "contradicts"
+  ],
+  "pairs": [
+    {
+      "id": "rw_rag_expand",
+      "profile": "ai_engineering_specialist_ravi_deshmukh",
+      "category": "faithful_rewording",
+      "evidence": [
+        "Built a RAG pipeline over 120k support documents with pgvector, lifting answer accuracy from 61% to 79%."
+      ],
+      "original": "Built a RAG pipeline over 120k support documents with pgvector, lifting answer accuracy from 61% to 79%.",
+      "bullet": "Built a retrieval-augmented generation pipeline over 120k support documents using pgvector, raising answer accuracy from 61% to 79%.",
+      "label": "supported",
+      "rationale": "RAG spelled out; every other claim and number is unchanged.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "rw_token_spend",
+      "profile": "ai_engineering_specialist_ravi_deshmukh",
+      "category": "faithful_rewording",
+      "evidence": [
+        "Cut token spend 40% by adding a prompt cache and trimming 3 redundant context blocks."
+      ],
+      "original": null,
+      "bullet": "Reduced token spend by 40% through a prompt cache and by removing 3 redundant context blocks.",
+      "label": "supported",
+      "rationale": "Cut/trimmed to reduced/removing; same facts.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "rw_airflow_maintained",
+      "profile": "data_engineering_metric_poor_gabriel_ferreira",
+      "category": "faithful_rewording",
+      "evidence": [
+        "Maintained the Airflow pipelines that load carrier invoices into the Snowflake warehouse."
+      ],
+      "original": "Maintained the Airflow pipelines that load carrier invoices into the Snowflake warehouse.",
+      "bullet": "Maintained the Airflow pipelines that ingest carrier invoices into the Snowflake data warehouse.",
+      "label": "supported",
+      "rationale": "Load/ingest and warehouse/data warehouse are synonyms.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "rw_autograder",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "faithful_rewording",
+      "evidence": [
+        "Built a Python autograder that cut assignment turnaround from 4 days to 1."
+      ],
+      "original": null,
+      "bullet": "Developed a Python autograder that shortened assignment turnaround from 4 days to 1.",
+      "label": "supported",
+      "rationale": "Built/developed, cut/shortened; same facts.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "rw_fastapi_endpoint",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "faithful_rewording",
+      "evidence": [
+        "Packaged the model behind a FastAPI endpoint in Docker, holding p95 latency under 80ms."
+      ],
+      "original": "Packaged the model behind a FastAPI endpoint in Docker, holding p95 latency under 80ms.",
+      "bullet": "Deployed the model as a FastAPI endpoint in a Docker container, keeping p95 latency below 80ms.",
+      "label": "supported",
+      "rationale": "Packaged behind an endpoint in Docker is deploying it as one; under/below.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "rw_mlflow_runs",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "faithful_rewording",
+      "evidence": [
+        "Tracked 60 experiment runs in MLflow and wrote the comparison that selected the shipped checkpoint."
+      ],
+      "original": null,
+      "bullet": "Logged 60 experiment runs in MLflow and wrote the comparison used to choose the shipped checkpoint.",
+      "label": "supported",
+      "rationale": "Tracked/logged, selected/used to choose.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "rw_react_dashboard",
+      "profile": "software_engineering_metric_poor_ana_sokolova",
+      "category": "faithful_rewording",
+      "evidence": [
+        "Built an internal React dashboard that replaced a spreadsheet workflow for the help desk."
+      ],
+      "original": "Built an internal React dashboard that replaced a spreadsheet workflow for the help desk.",
+      "bullet": "Created an internal React dashboard for the help desk in place of a spreadsheet-based workflow.",
+      "label": "supported",
+      "rationale": "Same claim, reordered.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "rw_pandas_features",
+      "profile": "data_science_metric_poor_tomas_iversen",
+      "category": "faithful_rewording",
+      "evidence": [
+        "Wrote a reusable pandas feature pipeline for lag and rolling-window terms."
+      ],
+      "original": null,
+      "bullet": "Created a reusable pandas feature pipeline covering lag and rolling-window terms.",
+      "label": "supported",
+      "rationale": "Wrote/created; for/covering.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "rw_pytorch_ranking",
+      "profile": "ml_engineering_metric_poor_hana_kobayashi",
+      "category": "faithful_rewording",
+      "evidence": [
+        "Trained ranking models in PyTorch and compared them against the existing heuristic ordering."
+      ],
+      "original": "Trained ranking models in PyTorch and compared them against the existing heuristic ordering.",
+      "bullet": "Trained PyTorch ranking models and evaluated them against the current heuristic ordering.",
+      "label": "supported",
+      "rationale": "Compared against/evaluated against; existing/current.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "rw_gtfs_years",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "faithful_rewording",
+      "evidence": [
+        "Ingested 2 years of GTFS feeds into BigQuery and modeled on-time performance across 190 routes."
+      ],
+      "original": null,
+      "bullet": "Loaded two years of GTFS feeds into BigQuery and modeled on-time performance for 190 routes.",
+      "label": "supported",
+      "rationale": "2 years written as 'two years'; otherwise a paraphrase.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "rw_confusion_matrices",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "faithful_rewording",
+      "evidence": [
+        "Wrote evaluation tooling that produced per-class confusion matrices for 3 papers under review."
+      ],
+      "original": "Wrote evaluation tooling that produced per-class confusion matrices for 3 papers under review.",
+      "bullet": "Built evaluation tooling that generated per-class confusion matrices for 3 papers under review.",
+      "label": "supported",
+      "rationale": "Wrote/built, produced/generated.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "rw_dedupe_negation",
+      "profile": "data_engineering_metric_poor_gabriel_ferreira",
+      "category": "faithful_rewording",
+      "evidence": [
+        "Handles duplicate transactions by hashing the source row rather than trusting file order."
+      ],
+      "original": null,
+      "bullet": "Deduplicates transactions by hashing the source row instead of relying on file order.",
+      "label": "supported",
+      "rationale": "'Rather than trusting file order' restated as 'instead of relying on file order'.",
+      "negation": true,
+      "touches_numbers": false
+    },
+    {
+      "id": "rw_dependency_free",
+      "profile": "software_engineering_metric_poor_ana_sokolova",
+      "category": "faithful_rewording",
+      "evidence": [
+        "TypeScript library for building validated forms with no runtime dependency."
+      ],
+      "original": "TypeScript library for building validated forms with no runtime dependency.",
+      "bullet": "Built a dependency-free TypeScript library for validated forms.",
+      "label": "supported",
+      "rationale": "'No runtime dependency' restated as 'dependency-free'.",
+      "negation": true,
+      "touches_numbers": false
+    },
+    {
+      "id": "rw_replay_noop",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "faithful_rewording",
+      "evidence": [
+        "Loads 500k-row vendor drops into Postgres with content hashing, so a replayed file is a no-op."
+      ],
+      "original": null,
+      "bullet": "Loads 500k-row vendor files into Postgres with content hashing, so replaying a file changes nothing.",
+      "label": "supported",
+      "rationale": "'A replayed file is a no-op' restated as 'replaying changes nothing'.",
+      "negation": true,
+      "touches_numbers": false
+    },
+    {
+      "id": "rw_offline_lookup",
+      "profile": "data_engineering_metric_poor_gabriel_ferreira",
+      "category": "faithful_rewording",
+      "evidence": [
+        "Caches GTFS schedule data in Parquet and serves lookups without a network call."
+      ],
+      "original": "Caches GTFS schedule data in Parquet and serves lookups without a network call.",
+      "bullet": "Serves transit schedule lookups offline from a Parquet cache.",
+      "label": "supported",
+      "rationale": "'Without a network call' is 'offline'; GTFS is transit schedule data.",
+      "negation": true,
+      "touches_numbers": false
+    },
+    {
+      "id": "rw_draft_untouched",
+      "profile": "ai_engineering_metric_poor_noah_adeyemi",
+      "category": "faithful_rewording",
+      "evidence": [
+        "Built a LangChain assistant that suggests revisions without rewriting a student's draft."
+      ],
+      "original": null,
+      "bullet": "Built a LangChain assistant that gives revision suggestions while leaving the student's draft untouched.",
+      "label": "supported",
+      "rationale": "'Without rewriting the draft' restated as 'leaving the draft untouched'.",
+      "negation": true,
+      "touches_numbers": false
+    },
+    {
+      "id": "weave_airflow_kafka",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "grounded_weave",
+      "evidence": [
+        "Built Airflow DAGs moving 40M shipment events a day from Kafka into Snowflake at 99.9% delivery."
+      ],
+      "original": "Built Airflow DAGs moving 40M shipment events a day from Kafka into Snowflake at 99.9% delivery.",
+      "bullet": "Built data pipelines with Airflow and Kafka, loading shipment events into Snowflake at 99.9% delivery.",
+      "label": "supported",
+      "rationale": "Airflow, Kafka and Snowflake are all in the cite; 'data pipelines' is the generic term for DAGs.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "weave_pgvector_search",
+      "profile": "ai_engineering_generalist_claire_bouchard",
+      "category": "grounded_weave",
+      "evidence": [
+        "Shipped a retrieval service over 2M documents with pgvector and Redis caching at 120ms p95."
+      ],
+      "original": null,
+      "bullet": "Shipped a vector-search retrieval service on pgvector with Redis caching over 2M documents.",
+      "label": "supported",
+      "rationale": "pgvector implies vector search; Redis and 2M documents are in the cite.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "weave_dbt_snowflake",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "grounded_weave",
+      "evidence": [
+        "Shipped a dbt model layer over Snowflake that consolidated 6 reporting pipelines into 1 tested source."
+      ],
+      "original": "Shipped a dbt model layer over Snowflake that consolidated 6 reporting pipelines into 1 tested source.",
+      "bullet": "Built a dbt model layer on Snowflake, consolidating reporting pipelines into one tested source.",
+      "label": "supported",
+      "rationale": "dbt, Snowflake and the consolidation are all stated.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "weave_junit_contract",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "grounded_weave",
+      "evidence": [
+        "Shipped 14 REST endpoints in Spring Boot backing a customer portal used by 8,000 accounts.",
+        "Raised service test coverage from 46% to 78% with JUnit and contract tests."
+      ],
+      "original": null,
+      "bullet": "Shipped Spring Boot REST endpoints and raised service test coverage from 46% to 78% with JUnit and contract tests.",
+      "label": "supported",
+      "rationale": "Two bullets of the same role; Spring Boot, REST, JUnit and the coverage are all cited.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "weave_sklearn_pytorch",
+      "profile": "ml_engineering_generalist_omar_haddad",
+      "category": "grounded_weave",
+      "evidence": [
+        "Trained demand models in scikit-learn and PyTorch on 300k transactions for 2 campus partners."
+      ],
+      "original": "Trained demand models in scikit-learn and PyTorch on 300k transactions for 2 campus partners.",
+      "bullet": "Trained demand models with scikit-learn and PyTorch on 300k transactions for two campus partners.",
+      "label": "supported",
+      "rationale": "Both libraries and the data are in the cite; 2 written as 'two'.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "weave_statsmodels",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "grounded_weave",
+      "evidence": [
+        "Built demand forecasts for 34 clinic sites in Python and statsmodels, reducing weekly schedule error by 19%."
+      ],
+      "original": null,
+      "bullet": "Built demand forecasts in Python with statsmodels for 34 clinic sites, cutting weekly schedule error by 19%.",
+      "label": "supported",
+      "rationale": "Python and statsmodels are cited; reducing/cutting.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "weave_mlflow_pytorch",
+      "profile": "ml_engineering_metric_poor_hana_kobayashi",
+      "category": "grounded_weave",
+      "evidence": [
+        "Ran fine-tuning experiments with scikit-learn and PyTorch and logged the results in MLflow."
+      ],
+      "original": "Ran fine-tuning experiments with scikit-learn and PyTorch and logged the results in MLflow.",
+      "bullet": "Ran PyTorch fine-tuning experiments and tracked the results in MLflow.",
+      "label": "supported",
+      "rationale": "PyTorch and MLflow are both cited.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "weave_terraform_iac",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "grounded_weave",
+      "evidence": [
+        "Wrote a Terraform module that provisioned the group's S3 buckets and IAM roles in 1 command."
+      ],
+      "original": null,
+      "bullet": "Provisioned S3 buckets and IAM roles as code with a Terraform module.",
+      "label": "supported",
+      "rationale": "'As code' is what a Terraform module does; S3, IAM and Terraform are cited.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "weave_fastapi_postgres_qa",
+      "profile": "ai_engineering_generalist_claire_bouchard",
+      "category": "grounded_weave",
+      "evidence": [
+        "Answers questions over 800 hours of transcripts with timestamped citations.",
+        "Runs on FastAPI and Postgres with a React player integration."
+      ],
+      "original": null,
+      "bullet": "Built a FastAPI and Postgres Q&A service over 800 hours of lecture transcripts with timestamped citations.",
+      "label": "supported",
+      "rationale": "FastAPI and Postgres come from the project's second cited bullet; the rest from the first.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "weave_kafka_grafana",
+      "profile": "ml_engineering_generalist_omar_haddad",
+      "category": "grounded_weave",
+      "evidence": [
+        "Shipped a Kafka feature stream feeding 3 production models with sub-minute freshness.",
+        "Added drift monitoring in Grafana that caught a 7% input distribution shift within a day."
+      ],
+      "original": null,
+      "bullet": "Shipped a Kafka feature stream feeding 3 production models and added Grafana drift monitoring.",
+      "label": "supported",
+      "rationale": "Both bullets of the role are cited and the bullet just joins them.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "infl_maintained_owned",
+      "profile": "data_engineering_metric_poor_gabriel_ferreira",
+      "category": "role_inflation",
+      "evidence": [
+        "Maintained the Airflow pipelines that load carrier invoices into the Snowflake warehouse."
+      ],
+      "original": "Maintained the Airflow pipelines that load carrier invoices into the Snowflake warehouse.",
+      "bullet": "Owned the Airflow pipelines that load carrier invoices into the Snowflake warehouse.",
+      "label": "adds_unsupported",
+      "rationale": "'Maintained' claims upkeep, not ownership.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "infl_reviewed_led",
+      "profile": "software_engineering_metric_poor_ana_sokolova",
+      "category": "role_inflation",
+      "evidence": [
+        "Reviewed pull requests from the rest of the team and kept the CI pipeline green."
+      ],
+      "original": null,
+      "bullet": "Led code review for the engineering team and owned the CI pipeline.",
+      "label": "adds_unsupported",
+      "rationale": "Reviewing PRs and keeping CI green is participation, not leading review or owning CI.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "infl_partnered_led",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "role_inflation",
+      "evidence": [
+        "Partnered with 3 product teams on an A/B testing framework now used for every release readout."
+      ],
+      "original": "Partnered with 3 product teams on an A/B testing framework now used for every release readout.",
+      "bullet": "Led the A/B testing framework now used for every release readout.",
+      "label": "adds_unsupported",
+      "rationale": "'Partnered with 3 product teams' is collaboration, not leadership.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "infl_compared_architected",
+      "profile": "ai_engineering_metric_poor_noah_adeyemi",
+      "category": "role_inflation",
+      "evidence": [
+        "Compared several chunking strategies and recorded which produced grounded answers."
+      ],
+      "original": null,
+      "bullet": "Architected the chunking strategy for the company's retrieval pipeline.",
+      "label": "adds_unsupported",
+      "rationale": "The evidence compared strategies; it does not say the candidate architected one.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "infl_ran_directed",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "role_inflation",
+      "evidence": [
+        "Ran weekly lab sections for 30 students on Git, Linux, and testing practice."
+      ],
+      "original": "Ran weekly lab sections for 30 students on Git, Linux, and testing practice.",
+      "bullet": "Directed the department's weekly lab program on Git, Linux, and testing practice.",
+      "label": "adds_unsupported",
+      "rationale": "'Ran weekly lab sections' is teaching them, not directing a program.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "infl_wrote_designed",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "role_inflation",
+      "evidence": [
+        "Wrote a Terraform module that provisioned the group's S3 buckets and IAM roles in 1 command."
+      ],
+      "original": null,
+      "bullet": "Designed the research group's cloud infrastructure architecture in Terraform.",
+      "label": "adds_unsupported",
+      "rationale": "Writing a module is not designing the group's architecture.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "infl_documented_owned",
+      "profile": "ml_engineering_metric_poor_hana_kobayashi",
+      "category": "role_inflation",
+      "evidence": [
+        "Documented the feature preparation steps so the team could rerun the study after I left."
+      ],
+      "original": "Documented the feature preparation steps so the team could rerun the study after I left.",
+      "bullet": "Owned feature preparation for the team's ranking study.",
+      "label": "adds_unsupported",
+      "rationale": "Documenting the steps is not owning the work.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "infl_implemented_owner",
+      "profile": "software_engineering_metric_poor_ana_sokolova",
+      "category": "role_inflation",
+      "evidence": [
+        "Implemented REST endpoints in Java and Spring Boot for the account management service.",
+        "Fixed defects in the billing module and added JUnit coverage around the affected paths.",
+        "Reviewed pull requests from the rest of the team and kept the CI pipeline green."
+      ],
+      "original": null,
+      "bullet": "Served as technical owner of the account management service.",
+      "label": "adds_unsupported",
+      "rationale": "Implementing endpoints, fixing defects and reviewing PRs is contribution, not ownership.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "infl_tests_authored",
+      "profile": "data_science_metric_poor_tomas_iversen",
+      "category": "role_inflation",
+      "evidence": [
+        "Ran hypothesis tests comparing treatment and control groups and drafted the results section."
+      ],
+      "original": "Ran hypothesis tests comparing treatment and control groups and drafted the results section.",
+      "bullet": "Led the statistical analysis for the study and authored its results.",
+      "label": "adds_unsupported",
+      "rationale": "Ran tests and drafted a section; did not lead the analysis or author the results.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "infl_maintained_architected",
+      "profile": "ai_engineering_metric_poor_noah_adeyemi",
+      "category": "role_inflation",
+      "evidence": [
+        "Maintained the FastAPI service and the deployment notes the center's coordinators follow."
+      ],
+      "original": null,
+      "bullet": "Architected the FastAPI service the center's coordinators rely on.",
+      "label": "adds_unsupported",
+      "rationale": "'Maintained' is not architecting.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "infl_built_led_migration",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "role_inflation",
+      "evidence": [
+        "Built a Go service that replaced 3 cron jobs, processing 200k records an hour."
+      ],
+      "original": "Built a Go service that replaced 3 cron jobs, processing 200k records an hour.",
+      "bullet": "Led a migration of legacy cron jobs to Go services.",
+      "label": "adds_unsupported",
+      "rationale": "Built one Go service replacing cron jobs; 'led a migration' is a larger role and scope.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "scope_production_org",
+      "profile": "ml_engineering_metric_poor_hana_kobayashi",
+      "category": "invented_scope_outcome",
+      "evidence": [
+        "Built an evaluation harness that reported offline metrics for every candidate checkpoint."
+      ],
+      "original": null,
+      "bullet": "Built a production evaluation harness used across the ML organization.",
+      "label": "adds_unsupported",
+      "rationale": "'Production' and 'used across the organization' are not stated.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "scope_end_to_end_deploy",
+      "profile": "ai_engineering_specialist_ravi_deshmukh",
+      "category": "invented_scope_outcome",
+      "evidence": [
+        "Built LangChain agents that call 6 campus APIs and return grounded answers with citations."
+      ],
+      "original": "Built LangChain agents that call 6 campus APIs and return grounded answers with citations.",
+      "bullet": "Built and deployed LangChain agents end to end, from API integration to hosting, that answer student questions with citations.",
+      "label": "adds_unsupported",
+      "rationale": "Deployment and 'end to end' are not stated; the evidence says built.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "scope_team_size",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "category": "invented_scope_outcome",
+      "evidence": [
+        "Containerized the ingest job with Docker so it runs identically on 2 campus servers."
+      ],
+      "original": null,
+      "bullet": "Containerized the ingest job with Docker for a team of six engineers.",
+      "label": "adds_unsupported",
+      "rationale": "A team size is invented.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "scope_invented_users",
+      "profile": "software_engineering_metric_poor_ana_sokolova",
+      "category": "invented_scope_outcome",
+      "evidence": [
+        "Built an internal React dashboard that replaced a spreadsheet workflow for the help desk."
+      ],
+      "original": "Built an internal React dashboard that replaced a spreadsheet workflow for the help desk.",
+      "bullet": "Built a React dashboard adopted by 200 help desk staff, replacing spreadsheets.",
+      "label": "adds_unsupported",
+      "rationale": "An adoption figure of 200 users is invented (touches a number, so #123's gate also fires).",
+      "negation": false,
+      "touches_numbers": true
+    },
+    {
+      "id": "scope_invented_impact",
+      "profile": "data_engineering_metric_poor_gabriel_ferreira",
+      "category": "invented_scope_outcome",
+      "evidence": [
+        "Rewrote a fragile shipment ingest job in Python, adding retries and structured logging."
+      ],
+      "original": null,
+      "bullet": "Rewrote a fragile shipment ingest job in Python, eliminating pipeline failures and saving significant engineering time.",
+      "label": "adds_unsupported",
+      "rationale": "Retries and logging do not establish eliminated failures or saved time.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "scope_deployed_replaced",
+      "profile": "data_science_metric_poor_tomas_iversen",
+      "category": "invented_scope_outcome",
+      "evidence": [
+        "Built a claims severity model in scikit-learn and compared it against the existing actuarial baseline."
+      ],
+      "original": "Built a claims severity model in scikit-learn and compared it against the existing actuarial baseline.",
+      "bullet": "Built and deployed a claims severity model in scikit-learn that replaced the actuarial baseline.",
+      "label": "adds_unsupported",
+      "rationale": "The evidence compared against the baseline; deployment and replacing it are not stated.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "scope_outperforms",
+      "profile": "ml_engineering_metric_poor_hana_kobayashi",
+      "category": "invented_scope_outcome",
+      "evidence": [
+        "Classifies scanned lecture notes by course with a small convolutional network."
+      ],
+      "original": null,
+      "bullet": "Classifies scanned lecture notes by course with a convolutional network, outperforming commercial OCR tools.",
+      "label": "adds_unsupported",
+      "rationale": "An outperformance claim is invented.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "scope_whole_corpus",
+      "profile": "ai_engineering_metric_poor_noah_adeyemi",
+      "category": "invented_scope_outcome",
+      "evidence": [
+        "Built a retrieval pipeline over the company handbook and wired it into an internal chat tool."
+      ],
+      "original": "Built a retrieval pipeline over the company handbook and wired it into an internal chat tool.",
+      "bullet": "Built a retrieval pipeline over the company's entire document corpus, serving the whole organization through an internal chat tool.",
+      "label": "adds_unsupported",
+      "rationale": "The evidence says the handbook and an internal chat tool; corpus-wide and organization-wide are larger.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "scope_high_availability",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "invented_scope_outcome",
+      "evidence": [
+        "Ships a Docker Compose stack that stands the whole pipeline up in under 2 minutes."
+      ],
+      "original": null,
+      "bullet": "Ships a Docker Compose stack that deploys the pipeline with high availability and zero downtime.",
+      "label": "adds_unsupported",
+      "rationale": "High availability and zero downtime are not stated; the evidence says fast startup.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "scope_edge_fleet",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "invented_scope_outcome",
+      "evidence": [
+        "Distilled a detector to 8MB for edge devices, retaining 88% of teacher mAP."
+      ],
+      "original": "Distilled a detector to 8MB for edge devices, retaining 88% of teacher mAP.",
+      "bullet": "Distilled a detector to 8MB and deployed it across a fleet of edge devices in production.",
+      "label": "adds_unsupported",
+      "rationale": "The evidence says sized for edge devices; a production fleet is not stated.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "scope_no_internet",
+      "profile": "ai_engineering_metric_poor_noah_adeyemi",
+      "category": "invented_scope_outcome",
+      "evidence": [
+        "Runs locally with SQLite and a small embedding model, with no API key required."
+      ],
+      "original": null,
+      "bullet": "Runs locally with SQLite and a small embedding model, with no API key or internet connection required.",
+      "label": "adds_unsupported",
+      "rationale": "'No API key' is cited; 'no internet' is an additional claim.",
+      "negation": true,
+      "touches_numbers": false
+    },
+    {
+      "id": "scope_plagiarism_feature",
+      "profile": "ai_engineering_metric_poor_noah_adeyemi",
+      "category": "invented_scope_outcome",
+      "evidence": [
+        "Built a LangChain assistant that suggests revisions without rewriting a student's draft."
+      ],
+      "original": "Built a LangChain assistant that suggests revisions without rewriting a student's draft.",
+      "bullet": "Built a LangChain assistant that suggests revisions without rewriting a student's draft and flags plagiarism.",
+      "label": "adds_unsupported",
+      "rationale": "The non-rewriting claim is cited; plagiarism flagging is invented.",
+      "negation": true,
+      "touches_numbers": false
+    },
+    {
+      "id": "scope_hourly_refresh",
+      "profile": "data_engineering_metric_poor_gabriel_ferreira",
+      "category": "invented_scope_outcome",
+      "evidence": [
+        "Caches GTFS schedule data in Parquet and serves lookups without a network call."
+      ],
+      "original": null,
+      "bullet": "Caches GTFS schedule data in Parquet, refreshed hourly, and serves lookups without a network call.",
+      "label": "adds_unsupported",
+      "rationale": "The offline lookups are cited; the hourly refresh is invented.",
+      "negation": true,
+      "touches_numbers": false
+    },
+    {
+      "id": "tool_kubernetes",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "ungrounded_tool",
+      "evidence": [
+        "Packaged the model behind a FastAPI endpoint in Docker, holding p95 latency under 80ms."
+      ],
+      "original": "Packaged the model behind a FastAPI endpoint in Docker, holding p95 latency under 80ms.",
+      "bullet": "Packaged the model behind a FastAPI endpoint on Kubernetes, holding p95 latency under 80ms.",
+      "label": "adds_unsupported",
+      "rationale": "Kubernetes is not in the cite (Docker is).",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "tool_airflow_elsewhere",
+      "profile": "data_engineering_metric_poor_gabriel_ferreira",
+      "category": "ungrounded_tool",
+      "evidence": [
+        "Replaced a spreadsheet handoff with a scheduled export written in Python."
+      ],
+      "original": null,
+      "bullet": "Replaced a spreadsheet handoff with a scheduled Airflow export written in Python.",
+      "label": "adds_unsupported",
+      "rationale": "Airflow appears in another role of the same profile, but not in the cited bullet.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "tool_xgboost",
+      "profile": "data_science_metric_poor_tomas_iversen",
+      "category": "ungrounded_tool",
+      "evidence": [
+        "Built a claims severity model in scikit-learn and compared it against the existing actuarial baseline."
+      ],
+      "original": "Built a claims severity model in scikit-learn and compared it against the existing actuarial baseline.",
+      "bullet": "Built a claims severity model with XGBoost and scikit-learn and compared it against the actuarial baseline.",
+      "label": "adds_unsupported",
+      "rationale": "XGBoost is not in the cite.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "tool_redis_cache",
+      "profile": "ai_engineering_specialist_ravi_deshmukh",
+      "category": "ungrounded_tool",
+      "evidence": [
+        "Cut token spend 40% by adding a prompt cache and trimming 3 redundant context blocks."
+      ],
+      "original": null,
+      "bullet": "Cut token spend 40% by adding a Redis prompt cache and trimming 3 redundant context blocks.",
+      "label": "adds_unsupported",
+      "rationale": "The cache technology (Redis) is not named in the cite.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "tool_terraform_added",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "category": "ungrounded_tool",
+      "evidence": [
+        "Containerized the ingest job with Docker so it runs identically on 2 campus servers."
+      ],
+      "original": "Containerized the ingest job with Docker so it runs identically on 2 campus servers.",
+      "bullet": "Containerized the ingest job with Docker and Terraform so it runs identically on 2 campus servers.",
+      "label": "adds_unsupported",
+      "rationale": "Terraform is not in the cite; it belongs to a different project.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "tool_airflow_added",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "category": "ungrounded_tool",
+      "evidence": [
+        "Automated catalog exports with Python and Bash, replacing a 5-step manual process."
+      ],
+      "original": null,
+      "bullet": "Automated catalog exports with Python, Bash and Airflow, replacing a 5-step manual process.",
+      "label": "adds_unsupported",
+      "rationale": "Airflow is not in the cite.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "tool_langchain_added",
+      "profile": "ai_engineering_generalist_claire_bouchard",
+      "category": "ungrounded_tool",
+      "evidence": [
+        "Answers questions over 800 hours of transcripts with timestamped citations."
+      ],
+      "original": "Answers questions over 800 hours of transcripts with timestamped citations.",
+      "bullet": "Built a LangChain application that answers questions over 800 hours of transcripts with timestamped citations.",
+      "label": "adds_unsupported",
+      "rationale": "LangChain is not in the cited project bullet (it is in another item).",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "tool_typescript_added",
+      "profile": "software_engineering_metric_poor_ana_sokolova",
+      "category": "ungrounded_tool",
+      "evidence": [
+        "React and PostgreSQL app for logging hikes, with offline-first sync."
+      ],
+      "original": null,
+      "bullet": "Built a React, TypeScript and PostgreSQL app for logging hikes, with offline-first sync.",
+      "label": "adds_unsupported",
+      "rationale": "TypeScript is not in this cited bullet.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "tool_redis_added",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "ungrounded_tool",
+      "evidence": [
+        "Next.js and Postgres app that settles group expenses in the fewest transfers."
+      ],
+      "original": "Next.js and Postgres app that settles group expenses in the fewest transfers.",
+      "bullet": "Built a Next.js, Postgres and Redis app that settles group expenses in the fewest transfers.",
+      "label": "adds_unsupported",
+      "rationale": "Redis is not in the cite.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "tool_dbt_added",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "ungrounded_tool",
+      "evidence": [
+        "Parsed 3,100 county result files with pandas and Spark, reconciling 5 conflicting schemas."
+      ],
+      "original": null,
+      "bullet": "Parsed 3,100 county result files with pandas, Spark and dbt, reconciling 5 conflicting schemas.",
+      "label": "adds_unsupported",
+      "rationale": "dbt is not in the cite.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "tool_tensorrt",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "ungrounded_tool",
+      "evidence": [
+        "Exported to ONNX and benchmarked 3 runtimes on a Raspberry Pi."
+      ],
+      "original": "Exported to ONNX and benchmarked 3 runtimes on a Raspberry Pi.",
+      "bullet": "Exported to ONNX and TensorRT and benchmarked 3 runtimes on a Raspberry Pi.",
+      "label": "adds_unsupported",
+      "rationale": "TensorRT is not in the cite.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "contra_kafka_rabbitmq",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "category": "contradiction",
+      "evidence": [
+        "Shipped a Kafka consumer in Scala that backfilled 3 weeks of missing click events."
+      ],
+      "original": null,
+      "bullet": "Shipped a RabbitMQ consumer in Scala that backfilled 3 weeks of missing click events.",
+      "label": "contradicts",
+      "rationale": "The cite says Kafka, not RabbitMQ.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "contra_go_rust",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "contradiction",
+      "evidence": [
+        "Built a Go service that replaced 3 cron jobs, processing 200k records an hour."
+      ],
+      "original": "Built a Go service that replaced 3 cron jobs, processing 200k records an hour.",
+      "bullet": "Built a Rust service that replaced 3 cron jobs, processing 200k records an hour.",
+      "label": "contradicts",
+      "rationale": "The cite says Go.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "contra_mongo_postgres",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "contradiction",
+      "evidence": [
+        "Parses 50k PGN games into MongoDB and reports opening win rates by rating band."
+      ],
+      "original": null,
+      "bullet": "Parses 50k PGN games into PostgreSQL and reports opening win rates by rating band.",
+      "label": "contradicts",
+      "rationale": "The cite says MongoDB.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "contra_flat_significant",
+      "profile": "data_science_specialist_priya_raman",
+      "category": "contradiction",
+      "evidence": [
+        "Ran an A/B testing readout on 12 store-level promotions, using bootstrap confidence intervals to flag 3 as statistically flat."
+      ],
+      "original": "Ran an A/B testing readout on 12 store-level promotions, using bootstrap confidence intervals to flag 3 as statistically flat.",
+      "bullet": "Ran an A/B testing readout on 12 store-level promotions, using bootstrap confidence intervals to flag 3 as statistically significant winners.",
+      "label": "contradicts",
+      "rationale": "The cite flags them as statistically flat, the opposite result.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "contra_rewrites_draft",
+      "profile": "ai_engineering_metric_poor_noah_adeyemi",
+      "category": "contradiction",
+      "evidence": [
+        "Built a LangChain assistant that suggests revisions without rewriting a student's draft."
+      ],
+      "original": null,
+      "bullet": "Built a LangChain assistant that rewrites students' drafts to improve them.",
+      "label": "contradicts",
+      "rationale": "The cite says it suggests revisions without rewriting the draft.",
+      "negation": true,
+      "touches_numbers": false
+    },
+    {
+      "id": "contra_image_text",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "contradiction",
+      "evidence": [
+        "Fine-tuned 4 image classification backbones on a 40k-image microscopy set, reaching 91% top-1."
+      ],
+      "original": "Fine-tuned 4 image classification backbones on a 40k-image microscopy set, reaching 91% top-1.",
+      "bullet": "Fine-tuned 4 text classification backbones on a 40k-document corpus, reaching 91% top-1.",
+      "label": "contradicts",
+      "rationale": "The cite says image classification on microscopy images.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "contra_offline_remote",
+      "profile": "data_engineering_metric_poor_gabriel_ferreira",
+      "category": "contradiction",
+      "evidence": [
+        "Caches GTFS schedule data in Parquet and serves lookups without a network call."
+      ],
+      "original": null,
+      "bullet": "Caches GTFS schedule data in Parquet and serves lookups through a remote API call.",
+      "label": "contradicts",
+      "rationale": "The cite says lookups need no network call.",
+      "negation": true,
+      "touches_numbers": false
+    },
+    {
+      "id": "contra_api_key",
+      "profile": "ai_engineering_metric_poor_noah_adeyemi",
+      "category": "contradiction",
+      "evidence": [
+        "Runs locally with SQLite and a small embedding model, with no API key required."
+      ],
+      "original": "Runs locally with SQLite and a small embedding model, with no API key required.",
+      "bullet": "Runs on a hosted vector database and requires an OpenAI API key.",
+      "label": "contradicts",
+      "rationale": "The cite says local with no API key required.",
+      "negation": true,
+      "touches_numbers": false
+    },
+    {
+      "id": "contra_cron_direction",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "contradiction",
+      "evidence": [
+        "Migrated 3 lab pipelines from cron scripts to Airflow, with retries and alerting."
+      ],
+      "original": null,
+      "bullet": "Migrated 3 lab pipelines from Airflow back to cron scripts.",
+      "label": "contradicts",
+      "rationale": "The cite migrates from cron to Airflow, the reverse.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "contra_java_python",
+      "profile": "software_engineering_metric_poor_ana_sokolova",
+      "category": "contradiction",
+      "evidence": [
+        "Implemented REST endpoints in Java and Spring Boot for the account management service."
+      ],
+      "original": "Implemented REST endpoints in Java and Spring Boot for the account management service.",
+      "bullet": "Implemented REST endpoints in Python and Django for the account management service.",
+      "label": "contradicts",
+      "rationale": "The cite says Java and Spring Boot.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "contra_r_python",
+      "profile": "data_science_specialist_priya_raman",
+      "category": "contradiction",
+      "evidence": [
+        "Fit mixed-effects models in R to estimate course-level grade variation across 38 sections."
+      ],
+      "original": null,
+      "bullet": "Fit mixed-effects models in Python with statsmodels to estimate course-level grade variation across 38 sections.",
+      "label": "contradicts",
+      "rationale": "The cite says R; a different stack is a contradiction rather than an addition.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "contra_wrote_reviewed",
+      "profile": "ml_engineering_generalist_omar_haddad",
+      "category": "contradiction",
+      "evidence": [
+        "Wrote a Terraform stack provisioning the team's SageMaker training environment."
+      ],
+      "original": "Wrote a Terraform stack provisioning the team's SageMaker training environment.",
+      "bullet": "Reviewed a SageMaker training environment Terraform stack written by another engineer.",
+      "label": "contradicts",
+      "rationale": "The cite says the candidate wrote the stack.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "contra_replay_overwrites",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "contradiction",
+      "evidence": [
+        "Loads 500k-row vendor drops into Postgres with content hashing, so a replayed file is a no-op."
+      ],
+      "original": null,
+      "bullet": "Loads 500k-row vendor drops into Postgres, where replaying a file overwrites earlier rows.",
+      "label": "contradicts",
+      "rationale": "The cite says a replayed file is a no-op.",
+      "negation": true,
+      "touches_numbers": false
+    },
+    {
+      "id": "bd_designed_and_built",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "category": "boundary",
+      "evidence": [
+        "Built a Postgres reporting schema serving 3 dashboards for the circulation team."
+      ],
+      "original": "Built a Postgres reporting schema serving 3 dashboards for the circulation team.",
+      "bullet": "Designed and built a Postgres reporting schema serving 3 dashboards for the circulation team.",
+      "label": "supported",
+      "rationale": "Building a schema implies designing it: a reasonable implication, not a new claim.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "bd_pytorch_deep_learning",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "boundary",
+      "evidence": [
+        "Trained a PyTorch sequence model on 1.1M clinical events, improving readmission recall by 12 points over the baseline."
+      ],
+      "original": null,
+      "bullet": "Trained a PyTorch deep learning sequence model on 1.1M clinical events, improving readmission recall by 12 points over the baseline.",
+      "label": "supported",
+      "rationale": "A PyTorch sequence model is a deep learning model; a generic synonym.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "bd_cypress_browser_tests",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "boundary",
+      "evidence": [
+        "Wrote Cypress end-to-end tests covering the 5 highest-traffic user flows."
+      ],
+      "original": "Wrote Cypress end-to-end tests covering the 5 highest-traffic user flows.",
+      "bullet": "Wrote automated browser tests for the 5 highest-traffic user flows.",
+      "label": "supported",
+      "rationale": "Cypress end-to-end tests are automated browser tests.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "bd_ci_every_pr",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "boundary",
+      "evidence": [
+        "Added GitHub Actions CI that ran 220 tests on every pull request."
+      ],
+      "original": null,
+      "bullet": "Automated testing on every pull request through GitHub Actions CI.",
+      "label": "supported",
+      "rationale": "CI that runs tests on each PR is automated testing on each PR.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "bd_shipped_deployed",
+      "profile": "ai_engineering_generalist_claire_bouchard",
+      "category": "boundary",
+      "evidence": [
+        "Shipped a retrieval service over 2M documents with pgvector and Redis caching at 120ms p95."
+      ],
+      "original": "Shipped a retrieval service over 2M documents with pgvector and Redis caching at 120ms p95.",
+      "bullet": "Deployed a retrieval service over 2M documents with pgvector and Redis caching at 120ms p95.",
+      "label": "supported",
+      "rationale": "Shipped and deployed are near-synonyms for a service with a latency figure.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "bd_collaboration_review",
+      "profile": "software_engineering_metric_poor_ana_sokolova",
+      "category": "boundary",
+      "evidence": [
+        "Reviewed pull requests from the rest of the team and kept the CI pipeline green."
+      ],
+      "original": null,
+      "bullet": "Collaborated with teammates through code review.",
+      "label": "supported",
+      "rationale": "Reviewing teammates' pull requests is collaboration through review.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "bd_original_inflated_bullet_clean",
+      "profile": "ai_engineering_specialist_ravi_deshmukh",
+      "category": "boundary",
+      "evidence": [
+        "Wrote an evaluation set of 200 graded questions that gated every prompt change."
+      ],
+      "original": "Built and owned the evaluation platform for the AI team, gating every prompt change.",
+      "bullet": "Built the evaluation set that gated every prompt change.",
+      "label": "supported",
+      "rationale": "The original overclaimed ('platform', 'owned'); the bullet itself claims only what the cite says.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "bd_hybrid_search_synonym",
+      "profile": "benchmark_profile",
+      "category": "boundary",
+      "evidence": [
+        "Implemented hybrid BM25 + dense retrieval with reciprocal rank fusion."
+      ],
+      "original": null,
+      "bullet": "Implemented hybrid search combining keyword and vector retrieval.",
+      "label": "supported",
+      "rationale": "BM25 is keyword retrieval and dense retrieval is vector retrieval.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "bd_seaborn_python",
+      "profile": "data_science_specialist_priya_raman",
+      "category": "boundary",
+      "evidence": [
+        "Wrote a seaborn plotting toolkit reused by 5 graduate researchers for thesis figures."
+      ],
+      "original": "Wrote a seaborn plotting toolkit reused by 5 graduate researchers for thesis figures.",
+      "bullet": "Built a Python plotting toolkit adopted by graduate researchers for thesis figures.",
+      "label": "supported",
+      "rationale": "Seaborn is a Python library; reused by researchers is adopted by them.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "bd_dozens_of_runs",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "boundary",
+      "evidence": [
+        "Tracked 60 experiment runs in MLflow and wrote the comparison that selected the shipped checkpoint."
+      ],
+      "original": null,
+      "bullet": "Tracked dozens of experiment runs in MLflow.",
+      "label": "supported",
+      "rationale": "60 runs is dozens; a vague quantifier that stays true.",
+      "negation": false,
+      "touches_numbers": true
+    },
+    {
+      "id": "bd_hundreds_of_runs",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "boundary",
+      "evidence": [
+        "Tracked 60 experiment runs in MLflow and wrote the comparison that selected the shipped checkpoint."
+      ],
+      "original": "Tracked 60 experiment runs in MLflow and wrote the comparison that selected the shipped checkpoint.",
+      "bullet": "Tracked hundreds of experiment runs in MLflow.",
+      "label": "contradicts",
+      "rationale": "60 runs is not hundreds; the quantifier overstates the number (touches a number).",
+      "negation": false,
+      "touches_numbers": true
+    },
+    {
+      "id": "bd_monitoring_platform",
+      "profile": "ml_engineering_generalist_omar_haddad",
+      "category": "boundary",
+      "evidence": [
+        "Added drift monitoring in Grafana that caught a 7% input distribution shift within a day."
+      ],
+      "original": null,
+      "bullet": "Built a Grafana-based model monitoring platform that detects model drift.",
+      "label": "adds_unsupported",
+      "rationale": "'Platform' claims a larger system than adding drift monitoring.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "bd_deep_learning_sklearn",
+      "profile": "data_science_metric_poor_tomas_iversen",
+      "category": "boundary",
+      "evidence": [
+        "Built a claims severity model in scikit-learn and compared it against the existing actuarial baseline."
+      ],
+      "original": "Built a claims severity model in scikit-learn and compared it against the existing actuarial baseline.",
+      "bullet": "Built a deep learning claims severity model and compared it against the actuarial baseline.",
+      "label": "adds_unsupported",
+      "rationale": "A scikit-learn model is not evidence of deep learning; a specific method the cite does not support.",
+      "negation": false,
+      "touches_numbers": false
+    },
+    {
+      "id": "bd_original_not_evidence",
+      "profile": "software_engineering_metric_poor_ana_sokolova",
+      "category": "boundary",
+      "evidence": [
+        "Documented the deployment steps so the next intern could run a release unaided."
+      ],
+      "original": "Automated the release process so the next intern could deploy unaided.",
+      "bullet": "Automated the release process so the next intern could deploy unaided.",
+      "label": "adds_unsupported",
+      "rationale": "The original (not evidence) says 'automated'; the cite says only documented.",
+      "negation": true,
+      "touches_numbers": false
+    },
+    {
+      "id": "bd_specific_algorithm",
+      "profile": "data_science_metric_poor_tomas_iversen",
+      "category": "boundary",
+      "evidence": [
+        "Explored policyholder segments with clustering and summarized what distinguished them for the pricing team."
+      ],
+      "original": "Explored policyholder segments with clustering and summarized what distinguished them for the pricing team.",
+      "bullet": "Segmented policyholders with k-means clustering and summarized what distinguished them for the pricing team.",
+      "label": "adds_unsupported",
+      "rationale": "'Clustering' does not name k-means.",
+      "negation": false,
+      "touches_numbers": false
+    }
+  ]
+}
