@@ -84,6 +84,9 @@ Call `execute_plan({program})`. Read the result:
 - `nodes[].status`:
   - `accepted` and `kept` went in.
   - `reverted` failed ART's acceptance rule; `reason` says which gate, guard or target.
+    A `consistency` gate reason lists the numbers, dates or names in your bullet that its
+    cited source bullets don't contain. Use only figures and names the evidence states
+    (`1,000,000` for `1M` is fine); don't derive new ones ("4x") from other figures.
   - `refused` never ran: an unknown key, an unresolvable cite, or a crossed hard
     preference. It also covers `tombstoned`, which names or cites an item the user
     deleted (don't bring it back), and `negative_pin`, a bullet that mentions a fact the

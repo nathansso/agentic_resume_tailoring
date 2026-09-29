@@ -12,7 +12,9 @@ are unaffected.
 `tests/test_harness_boundary.py` walks the import graph to enforce it.
 """
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from decimal import Decimal
+from functools import lru_cache
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from agents.ats_scorer import ATSScoringEngine
 from agents.skill_scorer import _env_float, _env_int
@@ -652,3 +654,426 @@ def _cut_hints(exps: List[Dict], projs: List[Dict],
         hints.append(hint)
         freed += hint["frees"]
     return hints
+
+
+# ── numeric and entity consistency (issue #123) ──────────────────────────────
+#
+# A tailored bullet may not contain a number, date, duration, money or scale
+# figure, or a proper noun / technology name, that its evidence does not. Regex
+# and word lists only: no model, no calibration. (The semantic half of
+# faithfulness is #193's Jev check; Jev is documented weak on numbers, so the
+# numerals are owned here.)
+#
+# Both sides go through the same extraction, so an odd token (3D, GPT-4)
+# cancels itself. Strict by design: a gate that is too strict is at least
+# visible. Known strictness, recorded rather than hidden:
+#   - a derivation ("200 to 800 users" -> "4x growth") is flagged;
+#   - `one` and `zero` written as words are never claims in a bullet (too many
+#     idioms: "one of", "zero-downtime"), and a number word hyphenated into a
+#     compound ("three-tier") is not one either. The evidence side reads them
+#     all, so "three-tier" supports "3-tier";
+#   - "a dozen", "half" and fractions in words are not read.
+
+_UNITS = {w: i for i, w in enumerate(
+    "zero one two three four five six seven eight nine ten eleven twelve thirteen "
+    "fourteen fifteen sixteen seventeen eighteen nineteen".split())}
+_TENS = {w: 10 * (i + 2) for i, w in enumerate(
+    "twenty thirty forty fifty sixty seventy eighty ninety".split())}
+_SCALES = {"hundred": 100, "thousand": 10**3, "million": 10**6, "billion": 10**9,
+           "trillion": 10**12}
+_NUMWORD = "|".join(sorted([*_UNITS, *_TENS, *_SCALES], key=len, reverse=True))
+_WORD_RUN = re.compile(
+    rf"(?<![A-Za-z])(?:{_NUMWORD})(?:(?:[\s-]+(?:and\s+)?|\s+and\s+)(?:{_NUMWORD}))*(?![A-Za-z])",
+    re.I)
+_A_SCALE = re.compile(r"\b[Aa](?=\s+(?:hundred|thousand|million|billion|trillion)\b)")
+_COMPOUND_UNIT = re.compile(r"-(?:second|minute|hour|day|week|month|year|percent)", re.I)
+
+
+def _parse_word_run(run: str) -> Optional[int]:
+    """`twenty-five` -> 25, `two million` -> 2000000; None when the words do
+    not compose into one number (`three four`)."""
+    total = cur = 0
+    prev = None                     # unit | teen | tens | hundred | scale
+    for w in re.split(r"[\s-]+", run.lower()):
+        if w == "and":
+            continue
+        if w in _UNITS:
+            v = _UNITS[w]
+            kind = "teen" if v >= 10 else "unit"
+            if prev in ("unit", "teen") or (prev == "tens" and kind != "unit") \
+                    or (v == 0 and prev is not None):
+                return None
+            cur += v
+            prev = kind
+        elif w in _TENS:
+            if prev in ("unit", "teen", "tens"):
+                return None
+            cur += _TENS[w]
+            prev = "tens"
+        elif w == "hundred":
+            if prev in ("hundred", "scale"):
+                return None
+            cur = (cur or 1) * 100
+            prev = "hundred"
+        else:
+            total += (cur or 1) * _SCALES[w]
+            cur = 0
+            prev = "scale"
+    return total + cur
+
+
+def _words_to_digits(text: str, *, generous: bool) -> Tuple[str, List[Tuple[int, int, int, int]]]:
+    """Rewrite number words as digits, returning the new text and the
+    replacements as `(new_start, new_end, old_start, old_end)` so a claim can be
+    reported as the user wrote it. `generous` (the evidence side) also reads
+    `one`, `zero` and hyphenated compounds; the bullet side leaves them."""
+    edits: List[Tuple[int, int, str]] = [(m.start(), m.end(), "1") for m in _A_SCALE.finditer(text)]
+    for m in _WORD_RUN.finditer(text):
+        run = m.group(0)
+        if run.split()[0].lower() in _SCALES:
+            continue                # `1 million`: the digit and scale word read natively
+        if not generous:
+            if run.lower() in ("one", "zero"):
+                continue
+            after, before = text[m.end():], text[max(0, m.start() - 1):m.start()]
+            if (after.startswith("-") and not _COMPOUND_UNIT.match(after)) or before == "-":
+                continue
+        n = _parse_word_run(run)
+        if n is not None:
+            edits.append((m.start(), m.end(), str(n)))
+    out, spans, last, shift = [], [], 0, 0
+    for s, e, new in sorted(edits):
+        if s < last:
+            continue
+        out.append(text[last:s])
+        out.append(new)
+        spans.append((s + shift, s + shift + len(new), s, e))
+        shift += len(new) - (e - s)
+        last = e
+    out.append(text[last:])
+    return "".join(out), spans
+
+
+def _to_old(spans: List[Tuple[int, int, int, int]], pos: int, end: bool) -> int:
+    """Map an offset in the digit-rewritten text back to the original."""
+    delta = 0
+    for ns, ne, os_, oe in spans:
+        if ne <= pos:
+            delta = oe - ne
+        elif ns < pos or (ns == pos and not end):
+            return oe if end else os_
+    return pos + delta
+
+
+_MONTHS = {m: i + 1 for i, m in enumerate(
+    "jan feb mar apr may jun jul aug sep oct nov dec".split())}
+_DATE = re.compile(
+    r"(?<![A-Za-z])(?P<mon>jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|"
+    r"aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+"
+    r"(?:\d{1,2}(?:st|nd|rd|th)?,?\s+)?(?P<year>(?:19|20)\d{2})(?!\d)", re.I)
+_RATIO = re.compile(r"(?<![\w./])\d+/\d+(?![\w/])")
+_NUM = r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?"
+_CLAIM = re.compile(rf"(?<![A-Za-z0-9_./])(?<![A-Za-z]-)(?P<cur>[$€£]\s?)?(?P<num>{_NUM})")
+_NEXT = re.compile(r"[\s-]?(?P<w>%|[A-Za-z×µ]+)")
+
+_SCALE_WORDS = {"hundred": 100, "thousand": 10**3, "million": 10**6, "billion": 10**9, "trillion": 10**12,
+                "k": 10**3, "mn": 10**6, "bn": 10**9}
+_TIME_S = {"ms": Decimal("0.001"), "msec": Decimal("0.001"), "millisecond": Decimal("0.001"),
+           "milliseconds": Decimal("0.001"),
+           "s": 1, "sec": 1, "secs": 1, "second": 1, "seconds": 1,
+           "min": 60, "mins": 60, "minute": 60, "minutes": 60,
+           "h": 3600, "hr": 3600, "hrs": 3600, "hour": 3600, "hours": 3600,
+           "d": 86400, "day": 86400, "days": 86400, "wk": 604800, "week": 604800,
+           "weeks": 604800, "mo": 2629800, "month": 2629800, "months": 2629800,
+           "yr": 31557600, "yrs": 31557600, "year": 31557600, "years": 31557600}
+_BYTES = {"kb": 10**3, "mb": 10**6, "gb": 10**9, "tb": 10**12, "pb": 10**15,
+          "kilobyte": 10**3, "kilobytes": 10**3, "megabyte": 10**6, "megabytes": 10**6,
+          "gigabyte": 10**9, "gigabytes": 10**9, "terabyte": 10**12, "terabytes": 10**12}
+_PERIODS = {"s": "second", "sec": "second", "second": "second", "min": "minute",
+            "minute": "minute", "h": "hour", "hr": "hour", "hour": "hour", "day": "day",
+            "wk": "week", "week": "week", "month": "month", "mo": "month", "year": "year",
+            "yr": "year"}
+_RATE = re.compile(r"\s?(?:(?P<noun>[A-Za-z]+)\s?)?(?:/|\bper\s+)\s?(?P<per>[A-Za-z]+)", re.I)
+_RATE_ABBR = re.compile(r"\s?(?:qps|rps|tps|eps)\b", re.I)
+
+
+def _fmt(d: Decimal) -> str:
+    return format(d.normalize(), "f")
+
+
+def extract_claims(text: str, *, generous: bool = False) -> List[Tuple[int, str, str]]:
+    """Numeric claims in `text` as `(position, canonical key, surface)`.
+
+    Keys make reformatting collapse: `1,000,000` = `1M` = `1 million` = `one
+    million`; `2 years` = `24 months`; `40k requests/min` = `40,000 requests per
+    minute`; `$5M` = `5 million dollars`. Kinds: `amt` (a bare number and money
+    share it: `5M` supports `$5M`), `pct`, `time` (in seconds), `bytes`, `x`
+    (multiplier), `rate:<period>`, `ord`, `ratio` and `date`. Position and
+    surface refer to the original `text`. Sorted by position.
+    """
+    src, spans = _words_to_digits(text, generous=generous)
+    found: List[Tuple[int, int, str]] = []            # (start, end, key) in `src`
+
+    def blank(pattern, key_of):
+        nonlocal src
+        for m in list(pattern.finditer(src)):
+            found.append((m.start(), m.end(), key_of(m)))
+        src = pattern.sub(lambda m: " " * (m.end() - m.start()), src)
+
+    # Dates and ratios first, blanked so their parts are not also bare numbers.
+    blank(_DATE, lambda m: f"date:{m.group('year')}-{_MONTHS[m.group('mon')[:3].lower()]:02d}")
+    blank(_RATIO, lambda m: f"ratio:{m.group(0)}")
+
+    for m in _CLAIM.finditer(src):
+        value = Decimal(m.group("num").replace(",", ""))
+        end = m.end()
+        nxt = _NEXT.match(src, end)
+        if nxt:
+            w = nxt.group("w")
+            scale = None
+            if w.lower() in _SCALE_WORDS:
+                scale = _SCALE_WORDS[w.lower()]
+            elif w in ("M", "B", "MM"):
+                scale = 10**9 if w == "B" else 10**6
+            if scale:
+                value *= scale
+                end = nxt.end()
+        kind = "amt"
+        nxt = _NEXT.match(src, end)
+        w = nxt.group("w").lower() if nxt else ""
+        rate = _RATE.match(src, end)
+        abbr = _RATE_ABBR.match(src, end)
+        attached = bool(nxt) and nxt.group(0)[0] not in " -"
+        if w in ("%", "percent", "pct", "percentage"):
+            kind, end = "pct", nxt.end()
+        elif w in _BYTES:
+            # `50GB/day` and `50GB of daily data` are one claim: the period is
+            # not compared for data sizes.
+            value *= _BYTES[w]
+            kind, end = "bytes", nxt.end()
+        elif rate and rate.group("per").lower() in _PERIODS and not m.group("cur"):
+            kind, end = f"rate:{_PERIODS[rate.group('per').lower()]}", rate.end()
+        elif abbr:
+            kind, end = "rate:second", abbr.end()
+        elif w in ("x", "×", "fold", "times") and not (
+                w == "x" and src[nxt.end():nxt.end() + 1].isalpha()):
+            kind, end = "x", nxt.end()
+        elif w in _TIME_S and (len(w) > 1 or attached):
+            value *= Decimal(_TIME_S[w])
+            kind, end = "time", nxt.end()
+        elif w in ("st", "nd", "rd", "th") and attached:
+            kind, end = "ord", nxt.end()
+        elif w in ("dollars", "dollar", "usd", "bucks"):
+            end = nxt.end()
+        found.append((m.start(), end, f"{kind}:{_fmt(value)}"))
+
+    out = []
+    for s, e, key in sorted(found):
+        os_, oe = _to_old(spans, s, False), _to_old(spans, e, True)
+        out.append((os_, key, text[os_:oe].strip()))
+    return out
+
+
+# Proper nouns and technology names ------------------------------------------
+#
+# What is flagged (each must be absent from the evidence, case-insensitively,
+# after plural stripping, compound splitting and the alias groups below):
+#   1. a known technology name from _TECH, in any case and any position;
+#   2. an ALL-CAPS acronym that is not a generic one (_GENERIC_ACRONYMS);
+#   3. a name with a capital inside it (PyTorch, GitHub, iOS) or with a digit or
+#      symbol (S3, p99, GPT-4, C++, C#, Node.js, .NET);
+#   4. a Capitalised word in mid-sentence.
+# What is not: the first word of the bullet or of a sentence (`. ! ? : ;` or an
+# opening bracket or quote before it), so a capitalised verb never trips it;
+# any Capitalised word when the bullet is headline-cased (most content words
+# capitalised, where the signal means nothing); single letters; and the generic
+# capitalised words in _GENERIC_WORDS (months, seniority, role and org words).
+# Precision over recall: a lowercase name outside _TECH ("we used kafka") is
+# missed, and so is a fabricated employer that is not capitalised.
+
+_TECH = frozenset("""
+kafka docker kubernetes k8s terraform ansible jenkins airflow hadoop hive snowflake redshift
+bigquery databricks dbt postgres postgresql mysql mongodb redis elasticsearch cassandra dynamodb
+sqlite pytorch tensorflow keras sklearn scikit-learn xgboost lightgbm numpy pandas scipy
+matplotlib seaborn tableau powerbi react angular vue svelte nextjs django fastapi graphql grpc
+rabbitmq nginx aws gcp azure s3 ec2 kinesis langchain openai huggingface bert gpt llama git
+github gitlab jira linux bash typescript javascript golang oracle salesforce sap kotlin
+tensorrt onnx mlflow kubeflow prometheus grafana datadog splunk elk pyspark jupyter numba
+sqlalchemy pytest junit selenium cypress webpack vite redux tailwind bootstrap flask
+""".split())
+
+_GENERIC_ACRONYMS = frozenset("""
+api apis etl elt ml ai nlp ci cd qa ui ux kpi kpis roi okr okrs sla slas sdlc crud rest gui cli
+sdk sdks oop mvp pr prs it hr us usa uk eu phd bs ms ba gpa ceo cto cfo faq seo b2b b2c saas
+url http https json xml html css csv pdf sql dsa cv ip os ide llm llms gpu gpus cpu cpus ram
+ocr eda etc vs pm hipaa gdpr soc pii tdd bi ab ok id ids vp svp devops mlops dataops arr mrr gmv cagr yoy
+gb mb kb tb pb qps rps tps eps usd ms mm
+""".split())
+
+_GENERIC_WORDS = frozenset("""
+i a an the and or of in on at to for with by as is are was were be it its this that these those
+january february march april may june july august september october november december
+monday tuesday wednesday thursday friday saturday sunday spring summer fall autumn winter
+senior junior lead principal staff intern interns engineer engineers developer developers
+manager director analyst scientist team teams data machine learning software cloud full stack
+front end back systems system university college institute school department association club
+society lab labs company group inc llc ltd corp research applied associate assistant head chief
+president vice project projects program programs product products platform platforms
+jan feb mar apr jun jul aug sep sept oct nov dec
+""".split())
+
+# Groups whose members support one another: if any member is in the evidence,
+# all of them are.
+_ALIASES = [
+    ("js", "javascript"), ("ts", "typescript"), ("k8s", "kubernetes"),
+    ("postgres", "postgresql", "psql"), ("mongo", "mongodb"), ("tf", "tensorflow"),
+    ("sklearn", "scikit-learn", "scikit learn"), ("np", "numpy"), ("pd", "pandas"),
+    ("node", "nodejs", "node.js"), ("react", "reactjs", "react.js"),
+    ("vue", "vuejs", "vue.js"), ("golang", "go"), ("py", "python"),
+    ("aws", "amazon web services"), ("gcp", "google cloud", "google cloud platform"),
+    ("gh", "github"), ("bq", "bigquery"), ("pyspark", "spark"),
+]
+
+_TOKEN = re.compile(r"\.?[A-Za-z][A-Za-z0-9]*(?:[+#]+|(?:[.\-][A-Za-z0-9]+)*)")
+_SENTENCE_START = re.compile(r"(?:^|[.!?:;(\[\"'“‘—–•*\-])\s*$")
+_HEADLINE_FILLER = frozenset("and of the for with to in on at by a an or as".split())
+_SYMBOLIC = re.compile(r"\d|[+#]|^\.|\.(?:js|net|io|py|ai)$", re.I)
+
+
+def _singular(w: str) -> str:
+    return w[:-1] if len(w) > 3 and w.endswith("s") and not w.endswith("ss") else w
+
+
+def _full_forms(token: str) -> set:
+    """The lowercase spellings under which the whole of `token` is present."""
+    t = token.lower().strip(".")
+    return {f for f in (t, _singular(t), t.replace("-", ""), t.replace(".", ""),
+                        t.replace("-", " ")) if f}
+
+
+@lru_cache(maxsize=4096)
+def _evidence_forms(text: str) -> "frozenset":
+    """Every lowercase token form in `text` (whole tokens, their hyphen and dot
+    parts, singulars), with the alias groups expanded."""
+    low = text.lower()
+    forms: set = set()
+    for tok in _TOKEN.findall(text):
+        forms |= _full_forms(tok)
+        forms |= {_singular(p) for p in re.split(r"[-./]", tok.lower()) if len(p) > 1}
+    for group in _ALIASES:
+        if any((m in forms) or (" " in m and m in low) for m in group):
+            for member in group:
+                forms |= _full_forms(member)
+                forms |= {p for p in member.split() if len(p) > 1}
+    return frozenset(forms)
+
+
+_DERIVED = re.compile(r"(?:ization|isation|izing|ising|ized|ised|ize|ise|ing|ed|ers|er|s)$")
+
+
+def _supported_term(token: str, forms: "frozenset") -> bool:
+    if _full_forms(token) & forms:
+        return True
+    # "Dockerized" asserts Docker, not a new name.
+    root = _DERIVED.sub("", token.lower())
+    if len(root) >= 4 and root != token.lower() and _full_forms(root) & forms:
+        return True
+    # A specific database supports the generic word ("PostgreSQL" -> "SQL").
+    return token.lower() == "sql" and any(f.endswith("sql") or f.startswith("sql") for f in forms)
+
+
+def _entity_candidates(text: str) -> List[Tuple[int, str]]:
+    """`(position, name)` for each proper noun or technology name the bullet
+    asserts, by the rules in the block comment above."""
+    toks = list(_TOKEN.finditer(text))
+    content = [m.group(0) for m in toks
+               if len(m.group(0)) > 2 and m.group(0).lower() not in _HEADLINE_FILLER]
+    # Headline case is judged on plain Capitalised words only: a bullet that
+    # lists technologies ("Kafka, PyTorch, AWS") is not headline-cased.
+    plain = sum(t[0].isupper() and t[1:].islower() and t.lower() not in _TECH for t in content)
+    headline = len(content) >= 4 and plain / len(content) > 0.6
+    shouting = len(content) >= 3 and sum(t.isupper() for t in content) / len(content) > 0.6
+    out: List[Tuple[int, str]] = []
+    for m in toks:
+        tok = m.group(0)
+        # `Kafka-based` asserts Kafka; `scikit-learn` and `GPT-4` are one name.
+        name = tok if _SYMBOLIC.search(tok) or tok.lower() in _TECH else tok.split("-")[0]
+        low = name.lower().strip(".")
+        if len(low) < 2 and not re.search(r"[+#]", name):
+            continue
+        is_tech = low in _TECH
+        if low in _GENERIC_WORDS or (low in _GENERIC_ACRONYMS and not is_tech):
+            continue
+        upper = name.isupper() and name.isalpha() and not shouting
+        camel = bool(re.search(r"[a-z][A-Z]", name))
+        symbolic = bool(_SYMBOLIC.search(name)) and (name[0].isalpha() or name[0] == ".")
+        initial = _SENTENCE_START.search(text[:m.start()]) is not None
+        capital = (name[0].isupper() and not name.isupper() and not initial and not headline)
+        if is_tech or upper or camel or symbolic or capital:
+            out.append((m.start(), name))
+    return out
+
+
+def unsupported_tokens(bullet: str, evidence: Sequence[str]) -> List[str]:
+    """The tokens of `bullet` that `evidence` (a list of source texts) does not
+    support: numbers, dates, durations, money and scale, and proper nouns and
+    technology names, in order of appearance, each once, as the bullet wrote
+    them. Empty when the bullet is fully supported."""
+    joined = " \n ".join(e for e in evidence if e)
+    have = {k for _, k, _ in extract_claims(joined, generous=True)}
+    forms = _evidence_forms(joined)
+    found: List[Tuple[int, str, str]] = [
+        (pos, key, surface) for pos, key, surface in extract_claims(bullet) if key not in have]
+    found += [(pos, tok.lower(), tok) for pos, tok in _entity_candidates(bullet)
+              if not _supported_term(tok, forms)]
+    out, seen = [], set()
+    for _, key, surface in sorted(found):
+        if key not in seen:
+            seen.add(key)
+            out.append(surface)
+    return out
+
+
+def cite_evidence(cite: str, source_bullets: Dict[str, List[str]]) -> List[str]:
+    """The text a cite (`<key>#b<n>`, or a bare `<key>`) points at."""
+    cite = (cite or "").strip().lower()
+    key, sep, idx = cite.rpartition("#b")
+    if sep and idx.isdigit() and key in source_bullets:
+        rows = source_bullets[key]
+        return [rows[int(idx)]] if int(idx) < len(rows) else []
+    if cite in source_bullets:
+        return list(source_bullets[cite])
+    # A skill, or an item with no source bullets: the name is all the evidence.
+    return [cite.split(":", 1)[-1].replace("|", " ")] if ":" in cite else []
+
+
+def consistency_check(content: Dict, source_bullets: Dict[str, List[str]]) -> List[Tuple[str, str, List[str]]]:
+    """`(item key, bullet, unsupported tokens)` for every experience and project
+    bullet that asserts something its evidence does not.
+
+    A bullet is checked against its **cited** evidence only: the text of the
+    source bullets its cites resolve to, plus its own item's source bullets and
+    header (title, company, name, dates). Never the whole profile. A bullet that
+    is verbatim one of its item's source bullets is skipped, and so is a bullet
+    with no cites (the citations gate's job).
+    """
+    out: List[Tuple[str, str, List[str]]] = []
+    for section, key_fn in (("experiences", exp_key), ("projects", proj_key)):
+        for item in content.get(section) or []:
+            key = key_fn(item)
+            own = source_bullets.get(key, [])
+            own_norm = {" ".join(b.split()) for b in own}
+            cites = item.get("cites") if isinstance(item.get("cites"), dict) else {}
+            header = [str(item.get(f) or "") for f in
+                      ("title", "company", "name", "start_date", "end_date")]
+            for b in item.get("bullets") or []:
+                named = cites.get(b) or []
+                if not (b or "").strip() or not named or " ".join(b.split()) in own_norm:
+                    continue
+                evidence = header + list(own)
+                for c in named:
+                    evidence += cite_evidence(c, source_bullets)
+                bad = unsupported_tokens(b, evidence)
+                if bad:
+                    out.append((key, b, bad))
+    return out

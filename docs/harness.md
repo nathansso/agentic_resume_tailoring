@@ -255,7 +255,18 @@ metric vector and the rule, and `harness/executor.py` runs it. The details:
     source bullet nor cited, or that cites something that doesn't resolve or that the
     user deleted.
   - Arbitration refuses a `tombstoned_cite` or `tombstoned` item with that reason.
-  - Lexical drift (`faithfulness`) stays a hard gate alongside it until #123 lands.
+  - Lexical drift (`faithfulness`) stays a hard gate alongside it. #123 has landed, but
+    removing drift is a separate decision.
+- **Consistency (#123).** The `consistency` hard gate is model-free
+  (`agents/checks.py::consistency_check`). Every number, percentage, date, duration,
+  money or scale figure, and every proper noun or technology name, in a *cited* bullet
+  must appear in its cited evidence: the source bullets its cites resolve to, plus its
+  own item's source bullets and header. A number elsewhere in the profile does not count.
+  - Reformatting normalizes (`1,000,000` = `1M` = `one million`, `2 years` = `24
+    months`, `40k requests/min` = `40,000 requests per minute`).
+  - It is strict on derivations: "200 to 800 users" does not license "4x growth".
+  - Verbatim source bullets and uncited bullets are skipped; the latter are the citations
+    gate's job. Violations are `consistency:<short bullet>:<token>`.
 - **Negative pins (#198).** A strength-5 suppression by term (not by key) is a fact that
   must never render.
   - A revise or replace whose bullets mention it is refused, even when cited.

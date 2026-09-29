@@ -16,7 +16,7 @@ import re
 from typing import Dict, List, Optional
 
 from agents.ats_scorer import ATSScoringEngine
-from agents.checks import relevance_density
+from agents.checks import consistency_check, relevance_density
 from agents.redundancy import redundancy_report
 from agents.skill_selection import skill_names
 from agents.skill_scorer import MAX_SKILLS, MIN_SKILLS
@@ -204,6 +204,32 @@ def redundancy_metrics(tailored_content: Dict, encoder=None) -> Dict:
     }
 
 
+# ── consistency ────────────────────────────────────────────────────────────────
+
+def consistency_metrics(tailored_content: Dict, source_bullets: Dict[str, List[str]]) -> Dict:
+    """Numeric and entity consistency of the cited bullets (issue #123).
+
+    The same model-free check the executor gates on
+    (`agents.checks.consistency_check`): every number, date, duration, money or
+    scale figure and proper noun / technology name in a cited bullet must appear
+    in its cited evidence. `source_bullets` maps item key -> KG source bullets.
+    Reported on its own, never folded into another number: `unsupported_tokens`
+    is the count a run should hold at zero.
+    """
+    flagged = consistency_check(tailored_content, source_bullets)
+    checked = 0
+    for section in ("experiences", "projects"):
+        for item in tailored_content.get(section) or []:
+            cites = item.get("cites") if isinstance(item.get("cites"), dict) else {}
+            checked += sum(1 for b in item.get("bullets") or [] if cites.get(b))
+    return {
+        "cited_bullets": checked,
+        "flagged_bullets": len(flagged),
+        "unsupported_tokens": sum(len(t) for _, _, t in flagged),
+        "flagged": [{"item": k, "bullet": b, "tokens": t} for k, b, t in flagged],
+    }
+
+
 # ── ATS summary ────────────────────────────────────────────────────────────────
 
 def ats_summary(baseline_breakdown: Dict, tailored_breakdown: Dict) -> Dict:
@@ -243,15 +269,21 @@ def compute_task_metrics(
     baseline_breakdown: Dict,
     tailored_breakdown: Dict,
     encoder=None,
+    source_bullets: Optional[Dict[str, List[str]]] = None,
 ) -> Dict:
     """All metric families for one benchmark task, as one JSON-serializable dict.
 
     `encoder` reaches only the redundancy family, which is the sole family with
-    a model dependency (issue #122). None on stub runs.
+    a model dependency (issue #122). None on stub runs. `source_bullets` (item
+    key -> KG source bullets) adds the `consistency` family (#123), and only
+    when given: the legacy tailor path records no cites to check against.
     """
-    return {
+    out = {
         "ats": ats_summary(baseline_breakdown, tailored_breakdown),
         "experience_allocation": experience_allocation(tailored_content, jd_text),
         "skills": skills_metrics(tailored_content, matched_skills, total_profile_skills),
         "redundancy": redundancy_metrics(tailored_content, encoder=encoder),
     }
+    if source_bullets is not None:
+        out["consistency"] = consistency_metrics(tailored_content, source_bullets)
+    return out

@@ -3,8 +3,8 @@
 Tailoring metrics stay separate and are never combined into one number. Each
 has a role:
 
-- **Hard gates** (`preferences`, `faithfulness`, `citations`, `bullet_lines`): an
-  action may not *introduce* a violation. Gates are compared as sets, so a parent that
+- **Hard gates** (`preferences`, `faithfulness`, `citations`, `bullet_lines`,
+  `consistency`): an action may not *introduce* a violation. Gates are compared as sets, so a parent that
   already violates one does not block every later node; the finalize step is
   where remaining violations stop a commit.
 - **Guards** (`stuffing`, `verb_entropy`, `mtld`, `duplication`): may not
@@ -27,7 +27,8 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set
 
 from agents.ats_scorer import ATSScoringEngine
 from agents.checks import (
-    bullet_line_violations, exp_key, faithfulness_drift, proj_key, relevance_density,
+    bullet_line_violations, consistency_check, exp_key, faithfulness_drift, proj_key,
+    relevance_density,
 )
 from agents.redundancy import (
     bullet_texts as all_bullets, bullet_tokens, leading_verb_entropy, mtld,
@@ -36,7 +37,7 @@ from agents.redundancy import (
 
 TARGETS = ("coverage", "relevance_density")
 GUARDS = ("stuffing", "verb_entropy", "mtld", "duplication")
-GATES = ("preferences", "faithfulness", "citations", "bullet_lines")
+GATES = ("preferences", "faithfulness", "citations", "bullet_lines", "consistency")
 
 # How far each guard may move in its bad direction before an action is
 # reverted. Provisional: #127 fits these per guard on the human anchor set and
@@ -171,6 +172,22 @@ def citation_violations(content: Dict, ctx: Context) -> List[str]:
     return sorted(set(out))
 
 
+def consistency_violations(content: Dict, ctx: Context) -> List[str]:
+    """Numbers, dates, money, durations and names a cited bullet asserts that
+    its cited evidence does not (#123): `consistency:<short bullet>:<token>`.
+
+    Model-free (`agents/checks.consistency_check`). A bullet is compared with
+    its cited source bullets and its own item's, never the whole profile.
+    Off without a cite checker, like the citations gate: a context built
+    outside the executor has no evidence to compare against.
+    """
+    if ctx.cite_status is None:
+        return []
+    return sorted({f"consistency:{_short(b, 40)}:{tok}"
+                   for _, b, toks in consistency_check(content, ctx.source_bullets)
+                   for tok in toks})
+
+
 def _max_pair_jaccard(bullets: Sequence[str]) -> float:
     """Model-free duplication: the most similar pair of bullets by token set.
 
@@ -202,6 +219,7 @@ def metric_vector(content: Dict, ctx: Context) -> Dict[str, Any]:
         "citations": citation_violations(content, ctx),
         "bullet_lines": (None if lines is None else sorted(
             v["bullet"] for v in bullet_line_violations(lines, ctx.max_bullet_lines))),
+        "consistency": consistency_violations(content, ctx),
     }
     guards = {
         "stuffing": len(term_document_frequency(content)["stuffed_terms"]),
@@ -277,4 +295,4 @@ def accept(before: Dict, after: Dict, *, improves: Iterable[str] = (),
 
 
 __all__ = ["Context", "DEFAULT_TOLERANCES", "GATES", "GUARDS", "TARGETS", "accept",
-           "metric_vector", "preference_violations"]
+           "consistency_violations", "metric_vector", "preference_violations"]
