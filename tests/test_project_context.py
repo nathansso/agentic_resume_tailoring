@@ -198,7 +198,9 @@ def test_graph_edges(world, isolated_engine):
 
 def test_role_evidences_skill_through_its_project(world, isolated_engine):
     before = _graph(world).evidence_for_skills(["XGBoost"])
-    assert before == {"XGBoost": {"projects": ["idx_ds38"], "experiences": []}}
+    # Bullet provenance (#233) is additive: the project's description is its bullet 0.
+    assert before == {"XGBoost": {"projects": ["idx_ds38"], "experiences": [], "bullets": [
+        {"key": "proj:idx_ds38", "index": 0, "cite": "proj:idx_ds38#b0"}]}}
 
     pc.set_project_context(isolated_engine, world, "idx_ds38", IDX)
     after = _graph(world).evidence_for_skills(["XGBoost"])
