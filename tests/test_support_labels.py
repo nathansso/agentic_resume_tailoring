@@ -110,7 +110,7 @@ def _row(pid, label, p, jev=None, cat="boundary", **extra):
     jev = jev or label
     probs = {"supported": round(1 - p, 4), "adds_unsupported": p, "contradicts": 0.0}
     return {"id": pid, "label": label, "jev": jev, "category": cat, "probs": probs, "p_worst": p,
-            "p_sum": p, "negation": False, "touches_numbers": False, "evidence": ["e"], "original": None,
+            "p_max": p, "negation": False, "touches_numbers": False, "evidence": ["e"], "original": None,
             "bullet": "b", "rationale": "r", **extra}
 
 
@@ -137,7 +137,7 @@ def test_confusion_and_disagreements_and_the_alternative_score():
     assert [r["id"] for r in fit.disagreements(rows)] == ["b", "c"]
     assert [r["label"] for r in fit.relabelled_to_jev(rows)] == ["supported", "adds_unsupported", "contradicts"]
     assert [r["id"] for r in fit.agreed_only(rows)] == ["a"]
-    assert fit.rescored([{**rows[0], "p_sum": 0.7}])[0]["p_worst"] == 0.7
+    assert fit.rescored([{**rows[0], "p_max": 0.7}])[0]["p_worst"] == 0.7
 
 
 def test_the_analysis_matches_what_the_gate_computes(isolated_engine, monkeypatch):
@@ -150,6 +150,24 @@ def test_the_analysis_matches_what_the_gate_computes(isolated_engine, monkeypatc
                    "p": r["probs"][r["jev"]], "probabilities": r["probs"]}
         assert bool(support.violations([finding])) == (r["p_worst"] >= support.TAU_BLOCK), r["id"]
         assert bool(support.reviews([finding])) == (support.TAU_REVIEW <= r["p_worst"] < support.TAU_BLOCK), r["id"]
+
+
+def test_the_thresholds_in_support_py_are_the_fit_and_leave_headroom(isolated_engine, monkeypatch):
+    """`TAU_BLOCK` / `TAU_REVIEW` are what the analysis recommends from the confirmed labels, with
+    real headroom over the highest score of any supported pair, no false block, and no should-block
+    pair passing silently. A relabelled pair or a new recording that moves the fit fails this."""
+    from harness.decisions import support
+    _replay(monkeypatch)
+    rows = fit.run_pairs(PAIRS)
+    rec = fit.recommend(rows)
+    assert (support.TAU_BLOCK, support.TAU_REVIEW) == (rec["tau_block"], rec["tau_review"])
+    st = fit.block_stats(rows, support.TAU_BLOCK)
+    assert st["fp"] == 0 and st["by_label"]["contradicts"][0] == st["by_label"]["contradicts"][1]
+    assert support.TAU_BLOCK - rec["top_supported"]["p_worst"] >= 0.05
+    assert fit.band_stats(rows, support.TAU_REVIEW, support.TAU_BLOCK)["missed"] == 0
+    # The split-answer regression: contra_r_python (0.51 / 0.49) blocks under the sum score.
+    split = next(r for r in rows if r["id"] == "contra_r_python")
+    assert split["p_worst"] >= support.TAU_BLOCK > max(split["probs"]["adds_unsupported"], split["probs"]["contradicts"])
 
 
 def test_the_committed_review_file_is_current_and_lists_every_pair(isolated_engine, monkeypatch):

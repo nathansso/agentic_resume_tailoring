@@ -1,5 +1,5 @@
 {
-  "_comment": "Hand-proposed labelled (evidence, original, bullet) pairs for fitting the support check's thresholds (issue #237). Built only from the synthetic benchmark profiles in eval/profiles/ (never personal/); every evidence string is a verbatim source bullet. `label` is a PROPOSED label awaiting user review: supported | adds_unsupported | contradicts. `original` is the bullet being revised (shown to Jev as context, never evidence) and is null on some pairs. `negation` marks evidence that hinges on a negation (did not / without / rather than / no-op). `touches_numbers` marks pairs whose change touches a figure, which #123's regex gate also sees. Regenerate the report with `python eval/fit_support_threshold.py analyze`.",
+  "_comment": "Hand-proposed labelled (evidence, original, bullet) pairs for fitting the support check's thresholds (issue #237). Built only from the synthetic benchmark profiles in eval/profiles/ (never personal/); every evidence string is a verbatim source bullet. `label` is the user-confirmed label (reviewed 2026-09-29 from REVIEW.md; rw_dependency_free was corrected from supported to adds_unsupported): supported | adds_unsupported | contradicts. `original` is the bullet being revised (shown to Jev as context, never evidence) and is null on some pairs. `negation` marks evidence that hinges on a negation (did not / without / rather than / no-op). `touches_numbers` marks pairs whose change touches a figure, which #123's regex gate also sees. Regenerate the report with `python eval/fit_support_threshold.py analyze`.",
   "version": 1,
   "labels": [
     "supported",
@@ -178,14 +178,14 @@
     {
       "id": "rw_dependency_free",
       "profile": "software_engineering_metric_poor_ana_sokolova",
-      "category": "faithful_rewording",
+      "category": "boundary",
       "evidence": [
         "TypeScript library for building validated forms with no runtime dependency."
       ],
       "original": "TypeScript library for building validated forms with no runtime dependency.",
       "bullet": "Built a dependency-free TypeScript library for validated forms.",
-      "label": "supported",
-      "rationale": "'No runtime dependency' restated as 'dependency-free'.",
+      "label": "adds_unsupported",
+      "rationale": "Dropping 'runtime' widens the claim: 'dependency-free' also covers dev and build dependencies, which the cite does not.",
       "negation": true,
       "touches_numbers": false
     },

@@ -52,7 +52,8 @@ def test_the_question_is_versioned_and_offers_the_three_labels():
     assert QUESTION.version == "support@v1" and QUESTION.point == "support"
     assert set(QUESTION.options) == {"supported", "adds_unsupported", "contradicts"}
     assert "evidence" in QUESTION.instructions and "only what the bullet claims" in QUESTION.instructions
-    assert 0.0 < TAU_REVIEW < TAU_BLOCK <= 1.0 and TAU_BLOCK == 0.8      # provisional, named
+    assert 0.0 < TAU_REVIEW < TAU_BLOCK <= 1.0
+    assert (TAU_BLOCK, TAU_REVIEW) == (0.85, 0.35)       # fitted (#237); eval/support_labels/REPORT.md
 
 
 def test_the_synthetic_set_covers_weaves_inflation_invented_outcomes_and_contradictions():
@@ -116,6 +117,44 @@ def test_thresholds_block_at_tau_block_and_review_in_the_band():
     assert reviews([f("contradicts", TAU_BLOCK)]) == []          # blocked, not "review"
     assert violations([f("supported", 0.99)]) == [] and reviews([f("supported", 0.99)]) == []
     assert violations([f("contradicts", 0.99, status="unchecked")]) == []
+
+
+def _split(adds, contra, sup=None, pick=None):
+    probs = {"supported": round(1 - adds - contra, 4) if sup is None else sup,
+             "adds_unsupported": adds, "contradicts": contra}
+    pick = pick or max(probs, key=probs.get)
+    return {"item": KEY, "bullet": "b", "status": "checked", "label": pick, "p": probs[pick],
+            "probabilities": probs}
+
+
+def test_an_answer_split_across_the_blocking_labels_blocks_on_their_sum():
+    """`contra_r_python`: Jev said adds_unsupported 0.51 / contradicts 0.49. Each label alone is
+    under the threshold, but the bullet is not supported either way, so it blocks (#237)."""
+    split = _split(0.51, 0.49)
+    assert violations([split]) == [f'unsupported:{KEY}: "b"']       # the stronger label names it
+    assert violations([_split(0.40, 0.60)]) == [f'contradicts:{KEY}: "b"']
+    assert reviews([split]) == []                                     # blocked, not "review"
+    # Each label alone under the threshold, the sum over it.
+    assert 0.5 < TAU_BLOCK and max(0.51, 0.49) < TAU_BLOCK <= 0.51 + 0.49
+
+
+def test_a_supported_answer_does_not_block_and_a_hedged_one_lands_in_review():
+    assert violations([_split(0.04, 0.01)]) == [] and reviews([_split(0.04, 0.01)]) == []
+    assert violations([_split(0.15, 0.0)]) == [] and reviews([_split(0.15, 0.0)]) == []
+    hedged = _split(0.60, 0.0)                                         # p(supported) 0.4
+    assert violations([hedged]) == []
+    assert [r["label"] for r in reviews([hedged])] == ["adds_unsupported"]
+    assert reviews([hedged])[0]["p"] == 0.6
+    # The score is 1 - p(supported): rounding keeps 0.84 + 0.01 equal to 0.85.
+    assert violations([_split(0.84, 0.01)]) != [] and TAU_BLOCK == 0.85
+
+
+def test_a_finding_without_probabilities_is_scored_by_the_picks_p():
+    def f(label, p):
+        return {"item": KEY, "bullet": "b", "status": "checked", "label": label, "p": p,
+                "probabilities": None}
+    assert violations([f("contradicts", 0.9)]) != [] and violations([f("supported", 0.99)]) == []
+    assert violations([f("contradicts", None)]) == []
 
 
 # ── what is (not) sent to Jev ────────────────────────────────────────────────
@@ -253,7 +292,7 @@ def test_the_uncertain_band_is_surfaced_as_review_not_blocked(auto, env):
     node = out["nodes"][0]
     assert node["status"] == "accepted"
     assert node["review"] == [{"item": EXP2, "bullet": WOVEN[:79] + "…", "label": "adds_unsupported",
-                               "p": 0.55}]
+                               "p": 0.59}]        # 0.55 + 0.04: the score is 1 - p(supported)
     assert out["support"]["checked"] == 1 and out["support"]["review"] == node["review"]
     assert out["metrics"]["final"]["gates"]["faithfulness"] == []       # not a gate violation
 

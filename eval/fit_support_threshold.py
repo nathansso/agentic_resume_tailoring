@@ -2,9 +2,10 @@
 
 `harness/decisions/support.py` asks Jev, per revised bullet, how the cited
 evidence relates to the new text (`support@v1`) and turns the answer into three
-tiers with two thresholds: block at `p >= TAU_BLOCK`, verify at `p >= TAU_REVIEW`.
-Both shipped provisional (#193). This script fits them on
-`eval/support_labels/pairs.json`, hand-proposed labels over the synthetic
+tiers with two thresholds on a blocking score: block at `>= TAU_BLOCK`, verify at
+`>= TAU_REVIEW`. Both shipped provisional (#193) and were set from this fit
+(#237). The script fits them on
+`eval/support_labels/pairs.json`, hand-labelled pairs over the synthetic
 benchmark profiles:
 
     python eval/fit_support_threshold.py record     # live Jev, once, needs TYPESAFE_API_KEY
@@ -19,12 +20,13 @@ Re-running it hits that store's cache, so a pair is asked at most once.
 `analyze` imports the recordings into a fresh temporary store and runs every
 pair in `replay` mode: a miss raises, and the run refuses to report unless the
 hit rate is 100%. It writes `REPORT.md` (the numbers) and `REVIEW.md` (what the
-user reads to confirm or correct the proposed labels), so re-running it after a
+user reads to audit the labels), so re-running it after a
 label is corrected refits the thresholds without touching the API.
 
 The analysis mirrors the gate exactly: a pair's blocking score is
-`support._worst` (the blocking label with the most probability behind it), the
-same number `violations` and `reviews` compare with the thresholds.
+`support._worst`'s score, p(adds_unsupported) + p(contradicts), the same number
+`violations` and `reviews` compare with the thresholds. The labels in
+`pairs.json` were confirmed by the user after reviewing `REVIEW.md`.
 """
 
 from __future__ import annotations
@@ -53,6 +55,7 @@ BLOCKING_LABELS = ("adds_unsupported", "contradicts")
 GRID_BLOCK = [round(0.5 + 0.05 * i, 2) for i in range(10)]     # 0.50 .. 0.95
 GRID_REVIEW = [round(0.2 + 0.05 * i, 2) for i in range(9)]     # 0.20 .. 0.60
 HEADROOM = 0.05                     # tau_block sits one grid step above the worst supported pair
+PROVISIONAL = (0.80, 0.40)        # #193: shipped, scoring by the larger blocking label
 REVIEW_NOISE_LIMIT = 0.10           # at most this share of supported pairs may land in the review band
 
 
@@ -80,7 +83,7 @@ def result_row(pair: Dict[str, Any], answer) -> Dict[str, Any]:
     worst_label, worst_p = support._worst(support._finding(pair["id"], pair["bullet"], answer))
     probs = {l: float((answer.probabilities or {}).get(l, 0.0)) for l in LABELS}
     return {**pair, "jev": answer.value, "probs": probs, "p_worst": float(worst_p),
-            "p_sum": round(sum(probs[l] for l in BLOCKING_LABELS), 4),
+            "p_max": max(probs[l] for l in BLOCKING_LABELS),
             "worst_label": worst_label, "source": answer.source, "model": answer.model}
 
 
@@ -121,9 +124,9 @@ def disagreements(rows) -> List[Dict[str, Any]]:
     return [r for r in rows if r["label"] != r["jev"]]
 
 
-def rescored(rows, key: str = "p_sum"):
-    """The same rows scored by another blocking score (`p_sum`: p(adds_unsupported) + p(contradicts),
-    i.e. 1 - p(supported)), so every function below can be reused unchanged."""
+def rescored(rows, key: str = "p_max"):
+    """The same rows scored by another blocking score (`p_max`: the larger of the two blocking labels,
+    the score #193 shipped), so every function below can be reused unchanged."""
     return [{**r, "p_worst": r[key]} for r in rows]
 
 
@@ -163,11 +166,12 @@ def band_stats(rows, tau_review: float, tau_block: float) -> Dict[str, Any]:
 
 def recommend(rows) -> Dict[str, Any]:
     """tau_block: the lowest grid value one step above the highest blocking score on any
-    pair proposed `supported` (so no honest edit is refused, with a step of headroom);
+    pair labelled `supported` (so no honest edit is refused, with a step of headroom);
     when no grid value clears that, the lowest one with the fewest false blocks.
-    tau_review: the lowest grid value below tau_block whose review band holds at most
-    REVIEW_NOISE_LIMIT of the supported pairs, which is the most should-block pairs
-    surfaced for verification at a bounded cost in noise."""
+    tau_review: among grid values below tau_block whose review band holds at most
+    REVIEW_NOISE_LIMIT of the supported pairs, the one that surfaces the most
+    should-block pairs for verification, then the fewest supported ones, then the
+    lowest (the widest band, a hedge for the range no labelled pair scores in)."""
     supported = [r for r in rows if not should_block(r)]
     top = max(supported, key=lambda r: r["p_worst"]) if supported else None
     floor = (top["p_worst"] if top else 0.0) + HEADROOM
@@ -178,7 +182,9 @@ def recommend(rows) -> Dict[str, Any]:
         tau_block = min(GRID_BLOCK, key=lambda t: (block_stats(rows, t)["fp"], t))
     limit = math.floor(REVIEW_NOISE_LIMIT * len(supported))
     ok = [t for t in GRID_REVIEW if t < tau_block and band_stats(rows, t, tau_block)["supported"] <= limit]
-    tau_review = ok[0] if ok else round(tau_block / 2, 2)
+    tau_review = (min(ok, key=lambda t: (-band_stats(rows, t, tau_block)["should"],
+                                         band_stats(rows, t, tau_block)["supported"], t))
+                  if ok else round(tau_block / 2, 2))
     return {"tau_block": tau_block, "tau_review": tau_review, "top_supported": top,
             "cleared_headroom": bool(clear), "noise_limit": limit}
 
@@ -231,23 +237,24 @@ def render_report(rows, meta: Dict[str, Any]) -> str:
     o: List[str] = []
     o.append("# Support check: threshold fit (issue #237)\n")
     o.append("Generated by `python eval/fit_support_threshold.py analyze` from `pairs.json` and `recordings.json`. "
-             "**The labels are proposed, not confirmed**: read `REVIEW.md`, correct any label in `pairs.json`, "
-             "and re-run `analyze` before trusting any number below. `TAU_BLOCK` / `TAU_REVIEW` are unchanged.\n")
+             "The labels are the ones the user confirmed from `REVIEW.md`; correct a label in `pairs.json` and "
+             "re-run `analyze` to refit.\n")
     o.append(f"- Recorded {meta.get('recorded', 'n/a')} with model {', '.join(meta.get('models') or ['n/a'])}, "
              f"question `{meta.get('question', 'support@v1')}`; {n} pairs, replayed at "
              f"{meta.get('hit_rate', 'n/a')} cache hit rate.")
-    o.append(f"- Proposed labels: " + ", ".join(f"{l} {sum(r['label'] == l for r in rows)}" for l in LABELS)
-             + f". `should block` = proposed label is not `supported` ({st['n_should']}); supported = {st['n_supported']}.")
-    o.append(f"- Current provisional thresholds: `TAU_BLOCK` {cur_b}, `TAU_REVIEW` {cur_r}.")
-    o.append("- The blocking score of a pair is `support._worst`: the larger of p(adds_unsupported) and "
-             "p(contradicts). Block when it is `>= tau_block`; review when `tau_review <= score < tau_block`.\n")
+    o.append(f"- Labels: " + ", ".join(f"{l} {sum(r['label'] == l for r in rows)}" for l in LABELS)
+             + f". `should block` = label is not `supported` ({st['n_should']}); supported = {st['n_supported']}.")
+    o.append(f"- Thresholds now in `support.py`: `TAU_BLOCK` {cur_b}, `TAU_REVIEW` {cur_r} "
+             f"({'they match the fit below' if (cur_b, cur_r) == (tb, tr) else 'they differ from the fit below'}).")
+    o.append("- The blocking score of a pair is `support._worst`'s score: p(adds_unsupported) + p(contradicts), "
+             "i.e. 1 - p(supported). Block when it is `>= tau_block`; review when `tau_review <= score < tau_block`.\n")
 
     # recommendation
     top = rec["top_supported"]
     o.append("## Recommendation\n")
     o.append(f"**tau_block = {tb:.2f}, tau_review = {tr:.2f}.**\n")
     para = (f"A false block refuses an honest edit, so tau_block is set first from the supported pairs: the highest "
-            f"blocking score on any pair proposed `supported` is {top['p_worst']:.2f} (`{top['id']}`), and {tb:.2f} is "
+            f"blocking score on any pair labelled `supported` is {top['p_worst']:.2f} (`{top['id']}`), and {tb:.2f} is "
             f"the first grid value one step ({HEADROOM:.2f}) above it, so it blocks {st['fp']} of {st['n_supported']} "
             f"supported pairs" if top else "No supported pairs. ")
     if not rec["cleared_headroom"]:
@@ -262,19 +269,22 @@ def render_report(rows, meta: Dict[str, Any]) -> str:
     para += (f". At that value it blocks {st['tp']} of {st['n_should']} should-block pairs ({_pct(st['recall'])}): "
              f"contradicts {by['contradicts'][0]}/{by['contradicts'][1]}, adds_unsupported "
              f"{by['adds_unsupported'][0]}/{by['adds_unsupported'][1]}, at {_pct(st['precision'])} precision. "
-             f"tau_review = {tr:.2f} is the lowest value whose review band holds at most "
-             f"{rec['noise_limit']} supported pair(s) ({_pct(REVIEW_NOISE_LIMIT)} of {st['n_supported']}); "
-             f"it surfaces {bs['should']} more should-block pairs for the host to verify at the cost of "
+             f"tau_review = {tr:.2f} is the lowest value that surfaces the most should-block pairs for the fewest "
+             f"supported ones, within a cap of {rec['noise_limit']} supported pair(s) "
+             f"({_pct(REVIEW_NOISE_LIMIT)} of {st['n_supported']}); it surfaces {bs['should']} more should-block pairs for the host to verify at the cost of "
              f"{bs['supported']} supported one(s), leaving {bs['missed']} should-block pairs "
              f"({bs['missed_contradicts']} contradicts) passing silently. On the {len(negs)} negation pairs, "
              f"tau_block = {tb:.2f} blocks {neg_st['tp']}/{neg_st['n_should']} of the should-block ones with "
              f"{neg_st['fp']} false block(s). Jev's confidence is not calibrated, so these are cutoffs on this "
              f"model's scores on this set, not probabilities; refit whenever the model version or the question changes.")
     o.append(para + "\n")
-    o.append("### At the recommended and at the current thresholds\n")
+    o.append("### At the recommended thresholds and at the provisional ones\n")
     body = []
-    for name, (b, r_) in (("recommended", (tb, tr)), ("current", (cur_b, cur_r))):
-        s, bd = block_stats(rows, b), band_stats(rows, r_, b)
+    old = rescored(rows)
+    for name, rs, (b, r_) in (("recommended (sum score)", rows, (tb, tr)),
+                              ("in support.py (sum score)", rows, (cur_b, cur_r)),
+                              ("provisional #193 (max-label score)", old, PROVISIONAL)):
+        s, bd = block_stats(rs, b), band_stats(rs, r_, b)
         body.append([name, f"{b:.2f}", f"{r_:.2f}", f"{s['tp']}/{s['n_should']} ({_pct(s['recall'])})",
                      f"{s['by_label']['contradicts'][0]}/{s['by_label']['contradicts'][1]}",
                      f"{s['by_label']['adds_unsupported'][0]}/{s['by_label']['adds_unsupported'][1]}",
@@ -294,7 +304,7 @@ def render_report(rows, meta: Dict[str, Any]) -> str:
     if st["fp_ids"]:
         o.append(f"False blocks at tau_block {tb:.2f}: " + ", ".join(f"`{i}`" for i in st["fp_ids"]) + "\n")
     highest = sorted(sup, key=lambda r: -r["p_worst"])[:5]
-    o.append("Supported pairs Jev scores highest for a blocking label (the ones that set the floor):\n")
+    o.append("Supported pairs with the highest blocking score (the ones that set the floor):\n")
     o.append(_table(["id", "category", "Jev label", "blocking score", "scores"],
                     [[f"`{r['id']}`", r["category"], r["jev"], f"{r['p_worst']:.3f}", _probs(r)] for r in highest]))
     o.append("")
@@ -302,51 +312,53 @@ def render_report(rows, meta: Dict[str, Any]) -> str:
     o.append("## Sensitivity to label adjudication\n")
     o.append("The recommendation is set by the supported pairs with the highest blocking scores, and those are the "
              "pairs most likely to be mislabelled, so the same fit is repeated under other label sets. "
-             "`cross` disagreements are the ones where the proposed label and Jev sit on opposite sides of the "
-             "supported / blocking line. Current thresholds: recall / false blocks.\n")
+             "`cross` disagreements are the ones where the label and Jev sit on opposite sides of the "
+             "supported / blocking line.\n")
     body = []
-    for name, rs in (("labels as proposed", rows),
+    for name, rs in (("labels as confirmed", rows),
                      ("cross disagreements relabelled to Jev's answer", relabelled_to_jev(rows)),
                      ("agreed pairs only (disputed pairs dropped)", agreed_only(rows))):
         rc = recommend(rs)
         b_, r_ = rc["tau_block"], rc["tau_review"]
-        s_, bd_, cu = block_stats(rs, b_), band_stats(rs, r_, b_), block_stats(rs, cur_b)
+        s_, bd_ = block_stats(rs, b_), band_stats(rs, r_, b_)
+        cu = block_stats(rs, cur_b)
         body.append([name, len(rs), s_["n_should"], s_["n_supported"], f"{b_:.2f}", f"{r_:.2f}",
                      f"{s_['tp']}/{s_['n_should']}", f"{s_['fp']}/{s_['n_supported']}",
                      f"{bd_['n']} ({bd_['should']}/{bd_['supported']})", bd_["missed"],
                      f"{cu['tp']}/{cu['n_should']} / {cu['fp']}/{cu['n_supported']}"])
-    o.append(_table(["label set", "pairs", "should block", "supported", "tau_block", "tau_review", "blocked",
-                     "false blocks", "review band (should/supp)", "passed silently", "at current 0.80: blocked / false blocks"],
-                    body))
+    o.append(_table(["label set", "pairs", "should block", "supported", "fitted tau_block", "fitted tau_review",
+                     "blocked", "false blocks", "review band (should/supp)", "passed silently",
+                     f"at support.py's {cur_b:.2f}: blocked / false blocks"], body))
     o.append("")
     alt = rescored(rows)
     arec = recommend(alt)
     atb, atr = arec["tau_block"], arec["tau_review"]
     ast_, abs_ = block_stats(alt, atb), band_stats(alt, atr, atb)
-    o.append("## An alternative blocking score: p(adds_unsupported) + p(contradicts)\n")
-    o.append("`support._worst` scores a pair by the larger of its two blocking labels, so an answer split between "
-             "them (`adds_unsupported` 0.51 / `contradicts` 0.49) scores 0.51 although both block. Scoring by their sum "
-             "(1 - p(supported)) treats the split as the block it is. This is analysis only: `support.py` is unchanged, "
-             "and adopting it would mean changing `_worst`.\n")
+    o.append("## Why the sum score: the max-label score it replaced\n")
+    o.append("#193 shipped scoring a pair by the larger of its two blocking labels, so an answer split between "
+             "them (`adds_unsupported` 0.51 / `contradicts` 0.49) scored 0.51 although both block. Scoring by their "
+             "sum (1 - p(supported)) treats the split as the block it is (#237).\n")
     body = []
     for t in GRID_BLOCK:
-        a, w = block_stats(alt, t), block_stats(rows, t)
-        body.append([f"{t:.2f}", f"{a['tp']}/{a['n_should']} ({_pct(a['recall'])})",
-                     f"{a['by_label']['contradicts'][0]}/{a['by_label']['contradicts'][1]}",
-                     f"{a['by_label']['adds_unsupported'][0]}/{a['by_label']['adds_unsupported'][1]}",
-                     f"{a['fp']}/{a['n_supported']}",
-                     f"{w['tp']}/{w['n_should']}", f"{w['fp']}/{w['n_supported']}"])
+        a_, w = block_stats(rows, t), block_stats(alt, t)
+        body.append([f"{t:.2f}", f"{a_['tp']}/{a_['n_should']} ({_pct(a_['recall'])})",
+                     f"{a_['by_label']['contradicts'][0]}/{a_['by_label']['contradicts'][1]}",
+                     f"{a_['by_label']['adds_unsupported'][0]}/{a_['by_label']['adds_unsupported'][1]}",
+                     f"{a_['fp']}/{a_['n_supported']}",
+                     f"{w['tp']}/{w['n_should']} ({_pct(w['recall'])})",
+                     f"{w['by_label']['contradicts'][0]}/{w['by_label']['contradicts'][1]}",
+                     f"{w['fp']}/{w['n_supported']}"])
     o.append(_table(["tau_block", "sum: blocked (recall)", "sum: contradicts", "sum: adds_unsupported",
-                     "sum: false blocks", "max: blocked", "max: false blocks"], body))
-    o.append(f"\nFit on the sum score with the same rule: tau_block {atb:.2f}, tau_review {atr:.2f}; blocks "
+                     "sum: false blocks", "max: blocked (recall)", "max: contradicts", "max: false blocks"], body))
+    o.append(f"\nFit on the max-label score with the same rule: tau_block {atb:.2f}, tau_review {atr:.2f}; blocks "
              f"{ast_['tp']}/{ast_['n_should']} ({_pct(ast_['recall'])}) with {ast_['fp']}/{ast_['n_supported']} "
              f"false blocks; the review band holds {abs_['n']} ({abs_['should']} should-block / {abs_['supported']} "
              f"supported) and {abs_['missed']} should-block pairs pass silently.\n")
 
     # confusion
-    o.append("## Proposed label vs Jev's answer\n")
-    o.append("Rows: proposed label. Columns: Jev's argmax.\n")
-    o.append(_table(["proposed \\ Jev"] + list(LABELS) + ["total"],
+    o.append("## Label vs Jev's answer\n")
+    o.append("Rows: label. Columns: Jev's argmax.\n")
+    o.append(_table(["label \\ Jev"] + list(LABELS) + ["total"],
                     [[a] + [con[a][b] for b in LABELS] + [sum(con[a].values())] for a in LABELS]))
     agree = sum(con[a][a] for a in LABELS)
     o.append(f"\nAgreement {agree}/{n} ({_pct(agree / n)}). {len(dis)} disagreements; {len(cross)} of them cross the "
@@ -354,9 +366,9 @@ def render_report(rows, meta: Dict[str, Any]) -> str:
              f"(both block).\n")
 
     # disagreements
-    o.append("## Disagreements between the proposed label and Jev\n")
+    o.append("## Disagreements between the label and Jev\n")
     if dis:
-        o.append(_table(["id", "category", "proposed", "Jev", "sup", "adds", "contra", "blocking score", "kind"],
+        o.append(_table(["id", "category", "label", "Jev", "sup", "adds", "contra", "blocking score", "kind"],
                         [[f"`{r['id']}`", r["category"], r["label"], r["jev"], f"{r['probs']['supported']:.3f}",
                           f"{r['probs']['adds_unsupported']:.3f}", f"{r['probs']['contradicts']:.3f}",
                           f"{r['p_worst']:.3f}", "cross" if r in cross else "same side"]
@@ -367,7 +379,7 @@ def render_report(rows, meta: Dict[str, Any]) -> str:
 
     # grid
     o.append("## tau_block grid\n")
-    o.append("`should block` = proposed label is not `supported`. False blocks are supported pairs at or above tau_block.\n")
+    o.append("`should block` = label is not `supported`. False blocks are supported pairs at or above tau_block.\n")
     body = []
     for t in GRID_BLOCK:
         s = block_stats(rows, t)
@@ -442,13 +454,13 @@ def render_report(rows, meta: Dict[str, Any]) -> str:
 
     # per pair
     o.append("## Every pair\n")
-    o.append(_table(["id", "category", "proposed", "Jev", "p(supported)", "p(adds_unsupported)", "p(contradicts)", "flags"],
+    o.append(_table(["id", "category", "label", "Jev", "p(supported)", "p(adds_unsupported)", "p(contradicts)", "flags"],
                     [[f"`{r['id']}`", r["category"], r["label"], r["jev"] + ("" if r["jev"] == r["label"] else " *"),
                       f"{r['probs']['supported']:.3f}", f"{r['probs']['adds_unsupported']:.3f}",
                       f"{r['probs']['contradicts']:.3f}",
                       ", ".join(f for f, on in (("negation", r.get("negation")), ("numbers", r.get("touches_numbers"))) if on)]
                      for r in rows]))
-    o.append("\n`*` marks a disagreement with the proposed label.\n")
+    o.append("\n`*` marks a disagreement with the label.\n")
     return "\n".join(o)
 
 
@@ -464,20 +476,19 @@ def render_review(rows) -> str:
             f"- Evidence: {ev}",
             f"- Original: " + (f'"{r["original"]}"' if r.get("original") else "none"),
             f"- Bullet: \"{r['bullet']}\"",
-            f"- Proposed: `{r['label']}`. {r['rationale']}",
+            f"- Label: `{r['label']}`. {r['rationale']}",
             f"- Jev: `{r['jev']}` ({_probs(r)})",
-            "- Verdict: [ ] agree (✓)   |   corrected label: ______",
             ""])
 
     o = ["# Support-check labels for review (issue #237)\n",
-         "Each pair is one revised bullet, the cited evidence it must be supported by, and the label proposed for it. "
+         "Each pair is one revised bullet, the cited evidence it must be supported by, and the label the user confirmed for it."
          "`supported`: every claim is stated or directly implied by the evidence. `adds_unsupported`: the bullet "
          "claims something the evidence does not state (a larger role, a scope, a tool, an outcome). `contradicts`: "
          "the evidence says otherwise. The `original` is the bullet being revised and is context only, never "
          "evidence. Numbers are the regex gate's business (#123), so pairs that touch one are tagged `numbers`.\n",
-         "Mark each verdict ✓ or write the corrected label; then correct `label` in `pairs.json` and re-run "
-         "`python eval/fit_support_threshold.py analyze` to refit. Disagreements with Jev come first because a "
-         "wrong proposed label and a wrong Jev answer look the same until you read the pair.\n",
+         "These are the labels the user confirmed (2026-09-29), kept for audit; to change one, correct `label` in "
+         "`pairs.json` and re-run `python eval/fit_support_threshold.py analyze` to refit. Disagreements with Jev "
+         "come first.\n",
          f"## Disagreements with Jev ({len(dis)})\n"]
     n = 0
     for r in sorted(dis, key=lambda r: ((r["label"] == "supported") == (r["jev"] == "supported"), r["id"])):

@@ -25,11 +25,16 @@ skipped (which also keeps a user's own editor edits from being blocked) and so
 is an uncited bullet (the citations gate owns it). With no key, mode `off`, or
 an API error the finding is `unchecked` and adds nothing.
 
-**Thresholds.** `TAU_BLOCK` and `TAU_REVIEW` are provisional (0.8 from
-TypeSafe's cookbook) until they are fitted on a hand-labelled set. Jev's
-confidence is not claimed to be calibrated, so the three tiers are: act
-(`p >= TAU_BLOCK`: a gate violation), verify (`p >= TAU_REVIEW`: shown to the
-host as `review`), and everything else passes.
+**Score and thresholds.** A finding's blocking score is the probability that
+the bullet is *not* supported: p(adds_unsupported) + p(contradicts), which is
+1 - p(supported). Scoring by the larger single label under-blocks an answer
+split between the two blocking labels (a wrong stack: 0.51 / 0.49), which is a
+block either way. The reported label is still the stronger of the two, so a
+violation reads `contradicts:` or `unsupported:`. Jev's confidence is not
+claimed to be calibrated, so the three tiers are cutoffs fitted on a labelled
+set (`eval/support_labels/`, #237), not probabilities: act (`score >=
+TAU_BLOCK`: a gate violation), verify (`score >= TAU_REVIEW`: shown to the host
+as `review`), and everything else passes.
 
 This module is model-free apart from `engine.decide`, which is imported only
 when a check runs.
@@ -58,10 +63,17 @@ QUESTION = Choice(
 LABELS = tuple(QUESTION.options)
 BLOCKING = {"contradicts": "contradicts", "adds_unsupported": "unsupported"}
 
-# Provisional. Fit on a hand-labelled set of (evidence, bullet) pairs before
-# relying on either (see the #193 PR); never derived from Jev's confidence.
-TAU_BLOCK = 0.8
-TAU_REVIEW = 0.4
+# Fitted (#237) on the 89 user-confirmed pairs in eval/support_labels/, against jev-1.13.0's
+# recorded answers to support@v1, scoring by p(adds_unsupported) + p(contradicts). Refit with
+# `python eval/fit_support_threshold.py analyze` whenever the model or the question changes.
+#   TAU_BLOCK 0.85: 0 of 35 supported pairs blocked, and the highest supported score is 0.77
+#     (bd_designed_and_built), so 0.08 of headroom; blocks 51 of 54 should-block pairs (94%,
+#     precision 100%): contradicts 14/14, adds_unsupported 37/40. 0.80 would catch 53/54 but
+#     leaves 0.03 of headroom.
+#   TAU_REVIEW 0.35: the band [0.35, 0.85) holds 4 pairs (3 should-block, 1 supported); no
+#     should-block pair passes silently. Nothing labelled scores between 0.34 and 0.76.
+TAU_BLOCK = 0.85
+TAU_REVIEW = 0.35
 
 _ROUND = 4
 ORIGINAL_MIN_OVERLAP = 0.25
@@ -189,18 +201,21 @@ def _finding(key: str, bullet: str, answer) -> Dict:
 
 
 def _worst(finding: Dict) -> Tuple[Optional[str], float]:
-    """The blocking label with the most probability behind it, and that p."""
+    """`(label, score)`: the stronger blocking label, and the score the thresholds
+    apply to, p(adds_unsupported) + p(contradicts) (see the module docstring)."""
     probs = finding.get("probabilities") or {}
-    label = max(BLOCKING, key=lambda l: (probs.get(l, 0.0), l))
-    p = probs.get(label)
-    if p is None and finding.get("label") == label:      # no probabilities: use the pick's p
-        p = finding.get("p")
-    return (label, float(p)) if p is not None else (None, 0.0)
+    if any(l in probs for l in BLOCKING):
+        label = max(BLOCKING, key=lambda l: (probs.get(l, 0.0), l))
+        # Rounded: the API reports two decimals, so 0.84 + 0.01 must compare equal to 0.85.
+        return label, min(1.0, round(sum(float(probs.get(l, 0.0)) for l in BLOCKING), _ROUND))
+    if finding.get("label") in BLOCKING and finding.get("p") is not None:   # no probabilities: the pick's p
+        return finding["label"], float(finding["p"])
+    return None, 0.0
 
 
 def violations(findings: Sequence[Dict]) -> List[str]:
     """Gate violations: `contradicts:` / `unsupported:` plus the item and bullet,
-    for findings whose worst label has p >= TAU_BLOCK. Sorted."""
+    for findings whose blocking score is >= TAU_BLOCK. Sorted."""
     out = []
     for f in findings:
         if f.get("status") != "checked":
@@ -213,7 +228,7 @@ def violations(findings: Sequence[Dict]) -> List[str]:
 
 def reviews(findings: Sequence[Dict]) -> List[Dict]:
     """The uncertain band, for the host to show the user: TAU_REVIEW <= p <
-    TAU_BLOCK on a blocking label. Sorted by item then bullet."""
+    TAU_BLOCK. Sorted by item then bullet."""
     out = []
     for f in findings:
         if f.get("status") != "checked":
