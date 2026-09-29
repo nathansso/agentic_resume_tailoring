@@ -12,6 +12,7 @@ import os
 import pytest
 from sqlmodel import Session, select
 
+import config  # noqa: F401  loads .env (a developer's key) now, at collection, not mid-test
 import database.db as db
 from database.models import JevDecision
 from harness.decisions import cache, engine, recordings
@@ -21,6 +22,10 @@ from harness.decisions.client import (
 from harness.decisions.questions import (
     MAX_OPTIONS, Answer, AnswerError, Choice, Noul, QuestionError, Score, canonical,
 )
+
+# The developer's key as it was at collection. `conftest` removes it from every
+# test's environment; only the live test puts it back.
+LIVE_KEY = (os.environ.get("TYPESAFE_API_KEY") or "").strip()
 
 FRUIT = {"apple": "A red or green fruit", "pear": None}
 
@@ -70,8 +75,10 @@ def client_with(transport, **kw):
 
 @pytest.fixture()
 def auto(isolated_engine, monkeypatch):
-    """Engine in auto mode on an empty store; `.use(transport)` installs a client."""
+    """Engine in auto mode on an empty store, with no key until `.use(transport)`
+    installs a client."""
     monkeypatch.setenv("ART_JEV_MODE", "auto")
+    monkeypatch.setattr(engine, "get_client", lambda: None)
     engine.reset_stats()
 
     class Env:
@@ -469,8 +476,9 @@ def test_the_decisions_package_is_the_only_network_call_under_harness():
 def test_the_live_api_answers_a_choice_and_a_noul(isolated_engine, monkeypatch):
     from harness.decisions.client import KEY_ENV
 
-    if not (os.environ.get(KEY_ENV) or "").strip():
+    if not LIVE_KEY:
         pytest.skip(f"{KEY_ENV} is not set")
+    monkeypatch.setenv(KEY_ENV, LIVE_KEY)
     monkeypatch.setenv("ART_JEV_MODE", "auto")
     engine.reset_stats()
     q = Choice("live@v1", "How does the evidence relate to the claim?",

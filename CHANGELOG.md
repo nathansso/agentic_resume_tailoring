@@ -36,14 +36,14 @@ ART can now ask TypeSafe's Jev a bounded question, cache the answer, and replay 
   - Modes: replay raises on a miss without calling the transport, `off` never calls it, an unrecognized mode is `off`.
   - Recordings: export/import round trip into an empty store then replay, version refusal, the CLI.
   - Support gate: nine synthetic labelled pairs (`tests/fixtures/support_pairs.json`: grounded weaves, "contributed" to "led" inflation, invented outcomes, contradictions, one uncertain case) each land on the right label and gate outcome through scripted answers; verbatim and uncited bullets are never sent; key-unset parity with the pre-Jev result; a scripted-host plan with a woven bullet is recorded once and replayed at a 100% hit rate with a transport that fails if called; the same plan with a changed bullet raises.
-  - `tests/conftest.py` sets `ART_JEV_MODE=off` for every test. `config.load_dotenv()` walks up from the repo, so a developer's `.env` puts `TYPESAFE_API_KEY` in the environment, and `auto` would otherwise call the API from any test that runs a plan.
+  - `tests/conftest.py` sets `ART_JEV_MODE=off` and removes `TYPESAFE_API_KEY` for every test; the live test puts back the key it captured at collection. `config.load_dotenv()` walks up from the repo, so a developer's `.env` puts `TYPESAFE_API_KEY` in the environment, and `auto` would otherwise call the API from any test that runs a plan.
   - The live test is `@pytest.mark.integration` and skips without the key.
 
 ### Deviations from spec
 
 - **`TAU_BLOCK` = 0.8 is provisional** (TypeSafe's cookbook value), and `TAU_REVIEW` = 0.4 is a guess. Neither is fitted: that needs a key and a hand-labelled set of about 50 pairs from benchmark output. Jev's confidence is not claimed to be calibrated.
 - **The recordings are synthetic.** The nine labelled pairs and their probabilities are scripted stand-ins, not Jev answers; real ones replace them once recorded with a key.
-- **The live test is not part of this PR's verification.** The implementing agent was told to make no live calls; the planner runs it.
+- **The live test needs a key**, so the implementing agent did not run it; the planner ran `python run_tests.py --integration -k jev` with the real key and it passes.
 - **The Postgres leg was not run locally** (the Docker daemon was not running). `JevDecision` uses only the JSON, string, float and datetime columns other tables use.
 - **An item cite counts as evidence.** The plan resolves `<key>#b<n>` cites; a cite naming an experience or project (`exp:...`) resolves to all of that item's source bullets, since the citations gate accepts it. Skill, education and achievement cites name no bullet text, so a bullet citing only those is `unchecked` (`no_evidence_text`), not sent with empty evidence.
 - **`original` is inferred.** A plan node does not say which bullet a new one revises, so `original` is the most similar bullet (word overlap of at least 0.25) in the version the plan builds on. It is part of the cache key, so replaying a plan against a different HEAD is a different set of questions.

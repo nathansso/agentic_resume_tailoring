@@ -98,9 +98,12 @@ def _no_live_jev(monkeypatch):
     put `TYPESAFE_API_KEY` in the environment, and Jev's default mode (`auto`)
     would then call the API from any test that runs a plan. `off` makes every
     decision point answer with its fallback. Tests that exercise the engine set
-    the mode themselves and inject a fake transport; the live test opts in.
+    the mode themselves and inject a fake transport; the live test opts in with
+    the key it captured at collection. The key is removed too, so nothing can
+    read one from the environment and behave differently on a developer's machine.
     """
     monkeypatch.setenv("ART_JEV_MODE", "off")
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
 
 
 @pytest.fixture(autouse=True)

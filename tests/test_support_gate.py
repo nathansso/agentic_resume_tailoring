@@ -269,7 +269,7 @@ def test_the_contract_carries_review_and_support(auto, env):
     assert out["support"]["checked"] == 1
 
 
-def test_key_unset_leaves_the_plan_exactly_as_it_was_before_jev(auto, env, monkeypatch):
+def test_key_unset_leaves_the_plan_exactly_as_it_was_before_jev(env, monkeypatch):
     """Acceptance 2: with no key (or `off`) the result equals main's."""
     from harness import executor
 
