@@ -35,6 +35,10 @@ The tools named below are the ART MCP server's tools.
   `metadata: {title, company, url}` and `rule_answers`.
 - Keep the `job_id`. Look at `top_terms`: these are the weighted terms the candidate
   can support.
+- `skill_matches` lists the requirement terms that name skills the candidate has, exactly
+  or through ART's alias map; those skills lead the default skills list. Each term in
+  `unmatched_terms` names no skill. ART does not guess: `kg_search` for it under another
+  name, ask the user, and never claim a skill without evidence.
 - If any rule comes back `needs_answer`, ask the user, then call
   `open_job(job_id=…, rule_answers=…)` again.
 

@@ -44,8 +44,10 @@ from agents.arbitration import HARD_STRENGTH
 from agents.ats_scorer import ATSScoringEngine
 from agents.checks import bullet_line_violations, exp_key, expected_sections, proj_key
 from agents.preferences import preferences_in_scope
-from agents.skill_scorer import rank_and_select_skills
-from database.models import JobDescription, PlanProgram, UserJobResult
+from agents.jd_payload import iter_requirements
+from agents.skill_matching import match_requirement_terms, priority_skills
+from agents.skill_scorer import MAX_SKILLS, rank_and_select_skills, score_skills
+from database.models import JDProfile, JobDescription, PlanProgram, UserJobResult
 from harness import ART_VERSION, tree
 from harness.acceptance import (
     Context, accept, metric_vector, preference_violations, term_pattern,
@@ -167,9 +169,49 @@ def _int(value) -> Optional[int]:
         return None
 
 
-def kg_default_content(user_id: UUID, jd_text: str, kg: Optional[_KG] = None) -> Dict:
+def job_requirements(user_id: UUID, job_id: UUID) -> List[Dict]:
+    """The requirements stored on a job's JD profile, in source order."""
+    with Session(_db.engine) as session:
+        profile = session.exec(select(JDProfile).where(
+            JDProfile.job_id == job_id, JDProfile.user_id == user_id)).first()
+        return iter_requirements(profile.payload if profile else None)
+
+
+def _prioritize_skills(ranked: List[Dict], skills: List[Dict], jd_text: str,
+                       requirements: Sequence[Dict]) -> List[Dict]:
+    """Skills the posting's requirements name, ahead of the TF-IDF order (#233).
+
+    A skill matched by a required requirement comes first, then one matched by a
+    preferred requirement (`agents.skill_matching.match_requirement_terms`: most
+    critical first, then posting order); the rest keep their TF-IDF order. A
+    matched skill the TF-IDF cap dropped is brought back, and the list is held to
+    the skills cap. With no matches nothing changes."""
+    names = priority_skills(match_requirement_terms(
+        [s["name"] for s in skills], requirements)["matches"])
+    if not names:
+        return ranked
+    have = {s["name"]: s for s in ranked}
+    scores = None
+    head: List[Dict] = []
+    for name in names:
+        if name in have:
+            head.append(have[name])
+            continue
+        if scores is None:
+            scores = {s["name"]: s for s in (score_skills(skills, jd_text or "") or [])}
+        row = scores.get(name) or next(s for s in skills if s["name"] == name)
+        head.append({"name": name, "category": row.get("category") or "Other",
+                     "score": row.get("score", 0.0)})
+    chosen = set(names)
+    return (head + [s for s in ranked if s["name"] not in chosen])[:MAX_SKILLS]
+
+
+def kg_default_content(user_id: UUID, jd_text: str, kg: Optional[_KG] = None,
+                       requirements: Optional[Sequence[Dict]] = None) -> Dict:
     """The version a job with no history starts from: the whole KG, untailored
-    except for skills ranked against the posting."""
+    except for skills ranked against the posting. With the posting's
+    `requirements`, skills they name rank first (#233); without them the
+    ranking is exactly the TF-IDF one."""
     kg = kg or _KG(user_id)
     skills = [{"name": s["record"]["name"], "category": s["record"].get("category"),
                "proficiency": _int(s["record"].get("proficiency"))} for s in kg.of("skill")]
@@ -177,6 +219,8 @@ def kg_default_content(user_id: UUID, jd_text: str, kg: Optional[_KG] = None) ->
     if not ranked:
         ranked = [{"name": s["name"], "category": s["category"], "score": 0.0}
                   for s in sorted(skills, key=lambda s: s["name"].lower())]
+    if requirements and skills:
+        ranked = _prioritize_skills(ranked, skills, jd_text, requirements)
     content = {
         "experiences": [kg.item(r["key"]) for r in kg.of("experience")],
         "projects": [kg.item(r["key"]) for r in kg.of("project")],
@@ -477,7 +521,8 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     ctx, prefs = _context(user_id, job, kg, prog["finalize"]["max_bullet_lines"])
     pref_ids = {str(p.get("preference_id")).lower()
                 for p in services.load_preferences(user_id)}
-    base = head["content"] if head else kg_default_content(user_id, job.description or "", kg)
+    base = head["content"] if head else kg_default_content(
+        user_id, job.description or "", kg, job_requirements(user_id, job_id))
     # Job-scoped rules answered for this posting (#192), e.g. the graduation
     # date a post-internship enrollment requirement calls for.
     rules_applied = apply_job_rules(base, resolve_rules(user_id, job_id))
