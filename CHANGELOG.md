@@ -13,7 +13,7 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 ---
 
 ## Issue 193 — Jev decisions engine and the cited-bullet support check
-**Status:** complete | **Tests:** 1725 pass on SQLite (70 new), 18 skipped
+**Status:** complete | **Tests:** 1787 pass on SQLite (70 new), 18 skipped
 
 ART can now ask TypeSafe's Jev a bounded question, cache the answer, and replay it with no network. The first caller is a check the gates lacked: does the evidence a bullet cites say what the bullet says? The `citations` gate (#198) proves the cite is real; lexical drift only measures word overlap and misses "contributed to" becoming "led".
 
