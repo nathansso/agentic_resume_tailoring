@@ -12,6 +12,45 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 230 — Project context: projects linked to the role or degree they were done under
+**Status:** complete | **Tests:** 1676 pass on SQLite (34 new), 12 skipped
+
+A project now records where it was done: under a role, under a degree, or on its own. Awards can be tied to the project they were won for. Links are proposed by rules and stored only when the user confirms them.
+
+### What shipped
+
+- **Graph.** `Education` and `Achievement` are nodes. Two stored edges: `Project -PART_OF-> Experience | Education` (at most one) and `Achievement -AWARDED_FOR-> Project`.
+- **Schema.** `Project.experience_id`, `Project.education_id`, `Project.context_status` (`unreviewed` / `linked` / `personal`, default `unreviewed`), `Achievement.project_id`. Added by guarded `ALTER TABLE`, so existing databases load with every project unreviewed.
+- **`agents/project_context.py`.**
+  - `suggest_contexts` proposes links from two rules and never writes. The first rule matches an employer's distinctive name word in the repo name, or the full company name in the description. The second maps a course code to the degree at the matching level (200+ is graduate).
+  - `set_project_context` and `link_achievement` are the only write paths. They resolve keys against the caller's own rows only.
+- **Integrity.** Heal merges move links onto the surviving row. Deleting a role or degree returns its projects to `unreviewed`, and deleting a project unties its award.
+- **Retrieval.**
+  - `evidence_for_skills` adds `experiences_via_projects`: a role evidences a skill through a project done in it. This is kept apart from the role's direct evidence.
+  - Tailoring gives each project `context` (`work` / `coursework` / `personal`) and each experience `graph_evidence_via_projects`.
+  - The planner prompt gains one rule, and only when an item carries either field.
+- **Harness.**
+  - Three new tools: `suggest_project_contexts`, `set_project_context` and `link_achievement`.
+  - Records carry the links: a project's `context`, a role's or degree's `projects`, an award's `project`.
+  - A `kg_search` project hit names its `context`, and a role is findable by its projects' names.
+  - The `art-setup` skill has a new step to confirm contexts. `art-tailor` explains the fields.
+- **Fix.** `get_skills_for_project` returns Skill successors only. Otherwise a project's new context node would have been read as a skill.
+- **Tests:** `tests/test_project_context.py` (25 new) covers:
+  - the rules;
+  - writes and user isolation;
+  - graph edges and evidence;
+  - merge and delete integrity;
+  - the harness tools and the tailoring inputs;
+  - an unchanged prompt without context.
+
+  `tests/test_harness_contract.py` adds calls for the three tools (9 new parametrized cases).
+
+### Deviations from spec
+
+- **Not built:** `Achievement -AWARDED_DURING-> Experience | Education`, an award signal in `project_scorer`, and a UI for confirming links. These are left for #136 and #204.
+- **Suggestions are rules only, with no LLM step.** The harness is model-free (#190), so the host's model handles projects no rule matches, by asking the user. On the author's Sep 22 profile snapshot, the rules place 26 of 52 projects.
+- **The course-level rule is a heuristic.** The 200+ graduate threshold follows the UC convention and can pick the wrong degree elsewhere. That risk is acceptable only because every suggestion is confirmed before it is stored.
+
 ## Issue 203 — Codex integration
 **Status:** complete | **Tests:** 1642 pass on SQLite (5 new), 12 skipped
 
