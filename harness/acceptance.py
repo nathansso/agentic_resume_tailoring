@@ -34,6 +34,7 @@ from agents.redundancy import (
     bullet_texts as all_bullets, bullet_tokens, leading_verb_entropy, mtld,
     term_document_frequency,
 )
+from harness.decisions.support import violations as support_finding_violations
 
 TARGETS = ("coverage", "relevance_density")
 GUARDS = ("stuffing", "verb_entropy", "mtld", "duplication")
@@ -85,6 +86,10 @@ class Context:
     # `{bullet id: lines}` source, or None when no LaTeX engine is available.
     line_counter: Optional[Callable[[Dict], Dict[str, int]]] = None
     max_bullet_lines: int = 2
+    # The cited-bullet support check (#193): `content -> findings`, backed by
+    # the Jev engine and injected by the executor, like `line_counter`, so this
+    # module stays model-free. None (or an unchecked finding) adds nothing.
+    support_checker: Optional[Callable[[Dict], List[Dict]]] = None
 
     @property
     def jd_keywords(self) -> Set[str]:
@@ -188,6 +193,15 @@ def consistency_violations(content: Dict, ctx: Context) -> List[str]:
                    for tok in toks})
 
 
+def support_violations(content: Dict, ctx: Context) -> List[str]:
+    """`contradicts:` / `unsupported:` for cited bullets whose evidence, per Jev,
+    does not support them with p >= the block threshold (#193). Empty without a
+    checker or an answer, so lexical drift alone gates, as before."""
+    if ctx.support_checker is None:
+        return []
+    return support_finding_violations(ctx.support_checker(content))
+
+
 def _max_pair_jaccard(bullets: Sequence[str]) -> float:
     """Model-free duplication: the most similar pair of bullets by token set.
 
@@ -215,7 +229,8 @@ def metric_vector(content: Dict, ctx: Context) -> Dict[str, Any]:
         lines = ctx.line_counter(content)
     gates = {
         "preferences": preference_violations(content, ctx),
-        "faithfulness": sorted(faithfulness_drift(content, ctx.source_experiences)),
+        "faithfulness": sorted(faithfulness_drift(content, ctx.source_experiences)
+                               + support_violations(content, ctx)),
         "citations": citation_violations(content, ctx),
         "bullet_lines": (None if lines is None else sorted(
             v["bullet"] for v in bullet_line_violations(lines, ctx.max_bullet_lines))),

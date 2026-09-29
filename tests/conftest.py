@@ -91,6 +91,19 @@ def _pg_ready():
 
 
 @pytest.fixture(autouse=True)
+def _no_live_jev(monkeypatch):
+    """No test reaches TypeSafe unless it says so (issue #193).
+
+    `config.load_dotenv()` walks up from the repo, so a developer's `.env` can
+    put `TYPESAFE_API_KEY` in the environment, and Jev's default mode (`auto`)
+    would then call the API from any test that runs a plan. `off` makes every
+    decision point answer with its fallback. Tests that exercise the engine set
+    the mode themselves and inject a fake transport; the live test opts in.
+    """
+    monkeypatch.setenv("ART_JEV_MODE", "off")
+
+
+@pytest.fixture(autouse=True)
 def _isolate_institution_cache(monkeypatch):
     """Keep ROR (issue #95) out of the suite: disable network lookups by default
     and clear the in-process canonicalization memo between tests, so institution

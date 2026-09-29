@@ -675,6 +675,32 @@ class BlockLineCache(SQLModel, table=True):
     measured_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class JevDecision(SQLModel, table=True):
+    """One cached Jev answer (issue #193): one question about one state.
+
+    Keyed per question, `sha256(canonical(state, question, requested_model))`,
+    so a request with one new question sends only that question and the rest
+    are served from here. The state itself is not stored (it holds resume text);
+    only its hash is part of the key, so a recording carries answers and no
+    resume content. `resolved_model` is the version the API reports answering,
+    which can differ from `requested_model` when an alias moves. Usage is this
+    question's even share of the request's tokens.
+
+    A pure cache: losing the table costs API calls, never correctness. A new
+    table, so `create_all` picks it up and no ALTER is needed.
+    """
+    cache_key: str = Field(primary_key=True)
+    point: str = Field(index=True)
+    question_version: str
+    requested_model: str
+    resolved_model: str
+    question: Dict = Field(default={}, sa_column=Column(JSON))
+    answer: Dict = Field(default={}, sa_column=Column(JSON))
+    input_tokens: Optional[float] = None
+    output_tokens: Optional[float] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 # ── Tailoring tree (issue #196) ───────────────────────────────────────────────
 # Every committed change to a job's resume — a pipeline run, an editor edit, a
 # revert, a host's plan — is a node whose parent is the version it revised. A

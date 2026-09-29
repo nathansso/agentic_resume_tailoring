@@ -5,6 +5,7 @@
     art ui --job <job_id>                        # the local editor (needs [ui])
     art hook user-prompt < hook.json             # Claude Code plugin hooks (#201)
     art hooks codex --write                      # install those hooks for Codex (#203)
+    art jev status|export|import                 # the Jev decision cache (#193)
 
 `art ui` hands off to `web.local_ui`, imported only when asked for, so the
 tool path never loads the web stack. `art-mcp` is `harness.mcp_server:main`.
@@ -27,6 +28,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if argv[:2] == ["hooks", "codex"]:
         from harness.hooks import codex_main
         return codex_main(argv[2:])
+    if argv[:1] == ["jev"]:
+        from harness.decisions.recordings import main as jev_main
+        return jev_main(argv[1:])
     if argv[:1] == ["ui"]:
         try:
             import fastapi  # noqa: F401
