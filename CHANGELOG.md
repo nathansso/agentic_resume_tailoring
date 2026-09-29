@@ -12,6 +12,59 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 123 — Numeric and entity consistency gate
+**Status:** complete | **Tests:** 1683 pass on SQLite (62 new), 18 skipped
+
+A cited bullet may no longer assert a number, date, duration, money figure or name that its evidence doesn't contain. It is the numeral half of faithfulness: #193's Jev check owns semantics and is documented weak on numbers, so this one is regex and word lists, with no model.
+
+### What shipped
+
+- **`agents/checks.py`: extraction, normalization and the per-bullet check.**
+  - `extract_claims` reads cardinals and number words, percentages, dates and year ranges, durations, money and scale (K/M/B), data sizes, multipliers, ordinals, ratios, and rates (`40k requests/min`, `QPS`). It reduces each to a canonical key, so `1,000,000` = `1M` = `one million`, `2 years` = `24 months`, `$5M` = `5 million dollars`.
+  - `unsupported_tokens(bullet, evidence)` returns the specific tokens the evidence lacks, as the bullet wrote them, not a boolean.
+  - **Names:** flags a known technology, a non-generic acronym, a CamelCase or digit/symbol name (PyTorch, S3, C#, Node.js, GPT-4), and a mid-sentence Capitalised word. The heuristic is documented in the module.
+    - It does not trip on the first word of a bullet or sentence, generic acronyms (API, ETL, ML), month and role words, or headline-cased bullets.
+    - Aliases and plurals count as present (`postgres`/`PostgreSQL`, `k8s`/`Kubernetes`, `AWS`/`Amazon Web Services`), and so does a derived form (`Dockerized` from `Docker`).
+  - `consistency_check(content, source_bullets)` applies it per bullet.
+- **The `consistency` hard gate** (`harness/acceptance.py`, appended to `GATES`). Violations read `consistency:<short bullet>:<token>`, sorted. As with every gate, only a newly introduced violation blocks. It is off when the context has no cite checker, like the citations gate.
+- **Scope is the cited evidence, not the profile.** A bullet is compared with:
+  - the text of the source bullets its cites resolve to (`<key>#b<n>`, or a bare key);
+  - its own item's source bullets and header (title, company, name, dates).
+
+  A number that appears only in an unrelated item is still flagged. A verbatim source bullet and an uncited bullet are skipped (the latter is the citations gate's job), so the user's own editor text never blocks a plan.
+- **`eval/metrics.py`:** `consistency_metrics`, and an optional `source_bullets` argument on `compute_task_metrics` that adds a `consistency` family. It is reported separately and never combined with another metric.
+- `docs/harness.md` § 7 and the `art-tailor` skill say what the gate does and how a host should respond to it.
+- **Tests: `tests/test_consistency_gate.py` (62 new):**
+  - reformatting normalizes to one claim, and a changed value or unit does not;
+  - an invented percentage is caught and named, and a tighter bullet with the same facts passes;
+  - names absent from the evidence are flagged, while capitalised verbs, generic acronyms and headline case are not;
+  - a number in an unrelated item is still flagged, and a cite to another item brings that item's evidence;
+  - the gate is sorted and deterministic, off without a checker, and blocks only new violations (including against a vector saved before the gate existed);
+  - through the executor, a node inventing a number is reverted with `hard_gate: consistency`, a faithful reformat is not, and uncited editor text never blocks;
+  - the eval metric counts what the gate flags.
+
+### Deviations from spec
+
+- **False-positive rate is measured on synthetic data, not real tailoring output.** The repo has no recorded model output: no cassettes are committed (#182), and the scripted host writes verbatim source bullets, which the gate skips. Two measurements stand in:
+  - **Mechanical faithful variants** of every bullet in the 21 synthetic profiles under `eval/profiles/`: truncations, clause tails, merged bullets, and number reformats (`40k` to `40,000`, `18%` to `18 percent`, digits to words). **0 of 455 flagged, over 588 numeric claims.**
+  - **33 hand-written realistic rewrites** of the benchmark profile: 0 flagged, and every one is caught when a fabricated `$3M` or `Cassandra` is appended.
+
+  Both were tuned during development, so treat them as a regression floor, not a production estimate. The first pass flagged `Dockerized` (from Docker) and `50GB/day` (against `50GB of daily data`), and both are now handled. Real host output will find more; the gate stays strict until it does.
+- **Injected fabrications on the 21 profiles:** an invented `by 37%` and `using Cassandra` were caught in 238 of 238 bullets each, a number lifted from another item in 507 of 507, and a shifted figure in 139 of 140. The one miss is a coincidence: the shifted value was already in the item's evidence.
+- **Derivations are flagged, as the issue said to start.** "200 to 800 users" does not license "4x growth". Nothing is whitelisted.
+- **The item's own header counts as evidence, and so do its uncited source bullets.** The issue says to compare with the source item's evidence, so a title, company, project name or date in a bullet is supported, and a revision of an item may reuse any of that item's own figures without citing each one.
+- **Known limits, all on the side of missing a fabrication rather than blocking a true bullet:**
+  - `one` and `zero` as words, and number words hyphenated into compounds (`three-tier`, `zero-downtime`), are not read as claims in a bullet;
+  - a lowercase name outside the built-in technology list (`we used kafka` is caught, `we used foo` is not);
+  - the period on a data-size rate (`50GB/day`) is not compared;
+  - "a dozen", "half" and fractions in words are not read.
+- **Lexical drift (`faithfulness`) is left in place.** Removing it is a separate decision.
+- **The `finalize` step does not re-check the gate.** A pre-existing violation on the base page (say, a bullet a previous plan committed) does not block later plans, by the same only-new-violations rule as every other gate.
+- **`_run_task` in the legacy benchmark path does not pass `source_bullets`.** That path records no cites, so there is nothing to check; the metric is for host-built pages.
+- **The Postgres leg was not run locally.** The change touches no storage. CI runs it.
+
+---
+
 ## Issue 230 — Project context: projects linked to the role or degree they were done under
 **Status:** complete | **Tests:** 1676 pass on SQLite (34 new), 12 skipped
 
@@ -50,6 +103,8 @@ A project now records where it was done: under a role, under a degree, or on its
 - **Not built:** `Achievement -AWARDED_DURING-> Experience | Education`, an award signal in `project_scorer`, and a UI for confirming links. These are left for #136 and #204.
 - **Suggestions are rules only, with no LLM step.** The harness is model-free (#190), so the host's model handles projects no rule matches, by asking the user. On the author's Sep 22 profile snapshot, the rules place 26 of 52 projects.
 - **The course-level rule is a heuristic.** The 200+ graduate threshold follows the UC convention and can pick the wrong degree elsewhere. That risk is acceptable only because every suggestion is confirmed before it is stored.
+
+---
 
 ## Issue 203 — Codex integration
 **Status:** complete | **Tests:** 1642 pass on SQLite (5 new), 12 skipped
