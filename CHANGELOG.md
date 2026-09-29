@@ -12,6 +12,43 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 237 — Fitted thresholds for the support check, on a labelled set of real Jev answers
+**Status:** complete | **Tests:** 1846 pass on SQLite (15 new), 18 skipped
+
+The support check (#193) shipped with `TAU_BLOCK` 0.8 (TypeSafe's cookbook value) and `TAU_REVIEW` 0.4 (a guess). Both are now fitted on 89 hand-labelled (evidence, original, bullet) pairs from the synthetic benchmark profiles, against Jev's real answers to `support@v1`, recorded once and replayed offline.
+
+### What shipped
+
+- **The labelled set, `eval/support_labels/pairs.json`.** 89 pairs, every evidence string a verbatim source bullet from `eval/profiles/` (never `personal/`). Seven categories: faithful rewording 15, grounded keyword weave 10, role inflation 11, invented scope or outcome 13, tool never named 11, contradiction 13, boundary 16. 13 pairs hinge on a negation in the evidence, 3 touch a number (#123's gate also sees those). Labels were proposed, then confirmed by the user from `eval/support_labels/REVIEW.md`; one was corrected (`rw_dependency_free`: dropping "runtime" widens the claim).
+- **The recordings, `recordings.json`, and `eval/fit_support_threshold.py`.** `record` ran every pair once through ART's own engine (`support.build_state` and `support.QUESTION`, `jev-1.13.0`) against a private SQLite store: 89 live calls, about 42.6k input and 4.2k output tokens. `analyze` imports the recordings into a fresh store and replays every pair in `replay` mode, refusing to report unless the hit rate is 100%, then writes `REPORT.md` (the grid and the recommendation) and `REVIEW.md`. Correcting a label in `pairs.json` and re-running `analyze` refits with no API call.
+- **The blocking score changed** from the larger of the two blocking labels to **p(adds_unsupported) + p(contradicts)**, which is 1 − p(supported). Jev often splits mass between the two blocking labels on a wrong stack or a stretched quantifier (`contra_r_python`: 0.51 adds / 0.49 contradicts), and the larger-label score let those through: contradiction recall was 10/14 at 0.8 and is 14/14 at every threshold from 0.50 to 0.95 on the sum. The reported label is still the stronger of the two, so a violation still reads `contradicts:` or `unsupported:`. `review` entries carry the score as `p`.
+- **`TAU_BLOCK` = 0.85, `TAU_REVIEW` = 0.35**, chosen by: zero false blocks on `supported` pairs first, then recall on `contradicts`, then on `adds_unsupported`, with a full grid step of headroom over the highest supported score. Results at those values:
+
+  | | value |
+  |---|---|
+  | False blocks on supported pairs | 0 of 35 |
+  | Highest supported score (headroom) | 0.77, `bd_designed_and_built` (0.08) |
+  | Blocked, all should-block pairs | 51 of 54 (94%), precision 100% |
+  | `contradicts` recall | 14 of 14 |
+  | `adds_unsupported` recall | 37 of 40 |
+  | Per category, blocked | contradiction 13/13, invented scope 13/13, tool never named 11/11, role inflation 9/11, boundary 5/6 |
+  | Negation pairs | 8 of 9 should-block blocked, 0 of 4 supported blocked |
+  | Review band [0.35, 0.85) | 4 pairs: 3 should-block, 1 supported |
+  | Should-block pairs passing silently | 0 |
+
+  For comparison, the provisional 0.8 / 0.4 on the old score blocked 48 of 54 (contradicts 10/14). 0.80 on the new score would catch 53/54 but leaves 0.03 of headroom over the 0.77 supported pair, so it was not taken.
+- **Tests (15 new).** `tests/test_support_labels.py`: schema, at least 6 pairs per category, negation coverage, evidence verbatim from a synthetic profile, every pair replays from the recordings with no live call at a 100% hit rate (the key is removed in tests), a changed pair fails loudly, the recordings carry no resume text, the analysis rule and the disagreement helpers, the analysis matches `violations` and `reviews`, the constants in `support.py` equal the fit with headroom, `contra_r_python` blocks, the committed `REVIEW.md` is current, and `analyze` runs offline from the command line. `tests/test_support_gate.py` (3 new): a contradiction split across the two labels now blocks, a supported answer never does, a hedged one lands in `review`, and a finding without probabilities is scored by the pick's p. One existing test's review `p` moved from 0.55 to 0.59 (0.55 + 0.04).
+- **`docs/harness.md` § 4** states the score and the fitted thresholds.
+
+### Deviations from spec
+
+- **`DATABASE_URL` is pinned in-process for recording.** `config.load_dotenv()` loads a `.env` `DATABASE_URL` and `ART_DATA_DIR` alone does not override it, so `fit_support_threshold.py` sets `DATABASE_URL` to a private SQLite file in its own process before `config` loads and refuses to run unless `db.engine` is that file. `art jev` does the same through `harness.runtime`. Nothing was written to the user's database.
+- **The set is easy, so the thresholds rest on few pairs.** Jev agreed with 86 of 89 labels and is near-certain on role inflation, invented scope and unnamed tools. Only 16 boundary pairs are contested, and no labelled pair scores between 0.34 and 0.76, so any `TAU_REVIEW` in that range fits equally; 0.35 was taken as the widest band that excludes the two supported pairs at 0.27 and 0.33. Refit when the model version or the question changes, and add boundary pairs first.
+- **`TAU_REVIEW` is on the grid's terms, not tuned finer.** Jev reports probabilities to two decimals, so scores move in steps of 0.01; `_worst` rounds the sum so 0.84 + 0.01 compares equal to 0.85.
+- **The Postgres leg was not run.** Nothing here touches storage beyond the existing `JevDecision` rows.
+
+---
+
 ## Issue 193 — Jev decisions engine and the cited-bullet support check
 **Status:** complete | **Tests:** 1831 pass on SQLite (70 new), 18 skipped
 
