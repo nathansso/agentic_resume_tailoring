@@ -107,6 +107,7 @@ every deterministic computation in code.
 
 | Decision point | Question type | Decides | Fallback |
 |---|---|---|---|
+| Cited-bullet support (#193) | choice per revised bullet | Whether the cited evidence supports the new bullet: `supported`, `adds_unsupported`, `contradicts`. Blocks at p ≥ 0.8 (provisional), surfaces 0.4–0.8 as `review` | Unchecked; lexical drift still gates |
 | Memory gate (#202) | noul, choice, score | Is the message a standing preference; emphasize or suppress; strength 1–5 (#129's scale) | Heuristics, then host extraction |
 | Variant choice (#199) | choice per item, with no-match | Which approved bullet variant fits the job; no-match means the host writes a new one | Retrieval similarity |
 | Track baseline (#199) | choice | Which baseline a new job branches from | Role-family lookup |
@@ -120,9 +121,15 @@ probabilities only compare options within a question). Include a no-match option
 "none" is a real answer. Keep the state narrow and structured. Fit thresholds on ART's own
 data (`tests/memory_evals/`, the #172 anchor set), never on Jev's reported confidence.
 
-**Cache and replay.** Every call is keyed on a hash of (state, questions, resolved model
-version). Replays and benchmark reruns never hit the API; tests run on recorded decisions,
-and live calls happen only under `--integration`.
+**Cache and replay.** Each question is cached on its own, keyed on a hash of (state,
+question, requested model), with the resolved model version stored on the row; a request
+sends only the questions the cache lacks, batched per state. `ART_JEV_MODE` is `off`
+(always the fallback), `replay` (cache only; a miss raises, never a live call) or `auto`
+(default: cache, then Jev when `TYPESAFE_API_KEY` is set, then the fallback). `art jev
+status|export|import` manages recordings, which hold answers and no resume text. Replays
+and benchmark reruns never hit the API; tests run on recorded decisions, and live calls
+happen only under `--integration`. The API is `harness/decisions/`, the only network call
+under `harness/`.
 
 **Privacy.** JD text and resume bullets leave the machine in Jev requests. Setup says so,
 and every decision point can run on its fallback for users who decline.

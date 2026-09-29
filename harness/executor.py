@@ -52,6 +52,7 @@ from harness import ART_VERSION, tree
 from harness.acceptance import (
     Context, accept, metric_vector, preference_violations, term_pattern,
 )
+from harness.decisions.support import make_support_checker, reviews as support_reviews
 from harness.ingest import apply_job_rules, resolve_rules
 from harness.program import Program, apply_patch, program_id
 from harness.tools import _records, skill_key
@@ -527,6 +528,9 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     # date a post-internship enrollment requirement calls for.
     rules_applied = apply_job_rules(base, resolve_rules(user_id, job_id))
     working = copy.deepcopy(base)
+    # The cited-bullet support check (#193): Jev, through the cached engine.
+    # Built here, not in `_context`, because it reads the base for "original".
+    ctx.support_checker = make_support_checker(kg.source_bullets, base)
     base_vector = metric_vector(working, ctx)
     current = base_vector
 
@@ -558,6 +562,11 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
         row.update(status="accepted" if verdict["accepted"] else "reverted",
                    reason=verdict["reason"], improved=verdict["improved"],
                    deltas=verdict["deltas"])
+        touched = {key, (node.get("replacement_key") or "").strip().lower()}
+        review = support_reviews([f for f in ctx.support_checker(candidate)
+                                  if f["item"] in touched])
+        if review:
+            row["review"] = review
         results.append(row)
         if verdict["accepted"]:
             working, current = candidate, vector
@@ -577,6 +586,11 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
         "line_budget": budget or {"status": "unmeasured"},
         "violations": violations, "cut_hints": cut_hints, "rules_applied": rules_applied,
     }
+    # Only when Jev (or its cache) answered for at least one bullet: with no key
+    # the result is what it was before #193.
+    findings = [f for f in ctx.support_checker(working) if f["status"] == "checked"]
+    if findings:
+        out["support"] = {"checked": len(findings), "review": support_reviews(findings)}
     if violations or dry_run:
         return out
 

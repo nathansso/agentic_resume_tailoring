@@ -507,6 +507,9 @@ class NodeResult(_Model):
     reason: Optional[str] = None
     improved: List[str] = Field(default_factory=list)
     deltas: Dict[str, Optional[float]] = Field(default_factory=dict)
+    review: Optional[List[Dict[str, Any]]] = Field(
+        None, description="Bullets Jev could not clearly call supported by their cited "
+                          "evidence (item, bullet, label, p). Show them to the user.")
 
 
 class Violation(_Model):
@@ -531,6 +534,10 @@ class ExecuteOutput(_Output):
     cut_hints: List[Dict[str, Any]] = Field(default_factory=list)
     rules_applied: List[Dict[str, Any]] = Field(
         default_factory=list, description="Job-scoped rule values written into the base.")
+    support: Optional[Dict[str, Any]] = Field(
+        None, description="The cited-bullet support check (#193): how many bullets Jev "
+                          "checked and which to review. Absent when nothing was checked "
+                          "(no key, mode off, or no changed cited bullet).")
 
 
 def _executor():

@@ -1,0 +1,87 @@
+{
+  "_comment": "Synthetic (evidence, bullet, label) pairs for the #193 support check. Labels are what a careful reader would call each pair; `probabilities` are scripted stand-ins for recorded Jev answers, chosen to exercise each gate outcome. Real recordings and the fitted threshold wait for a TypeSafe key. Nothing here comes from a real candidate.",
+  "pairs": [
+    {
+      "id": "grounded_weave_ci",
+      "kind": "keyword weave grounded in a cite",
+      "evidence": ["Containerized services with Docker and deployed to AWS ECS through GitHub Actions CI/CD."],
+      "bullet": "Deployed Dockerized services to AWS ECS through GitHub Actions CI/CD pipelines.",
+      "label": "supported",
+      "probabilities": {"supported": 0.96, "adds_unsupported": 0.03, "contradicts": 0.01},
+      "outcome": "pass"
+    },
+    {
+      "id": "grounded_weave_etl",
+      "kind": "keyword weave grounded in a cite",
+      "evidence": ["Wrote Python ETL jobs with pandas processing 50GB of daily event data into Snowflake."],
+      "bullet": "Built Python ETL pipelines with pandas that load daily event data into Snowflake.",
+      "label": "supported",
+      "probabilities": {"supported": 0.91, "adds_unsupported": 0.08, "contradicts": 0.01},
+      "outcome": "pass"
+    },
+    {
+      "id": "reworded_service",
+      "kind": "honest rewording",
+      "evidence": ["Developed FastAPI and Flask microservices handling 40k requests/minute behind an Nginx gateway."],
+      "bullet": "Built FastAPI and Flask microservices serving 40k requests per minute behind an Nginx gateway.",
+      "label": "supported",
+      "probabilities": {"supported": 0.94, "adds_unsupported": 0.05, "contradicts": 0.01},
+      "outcome": "pass"
+    },
+    {
+      "id": "contributed_to_led",
+      "kind": "role inflation",
+      "evidence": ["Contributed to the migration from a monolith to event-driven services."],
+      "original": "Contributed to the migration from a monolith to event-driven services.",
+      "bullet": "Led the migration from a monolith to event-driven services.",
+      "label": "adds_unsupported",
+      "probabilities": {"supported": 0.06, "adds_unsupported": 0.92, "contradicts": 0.02},
+      "outcome": "block:unsupported"
+    },
+    {
+      "id": "team_lead_testing",
+      "kind": "role inflation",
+      "evidence": ["Added integration tests with pytest and cut flaky-test rate by half."],
+      "bullet": "Led the testing strategy for the engineering team, cutting the flaky-test rate by half.",
+      "label": "adds_unsupported",
+      "probabilities": {"supported": 0.12, "adds_unsupported": 0.85, "contradicts": 0.03},
+      "outcome": "block:unsupported"
+    },
+    {
+      "id": "invented_outcome",
+      "kind": "invented outcome",
+      "evidence": ["Modeled billing and subscription data in Postgres with SQLAlchemy; wrote migrations with Alembic."],
+      "bullet": "Modeled billing data in Postgres, reducing report latency by 60%.",
+      "label": "adds_unsupported",
+      "probabilities": {"supported": 0.04, "adds_unsupported": 0.95, "contradicts": 0.01},
+      "outcome": "block:unsupported"
+    },
+    {
+      "id": "contradicted_stack",
+      "kind": "contradiction",
+      "evidence": ["Maintained PHP and MySQL tooling for course registration workflows."],
+      "bullet": "Built course registration tooling in Ruby on Rails and PostgreSQL.",
+      "label": "contradicts",
+      "probabilities": {"supported": 0.02, "adds_unsupported": 0.07, "contradicts": 0.91},
+      "outcome": "block:contradicts"
+    },
+    {
+      "id": "contradicted_audience",
+      "kind": "contradiction",
+      "evidence": ["Built React and TypeScript dashboards visualizing pipeline health for internal teams."],
+      "bullet": "Built customer-facing React dashboards visualizing pipeline health for external clients.",
+      "label": "contradicts",
+      "probabilities": {"supported": 0.03, "adds_unsupported": 0.12, "contradicts": 0.85},
+      "outcome": "block:contradicts"
+    },
+    {
+      "id": "uncertain_scope",
+      "kind": "uncertain band",
+      "evidence": ["Modeled billing and subscription data in Postgres with SQLAlchemy; wrote migrations with Alembic."],
+      "bullet": "Owned the billing data layer, from Postgres schemas to Alembic migrations.",
+      "label": "adds_unsupported",
+      "probabilities": {"supported": 0.41, "adds_unsupported": 0.55, "contradicts": 0.04},
+      "outcome": "review"
+    }
+  ]
+}

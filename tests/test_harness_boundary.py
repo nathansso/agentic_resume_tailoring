@@ -130,6 +130,10 @@ def test_harness_code_names_no_generative_client():
 def test_importing_harness_or_checks_loads_no_generative_client():
     entries = _harness_entries(ROOT) + list(EXTRA_ENTRIES)
     assert "harness.mcp_server" in entries and "harness.tools" in entries
+    # The Jev client (#193) is under the same rule: it is a network call, not a
+    # generative client, and it imports none.
+    assert {"harness.decisions.client", "harness.decisions.engine",
+            "harness.decisions.support"} <= set(entries)
     assert transitive_violations(ROOT, entries) == []
 
 

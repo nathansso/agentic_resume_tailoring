@@ -12,6 +12,49 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 193 — Jev decisions engine and the cited-bullet support check
+**Status:** complete | **Tests:** 1831 pass on SQLite (70 new), 18 skipped
+
+ART can now ask TypeSafe's Jev a bounded question, cache the answer, and replay it with no network. The first caller is a check the gates lacked: does the evidence a bullet cites say what the bullet says? The `citations` gate (#198) proves the cite is real; lexical drift only measures word overlap and misses "contributed to" becoming "led".
+
+### What shipped
+
+- **`harness/decisions/` (new), the only network call under `harness/`.**
+  - `questions.py`: `Noul`, `Choice(options, no_match)` and `Score(levels)`, with the documented limits enforced when a question is built, canonical JSON, and a normalized `Answer` (value, p, probabilities, source `cache`/`jev`/`fallback`, reason). Each question carries a version (`support@v1`) that is part of its hash, so rewording one visibly invalidates its recordings.
+  - `client.py`: `JevClient` over `requests` with an injectable transport, a timeout, and bounded exponential backoff on 429 and 529 only. 401, 422 and anything else raise `JevError(code)` at once. The model is pinned to `jev-1.13.0` (`ART_JEV_MODEL` overrides). The key comes from `TYPESAFE_API_KEY`, or the optional `keyring`, and is never logged, stored, or shown in a repr or error.
+  - `cache.py` and a `JevDecision` table (created by `create_all`): one row per question, keyed `sha256(state, question, requested model)`, storing the question, the answer, the **resolved** model version, the question's share of the request's tokens, the point and the time. The state itself is not stored. A failed write is logged, never raised.
+  - `engine.py`: `decide(point, state, questions, fallback)` looks up every question, sends only the misses in one batched request per state, and caches each answer. `ART_JEV_MODE`: `off` (always the fallback), `replay` (cache only; a miss raises `JevReplayMiss`, never a live call, never a silent fallback) or `auto` (default: cache, then Jev if a key is set, then the fallback on no key or any API error). `stats()` counts answers by source per point, with a hit rate.
+  - `recordings.py` and `art jev status|export|import`: a versioned JSON of cache rows (answers, no resume text). A recording in an unknown format or version is refused.
+- **The support check** (`harness/decisions/support.py`, `support@v1`): one `choice` per changed cited bullet, `supported` / `adds_unsupported` / `contradicts`. Its state is `{evidence, original?, bullet}`, where evidence is the text of the cited source bullets and nothing else from the knowledge graph. Verbatim source bullets and uncited bullets are never sent.
+  - **Wiring keeps `harness/acceptance.py` model-free.** The executor builds a `support_checker` from the engine and passes it in `Context` (new optional field, like `line_counter`). The `faithfulness` gate gains `contradicts:<item>: "<bullet>"` and `unsupported:<item>: "<bullet>"` when that label's p is at least `TAU_BLOCK` (0.8).
+  - **The uncertain band** (`TAU_REVIEW` 0.4 up to `TAU_BLOCK`) is not a violation. It comes back as `nodes[].review` and a top-level `support` block (`checked`, `review`), each entry with the label and p.
+  - **With no key, mode `off`, or an API error** the finding is `unchecked` and adds nothing: lexical drift keeps gating, and the result is unchanged (`support` and `review` are absent).
+- **Contract and skill.** `ExecuteOutput` gains an optional `support`, `NodeResult` an optional `review`. The `art-tailor` skill tells the host to show reviewed bullets and how to read an `unsupported:` revert. docs/harness.md § 4 has the new row and the per-question cache and mode semantics.
+- **Tests: `tests/test_jev.py` (42 new, plus one live test) and `tests/test_support_gate.py` (28 new).**
+  - Client and API format: the documented request and response shapes, limits, retries on 429/529 and not on 401/422/500, the key never appearing in output.
+  - Cache: a request with one new question sends only that one, a hit skips the transport, the resolved model version is stored, a failed write is logged.
+  - Modes: replay raises on a miss without calling the transport, `off` never calls it, an unrecognized mode is `off`.
+  - Recordings: export/import round trip into an empty store then replay, version refusal, the CLI.
+  - Support gate: nine synthetic labelled pairs (`tests/fixtures/support_pairs.json`: grounded weaves, "contributed" to "led" inflation, invented outcomes, contradictions, one uncertain case) each land on the right label and gate outcome through scripted answers; verbatim and uncited bullets are never sent; key-unset parity with the pre-Jev result; a scripted-host plan with a woven bullet is recorded once and replayed at a 100% hit rate with a transport that fails if called; the same plan with a changed bullet raises.
+  - `tests/conftest.py` sets `ART_JEV_MODE=off` and removes `TYPESAFE_API_KEY` for every test; the live test puts back the key it captured at collection. `config.load_dotenv()` walks up from the repo, so a developer's `.env` puts `TYPESAFE_API_KEY` in the environment, and `auto` would otherwise call the API from any test that runs a plan.
+  - The live test is `@pytest.mark.integration` and skips without the key.
+
+### Deviations from spec
+
+- **`TAU_BLOCK` = 0.8 is provisional** (TypeSafe's cookbook value), and `TAU_REVIEW` = 0.4 is a guess. Neither is fitted: that needs a key and a hand-labelled set of about 50 pairs from benchmark output. Jev's confidence is not claimed to be calibrated.
+- **The recordings are synthetic.** The nine labelled pairs and their probabilities are scripted stand-ins, not Jev answers; real ones replace them once recorded with a key.
+- **The live test needs a key**, so the implementing agent did not run it; the planner ran `python run_tests.py --integration -k jev` with the real key and it passes.
+- **The Postgres leg was not run locally** (the Docker daemon was not running). `JevDecision` uses only the JSON, string, float and datetime columns other tables use.
+- **An item cite counts as evidence.** The plan resolves `<key>#b<n>` cites; a cite naming an experience or project (`exp:...`) resolves to all of that item's source bullets, since the citations gate accepts it. Skill, education and achievement cites name no bullet text, so a bullet citing only those is `unchecked` (`no_evidence_text`), not sent with empty evidence.
+- **`original` is inferred.** A plan node does not say which bullet a new one revises, so `original` is the most similar bullet (word overlap of at least 0.25) in the version the plan builds on. It is part of the cache key, so replaying a plan against a different HEAD is a different set of questions.
+- **The `support` result field is present only when Jev or the cache answered.** That keeps the no-key result unchanged; `art jev status` is how a user sees that the check is not running.
+- **A replay miss inside `execute_plan` propagates** as `JevReplayMiss` instead of becoming a tool error, the way a cassette miss does.
+- **An unrecognized `ART_JEV_MODE` means `off`**, not `auto`, so a typo cannot send resume text anywhere.
+- **Requests are one per bullet.** The state carries the bullet, so questions about different bullets cannot share a request; batching still applies to several questions about one state.
+- **Other decision points, and the `docs/harness.md` § 4 table order, are left to their own issues**, as the plan says.
+
+---
+
 ## Issue 233 — Skill retrieval without a model: word-boundary links, bullet provenance, requirement keywords
 **Status:** complete | **Tests:** 1761 pass on SQLite (44 new), 18 skipped
 
@@ -44,6 +87,8 @@ Skill retrieval improves with no model call. The host's requirement keywords plu
 - **Only required and preferred requirements** take part in ranking and in `unmatched_terms`. Incidental ones are ignored.
 - **Not consumed yet:** the legacy tailor path does not read `bullets` or `education_via_projects`, and no harness tool exposes them. They are for #199 and for citations.
 - **The Postgres leg was not run locally** (Docker not running). CI runs it.
+
+---
 
 ## Issue 123 — Numeric and entity consistency gate
 **Status:** complete | **Tests:** 1717 pass on SQLite (62 new), 18 skipped
