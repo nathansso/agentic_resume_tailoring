@@ -44,6 +44,10 @@ The tools named below are the ART MCP server's tools.
   achievement.
 - Call `get_item` for each experience and project you might use. It returns the source
   bullets. Evidence ids are `<item key>#b<n>`, the n-th source bullet, counting from 0.
+- A project's record says where it was done: `context` is its role or degree, and
+  `context_status` is `personal` for the user's own project. Work is stronger evidence
+  than coursework; never present a course or personal project as a job. A role's
+  record lists its `projects`; an achievement's `project` is what it was won for.
 - Call `get_head(job_id)`. If the job already has a version, build on it; the plan's
   `parent` must be its `node_id`. Respect anything under `editor_edits`: the user made
   those changes by hand.

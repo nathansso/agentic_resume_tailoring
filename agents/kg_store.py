@@ -24,6 +24,7 @@ import database.db as _db
 from database.db import next_seq
 from database.models import Achievement, DeletedEntry, Education, Experience, Project, Skill, UserSkill
 from agents.skill_postprocessor import normalize_skill_name
+from agents import project_context as _ctx
 from institution import canonicalize_institution
 
 logger = logging.getLogger(__name__)
@@ -190,6 +191,10 @@ class KGStoreMixin:
                 cls._merge_experience(winner, loser.start_date, loser.end_date,
                                       loser.description, loser.bullets)
             session.add(winner)
+            # Projects done in the loser now belong to the survivor; flushed
+            # before the delete so a Postgres FK never sees a dangling id.
+            _ctx.repoint(session, Project, "experience_id", loser.experience_id, winner.experience_id)
+            session.flush()
             session.delete(loser)
             if winner is e:
                 kept[kept.index(match)] = e
@@ -240,8 +245,14 @@ class KGStoreMixin:
                         setattr(richer, field, getattr(poorer, field))
                 if not (richer.metrics or {}) and (poorer.metrics or {}):
                     richer.metrics = poorer.metrics
+            # A context the user confirmed on either copy survives the merge.
+            if (richer.context_status or _ctx.UNREVIEWED) == _ctx.UNREVIEWED                     and (poorer.context_status or _ctx.UNREVIEWED) != _ctx.UNREVIEWED:
+                richer.experience_id, richer.education_id = poorer.experience_id, poorer.education_id
+                richer.context_status = poorer.context_status
+            _ctx.repoint(session, Achievement, "project_id", poorer.project_id, richer.project_id)
             richer.updated_at = datetime.utcnow()
             session.add(richer)
+            session.flush()
             session.delete(poorer)
             if richer is p:  # p won: replace match in kept
                 kept[kept.index(match)] = p
@@ -283,8 +294,10 @@ class KGStoreMixin:
                 for field in ("degree", "location", "start_date", "end_date", "gpa"):
                     if not getattr(richer, field, None) and getattr(poorer, field, None):
                         setattr(richer, field, getattr(poorer, field))
+            _ctx.repoint(session, Project, "education_id", poorer.education_id, richer.education_id)
             richer.updated_at = datetime.utcnow()
             session.add(richer)
+            session.flush()
             session.delete(poorer)
             if richer is e:  # e won: replace match in kept
                 kept[kept.index(match)] = e
@@ -446,6 +459,8 @@ class KGStoreMixin:
             for field in ("description", "issuer", "date"):
                 if not getattr(richer, field, None) and getattr(poorer, field, None):
                     setattr(richer, field, getattr(poorer, field))
+            if richer.project_id is None and poorer.project_id is not None:
+                richer.project_id = poorer.project_id
             richer.updated_at = datetime.utcnow()
             session.add(richer)
             session.delete(poorer)

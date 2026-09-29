@@ -51,12 +51,27 @@ Read them yourself. ART does not read files.
   "Present"), resend that record with `"correct": true` and only the corrected
   fields.
 
-## 4. Set the header
+## 4. Say where each project was done
+
+A project was done in a role, for a degree, or on its own. Tailoring weighs work
+above coursework, so this matters.
+
+- Call `suggest_project_contexts`. Each unreviewed project comes with the roles or
+  degrees ART's rules point to (an employer's name in the repo name, a course code),
+  or none.
+- Show the user the list and ask them to confirm, correct or answer each one. Never
+  store a suggestion they have not confirmed.
+- Call `set_project_context({project, context})` for each answer: an `exp:` or `edu:`
+  key from `list_items`, or `personal`.
+- An award won for a project (a hackathon placing) is an achievement. Store it, then
+  call `link_achievement({achievement, project})`.
+
+## 5. Set the header
 
 Call `update_profile({fields})` with the name, email, phone, location, linkedin_url,
 github_username and portfolio_url the user gave you or that appear on their resume.
 
-## 5. Job-scoped rules
+## 6. Job-scoped rules
 
 If the user says a fact depends on the posting (for example "graduation is June 2027,
 but Dec 2027 when a role needs me enrolled after the internship"), record a rule with
@@ -69,7 +84,7 @@ but Dec 2027 when a role needs me enrolled after the internship"), record a rule
 
 Tailoring then asks that question of every posting.
 
-## 6. Confirm
+## 7. Confirm
 
 Call `list_items` again and summarize what is stored by kind. Point out anything that
 looks duplicated or thin, and ask the user whether to fix it.

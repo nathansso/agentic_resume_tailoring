@@ -106,6 +106,8 @@ class SearchHit(_Model):
     title: str
     score: float
     snippet: str
+    context: Optional[str] = Field(
+        None, description="For a project: key of the role or degree it was done under.")
 
 
 class SearchOutput(_Output):
@@ -135,6 +137,60 @@ class ItemOutput(_Output):
     key: Optional[str] = None
     kind: Optional[Kind] = None
     record: Optional[Dict[str, Any]] = None
+
+
+# ── project context ──────────────────────────────────────────────────────────
+
+ContextStatus = Literal["unreviewed", "linked", "personal"]
+
+
+class SuggestContextsInput(_Model):
+    include_reviewed: bool = Field(
+        False, description="Also list projects whose context is already set.")
+
+
+class ContextCandidate(_Model):
+    context_key: str
+    kind: Literal["experience", "education"]
+    title: str
+    rule: str = Field(description="employer or course_code.")
+    reason: str
+
+
+class ProjectContextSuggestion(_Model):
+    project_key: str
+    project: str
+    context_status: ContextStatus
+    context_key: Optional[str] = None
+    suggestions: List[ContextCandidate] = Field(
+        default_factory=list, description="Empty when no rule fired: ask the user.")
+
+
+class SuggestContextsOutput(_Output):
+    projects: List[ProjectContextSuggestion] = Field(default_factory=list)
+
+
+class SetContextInput(_Model):
+    project: str = Field(description="A project key ('proj:<name>') or name.")
+    context: str = Field(description="An 'exp:' or 'edu:' key, 'personal', or "
+                                     "'unreviewed' to clear it.")
+
+
+class SetContextOutput(_Output):
+    project_key: Optional[str] = None
+    context_status: Optional[ContextStatus] = None
+    context_key: Optional[str] = None
+
+
+class LinkAchievementInput(_Model):
+    achievement: str = Field(description="An achievement key ('ach:<title>') or title.")
+    project: Optional[str] = Field(None, description="The project it was won for; "
+                                                     "omit to untie it.")
+
+
+class LinkAchievementOutput(_Output):
+    achievement_key: Optional[str] = None
+    project_key: Optional[str] = None
 
 
 # ── get_profile ──────────────────────────────────────────────────────────────
@@ -521,6 +577,29 @@ TOOLS: List[ToolSpec] = [
         "Full record for one key. Unknown keys return an error with suggestions.",
         ItemInput, ItemOutput,
         lambda uid, key: _tools().get_item(uid, key)),
+    ToolSpec(
+        "suggest_project_contexts",
+        "Where each unreviewed project was probably done (a role or a degree), from "
+        "employer names in repo names and course codes. Confirm each with the user, then "
+        "call set_project_context. A project with no suggestion: ask.",
+        SuggestContextsInput, SuggestContextsOutput,
+        lambda uid, include_reviewed=False:
+            _tools().suggest_project_contexts(uid, include_reviewed)),
+    ToolSpec(
+        "set_project_context",
+        "Record where a project was done: an exp: or edu: key, or 'personal'. Only what "
+        "the user confirmed. Writes.",
+        SetContextInput, SetContextOutput,
+        lambda uid, project, context: _tools().set_project_context(uid, project, context),
+        read_only=False),
+    ToolSpec(
+        "link_achievement",
+        "Tie an award (e.g. a hackathon placing) to the project it was won for. Only what "
+        "the user confirmed. Writes.",
+        LinkAchievementInput, LinkAchievementOutput,
+        lambda uid, achievement, project=None:
+            _tools().link_achievement(uid, achievement, project),
+        read_only=False),
     ToolSpec(
         "get_profile",
         "The candidate's name and contact details for the resume header.",

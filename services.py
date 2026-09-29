@@ -613,6 +613,9 @@ def delete_experience(user_id: Optional[UUID], experience_id: str) -> bool:
         if not row or row.user_id != user_id:
             return False
         _record_tombstone(session, user_id, "experience", row.title, row.company)
+        from agents.project_context import unlink
+        unlink(session, Project, "experience_id", row.experience_id)
+        session.flush()
         session.delete(row)
         session.commit()
         return True
@@ -628,6 +631,9 @@ def delete_education(user_id: Optional[UUID], education_id: str) -> bool:
         if not row or row.user_id != user_id:
             return False
         _record_tombstone(session, user_id, "education", row.institution, row.degree)
+        from agents.project_context import unlink
+        unlink(session, Project, "education_id", row.education_id)
+        session.flush()
         session.delete(row)
         session.commit()
         return True
@@ -647,6 +653,10 @@ def delete_project(user_id: Optional[UUID], project_id: str) -> bool:
         # their NOT NULL project_id and fail the delete (#198).
         for blurb in list(row.blurbs):
             session.delete(blurb)
+        # An award won for it stays an award, just no longer tied to a project.
+        from agents.project_context import unlink
+        unlink(session, Achievement, "project_id", row.project_id)
+        session.flush()
         session.delete(row)
         session.commit()
         return True

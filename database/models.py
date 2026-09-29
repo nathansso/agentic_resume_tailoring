@@ -152,6 +152,10 @@ class Achievement(SQLModel, table=True):
     # table's read path documents itself as "in resume-document order", which
     # ordering on a tied `created_at` could not actually deliver.
     seq: Optional[int] = Field(default=None, index=True)
+    # The project this award was won for (a hackathon placing): the graph's
+    # Achievement -AWARDED_FOR-> Project edge. Null for awards not tied to one
+    # project (Dean's List). Set only by agents/project_context.link_achievement.
+    project_id: Optional[UUID] = Field(default=None, foreign_key="project.project_id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -173,6 +177,14 @@ class Project(SQLModel, table=True):
     source_context: Optional[str] = Field(default=None)
     # Per-user résumé-document ordinal (issue #180). See Experience.seq.
     seq: Optional[int] = Field(default=None, index=True)
+    # Where the project was done: the graph's Project -PART_OF-> Experience or
+    # Education edge; at most one is set. `context_status` separates "personal"
+    # (confirmed: no role or degree) from "unreviewed" (nobody has said yet),
+    # which two null ids cannot. "linked" when one id is set. Written only by
+    # agents/project_context.set_project_context, on explicit confirmation.
+    experience_id: Optional[UUID] = Field(default=None, foreign_key="experience.experience_id")
+    education_id: Optional[UUID] = Field(default=None, foreign_key="education.education_id")
+    context_status: str = Field(default="unreviewed")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

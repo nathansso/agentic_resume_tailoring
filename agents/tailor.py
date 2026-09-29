@@ -181,11 +181,12 @@ class ResumeTailorAgent:
             ).all()
 
             proj_dicts_all = []
+            contexts = self._project_contexts(session, user_id)
             for p in projects:
                 blurbs = session.exec(
                     select(ProjectBlurb).where(ProjectBlurb.project_id == p.project_id)
                 ).all()
-                proj_dicts_all.append({
+                d = {
                     "name": p.name,
                     "description": p.description,
                     "blurbs": {b.style: b.content for b in blurbs},
@@ -195,7 +196,13 @@ class ResumeTailorAgent:
                     "demo_url": p.demo_url,
                     "start_date": p.start_date,
                     "end_date": p.end_date,
-                })
+                }
+                # Where it was done (work / coursework / personal). Set only once
+                # the user has confirmed it, so an unreviewed project's dict, and
+                # the planner payload built from it, are unchanged.
+                if p.project_id in contexts:
+                    d["context"] = contexts[p.project_id]
+                proj_dicts_all.append(d)
 
             jd_text = job.description if job else ""
             # Drop malformed/duplicate experience rows and coerce placeholder
@@ -233,6 +240,7 @@ class ResumeTailorAgent:
                 proj_dicts, proj_pool, item_evidence
             )
             self._annotate_graph_evidence(exp_dicts, proj_dicts, item_evidence)
+            self._annotate_evidence_via_projects(exp_dicts, kg_evidence)
 
             # Signal-rank the missing JD keywords and assign each to the specific
             # experience/project whose own content supports it (issue #72), so the
@@ -1566,6 +1574,47 @@ class ResumeTailorAgent:
             if ev:
                 p["graph_evidence"] = ev
 
+    @staticmethod
+    def _project_contexts(session, user_id: UUID) -> Dict:
+        """project_id -> {"kind": "work"|"coursework"|"personal", "under": label}
+        for every project whose context the user confirmed. Unreviewed projects
+        are absent. Any failure degrades to {} (no context anywhere)."""
+        try:
+            from agents.project_context import PERSONAL, context_index
+            out = {}
+            for pid, c in context_index(session, user_id).items():
+                if c["status"] == PERSONAL:
+                    out[pid] = {"kind": "personal"}
+                elif c["kind"]:
+                    out[pid] = {"kind": "work" if c["kind"] == "experience" else "coursework",
+                                "under": c["title"]}
+            return out
+        except Exception as exc:
+            logger.warning("Project context lookup failed, proceeding without it: %s", exc)
+            return {}
+
+    @classmethod
+    def _annotate_evidence_via_projects(cls, exp_dicts: List[Dict], kg_evidence: Dict) -> None:
+        """Attach 'graph_evidence_via_projects' to each experience: JD skills it
+        is tied to only through a project done in that role, as
+        [{"skill", "project"}]. Separate from 'graph_evidence' because it is
+        weaker than the role's own text naming the skill. Set only when
+        non-empty, so without stored project links nothing changes."""
+        by_key: Dict[str, List[Dict]] = {}
+        for skill, ev in (kg_evidence or {}).items():
+            for v in ev.get("experiences_via_projects") or []:
+                key = cls._exp_key({"title": v.get("title"), "company": v.get("company")})
+                bucket = by_key.setdefault(key, [])
+                entry = {"skill": skill, "project": v.get("project")}
+                if entry not in bucket:
+                    bucket.append(entry)
+        if not by_key:
+            return
+        for e in exp_dicts:
+            via = by_key.get(cls._exp_key(e))
+            if via:
+                e["graph_evidence_via_projects"] = via
+
     # ── Cross-job memory: JobCard selection (issue #137) ─────────────────────
 
     @staticmethod
@@ -1632,6 +1681,8 @@ class ResumeTailorAgent:
                 "suggested_keywords": e.get("suggested_keywords") or [],
                 "relevance": e.get("relevance_score"),
                 "graph_evidence": e.get("graph_evidence") or [],
+                **({"graph_evidence_via_projects": e["graph_evidence_via_projects"]}
+                   if e.get("graph_evidence_via_projects") else {}),
             }
             for e in exp_dicts
         ] + [
@@ -1643,6 +1694,7 @@ class ResumeTailorAgent:
                 "suggested_keywords": p.get("suggested_keywords") or [],
                 "relevance": p.get("selection_score"),
                 "graph_evidence": p.get("graph_evidence") or [],
+                **({"context": p["context"]} if p.get("context") else {}),
             }
             for p in proj_dicts
         ]
