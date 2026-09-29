@@ -107,7 +107,7 @@ every deterministic computation in code.
 
 | Decision point | Question type | Decides | Fallback |
 |---|---|---|---|
-| Cited-bullet support (#193) | choice per revised bullet | Whether the cited evidence supports the new bullet: `supported`, `adds_unsupported`, `contradicts`. Blocks at p ≥ 0.8 (provisional), surfaces 0.4–0.8 as `review` | Unchecked; lexical drift still gates |
+| Cited-bullet support (#193) | choice per revised bullet | Whether the cited evidence supports the new bullet: `supported`, `adds_unsupported`, `contradicts`. Scored by p(adds_unsupported) + p(contradicts), which is 1 − p(supported). Blocks at a score ≥ 0.85, surfaces 0.35–0.85 as `review` (fitted on 89 labelled pairs, #237; `eval/support_labels/REPORT.md`) | Unchecked; lexical drift still gates |
 | Memory gate (#202) | noul, choice, score | Is the message a standing preference; emphasize or suppress; strength 1–5 (#129's scale) | Heuristics, then host extraction |
 | Variant choice (#199) | choice per item, with no-match | Which approved bullet variant fits the job; no-match means the host writes a new one | Retrieval similarity |
 | Track baseline (#199) | choice | Which baseline a new job branches from | Role-family lookup |

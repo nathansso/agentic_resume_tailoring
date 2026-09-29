@@ -1,0 +1,2588 @@
+{
+  "decisions": [
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.9,
+        "probabilities": {
+          "adds_unsupported": 0.06,
+          "contradicts": 0.01,
+          "supported": 0.93
+        },
+        "type": "choice"
+      },
+      "cache_key": "009fb54fee301c10de5b13c4d89fc9f902abf3bdcbd98f764a27c6421f122a7a",
+      "created_at": "2026-09-29T21:23:54.215814",
+      "input_tokens": 472.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.87,
+        "probabilities": {
+          "adds_unsupported": 0.08,
+          "contradicts": 0.0,
+          "supported": 0.92
+        },
+        "type": "choice"
+      },
+      "cache_key": "00c2655cc89b560e24f329b5ecda1402e99549b385064d1c4626aeb92db06bd7",
+      "created_at": "2026-09-29T21:23:51.197674",
+      "input_tokens": 509.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.6,
+        "probabilities": {
+          "adds_unsupported": 0.26,
+          "contradicts": 0.01,
+          "supported": 0.73
+        },
+        "type": "choice"
+      },
+      "cache_key": "09511c713befe1d93d1890e882c8df1048c531e93a270be59b8cd0c4d93e3a73",
+      "created_at": "2026-09-29T21:24:46.648083",
+      "input_tokens": 476.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.96,
+        "probabilities": {
+          "adds_unsupported": 0.98,
+          "contradicts": 0.0,
+          "supported": 0.02
+        },
+        "type": "choice"
+      },
+      "cache_key": "09c0f6f6cb200a10bb96270b47cf070d1be3711ab8478184292b89fbb401e8bd",
+      "created_at": "2026-09-29T21:24:14.059492",
+      "input_tokens": 461.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.98,
+        "probabilities": {
+          "adds_unsupported": 0.98,
+          "contradicts": 0.02,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "0a3b23855aaafcd814423b629a20f2535020ab8473b9d126d6be11907b49242e",
+      "created_at": "2026-09-29T21:24:22.804423",
+      "input_tokens": 507.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.99,
+        "probabilities": {
+          "adds_unsupported": 0.99,
+          "contradicts": 0.0,
+          "supported": 0.01
+        },
+        "type": "choice"
+      },
+      "cache_key": "0a6b58562dc29f938985e0cbc3c1f96696baf958fd8b4c734dc348879c1bf66c",
+      "created_at": "2026-09-29T21:24:23.572427",
+      "input_tokens": 457.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.93,
+        "probabilities": {
+          "adds_unsupported": 0.96,
+          "contradicts": 0.0,
+          "supported": 0.04
+        },
+        "type": "choice"
+      },
+      "cache_key": "0fccf22123d4f85452e692fdb8636ec95938ef7f71d5b7cf12005c7c633379e2",
+      "created_at": "2026-09-29T21:24:52.790426",
+      "input_tokens": 491.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.87,
+        "probabilities": {
+          "adds_unsupported": 0.08,
+          "contradicts": 0.0,
+          "supported": 0.92
+        },
+        "type": "choice"
+      },
+      "cache_key": "11ad47056338744189e7577e19f5d01d4e3a0995ec55a05c8037ff8c25336ba2",
+      "created_at": "2026-09-29T21:23:49.928311",
+      "input_tokens": 487.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.95,
+        "probabilities": {
+          "adds_unsupported": 0.03,
+          "contradicts": 0.0,
+          "supported": 0.97
+        },
+        "type": "choice"
+      },
+      "cache_key": "1579b298f6b0b76c16a3298deec700e161c45fc6d649f02d559bb438c397961d",
+      "created_at": "2026-09-29T21:23:55.413919",
+      "input_tokens": 456.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 1.0,
+        "probabilities": {
+          "adds_unsupported": 1.0,
+          "contradicts": 0.0,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "1c81d14ba982601c6ca0a3e29dc2e7840fbb1288a510921cb9d52b6284337118",
+      "created_at": "2026-09-29T21:24:15.589021",
+      "input_tokens": 462.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.72,
+        "probabilities": {
+          "adds_unsupported": 0.81,
+          "contradicts": 0.0,
+          "supported": 0.19
+        },
+        "type": "choice"
+      },
+      "cache_key": "1f69c7834cf4c73c88ee3f07097147e453325f5b250f677d60c3bae521484f17",
+      "created_at": "2026-09-29T21:24:08.354749",
+      "input_tokens": 480.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.94,
+        "probabilities": {
+          "adds_unsupported": 0.96,
+          "contradicts": 0.03,
+          "supported": 0.01
+        },
+        "type": "choice"
+      },
+      "cache_key": "2386c57dcfb8e840d4f44cc73436876b9e2395f8e6eabfb738abbbf17d2eed7d",
+      "created_at": "2026-09-29T21:24:05.797422",
+      "input_tokens": 490.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.99,
+        "probabilities": {
+          "adds_unsupported": 1.0,
+          "contradicts": 0.0,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "242e05f9dfb9b520581f67ad1d58bc3628a0fcc846c85bb0cb690e77a30e5484",
+      "created_at": "2026-09-29T21:24:30.794968",
+      "input_tokens": 496.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.97,
+        "probabilities": {
+          "adds_unsupported": 0.02,
+          "contradicts": 0.0,
+          "supported": 0.98
+        },
+        "type": "choice"
+      },
+      "cache_key": "26a891ec9071ba2150fc32dad08777fdf8929eb42e2c15ee9336a0f69d2ceb30",
+      "created_at": "2026-09-29T21:24:02.786303",
+      "input_tokens": 466.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.99,
+        "probabilities": {
+          "adds_unsupported": 0.01,
+          "contradicts": 0.0,
+          "supported": 0.99
+        },
+        "type": "choice"
+      },
+      "cache_key": "29e843682c42608b6870b2119131ed4662875a2f2da3e8507550478fb2516aaf",
+      "created_at": "2026-09-29T21:24:04.012875",
+      "input_tokens": 481.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.9,
+        "probabilities": {
+          "adds_unsupported": 0.05,
+          "contradicts": 0.01,
+          "supported": 0.94
+        },
+        "type": "choice"
+      },
+      "cache_key": "31505d556aff0a924fdf6a182b866b01df513ca44127ee598f7aa8db3a5df10f",
+      "created_at": "2026-09-29T21:24:45.042868",
+      "input_tokens": 514.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "contradicts",
+        "confidence": 0.87,
+        "probabilities": {
+          "adds_unsupported": 0.06,
+          "contradicts": 0.91,
+          "supported": 0.03
+        },
+        "type": "choice"
+      },
+      "cache_key": "3457fa971fcffa18f2535f3e8b2e5db9c99d16e5bd1e40b5d246a2bccdf48e84",
+      "created_at": "2026-09-29T21:24:41.189733",
+      "input_tokens": 476.0,
+      "output_tokens": 47.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.79,
+        "probabilities": {
+          "adds_unsupported": 0.85,
+          "contradicts": 0.14,
+          "supported": 0.01
+        },
+        "type": "choice"
+      },
+      "cache_key": "379f6ef7d845dc69746d02215186ce86ae38bb5bc1b1d921bc5de270727c450b",
+      "created_at": "2026-09-29T21:24:52.113867",
+      "input_tokens": 477.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "contradicts",
+        "confidence": 0.89,
+        "probabilities": {
+          "adds_unsupported": 0.07,
+          "contradicts": 0.93,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "3e917b04022911e709cf995d50f0e7cd31cd19dbe1aa6fc5350fb3b664876965",
+      "created_at": "2026-09-29T21:24:34.200835",
+      "input_tokens": 514.0,
+      "output_tokens": 47.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.88,
+        "probabilities": {
+          "adds_unsupported": 0.08,
+          "contradicts": 0.0,
+          "supported": 0.92
+        },
+        "type": "choice"
+      },
+      "cache_key": "3f483afba8e8ba0af21594aeceecffb9b0a1b8bcf24e8f3fa39ec41a1f880f3b",
+      "created_at": "2026-09-29T21:23:58.458910",
+      "input_tokens": 518.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.91,
+        "probabilities": {
+          "adds_unsupported": 0.06,
+          "contradicts": 0.0,
+          "supported": 0.94
+        },
+        "type": "choice"
+      },
+      "cache_key": "40c5d56bc7baaeda151061de9bd4b8ac38ed57f512c0aff7cd6addd12e40bf3f",
+      "created_at": "2026-09-29T21:23:53.599584",
+      "input_tokens": 482.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.99,
+        "probabilities": {
+          "adds_unsupported": 1.0,
+          "contradicts": 0.0,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "44382bf9b53d3373486ec57ccf42e32afde54568a05522fd42e5503db7a1311e",
+      "created_at": "2026-09-29T21:24:06.978515",
+      "input_tokens": 484.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "contradicts",
+        "confidence": 0.96,
+        "probabilities": {
+          "adds_unsupported": 0.03,
+          "contradicts": 0.97,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "45f52370cdd85c2f4f40679ded888a480694fcd58851c72e077990b9c6628db4",
+      "created_at": "2026-09-29T21:24:34.958592",
+      "input_tokens": 459.0,
+      "output_tokens": 47.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.77,
+        "probabilities": {
+          "adds_unsupported": 0.85,
+          "contradicts": 0.0,
+          "supported": 0.15
+        },
+        "type": "choice"
+      },
+      "cache_key": "4827ae6235e35f549be89a302bfd314f9024d9e0de55b3ab4ec8c7c0466c12b3",
+      "created_at": "2026-09-29T21:24:50.647783",
+      "input_tokens": 457.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "contradicts",
+        "confidence": 0.41,
+        "probabilities": {
+          "adds_unsupported": 0.38,
+          "contradicts": 0.61,
+          "supported": 0.01
+        },
+        "type": "choice"
+      },
+      "cache_key": "4838bcb7ac91938bd3803092f94803375154fe2fc8969c1b8cf09745a0a9b7eb",
+      "created_at": "2026-09-29T21:24:40.409610",
+      "input_tokens": 482.0,
+      "output_tokens": 47.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.8,
+        "probabilities": {
+          "adds_unsupported": 0.87,
+          "contradicts": 0.0,
+          "supported": 0.13
+        },
+        "type": "choice"
+      },
+      "cache_key": "4cb1e96439398280e29c360b8139fc87bbe27cbfbcc0b5cd39689543e45ed49f",
+      "created_at": "2026-09-29T21:24:11.578540",
+      "input_tokens": 485.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.82,
+        "probabilities": {
+          "adds_unsupported": 0.12,
+          "contradicts": 0.0,
+          "supported": 0.88
+        },
+        "type": "choice"
+      },
+      "cache_key": "4e0e0e6b282624cd7deef9d9df9cbe7671d0531f39c168dc98678375613ea064",
+      "created_at": "2026-09-29T21:24:42.733489",
+      "input_tokens": 489.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.96,
+        "probabilities": {
+          "adds_unsupported": 0.97,
+          "contradicts": 0.0,
+          "supported": 0.03
+        },
+        "type": "choice"
+      },
+      "cache_key": "5101c4edaf47a29f7152f5d007840715c72a0e07dc075d606c8a48138fcb40e3",
+      "created_at": "2026-09-29T21:24:06.375294",
+      "input_tokens": 454.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.98,
+        "probabilities": {
+          "adds_unsupported": 0.99,
+          "contradicts": 0.01,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "51edb893b571e6d20ebc2920c632483f3dd5b0ee803d3abe268d8a662c9950ce",
+      "created_at": "2026-09-29T21:24:16.393318",
+      "input_tokens": 494.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.84,
+        "probabilities": {
+          "adds_unsupported": 0.89,
+          "contradicts": 0.11,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "5499ad93b29fe5ded6bc5348f73215c0b16e51391aad530de22870435856f58b",
+      "created_at": "2026-09-29T21:24:17.919125",
+      "input_tokens": 488.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.99,
+        "probabilities": {
+          "adds_unsupported": 1.0,
+          "contradicts": 0.0,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "57f465dd8a9ecb56fddee611950d0246bffc3e0fa3f78f7a95d729760c4494dd",
+      "created_at": "2026-09-29T21:24:12.432707",
+      "input_tokens": 449.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.41,
+        "probabilities": {
+          "adds_unsupported": 0.61,
+          "contradicts": 0.39,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "6694329aa76ab281de089b1a0ac169a1db96b1838b7cfb1528a597334c968d81",
+      "created_at": "2026-09-29T21:24:49.912984",
+      "input_tokens": 485.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.95,
+        "probabilities": {
+          "adds_unsupported": 0.97,
+          "contradicts": 0.0,
+          "supported": 0.03
+        },
+        "type": "choice"
+      },
+      "cache_key": "68a11568a5cc9ab1081e4fcbe97293e5323093bc878fc4df84ed27ad29fddead",
+      "created_at": "2026-09-29T21:24:25.157470",
+      "input_tokens": 466.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 1.0,
+        "probabilities": {
+          "adds_unsupported": 1.0,
+          "contradicts": 0.0,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "69d63bf76c032f35810be650ca389d3603fed6b58b7ed8098015a8a264b40dfc",
+      "created_at": "2026-09-29T21:24:29.964789",
+      "input_tokens": 476.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.82,
+        "probabilities": {
+          "adds_unsupported": 0.12,
+          "contradicts": 0.0,
+          "supported": 0.88
+        },
+        "type": "choice"
+      },
+      "cache_key": "6be5d0236adbce43114c2eaa69bd48a0639af028f2bf8b71507cbecaca9bd8f8",
+      "created_at": "2026-09-29T21:23:57.240925",
+      "input_tokens": 484.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.27,
+        "probabilities": {
+          "adds_unsupported": 0.51,
+          "contradicts": 0.49,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "6ed132bdb4144751ab80b69deee5560cdddfaa53c4d081e346b3dbccb1d8bbce",
+      "created_at": "2026-09-29T21:24:39.627315",
+      "input_tokens": 464.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.8,
+        "probabilities": {
+          "adds_unsupported": 0.13,
+          "contradicts": 0.0,
+          "supported": 0.87
+        },
+        "type": "choice"
+      },
+      "cache_key": "7213099d0fbdb6efd092bd76c91097c99cf3ab862f6c639aeaf6d2c139a430d5",
+      "created_at": "2026-09-29T21:24:03.424471",
+      "input_tokens": 484.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.97,
+        "probabilities": {
+          "adds_unsupported": 0.02,
+          "contradicts": 0.0,
+          "supported": 0.98
+        },
+        "type": "choice"
+      },
+      "cache_key": "7659a15f21e7a8a981323091cf10277e209ff4dc821ea6ffabf7378119e29007",
+      "created_at": "2026-09-29T21:24:47.541717",
+      "input_tokens": 447.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 1.0,
+        "probabilities": {
+          "adds_unsupported": 1.0,
+          "contradicts": 0.0,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "76906449751c128eb93532366b79d791cd1b2466255790a01813084b91ce33d0",
+      "created_at": "2026-09-29T21:24:25.930421",
+      "input_tokens": 498.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.83,
+        "probabilities": {
+          "adds_unsupported": 0.1,
+          "contradicts": 0.01,
+          "supported": 0.89
+        },
+        "type": "choice"
+      },
+      "cache_key": "7699a9d606f0fcd587f87466a6db3998f5275e4ecf78ffa2c0d57d04c54017a8",
+      "created_at": "2026-09-29T21:23:56.610179",
+      "input_tokens": 477.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.92,
+        "probabilities": {
+          "adds_unsupported": 0.05,
+          "contradicts": 0.0,
+          "supported": 0.95
+        },
+        "type": "choice"
+      },
+      "cache_key": "76e1d213dcdde80879e734dc69e9f0ceafdedbc7620be62b547f163830209389",
+      "created_at": "2026-09-29T21:23:59.714118",
+      "input_tokens": 502.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.99,
+        "probabilities": {
+          "adds_unsupported": 0.01,
+          "contradicts": 0.0,
+          "supported": 0.99
+        },
+        "type": "choice"
+      },
+      "cache_key": "7aa607970e3cb54bbf08d14942f22f4d792f05ab164a2089cc9ff7934472d01c",
+      "created_at": "2026-09-29T21:24:00.341988",
+      "input_tokens": 501.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.98,
+        "probabilities": {
+          "adds_unsupported": 0.99,
+          "contradicts": 0.0,
+          "supported": 0.01
+        },
+        "type": "choice"
+      },
+      "cache_key": "7f2ce9963dd1e233a535a0568c51b829f0af1fff48afd2feaeb53ab563dac818",
+      "created_at": "2026-09-29T21:24:13.253049",
+      "input_tokens": 495.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.98,
+        "probabilities": {
+          "adds_unsupported": 0.01,
+          "contradicts": 0.0,
+          "supported": 0.99
+        },
+        "type": "choice"
+      },
+      "cache_key": "8085b4ab5e6e00b339014351163df1e408ee754665df5c9f246396e32034a085",
+      "created_at": "2026-09-29T21:23:52.955138",
+      "input_tokens": 452.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 1.0,
+        "probabilities": {
+          "adds_unsupported": 1.0,
+          "contradicts": 0.0,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "80d24abab42ba669e9f9fea11a0f1ce74910f8fe6c0c0ee4891b53b004e5a971",
+      "created_at": "2026-09-29T21:24:26.707682",
+      "input_tokens": 462.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.98,
+        "probabilities": {
+          "adds_unsupported": 0.01,
+          "contradicts": 0.0,
+          "supported": 0.99
+        },
+        "type": "choice"
+      },
+      "cache_key": "82a66a4d40c462e7b250ec6b3b9b2e250d0d4efbad19a5b691e6ee841533477e",
+      "created_at": "2026-09-29T21:23:52.361894",
+      "input_tokens": 479.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.82,
+        "probabilities": {
+          "adds_unsupported": 0.88,
+          "contradicts": 0.0,
+          "supported": 0.12
+        },
+        "type": "choice"
+      },
+      "cache_key": "87cd799fe07901eee9e4763b36a5a33dd9b414338f3ddc38000916cbfde23d42",
+      "created_at": "2026-09-29T21:24:09.945245",
+      "input_tokens": 472.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.65,
+        "probabilities": {
+          "adds_unsupported": 0.77,
+          "contradicts": 0.0,
+          "supported": 0.23
+        },
+        "type": "choice"
+      },
+      "cache_key": "8c70f8eb203d059423211383de793729b347c90bd063b14e05bdda5fa8d6bdf9",
+      "created_at": "2026-09-29T21:24:07.677769",
+      "input_tokens": 461.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.99,
+        "probabilities": {
+          "adds_unsupported": 1.0,
+          "contradicts": 0.0,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "915e07c3d82657bb48f2d7fdaed60c1fff94492b9c6115e03c5bb3b0f36f60da",
+      "created_at": "2026-09-29T21:24:14.824858",
+      "input_tokens": 482.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 1.0,
+        "probabilities": {
+          "adds_unsupported": 1.0,
+          "contradicts": 0.0,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "918cb3daa736080f53a4fb5145ceeafdd25d8a1b05f4dec5f16a3a444482d3ab",
+      "created_at": "2026-09-29T21:24:19.537701",
+      "input_tokens": 496.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.98,
+        "probabilities": {
+          "adds_unsupported": 0.01,
+          "contradicts": 0.0,
+          "supported": 0.99
+        },
+        "type": "choice"
+      },
+      "cache_key": "96eaea46190c08be5daf27dac56205e3829085f16f91edfe78259c5528cdfe04",
+      "created_at": "2026-09-29T21:23:50.613953",
+      "input_tokens": 463.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "contradicts",
+        "confidence": 0.99,
+        "probabilities": {
+          "adds_unsupported": 0.0,
+          "contradicts": 1.0,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "99a4c4ab07ad77a3f93e1ccff6119cc6da15b925df763d59b6a5c3b93daf1dff",
+      "created_at": "2026-09-29T21:24:36.499963",
+      "input_tokens": 464.0,
+      "output_tokens": 47.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.92,
+        "probabilities": {
+          "adds_unsupported": 0.95,
+          "contradicts": 0.01,
+          "supported": 0.04
+        },
+        "type": "choice"
+      },
+      "cache_key": "9ecc209b344ce34b539a8937abd67db00e593f2a339971f083747dc9a3ac88bb",
+      "created_at": "2026-09-29T21:24:04.617380",
+      "input_tokens": 485.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "contradicts",
+        "confidence": 0.88,
+        "probabilities": {
+          "adds_unsupported": 0.08,
+          "contradicts": 0.92,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "9f24e7c778c53b9f70b3bbb3bee944e34a0383b6d06f5f478e27866e34b33e04",
+      "created_at": "2026-09-29T21:24:31.535677",
+      "input_tokens": 465.0,
+      "output_tokens": 47.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.99,
+        "probabilities": {
+          "adds_unsupported": 1.0,
+          "contradicts": 0.0,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "a735909958eb39320716f212c82c398e3920f0e25a9c4e87776f61055eb3c94d",
+      "created_at": "2026-09-29T21:24:29.154683",
+      "input_tokens": 484.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.89,
+        "probabilities": {
+          "adds_unsupported": 0.07,
+          "contradicts": 0.0,
+          "supported": 0.93
+        },
+        "type": "choice"
+      },
+      "cache_key": "a750a7844300e5b7ca0b0df13b0bea8fe6ba7552783bbc4a4d08ee04f59a5085",
+      "created_at": "2026-09-29T21:23:54.811299",
+      "input_tokens": 485.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.99,
+        "probabilities": {
+          "adds_unsupported": 0.0,
+          "contradicts": 0.0,
+          "supported": 1.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "b2bb8dc928fb3c242ac388358ac2ccc1f50dee5b932e73906e5af0648e0e71ae",
+      "created_at": "2026-09-29T21:24:02.170630",
+      "input_tokens": 495.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.96,
+        "probabilities": {
+          "adds_unsupported": 0.02,
+          "contradicts": 0.0,
+          "supported": 0.98
+        },
+        "type": "choice"
+      },
+      "cache_key": "b312d0f556dd95968a077cb0af47afc94f2ad4ca6226a7ed74d2a4c7f32ff1a7",
+      "created_at": "2026-09-29T21:23:59.090414",
+      "input_tokens": 472.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.95,
+        "probabilities": {
+          "adds_unsupported": 0.03,
+          "contradicts": 0.01,
+          "supported": 0.96
+        },
+        "type": "choice"
+      },
+      "cache_key": "b5ec152fa200c4597e23da86275c322bf1804fba8bccfc83443c4c25cd571345",
+      "created_at": "2026-09-29T21:23:51.803596",
+      "input_tokens": 466.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.82,
+        "probabilities": {
+          "adds_unsupported": 0.88,
+          "contradicts": 0.01,
+          "supported": 0.11
+        },
+        "type": "choice"
+      },
+      "cache_key": "b7644a3e25a42ec8403d18b500ae2c7e467e3fd8280c64034bc2fc56c3b0f9dd",
+      "created_at": "2026-09-29T21:24:05.208990",
+      "input_tokens": 454.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "contradicts",
+        "confidence": 0.91,
+        "probabilities": {
+          "adds_unsupported": 0.06,
+          "contradicts": 0.94,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "b7677bcf5d9c783d206c6c1730a6cd0e426e6cd52b03bf492d9c3aebcdda7607",
+      "created_at": "2026-09-29T21:24:33.427873",
+      "input_tokens": 469.0,
+      "output_tokens": 47.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.53,
+        "probabilities": {
+          "adds_unsupported": 0.69,
+          "contradicts": 0.31,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "b8d952d527dedd404b5dc00ba963a54fe2acdb3cdf45ea4fe0745c2a4bfebcf4",
+      "created_at": "2026-09-29T21:24:51.380062",
+      "input_tokens": 491.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.51,
+        "probabilities": {
+          "adds_unsupported": 0.32,
+          "contradicts": 0.01,
+          "supported": 0.67
+        },
+        "type": "choice"
+      },
+      "cache_key": "b913a93bc8f2aaafbfd3c576d71a269b2c303d98e57e03a64f3102c740b43d2c",
+      "created_at": "2026-09-29T21:24:48.305275",
+      "input_tokens": 479.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "contradicts",
+        "confidence": 1.0,
+        "probabilities": {
+          "adds_unsupported": 0.0,
+          "contradicts": 1.0,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "b96ca398d19cc753dead7c136669b99a24269b47b86cdbf4e4d81ee32767e807",
+      "created_at": "2026-09-29T21:24:38.061491",
+      "input_tokens": 461.0,
+      "output_tokens": 47.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.99,
+        "probabilities": {
+          "adds_unsupported": 1.0,
+          "contradicts": 0.0,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "bdf49b8c72ebcdb8f9fc490551812795ea62a49bf37efe32e174d26e7e09f327",
+      "created_at": "2026-09-29T21:24:22.013351",
+      "input_tokens": 467.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "contradicts",
+        "confidence": 0.4,
+        "probabilities": {
+          "adds_unsupported": 0.4,
+          "contradicts": 0.6,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "bdf957e0872646a5265f7d21855cdab763aa36b820cdafd16c491226e9e72493",
+      "created_at": "2026-09-29T21:24:35.707746",
+      "input_tokens": 515.0,
+      "output_tokens": 47.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.87,
+        "probabilities": {
+          "adds_unsupported": 0.92,
+          "contradicts": 0.0,
+          "supported": 0.08
+        },
+        "type": "choice"
+      },
+      "cache_key": "c4dbf200bef6a11f8a09a7ba346f8b4b03397860dccb160d91a81787a38abdba",
+      "created_at": "2026-09-29T21:24:27.558702",
+      "input_tokens": 488.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "contradicts",
+        "confidence": 0.99,
+        "probabilities": {
+          "adds_unsupported": 0.01,
+          "contradicts": 0.99,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "c9dacdb81ade15ffc778c990ca276bbbcb2a1f8c445b8bb4edefc929c700a83f",
+      "created_at": "2026-09-29T21:24:38.839800",
+      "input_tokens": 473.0,
+      "output_tokens": 47.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.93,
+        "probabilities": {
+          "adds_unsupported": 0.04,
+          "contradicts": 0.0,
+          "supported": 0.96
+        },
+        "type": "choice"
+      },
+      "cache_key": "d15c0ae6e4720a9fe344fda47750d6ab2550f28599dfac38362b9c2fd47dbfb4",
+      "created_at": "2026-09-29T21:24:49.138570",
+      "input_tokens": 457.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.66,
+        "probabilities": {
+          "adds_unsupported": 0.77,
+          "contradicts": 0.0,
+          "supported": 0.23
+        },
+        "type": "choice"
+      },
+      "cache_key": "d2ac67f077b877136a5479165aad94c08cee0e8c5e5619781eb75016ee44812d",
+      "created_at": "2026-09-29T21:24:41.980820",
+      "input_tokens": 485.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "contradicts",
+        "confidence": 0.99,
+        "probabilities": {
+          "adds_unsupported": 0.01,
+          "contradicts": 0.99,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "d3a3929d16053751b6cc4759db66c4f2ce4dba21c740294c4b5439efd65d7558",
+      "created_at": "2026-09-29T21:24:37.301370",
+      "input_tokens": 479.0,
+      "output_tokens": 47.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.73,
+        "probabilities": {
+          "adds_unsupported": 0.82,
+          "contradicts": 0.0,
+          "supported": 0.18
+        },
+        "type": "choice"
+      },
+      "cache_key": "d54483ee50af9f99d947a14af8492d7c9c171a6218c0c9f83c83a71e1447032f",
+      "created_at": "2026-09-29T21:23:56.024147",
+      "input_tokens": 473.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.98,
+        "probabilities": {
+          "adds_unsupported": 0.99,
+          "contradicts": 0.01,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "ded4bd7ea2a7250d93e65bcdbc8ee01ddb5f2c49dc2e8072c18f57fce38c13d2",
+      "created_at": "2026-09-29T21:24:10.764225",
+      "input_tokens": 463.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 1.0,
+        "probabilities": {
+          "adds_unsupported": 1.0,
+          "contradicts": 0.0,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "e16bde151a6df5795bddc395f9b23d95c7d0110b295d6c6d463f6400b4ae4084",
+      "created_at": "2026-09-29T21:24:21.215448",
+      "input_tokens": 486.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "contradicts",
+        "confidence": 0.81,
+        "probabilities": {
+          "adds_unsupported": 0.13,
+          "contradicts": 0.87,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "e19cd5cd40a3863aa2548ec9365fac4ebfa76d1350bf65565b732b3e96fae065",
+      "created_at": "2026-09-29T21:24:32.540277",
+      "input_tokens": 495.0,
+      "output_tokens": 47.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.99,
+        "probabilities": {
+          "adds_unsupported": 0.0,
+          "contradicts": 0.0,
+          "supported": 1.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "e2e2aab6728238b597d6113c501fef249e062a23eecb38710ce12a52be0a2ae1",
+      "created_at": "2026-09-29T21:23:57.832930",
+      "input_tokens": 461.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.99,
+        "probabilities": {
+          "adds_unsupported": 1.0,
+          "contradicts": 0.0,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "e385f07339ae4f24456d790571b77bb5d2c469f2bd11deef015a0b5722954d17",
+      "created_at": "2026-09-29T21:24:20.448709",
+      "input_tokens": 460.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.91,
+        "probabilities": {
+          "adds_unsupported": 0.06,
+          "contradicts": 0.0,
+          "supported": 0.94
+        },
+        "type": "choice"
+      },
+      "cache_key": "e41580cd2ff378fceba0881edc94e0e2608becd6e9e737fae5827009069d173c",
+      "created_at": "2026-09-29T21:23:49.297760",
+      "input_tokens": 467.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.98,
+        "probabilities": {
+          "adds_unsupported": 0.01,
+          "contradicts": 0.0,
+          "supported": 0.99
+        },
+        "type": "choice"
+      },
+      "cache_key": "e73fe873da6f728da6554d34178e0827fc25ef113071b78729e970be4b8e6dc8",
+      "created_at": "2026-09-29T21:23:48.716283",
+      "input_tokens": 528.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.99,
+        "probabilities": {
+          "adds_unsupported": 1.0,
+          "contradicts": 0.0,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "e809cc4ed84ce566b8c1c36dcea630bdd1285776f9420ad715f9a2cce3bb4d70",
+      "created_at": "2026-09-29T21:24:18.757374",
+      "input_tokens": 464.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.96,
+        "probabilities": {
+          "adds_unsupported": 0.03,
+          "contradicts": 0.0,
+          "supported": 0.97
+        },
+        "type": "choice"
+      },
+      "cache_key": "eb5927d0793d5369120ed7be13358780c3e81c58535f9380a465ac592bc4dd1e",
+      "created_at": "2026-09-29T21:24:44.250241",
+      "input_tokens": 455.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.99,
+        "probabilities": {
+          "adds_unsupported": 0.0,
+          "contradicts": 0.0,
+          "supported": 1.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "f043d66df1988fb87fae7971425ed933b3948df5283365efe920f04ed3c8180c",
+      "created_at": "2026-09-29T21:24:01.574802",
+      "input_tokens": 473.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 1.0,
+        "probabilities": {
+          "adds_unsupported": 1.0,
+          "contradicts": 0.0,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "f0ca48b9ff9261cc3bbf6628fc073af1371676682660004c982f2123f3c429eb",
+      "created_at": "2026-09-29T21:24:17.171256",
+      "input_tokens": 466.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.97,
+        "probabilities": {
+          "adds_unsupported": 0.02,
+          "contradicts": 0.0,
+          "supported": 0.98
+        },
+        "type": "choice"
+      },
+      "cache_key": "f0d466afa3111732fa15fdad1fbed3f1f732e8ffb4fefb1993ba432d28866cf5",
+      "created_at": "2026-09-29T21:24:00.964997",
+      "input_tokens": 509.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.92,
+        "probabilities": {
+          "adds_unsupported": 0.05,
+          "contradicts": 0.0,
+          "supported": 0.95
+        },
+        "type": "choice"
+      },
+      "cache_key": "f1142b7bfcda8338e33188e5b77b7208414d8eaa4230259b7e6acfea4322cfd7",
+      "created_at": "2026-09-29T21:24:45.831702",
+      "input_tokens": 450.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "supported",
+        "confidence": 0.86,
+        "probabilities": {
+          "adds_unsupported": 0.09,
+          "contradicts": 0.0,
+          "supported": 0.91
+        },
+        "type": "choice"
+      },
+      "cache_key": "f2257029acbdf76423bb51a183af4e2dc6a4573c89b559676692c93a2ebc7f81",
+      "created_at": "2026-09-29T21:24:43.480203",
+      "input_tokens": 481.0,
+      "output_tokens": 45.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.99,
+        "probabilities": {
+          "adds_unsupported": 0.99,
+          "contradicts": 0.01,
+          "supported": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "f29d960c1861fb9a9af02988fb770c2d46ee509997028dbe8c0834eb753ddc7e",
+      "created_at": "2026-09-29T21:24:24.362288",
+      "input_tokens": 499.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.95,
+        "probabilities": {
+          "adds_unsupported": 0.97,
+          "contradicts": 0.0,
+          "supported": 0.03
+        },
+        "type": "choice"
+      },
+      "cache_key": "f4f38d62b55bedbaad322d1da814a1cc4d1d33980d00ec6f760b8d3c07fe0cec",
+      "created_at": "2026-09-29T21:24:09.266303",
+      "input_tokens": 488.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "adds_unsupported",
+        "confidence": 0.95,
+        "probabilities": {
+          "adds_unsupported": 0.97,
+          "contradicts": 0.0,
+          "supported": 0.03
+        },
+        "type": "choice"
+      },
+      "cache_key": "f554ec5f6d2cda25f4b04e315b478f1a704f06b0117e493eb0a87004d48a61ed",
+      "created_at": "2026-09-29T21:24:28.383850",
+      "input_tokens": 462.0,
+      "output_tokens": 49.0,
+      "point": "support",
+      "question": {
+        "criteria": {
+          "adds_unsupported": "The bullet claims something the evidence does not state, such as a larger role, a scope, a tool or an outcome.",
+          "contradicts": "The evidence says otherwise.",
+          "supported": "Every claim in the bullet is stated or directly implied by the evidence."
+        },
+        "instructions": "How does the evidence relate to the new bullet? Judge only what the bullet claims about the candidate's own work. The evidence is the only ground truth; `original` is the bullet being revised, shown for context, and is not evidence.",
+        "type": "choice"
+      },
+      "question_version": "support@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    }
+  ],
+  "exported_at": "2026-09-29T21:24:52",
+  "format": "art-jev-recordings",
+  "version": 1
+}
