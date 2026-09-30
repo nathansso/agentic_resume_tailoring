@@ -1,0 +1,2141 @@
+{
+  "decisions": [
+    {
+      "answer": {
+        "noul": 0.05,
+        "type": "noul"
+      },
+      "cache_key": "002dfce2bb43dc4c623b5ff11e7de0b4c773ba7f49e2b7bb7fc4a493a4122f8c",
+      "created_at": "2026-09-30T17:12:57.181276",
+      "input_tokens": 301.0,
+      "output_tokens": 19.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience building Power BI reports\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.01,
+        "type": "noul"
+      },
+      "cache_key": "0437d356ab57e5db7a0378c42056984da954ef187ac21aeec98e140851d03894",
+      "created_at": "2026-09-30T17:13:17.086070",
+      "input_tokens": 445.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"CPA certification and experience with month-end financial close\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.01,
+        "type": "noul"
+      },
+      "cache_key": "0a35c5d7068a335cb67a4e63489be14d2eee2d3d1e7ec6856fee507921ebd207",
+      "created_at": "2026-09-30T17:13:17.700719",
+      "input_tokens": 444.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience running paid social media campaigns\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.93,
+        "type": "noul"
+      },
+      "cache_key": "0cbdf44624d68b7e8e79f5766f9829b507b73722d53fcf8f9bb27ffd9bba01ee",
+      "created_at": "2026-09-30T17:15:43.021353",
+      "input_tokens": 446.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience collaborating with cross-functional teams\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.94,
+        "type": "noul"
+      },
+      "cache_key": "0d2da4c5b54e309be06f878cd7a9a450d910254c50e0c62432f7f39b391e2b68",
+      "created_at": "2026-09-30T17:12:46.099650",
+      "input_tokens": 234.75,
+      "output_tokens": 18.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with statistical hypothesis testing and experimentation\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.95,
+        "type": "noul"
+      },
+      "cache_key": "0f174c55224e354325b4b132ca0fcb4c672eadd69c1bd38e9774d39f15f31957",
+      "created_at": "2026-09-30T17:12:44.271308",
+      "input_tokens": 233.5,
+      "output_tokens": 18.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with data engineering at scale\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.01,
+        "type": "noul"
+      },
+      "cache_key": "0f8b3b5ada25c4b5e80be978f58075889be948312c72497083a47701400b194a",
+      "created_at": "2026-09-30T17:12:47.354000",
+      "input_tokens": 257.0,
+      "output_tokens": 18.333333333333332,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Clinical nursing experience in an acute-care setting\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.18,
+        "type": "noul"
+      },
+      "cache_key": "13b3ee916c53541f481c7ed3dda46044d299fba176bfead8128dc0149d72fcae",
+      "created_at": "2026-09-30T17:13:02.857453",
+      "input_tokens": 446.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience presenting analyses to executive leadership\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.08,
+        "type": "noul"
+      },
+      "cache_key": "1585b39fd83b25e86ef358986dccf6530c359f877680e81709d3b271616d38c5",
+      "created_at": "2026-09-30T17:13:01.646868",
+      "input_tokens": 445.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience architecting data platforms end to end\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.03,
+        "type": "noul"
+      },
+      "cache_key": "1a13779f3b4f67a93208e279f68cc13e5c90cf9e6ee94f3d30b86d5f32da8ad4",
+      "created_at": "2026-09-30T17:13:14.586368",
+      "input_tokens": 456.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with AWS data services such as Redshift and Glue\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.05,
+        "type": "noul"
+      },
+      "cache_key": "1af869bc6d73574b39643589241bfd4930bcc7d265137cf0d846c57b2c4412c0",
+      "created_at": "2026-09-30T17:13:15.830779",
+      "input_tokens": 443.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with model serving and inference optimization\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.09,
+        "type": "noul"
+      },
+      "cache_key": "1d11dfc85823d604115113112c6a1af0b4ae0466e4d4f7fd2eb2f01ed7284c29",
+      "created_at": "2026-09-30T17:13:01.028997",
+      "input_tokens": 448.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience designing highly available multi-region AWS architectures\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.03,
+        "type": "noul"
+      },
+      "cache_key": "2111ca227189abe7fe5e28793b45234732c6190c3007ed08e2133c665ce2707c",
+      "created_at": "2026-09-30T17:12:59.640809",
+      "input_tokens": 452.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience tuning Spark jobs on petabyte-scale datasets\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.91,
+        "type": "noul"
+      },
+      "cache_key": "27cdd9f8f4e23883d1ab6adf11b7e35257002ab394892dead1f153a339bf7f11",
+      "created_at": "2026-09-30T17:12:59.023748",
+      "input_tokens": 447.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with time series analysis\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.89,
+        "type": "noul"
+      },
+      "cache_key": "27d9bdf3ed3c6dc6401dbafc2f153168217a98d9de9622dfa42576fc4b7e3473",
+      "created_at": "2026-09-30T17:12:46.099650",
+      "input_tokens": 234.75,
+      "output_tokens": 18.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience designing and analyzing A/B tests\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.27,
+        "type": "noul"
+      },
+      "cache_key": "29d3fb9693653af1179ee1500568686cc2e9a1e8ae78174a34a711694d66c9ce",
+      "created_at": "2026-09-30T17:15:46.829586",
+      "input_tokens": 437.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Strong written communication skills\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "2a4464a88f75f9e2b559377aa06dbf26174dcd9652ae76642b0a0e058864dccd",
+      "created_at": "2026-09-30T17:12:47.950766",
+      "input_tokens": 303.5,
+      "output_tokens": 19.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience building gRPC services\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.96,
+        "type": "noul"
+      },
+      "cache_key": "2ac2c133c82b5ad26a539f09a9b0045a92723451f06959334400f76e9c685ef5",
+      "created_at": "2026-09-30T17:12:48.562892",
+      "input_tokens": 256.6666666666667,
+      "output_tokens": 18.333333333333332,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience building user-facing web applications\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "2b19bd95b8dc9eecea31698727c17dbb7edfcb7edad2f7623bfb493f734faffa",
+      "created_at": "2026-09-30T17:13:02.263855",
+      "input_tokens": 443.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Publications at top-tier machine learning conferences\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "2bfe98692444a6061acdfb22dd22b199eb49038d1ae1175b528ded64b43c849b",
+      "created_at": "2026-09-30T17:13:11.293010",
+      "input_tokens": 441.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience building retrieval-augmented generation systems\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.9,
+        "type": "noul"
+      },
+      "cache_key": "2c36cda6dd831477da5daa828486c961c189c4f9d0062d1f78e6e9dc6fa6ec64",
+      "created_at": "2026-09-30T17:12:55.946265",
+      "input_tokens": 454.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience optimizing the cost and performance of cloud data platforms\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.92,
+        "type": "noul"
+      },
+      "cache_key": "2c5fe9b92d5963d25d7483f472bc1c6d43f561b1936b05b495fc4912ff1de880",
+      "created_at": "2026-09-30T17:12:57.791379",
+      "input_tokens": 450.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with distributed computing for machine learning workloads\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.97,
+        "type": "noul"
+      },
+      "cache_key": "2e8d91c3b4ad753ce3a7d6752deab686b3025e4870a7f6b54629b5d5337ef495",
+      "created_at": "2026-09-30T17:12:48.562892",
+      "input_tokens": 256.6666666666667,
+      "output_tokens": 18.333333333333332,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience building web front ends with React and TypeScript\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.92,
+        "type": "noul"
+      },
+      "cache_key": "2f50ad5745be1638eaed6fd2bc13e7bb060c954f6e1bfd53b0471b1dee620884",
+      "created_at": "2026-09-30T17:15:51.281786",
+      "input_tokens": 443.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with model evaluation and error analysis\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.93,
+        "type": "noul"
+      },
+      "cache_key": "301edcc9c21dab94549edcd48144e79e9c9c3ce9986e8dbd0be8b54444ac9b9d",
+      "created_at": "2026-09-30T17:12:53.227274",
+      "input_tokens": 304.0,
+      "output_tokens": 19.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with workflow orchestration and job scheduling\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.05,
+        "type": "noul"
+      },
+      "cache_key": "33192d8aae815651ce8ebda3088015c65adc418a7fa75e30f82fa33b5ecb47ba",
+      "created_at": "2026-09-30T17:13:13.289039",
+      "input_tokens": 446.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience running workloads on Kubernetes\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.01,
+        "type": "noul"
+      },
+      "cache_key": "38a84d2c5761652f2e95826459495480e3f4c08ba0fae1b94bd4586a852c27a4",
+      "created_at": "2026-09-30T17:13:18.329666",
+      "input_tokens": 437.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience in talent acquisition and recruiting\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.84,
+        "type": "noul"
+      },
+      "cache_key": "394d36852fd552b500f97745265d2650cc1390a5077a95096e3dc40b55b4479e",
+      "created_at": "2026-09-30T17:15:46.215878",
+      "input_tokens": 443.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with real-time data streaming\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.97,
+        "type": "noul"
+      },
+      "cache_key": "409545d27b1eac5cab99be485bd68674f12bae24e5b30a4af7579d62b74f089d",
+      "created_at": "2026-09-30T17:12:50.024717",
+      "input_tokens": 232.0,
+      "output_tokens": 18.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience working with Kafka for streaming data\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.18,
+        "type": "noul"
+      },
+      "cache_key": "481d05d18bdf079d9db48bb37f589a24106cf3bdce0f1b9579adc66d57244332",
+      "created_at": "2026-09-30T17:15:48.147485",
+      "input_tokens": 444.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience practicing test-driven development\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.82,
+        "type": "noul"
+      },
+      "cache_key": "4b8346267c32c644f4d5212e6beb14a6e39605caa658814bbe01a51d68615be4",
+      "created_at": "2026-09-30T17:12:56.549818",
+      "input_tokens": 301.0,
+      "output_tokens": 19.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience evaluating large language model applications\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.01,
+        "type": "noul"
+      },
+      "cache_key": "518a4fae4d90f13ffc851f6353c0ae70a3108466ac19fc078c619929a23dd9e7",
+      "created_at": "2026-09-30T17:12:50.665582",
+      "input_tokens": 303.0,
+      "output_tokens": 19.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Active Secret security clearance\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.03,
+        "type": "noul"
+      },
+      "cache_key": "525c7ae108718137ed76789de550d8781ffe8e78ea8690ef02fe8e9bddf45a8a",
+      "created_at": "2026-09-30T17:12:45.487906",
+      "input_tokens": 314.0,
+      "output_tokens": 19.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience building recommendation systems\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.92,
+        "type": "noul"
+      },
+      "cache_key": "573dea6e06e2b618fa156269884a7a9750fe82d0daacbf425a72480fc2738338",
+      "created_at": "2026-09-30T17:12:47.354000",
+      "input_tokens": 257.0,
+      "output_tokens": 18.333333333333332,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience deploying machine learning models to production\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.97,
+        "type": "noul"
+      },
+      "cache_key": "5767f65988362d5f42bcad7ea27b22af4459668dec21ea1039a2b0b00f52862c",
+      "created_at": "2026-09-30T17:12:44.270300",
+      "input_tokens": 233.5,
+      "output_tokens": 18.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience building data pipelines with Apache Airflow\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.89,
+        "type": "noul"
+      },
+      "cache_key": "5814ad632910c581c996b3fb155f040ea6f45d12d58bea9be024ce39151804c8",
+      "created_at": "2026-09-30T17:15:50.019429",
+      "input_tokens": 448.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with MLOps practices and experiment tracking\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "63f7ee5b9eca98d8100bdb86bd7db84c4040f2ada0397490c54cebebf9769f54",
+      "created_at": "2026-09-30T17:13:09.275359",
+      "input_tokens": 436.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience building React applications\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "67b303d574f585dca88dd69043324e7cf9e106025d94ab58a7d9c1361d8b93e0",
+      "created_at": "2026-09-30T17:12:51.959942",
+      "input_tokens": 309.0,
+      "output_tokens": 19.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with Apache Flink for stream processing\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.77,
+        "type": "noul"
+      },
+      "cache_key": "7c30ca7a073ffbd63482ddde0119d358b518c13631db9fb1c37eabcdc0e42db2",
+      "created_at": "2026-09-30T17:15:47.493419",
+      "input_tokens": 441.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience owning production data pipelines\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.09,
+        "type": "noul"
+      },
+      "cache_key": "835062e313d9f94a41b450766dac1e6ba9cd36d18169685d6ac5e5d7d56a61f4",
+      "created_at": "2026-09-30T17:13:00.252399",
+      "input_tokens": 453.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience deploying and operating machine learning models in production\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.88,
+        "type": "noul"
+      },
+      "cache_key": "880a3d105f7c2b378c7aaf49f380562093a7c3c5d2d6dfebb82afe6395adb943",
+      "created_at": "2026-09-30T17:15:50.659516",
+      "input_tokens": 458.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience building low-latency, high-throughput services\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.03,
+        "type": "noul"
+      },
+      "cache_key": "8844644c1295feabeb0119629966abcb53a8ca36264d8be666533511a6c589b1",
+      "created_at": "2026-09-30T17:13:09.896804",
+      "input_tokens": 440.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience modeling data with dbt\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.39,
+        "type": "noul"
+      },
+      "cache_key": "88c2e61198cc48eeeabe65c128d554aaf98025cb260a9072146fe63b93f252a3",
+      "created_at": "2026-09-30T17:12:54.535727",
+      "input_tokens": 303.5,
+      "output_tokens": 19.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience owning the CI/CD and release infrastructure for a product team\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.03,
+        "type": "noul"
+      },
+      "cache_key": "893fa60622209f5fbc6dc4a986d4fa6842147f46785e6fb23a06d1b726abdcfb",
+      "created_at": "2026-09-30T17:13:11.982261",
+      "input_tokens": 437.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience building data pipelines with Airflow\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.04,
+        "type": "noul"
+      },
+      "cache_key": "8a3af3cf9f0fbcfb70b01d59123b741b11c7c7c765f691874e82eff5dac2eb1c",
+      "created_at": "2026-09-30T17:12:44.271308",
+      "input_tokens": 233.5,
+      "output_tokens": 18.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience leading a team of data engineers\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.94,
+        "type": "noul"
+      },
+      "cache_key": "8ce5eee16d9708aedf7ef6bd971e904f14ca24288f19272a3a822e99498ae4f8",
+      "created_at": "2026-09-30T17:12:55.234019",
+      "input_tokens": 445.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Ability to teach and explain technical concepts to others\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.04,
+        "type": "noul"
+      },
+      "cache_key": "8e8aa6d49b596cf9b626a8ecc7148d0b9a074a1c77f76a7d7612333ea055c638",
+      "created_at": "2026-09-30T17:13:04.821739",
+      "input_tokens": 307.5,
+      "output_tokens": 19.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience operating petabyte-scale data systems\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.95,
+        "type": "noul"
+      },
+      "cache_key": "8e8dcb674f76eeac6742409da649176fd448b6a98279ffab200934dcd75be29f",
+      "created_at": "2026-09-30T17:15:49.396000",
+      "input_tokens": 440.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with containerization\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.94,
+        "type": "noul"
+      },
+      "cache_key": "8f66037357e8c5faf04828c0ac0eaffc5ce4580e0c21d4935ad251698c9d0af5",
+      "created_at": "2026-09-30T17:12:47.354000",
+      "input_tokens": 257.0,
+      "output_tokens": 18.333333333333332,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience packaging and shipping services with Docker\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.75,
+        "type": "noul"
+      },
+      "cache_key": "90a3fd862c16bc4556ccf4c6534a45fb198e721b9dd3520a1078a7f0f7b799c6",
+      "created_at": "2026-09-30T17:15:44.290877",
+      "input_tokens": 447.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Strong Python programming skills\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.01,
+        "type": "noul"
+      },
+      "cache_key": "914424106f843c4cfb452966528c816b1239739eedbba8ec5aee48a751249e50",
+      "created_at": "2026-09-30T17:12:46.099650",
+      "input_tokens": 234.75,
+      "output_tokens": 18.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience drafting and negotiating commercial contracts\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.93,
+        "type": "noul"
+      },
+      "cache_key": "9430e62f951979d63b5cf05d2894a67275e6fe573f74fb6faf760684a06c4c54",
+      "created_at": "2026-09-30T17:15:41.210758",
+      "input_tokens": 448.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience provisioning and managing cloud infrastructure\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.96,
+        "type": "noul"
+      },
+      "cache_key": "9f9e05ace1e90a9b6d31ced85b2cebfd7b9c0997e8a0eac8f36d8d837118b52e",
+      "created_at": "2026-09-30T17:12:44.874962",
+      "input_tokens": 256.0,
+      "output_tokens": 18.333333333333332,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with dbt for data transformation and testing\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.95,
+        "type": "noul"
+      },
+      "cache_key": "a4de08076e2c53f67fd071abb6bba133aea4017699efbffbdc168f2e0b3602e4",
+      "created_at": "2026-09-30T17:12:44.874962",
+      "input_tokens": 256.0,
+      "output_tokens": 18.333333333333332,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience implementing data quality checks and validation\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.01,
+        "type": "noul"
+      },
+      "cache_key": "a61f0622d7afe6dc1f8529e8a4483d38aa7412ee34b9d2b80b8ad903fd6363a3",
+      "created_at": "2026-09-30T17:12:50.025710",
+      "input_tokens": 232.0,
+      "output_tokens": 18.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"A portfolio of graphic and brand design work\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "a777bc519ade2a842ab50489589eb65948aec47d39438f7d4895e1fbf908de33",
+      "created_at": "2026-09-30T17:12:56.549818",
+      "input_tokens": 301.0,
+      "output_tokens": 19.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with CNC machining and precision manufacturing\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.03,
+        "type": "noul"
+      },
+      "cache_key": "a8e89b7bcc22394efa96b7babdf260ee7c941b5a877d9a818a20bd4082fb61d8",
+      "created_at": "2026-09-30T17:13:12.659042",
+      "input_tokens": 436.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience programming in Go\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.01,
+        "type": "noul"
+      },
+      "cache_key": "aaad7c3afdeb31f36cfd858d785ffa74e5b5adf066f4741ad552d5d7d55544e0",
+      "created_at": "2026-09-30T17:13:18.948487",
+      "input_tokens": 453.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"A valid driver's license and willingness to travel 25% of the time\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.03,
+        "type": "noul"
+      },
+      "cache_key": "ac65b7435c292cf2840e99cef9251900a4e580f25d679f090a3541f7c0f71475",
+      "created_at": "2026-09-30T17:13:10.632620",
+      "input_tokens": 439.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience deploying applications on AWS\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.04,
+        "type": "noul"
+      },
+      "cache_key": "afb9f47da385e9b9b838f40477104c880f41cfe6ce70578694789c25057d45ab",
+      "created_at": "2026-09-30T17:13:03.541459",
+      "input_tokens": 458.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Expert SQL, including query optimization on multi-terabyte databases\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.01,
+        "type": "noul"
+      },
+      "cache_key": "b18318df67d8e2782ee2c38094a7c69d023e17b70c5f14cb51d9a45d39c7e702",
+      "created_at": "2026-09-30T17:12:44.874962",
+      "input_tokens": 256.0,
+      "output_tokens": 18.333333333333332,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience managing enterprise sales accounts\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.68,
+        "type": "noul"
+      },
+      "cache_key": "b1ba9756fdc82ace011e3d7cd850a4471bb1f2b956772775d979a6ab950f663c",
+      "created_at": "2026-09-30T17:12:52.584984",
+      "input_tokens": 440.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience designing data warehouse schemas\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.94,
+        "type": "noul"
+      },
+      "cache_key": "b2c1ead197f11462cf2f9ecbb866069f5acb96f4fa1fa9602ca5bd18bb4307ac",
+      "created_at": "2026-09-30T17:15:48.803979",
+      "input_tokens": 444.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Ability to read and reproduce machine learning research papers\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.96,
+        "type": "noul"
+      },
+      "cache_key": "b49239d1923412ba9ea4855fc55de867fc25231e07e43dd283d9cdfc7682e3bb",
+      "created_at": "2026-09-30T17:12:45.487906",
+      "input_tokens": 314.0,
+      "output_tokens": 19.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Proficiency with scikit-learn for building predictive models\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.89,
+        "type": "noul"
+      },
+      "cache_key": "b972870127d1b44d4aa8bfb0fbb9e9ca05c35b4beb04932421795d43da50e769",
+      "created_at": "2026-09-30T17:12:58.418558",
+      "input_tokens": 440.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience designing and building APIs\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.17,
+        "type": "noul"
+      },
+      "cache_key": "b9d08467415866accc5912c46db2ff016de5e861404f68979232d9678cf6693e",
+      "created_at": "2026-09-30T17:15:51.911340",
+      "input_tokens": 440.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience operating production Kubernetes clusters\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.03,
+        "type": "noul"
+      },
+      "cache_key": "b9d83cdd9bc3f8ab42800f428662d120f863c76e5d6464560cc293c9eefb13e4",
+      "created_at": "2026-09-30T17:15:45.544759",
+      "input_tokens": 444.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with application security and authentication\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.09,
+        "type": "noul"
+      },
+      "cache_key": "b9eb14ddc91a56a0c9a83166221e14464d03f4db468240c92de1ac778fbfc6b5",
+      "created_at": "2026-09-30T17:12:50.024717",
+      "input_tokens": 232.0,
+      "output_tokens": 18.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience building real-time inference services handling millions of requests per second\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "baa37c57bcc946378510df1b4ab6cc3fd9d10d1ff1aa9ff8aa15a6ef8bd35f06",
+      "created_at": "2026-09-30T17:13:13.932633",
+      "input_tokens": 451.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with natural language processing\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.03,
+        "type": "noul"
+      },
+      "cache_key": "bc784781aba6125aa9c577f70ed22d8bd9e7e202f9980438149eb70bc259782e",
+      "created_at": "2026-09-30T17:13:08.636014",
+      "input_tokens": 442.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with infrastructure as code using Terraform\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.27,
+        "type": "noul"
+      },
+      "cache_key": "be78d1c18e43b213532914e8c028440f3ee1d74e9a279ae3999f1caf699d0d70",
+      "created_at": "2026-09-30T17:15:42.426621",
+      "input_tokens": 442.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience leading and managing a team\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.05,
+        "type": "noul"
+      },
+      "cache_key": "bfae1b94130873add0558ec3de7019ac34a2f7486ad26b8474ff7e0484cecea6",
+      "created_at": "2026-09-30T17:12:53.227274",
+      "input_tokens": 304.0,
+      "output_tokens": 19.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with Dagster or Prefect\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.94,
+        "type": "noul"
+      },
+      "cache_key": "c3a931c46791137a9c480a07f4076a4bd53c0b103c56e22a486767998e63fee2",
+      "created_at": "2026-09-30T17:12:54.535727",
+      "input_tokens": 303.5,
+      "output_tokens": 19.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with continuous integration and automated testing\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "c8541e96d08668821e6bdfc05b197a405ccc3658b4aca45d6204284116b8e65d",
+      "created_at": "2026-09-30T17:13:04.822735",
+      "input_tokens": 307.5,
+      "output_tokens": 19.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with MongoDB and other NoSQL databases\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.94,
+        "type": "noul"
+      },
+      "cache_key": "ca0f87ad67386a4c9b90c841e296ed191897d0fcde995728ccd257a7ad351bdb",
+      "created_at": "2026-09-30T17:12:50.665582",
+      "input_tokens": 303.0,
+      "output_tokens": 19.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Infrastructure-as-code experience with Terraform\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "cb4dbefb2e5958e505ec8a30a98124080f167c0317ea1089b9dcaf598b1cfcec",
+      "created_at": "2026-09-30T17:12:46.709152",
+      "input_tokens": 309.0,
+      "output_tokens": 19.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience building models with TensorFlow\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.05,
+        "type": "noul"
+      },
+      "cache_key": "cccde703aaf29bbc427ae68eb54acf72ba9b68d6efe6a56726a78f97691819e2",
+      "created_at": "2026-09-30T17:13:06.333483",
+      "input_tokens": 438.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Hands-on experience with Apache Spark\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.97,
+        "type": "noul"
+      },
+      "cache_key": "cef48764996df97de9a3171e8983b410b0915b3262d4a439be48060bf081e6ff",
+      "created_at": "2026-09-30T17:12:51.328252",
+      "input_tokens": 447.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience building LLM agents with LangChain\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.98,
+        "type": "noul"
+      },
+      "cache_key": "cf26204f689cdedabe23637c9e5be9608e7491215d30096894dc07834d2f5fb3",
+      "created_at": "2026-09-30T17:12:46.709152",
+      "input_tokens": 309.0,
+      "output_tokens": 19.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Hands-on experience training models in PyTorch\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "cfb62b761c54a4f35a02548a305cbbd2027e59aeef5d61a8226f1d7524654470",
+      "created_at": "2026-09-30T17:13:05.595215",
+      "input_tokens": 436.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with Kubernetes\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.91,
+        "type": "noul"
+      },
+      "cache_key": "d0f565f6d6cf73fb50d0c22e282ae40c43b77f98d50ea780bda2ce7b53577010",
+      "created_at": "2026-09-30T17:15:43.649325",
+      "input_tokens": 449.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with SQL query optimization\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.01,
+        "type": "noul"
+      },
+      "cache_key": "d2147e0ee3db56da6bd39487f2d986c2731b9166697bac22a57319799cbff35d",
+      "created_at": "2026-09-30T17:13:16.438386",
+      "input_tokens": 450.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with PCB layout and embedded firmware\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.1,
+        "type": "noul"
+      },
+      "cache_key": "d43b3101274dd2d1859b510e1675eb9d020b73df98b4989c934fb45f6b0beb30",
+      "created_at": "2026-09-30T17:12:50.024717",
+      "input_tokens": 232.0,
+      "output_tokens": 18.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"5+ years of professional experience with Kafka\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.05,
+        "type": "noul"
+      },
+      "cache_key": "d6a1d357e559678feb220a5a7f1a5f1b282b14e19c31c17d8b08dcc1127144ce",
+      "created_at": "2026-09-30T17:13:15.218396",
+      "input_tokens": 447.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience developing backend services in Java or Kotlin\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "d7c873e80f3165556b5aa521af06b1ac0fe93d9117ae68592cbd9b04f98a030e",
+      "created_at": "2026-09-30T17:13:06.934463",
+      "input_tokens": 436.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Professional experience programming in Rust\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.96,
+        "type": "noul"
+      },
+      "cache_key": "ddf5d45b9bc8600494fe56976c9b03059f759584e5f8194893c5182c86480fac",
+      "created_at": "2026-09-30T17:15:41.832536",
+      "input_tokens": 461.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience working with big data technologies such as Hadoop or Spark\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "deb8935f070ecb7d52d8c5a22d127187ed53eb7adf5806544bd3fba7d06e4923",
+      "created_at": "2026-09-30T17:12:44.271308",
+      "input_tokens": 233.5,
+      "output_tokens": 18.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with Amazon Redshift\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "dfb747185ddf12d60507233b80d2724ae93b3e6eaa98c4565a58fcff51fe4b25",
+      "created_at": "2026-09-30T17:12:48.562892",
+      "input_tokens": 256.6666666666667,
+      "output_tokens": 18.333333333333332,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience building single-page applications in Angular\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.91,
+        "type": "noul"
+      },
+      "cache_key": "ea0db4760a17785a4440289e3a17e5f73daa6db8e400f6ff8657d5e06e7b5c9a",
+      "created_at": "2026-09-30T17:12:57.181276",
+      "input_tokens": 301.0,
+      "output_tokens": 19.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience communicating insights through dashboards and data visualization\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.08,
+        "type": "noul"
+      },
+      "cache_key": "ea58513bd5072841e096324525effe483a55840c4f76deaa314a26b7458b67f1",
+      "created_at": "2026-09-30T17:13:04.158887",
+      "input_tokens": 454.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience pretraining or fine-tuning large language models with billions of parameters\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.84,
+        "type": "noul"
+      },
+      "cache_key": "efcb919d5bfb45f7eba84af8785fac5331cf96c9a060dedd935f11fa0d89dbec",
+      "created_at": "2026-09-30T17:15:44.918152",
+      "input_tokens": 441.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience building internal developer tools\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.88,
+        "type": "noul"
+      },
+      "cache_key": "f4b1999cc402594e798336ce82000c32756016e99d302b120e71783cd30ea181",
+      "created_at": "2026-09-30T17:12:53.829345",
+      "input_tokens": 444.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience monitoring machine learning systems in production\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.97,
+        "type": "noul"
+      },
+      "cache_key": "f5fac2da2210945fba56d24420cf6e8d0fb596bbdd8542a80ae39126bd3084b9",
+      "created_at": "2026-09-30T17:12:47.950766",
+      "input_tokens": 303.5,
+      "output_tokens": 19.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience building REST APIs with Spring Boot\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.98,
+        "type": "noul"
+      },
+      "cache_key": "f683378ffe70512810a63993c39ca7d308a4148922776c46204e46364f1f1150",
+      "created_at": "2026-09-30T17:12:49.246338",
+      "input_tokens": 461.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience building retrieval-augmented generation (RAG) systems\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.96,
+        "type": "noul"
+      },
+      "cache_key": "f717098a8b11e397d3d6576cfd4c4aee087340854088b566bb43537834b644c5",
+      "created_at": "2026-09-30T17:12:51.958940",
+      "input_tokens": 309.0,
+      "output_tokens": 19.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with Apache Spark for large-scale data processing\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.07,
+        "type": "noul"
+      },
+      "cache_key": "f942de4fbfcb33c5f5fb22342ec37316cb7fcb405a163d6f694115e561204b97",
+      "created_at": "2026-09-30T17:12:46.099650",
+      "input_tokens": 234.75,
+      "output_tokens": 18.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience with causal inference methods such as difference-in-differences and instrumental variables\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "ff47f8758f754d1e0df67008fa28339e8661dd5f32bd00af809bb5dd4549dabd",
+      "created_at": "2026-09-30T17:13:07.530254",
+      "input_tokens": 438.0,
+      "output_tokens": 21.0,
+      "point": "requirement_covered",
+      "question": {
+        "criteria": {
+          "false": "The bullet does not show it: it may be related, only state interest, or fall short of what the requirement asks.",
+          "true": "The bullet shows the candidate meets the requirement."
+        },
+        "instructions": "Does this bullet show that the candidate meets this requirement: \"Experience training deep learning models\"? Answer yes when the bullet describes work, results or experience that satisfies it, even in different words or at a more specific level. Stated interest, plans or being eager to learn do not meet a requirement; naming a tool does not meet a requirement that asks for more than using it, such as years, leadership, ownership or production scale; and something related or of the same kind is not the requirement itself.",
+        "type": "noul"
+      },
+      "question_version": "requirement_covered@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    }
+  ],
+  "exported_at": "2026-09-30T17:15:51",
+  "format": "art-jev-recordings",
+  "version": 1
+}

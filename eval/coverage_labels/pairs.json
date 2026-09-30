@@ -1,0 +1,1271 @@
+{
+  "_comment": "Hand-proposed (requirement, bullet) pairs for fitting the semantic-coverage threshold (issue #126). Built only from the synthetic benchmark profiles in eval/profiles/ (never personal/): every `text` is verbatim from the named profile, except the `aspiration` pairs, whose bullets are synthetic (`origin: synthetic`) because no profile states an intention in a bullet; each is about the tool its requirement names. The requirements are synthetic, written in job-posting style. `label` is the PROPOSED label (awaiting user review from REVIEW.md): covered | not_covered. `literal` pairs share the requirement's own words with the bullet (the control the literal target already catches); `semantic` pairs meet the requirement in none of its words; `partial` pairs name the tool or area but the requirement asks for more (years, leadership, scale, production); `aspiration` pairs state interest or a plan; `near_miss` pairs are a related technology or domain; `unrelated` pairs are a different field; `boundary` pairs are contestable either way. Regenerate the report with `python eval/fit_coverage_threshold.py analyze`.",
+  "version": 1,
+  "labels": [
+    "covered",
+    "not_covered"
+  ],
+  "pairs": [
+    {
+      "id": "l_airflow",
+      "origin": "profile",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "literal",
+      "requirement": {
+        "text": "Experience building data pipelines with Apache Airflow.",
+        "type": "required"
+      },
+      "text": "Built Airflow DAGs moving 40M shipment events a day from Kafka into Snowflake at 99.9% delivery.",
+      "label": "covered",
+      "rationale": "Built Airflow DAGs at 40M events a day."
+    },
+    {
+      "id": "l_dbt",
+      "origin": "profile",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "literal",
+      "requirement": {
+        "text": "Experience with dbt for data transformation and testing.",
+        "type": "required"
+      },
+      "text": "Added dbt tests to 60 models, catching 14 schema regressions before they reached reporting.",
+      "label": "covered",
+      "rationale": "Added dbt tests to 60 models."
+    },
+    {
+      "id": "l_sklearn",
+      "origin": "profile",
+      "profile": "data_science_specialist_priya_raman",
+      "category": "literal",
+      "requirement": {
+        "text": "Proficiency with scikit-learn for building predictive models.",
+        "type": "required"
+      },
+      "text": "Built a customer churn model in scikit-learn over 480k subscription records, raising AUC from 0.71 to 0.83 against the incumbent rule set.",
+      "label": "covered",
+      "rationale": "Built a churn model in scikit-learn."
+    },
+    {
+      "id": "l_abtest",
+      "origin": "profile",
+      "profile": "data_science_specialist_priya_raman",
+      "category": "literal",
+      "requirement": {
+        "text": "Experience designing and analyzing A/B tests.",
+        "type": "required"
+      },
+      "text": "Ran an A/B testing readout on 12 store-level promotions, using bootstrap confidence intervals to flag 3 as statistically flat.",
+      "label": "covered",
+      "rationale": "Ran an A/B testing readout over 12 promotions."
+    },
+    {
+      "id": "l_pytorch",
+      "origin": "profile",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "literal",
+      "requirement": {
+        "text": "Hands-on experience training models in PyTorch.",
+        "type": "required"
+      },
+      "text": "Trained a PyTorch sequence model on 1.1M clinical events, improving readmission recall by 12 points over the baseline.",
+      "label": "covered",
+      "rationale": "Trained a PyTorch model on 1.1M events."
+    },
+    {
+      "id": "l_docker",
+      "origin": "profile",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "literal",
+      "requirement": {
+        "text": "Experience packaging and shipping services with Docker.",
+        "type": "preferred"
+      },
+      "text": "Packaged the model behind a FastAPI endpoint in Docker, holding p95 latency under 80ms.",
+      "label": "covered",
+      "rationale": "Packaged a service in Docker."
+    },
+    {
+      "id": "l_spring",
+      "origin": "profile",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "literal",
+      "requirement": {
+        "text": "Experience building REST APIs with Spring Boot.",
+        "type": "required"
+      },
+      "text": "Shipped 14 REST endpoints in Spring Boot backing a customer portal used by 8,000 accounts.",
+      "label": "covered",
+      "rationale": "Shipped 14 REST endpoints in Spring Boot."
+    },
+    {
+      "id": "l_react",
+      "origin": "profile",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "literal",
+      "requirement": {
+        "text": "Experience building web front ends with React and TypeScript.",
+        "type": "required"
+      },
+      "text": "Built a React and TypeScript scheduling tool that replaced a paper process for 12 departments.",
+      "label": "covered",
+      "rationale": "Built a React and TypeScript tool."
+    },
+    {
+      "id": "l_rag",
+      "origin": "profile",
+      "profile": "ai_engineering_specialist_ravi_deshmukh",
+      "category": "literal",
+      "requirement": {
+        "text": "Experience building retrieval-augmented generation (RAG) systems.",
+        "type": "required"
+      },
+      "text": "Built a RAG pipeline over 120k support documents with pgvector, lifting answer accuracy from 61% to 79%.",
+      "label": "covered",
+      "rationale": "Built a RAG pipeline over 120k documents."
+    },
+    {
+      "id": "l_kafka",
+      "origin": "profile",
+      "profile": "ml_engineering_generalist_omar_haddad",
+      "category": "literal",
+      "requirement": {
+        "text": "Experience working with Kafka for streaming data.",
+        "type": "preferred"
+      },
+      "text": "Shipped a Kafka feature stream feeding 3 production models with sub-minute freshness.",
+      "label": "covered",
+      "rationale": "Shipped a Kafka feature stream."
+    },
+    {
+      "id": "l_terraform",
+      "origin": "profile",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "literal",
+      "requirement": {
+        "text": "Infrastructure-as-code experience with Terraform.",
+        "type": "preferred"
+      },
+      "text": "Wrote a Terraform module that provisioned the group's S3 buckets and IAM roles in 1 command.",
+      "label": "covered",
+      "rationale": "Wrote a Terraform module for S3 and IAM."
+    },
+    {
+      "id": "l_langchain",
+      "origin": "profile",
+      "profile": "ai_engineering_specialist_ravi_deshmukh",
+      "category": "literal",
+      "requirement": {
+        "text": "Experience building LLM agents with LangChain.",
+        "type": "required"
+      },
+      "text": "Built LangChain agents that call 6 campus APIs and return grounded answers with citations.",
+      "label": "covered",
+      "rationale": "Built LangChain agents calling 6 APIs."
+    },
+    {
+      "id": "l_spark",
+      "origin": "profile",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "category": "literal",
+      "requirement": {
+        "text": "Experience with Apache Spark for large-scale data processing.",
+        "type": "required"
+      },
+      "text": "Built a Spark job that deduplicated 90M ad impression rows nightly, trimming runtime from 50 minutes to 18.",
+      "label": "covered",
+      "rationale": "Built a Spark job over 90M rows nightly."
+    },
+    {
+      "id": "s_etl_scale",
+      "origin": "profile",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "semantic",
+      "requirement": {
+        "text": "Experience with data engineering at scale.",
+        "type": "required"
+      },
+      "text": "Built Airflow DAGs moving 40M shipment events a day from Kafka into Snowflake at 99.9% delivery.",
+      "label": "covered",
+      "rationale": "Moving 40M events a day into a warehouse is data engineering at scale."
+    },
+    {
+      "id": "s_warehouse_models",
+      "origin": "profile",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "category": "semantic",
+      "requirement": {
+        "text": "Experience designing data warehouse schemas.",
+        "type": "required"
+      },
+      "text": "Modeled 8 core marketing tables in dbt with documented tests and freshness checks.",
+      "label": "covered",
+      "rationale": "Modeled 8 core tables with tests and freshness checks."
+    },
+    {
+      "id": "s_ml_deploy",
+      "origin": "profile",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "semantic",
+      "requirement": {
+        "text": "Experience deploying machine learning models to production.",
+        "type": "required"
+      },
+      "text": "Packaged the model behind a FastAPI endpoint in Docker, holding p95 latency under 80ms.",
+      "label": "covered",
+      "rationale": "Served a model behind an endpoint with a latency target."
+    },
+    {
+      "id": "s_experiment",
+      "origin": "profile",
+      "profile": "data_science_specialist_priya_raman",
+      "category": "semantic",
+      "requirement": {
+        "text": "Experience with statistical hypothesis testing and experimentation.",
+        "type": "required"
+      },
+      "text": "Ran an A/B testing readout on 12 store-level promotions, using bootstrap confidence intervals to flag 3 as statistically flat.",
+      "label": "covered",
+      "rationale": "Used bootstrap confidence intervals to call promotions flat."
+    },
+    {
+      "id": "s_orchestration",
+      "origin": "profile",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "semantic",
+      "requirement": {
+        "text": "Experience with workflow orchestration and job scheduling.",
+        "type": "required"
+      },
+      "text": "Migrated 3 lab pipelines from cron scripts to Airflow, with retries and alerting.",
+      "label": "covered",
+      "rationale": "Moved cron scripts to a scheduler with retries and alerting."
+    },
+    {
+      "id": "s_ml_monitoring",
+      "origin": "profile",
+      "profile": "ml_engineering_generalist_omar_haddad",
+      "category": "semantic",
+      "requirement": {
+        "text": "Experience monitoring machine learning systems in production.",
+        "type": "preferred"
+      },
+      "text": "Added drift monitoring in Grafana that caught a 7% input distribution shift within a day.",
+      "label": "covered",
+      "rationale": "Drift monitoring that caught a 7% input shift."
+    },
+    {
+      "id": "s_ci",
+      "origin": "profile",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "semantic",
+      "requirement": {
+        "text": "Experience with continuous integration and automated testing.",
+        "type": "required"
+      },
+      "text": "Added GitHub Actions CI that ran 220 tests on every pull request.",
+      "label": "covered",
+      "rationale": "CI running 220 tests on every pull request."
+    },
+    {
+      "id": "s_teaching",
+      "origin": "profile",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "semantic",
+      "requirement": {
+        "text": "Ability to teach and explain technical concepts to others.",
+        "type": "preferred"
+      },
+      "text": "Ran weekly lab sections for 30 students on Git, Linux, and testing practice.",
+      "label": "covered",
+      "rationale": "Taught weekly lab sections to 30 students."
+    },
+    {
+      "id": "s_cost_opt",
+      "origin": "profile",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "semantic",
+      "requirement": {
+        "text": "Experience optimizing the cost and performance of cloud data platforms.",
+        "type": "preferred"
+      },
+      "text": "Cut warehouse spend 28% by repartitioning the 12 largest Parquet tables and pruning unused columns.",
+      "label": "covered",
+      "rationale": "Cut warehouse spend 28% through table layout."
+    },
+    {
+      "id": "s_llm_eval",
+      "origin": "profile",
+      "profile": "ai_engineering_specialist_ravi_deshmukh",
+      "category": "semantic",
+      "requirement": {
+        "text": "Experience evaluating large language model applications.",
+        "type": "required"
+      },
+      "text": "Wrote an evaluation set of 200 graded questions that gated every prompt change.",
+      "label": "covered",
+      "rationale": "Built an eval set that gated every prompt change."
+    },
+    {
+      "id": "s_dataviz",
+      "origin": "profile",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "semantic",
+      "requirement": {
+        "text": "Experience communicating insights through dashboards and data visualization.",
+        "type": "preferred"
+      },
+      "text": "Published an interactive Tableau workbook opened 900 times in its first month.",
+      "label": "covered",
+      "rationale": "Published an interactive Tableau workbook."
+    },
+    {
+      "id": "s_dist_training",
+      "origin": "profile",
+      "profile": "ml_engineering_generalist_omar_haddad",
+      "category": "semantic",
+      "requirement": {
+        "text": "Experience with distributed computing for machine learning workloads.",
+        "type": "required"
+      },
+      "text": "Built a Ray-backed training pipeline that cut a 9-hour job to 2 hours across 4 GPUs.",
+      "label": "covered",
+      "rationale": "Distributed a training job across 4 GPUs."
+    },
+    {
+      "id": "s_data_quality",
+      "origin": "profile",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "semantic",
+      "requirement": {
+        "text": "Experience implementing data quality checks and validation.",
+        "type": "required"
+      },
+      "text": "Added dbt tests to 60 models, catching 14 schema regressions before they reached reporting.",
+      "label": "covered",
+      "rationale": "Tests caught 14 schema regressions before reporting."
+    },
+    {
+      "id": "s_web_apps",
+      "origin": "profile",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "semantic",
+      "requirement": {
+        "text": "Experience building user-facing web applications.",
+        "type": "required"
+      },
+      "text": "Built a React and TypeScript scheduling tool that replaced a paper process for 12 departments.",
+      "label": "covered",
+      "rationale": "Built a scheduling tool used by 12 departments."
+    },
+    {
+      "id": "s_api_design",
+      "origin": "profile",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "semantic",
+      "requirement": {
+        "text": "Experience designing and building APIs.",
+        "type": "required"
+      },
+      "text": "Added GraphQL resolvers for 9 entity types behind an existing REST gateway.",
+      "label": "covered",
+      "rationale": "Added GraphQL resolvers behind an existing gateway."
+    },
+    {
+      "id": "s_timeseries",
+      "origin": "profile",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "semantic",
+      "requirement": {
+        "text": "Experience with time series analysis.",
+        "type": "preferred"
+      },
+      "text": "Built demand forecasts for 34 clinic sites in Python and statsmodels, reducing weekly schedule error by 19%.",
+      "label": "covered",
+      "rationale": "Demand forecasting across 34 sites is time series work."
+    },
+    {
+      "id": "p_kafka_years",
+      "origin": "profile",
+      "profile": "ml_engineering_generalist_omar_haddad",
+      "category": "partial",
+      "requirement": {
+        "text": "5+ years of professional experience with Kafka.",
+        "type": "required"
+      },
+      "text": "Shipped a Kafka feature stream feeding 3 production models with sub-minute freshness.",
+      "label": "not_covered",
+      "rationale": "One stream, no years of experience shown."
+    },
+    {
+      "id": "p_lead_team",
+      "origin": "profile",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "partial",
+      "requirement": {
+        "text": "Experience leading a team of data engineers.",
+        "type": "required"
+      },
+      "text": "Built Airflow DAGs moving 40M shipment events a day from Kafka into Snowflake at 99.9% delivery.",
+      "label": "not_covered",
+      "rationale": "Individual build; no leadership shown."
+    },
+    {
+      "id": "p_spark_petabyte",
+      "origin": "profile",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "partial",
+      "requirement": {
+        "text": "Experience tuning Spark jobs on petabyte-scale datasets.",
+        "type": "required"
+      },
+      "text": "Parsed 3,100 county result files with pandas and Spark, reconciling 5 conflicting schemas.",
+      "label": "not_covered",
+      "rationale": "Spark named, but 3,100 files is nowhere near petabyte scale or tuning."
+    },
+    {
+      "id": "p_ml_production",
+      "origin": "profile",
+      "profile": "ml_engineering_generalist_omar_haddad",
+      "category": "partial",
+      "requirement": {
+        "text": "Experience deploying and operating machine learning models in production.",
+        "type": "required"
+      },
+      "text": "Trained demand models in scikit-learn and PyTorch on 300k transactions for 2 campus partners.",
+      "label": "not_covered",
+      "rationale": "Training for campus partners; no deployment or operation shown."
+    },
+    {
+      "id": "p_aws_architecture",
+      "origin": "profile",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "partial",
+      "requirement": {
+        "text": "Experience designing highly available multi-region AWS architectures.",
+        "type": "required"
+      },
+      "text": "Deployed with Docker and Terraform on AWS, holding 99% uptime over 6 months.",
+      "label": "not_covered",
+      "rationale": "Deployed on AWS, but no multi-region or architecture design."
+    },
+    {
+      "id": "p_platform_architect",
+      "origin": "profile",
+      "profile": "data_engineering_metric_poor_gabriel_ferreira",
+      "category": "partial",
+      "requirement": {
+        "text": "Experience architecting data platforms end to end.",
+        "type": "required"
+      },
+      "text": "Rewrote a fragile shipment ingest job in Python, adding retries and structured logging.",
+      "label": "not_covered",
+      "rationale": "Rewrote one job; no platform architecture."
+    },
+    {
+      "id": "p_publications",
+      "origin": "profile",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "partial",
+      "requirement": {
+        "text": "Publications at top-tier machine learning conferences.",
+        "type": "preferred"
+      },
+      "text": "Implemented 5 replay strategies and measured forgetting across a 10-task sequence.",
+      "label": "not_covered",
+      "rationale": "Research experiments, not a publication."
+    },
+    {
+      "id": "p_exec_present",
+      "origin": "profile",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "partial",
+      "requirement": {
+        "text": "Experience presenting analyses to executive leadership.",
+        "type": "preferred"
+      },
+      "text": "Partnered with 3 product teams on an A/B testing framework now used for every release readout.",
+      "label": "not_covered",
+      "rationale": "Worked with product teams; no executive audience shown."
+    },
+    {
+      "id": "p_sql_expert",
+      "origin": "profile",
+      "profile": "data_science_specialist_priya_raman",
+      "category": "partial",
+      "requirement": {
+        "text": "Expert SQL, including query optimization on multi-terabyte databases.",
+        "type": "required"
+      },
+      "text": "Cleaned and joined 9 semesters of enrollment data in SQL and pandas, resolving 4,200 duplicate student records.",
+      "label": "not_covered",
+      "rationale": "Used SQL to clean data; no optimization or terabyte scale."
+    },
+    {
+      "id": "p_cicd_owner",
+      "origin": "profile",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "partial",
+      "requirement": {
+        "text": "Experience owning the CI/CD and release infrastructure for a product team.",
+        "type": "required"
+      },
+      "text": "Added GitHub Actions CI that ran 220 tests on every pull request.",
+      "label": "not_covered",
+      "rationale": "Added CI; no ownership of release infrastructure shown."
+    },
+    {
+      "id": "p_llm_pretrain",
+      "origin": "profile",
+      "profile": "ai_engineering_generalist_claire_bouchard",
+      "category": "partial",
+      "requirement": {
+        "text": "Experience pretraining or fine-tuning large language models with billions of parameters.",
+        "type": "required"
+      },
+      "text": "Fine-tuned a Hugging Face classifier routing 12 question types to the right tool.",
+      "label": "not_covered",
+      "rationale": "Fine-tuned a small classifier, not a large language model."
+    },
+    {
+      "id": "p_petabyte",
+      "origin": "profile",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "partial",
+      "requirement": {
+        "text": "Experience operating petabyte-scale data systems.",
+        "type": "required"
+      },
+      "text": "Loaded 1.4TB of sensor archives into Postgres and cut a common query from 90 seconds to 4.",
+      "label": "not_covered",
+      "rationale": "1.4TB is three orders of magnitude short."
+    },
+    {
+      "id": "p_realtime_inference",
+      "origin": "profile",
+      "profile": "ml_engineering_generalist_omar_haddad",
+      "category": "partial",
+      "requirement": {
+        "text": "Experience building real-time inference services handling millions of requests per second.",
+        "type": "required"
+      },
+      "text": "Shipped a Kafka feature stream feeding 3 production models with sub-minute freshness.",
+      "label": "not_covered",
+      "rationale": "A feature stream for 3 models; no inference service at that scale."
+    },
+    {
+      "id": "a_k8s",
+      "origin": "synthetic",
+      "profile": "ml_engineering_generalist_omar_haddad",
+      "category": "aspiration",
+      "requirement": {
+        "text": "Experience with Kubernetes.",
+        "type": "required"
+      },
+      "text": "Eager to learn Kubernetes and apply it to the team's training jobs.",
+      "label": "not_covered",
+      "rationale": "Eager to learn is not experience."
+    },
+    {
+      "id": "a_spark",
+      "origin": "synthetic",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "category": "aspiration",
+      "requirement": {
+        "text": "Hands-on experience with Apache Spark.",
+        "type": "required"
+      },
+      "text": "Exploring Apache Spark through online tutorials to prepare for larger datasets.",
+      "label": "not_covered",
+      "rationale": "Tutorials are exploration, not experience."
+    },
+    {
+      "id": "a_rust",
+      "origin": "synthetic",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "aspiration",
+      "requirement": {
+        "text": "Professional experience programming in Rust.",
+        "type": "required"
+      },
+      "text": "Interested in systems programming and planning to pick up Rust this year.",
+      "label": "not_covered",
+      "rationale": "A plan to learn."
+    },
+    {
+      "id": "a_deep_learning",
+      "origin": "synthetic",
+      "profile": "data_science_specialist_priya_raman",
+      "category": "aspiration",
+      "requirement": {
+        "text": "Experience training deep learning models.",
+        "type": "required"
+      },
+      "text": "Excited to get started with deep learning and currently reading about transformer architectures.",
+      "label": "not_covered",
+      "rationale": "Reading and excitement only."
+    },
+    {
+      "id": "a_terraform",
+      "origin": "synthetic",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "aspiration",
+      "requirement": {
+        "text": "Experience with infrastructure as code using Terraform.",
+        "type": "required"
+      },
+      "text": "Keen to adopt Terraform for the group's infrastructure once the migration settles.",
+      "label": "not_covered",
+      "rationale": "An intention, nothing built."
+    },
+    {
+      "id": "a_react",
+      "origin": "synthetic",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "aspiration",
+      "requirement": {
+        "text": "Experience building React applications.",
+        "type": "required"
+      },
+      "text": "Looking forward to building user interfaces in React as part of the roadmap.",
+      "label": "not_covered",
+      "rationale": "Looking forward to, not done."
+    },
+    {
+      "id": "a_dbt",
+      "origin": "synthetic",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "aspiration",
+      "requirement": {
+        "text": "Experience modeling data with dbt.",
+        "type": "required"
+      },
+      "text": "Completed a short course introducing dbt and hope to use it on upcoming projects.",
+      "label": "not_covered",
+      "rationale": "A course and a hope; no work with dbt."
+    },
+    {
+      "id": "a_aws",
+      "origin": "synthetic",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "aspiration",
+      "requirement": {
+        "text": "Experience deploying applications on AWS.",
+        "type": "required"
+      },
+      "text": "Planning to earn an AWS certification and move the team's services to the cloud.",
+      "label": "not_covered",
+      "rationale": "A plan, nothing deployed."
+    },
+    {
+      "id": "a_rag",
+      "origin": "synthetic",
+      "profile": "ai_engineering_specialist_ravi_deshmukh",
+      "category": "aspiration",
+      "requirement": {
+        "text": "Experience building retrieval-augmented generation systems.",
+        "type": "required"
+      },
+      "text": "Eager to learn retrieval-augmented generation and build a prototype soon.",
+      "label": "not_covered",
+      "rationale": "Eager to learn; no prototype yet."
+    },
+    {
+      "id": "a_airflow",
+      "origin": "synthetic",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "aspiration",
+      "requirement": {
+        "text": "Experience building data pipelines with Airflow.",
+        "type": "required"
+      },
+      "text": "Learning Airflow in order to replace the existing cron scripts.",
+      "label": "not_covered",
+      "rationale": "Learning, not having built."
+    },
+    {
+      "id": "a_go",
+      "origin": "synthetic",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "aspiration",
+      "requirement": {
+        "text": "Experience programming in Go.",
+        "type": "required"
+      },
+      "text": "Wants to learn Go and has started working through the language tour.",
+      "label": "not_covered",
+      "rationale": "Started a tutorial."
+    },
+    {
+      "id": "n_flink",
+      "origin": "profile",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "category": "near_miss",
+      "requirement": {
+        "text": "Experience with Apache Flink for stream processing.",
+        "type": "required"
+      },
+      "text": "Built a Spark job that deduplicated 90M ad impression rows nightly, trimming runtime from 50 minutes to 18.",
+      "label": "not_covered",
+      "rationale": "Spark batch is related, not Flink stream processing."
+    },
+    {
+      "id": "n_tensorflow",
+      "origin": "profile",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "near_miss",
+      "requirement": {
+        "text": "Experience building models with TensorFlow.",
+        "type": "required"
+      },
+      "text": "Trained a PyTorch sequence model on 1.1M clinical events, improving readmission recall by 12 points over the baseline.",
+      "label": "not_covered",
+      "rationale": "PyTorch is a sibling framework, not TensorFlow."
+    },
+    {
+      "id": "n_kubernetes",
+      "origin": "profile",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "category": "near_miss",
+      "requirement": {
+        "text": "Experience running workloads on Kubernetes.",
+        "type": "required"
+      },
+      "text": "Containerized the ingest job with Docker so it runs identically on 2 campus servers.",
+      "label": "not_covered",
+      "rationale": "Docker is not Kubernetes."
+    },
+    {
+      "id": "n_mongodb",
+      "origin": "profile",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "near_miss",
+      "requirement": {
+        "text": "Experience with MongoDB and other NoSQL databases.",
+        "type": "preferred"
+      },
+      "text": "Loaded 1.4TB of sensor archives into Postgres and cut a common query from 90 seconds to 4.",
+      "label": "not_covered",
+      "rationale": "Postgres is relational, not a NoSQL store."
+    },
+    {
+      "id": "n_dagster",
+      "origin": "profile",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "near_miss",
+      "requirement": {
+        "text": "Experience with Dagster or Prefect.",
+        "type": "preferred"
+      },
+      "text": "Migrated 3 lab pipelines from cron scripts to Airflow, with retries and alerting.",
+      "label": "not_covered",
+      "rationale": "Airflow is a sibling orchestrator, not those."
+    },
+    {
+      "id": "n_redshift",
+      "origin": "profile",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "near_miss",
+      "requirement": {
+        "text": "Experience with Amazon Redshift.",
+        "type": "required"
+      },
+      "text": "Built Airflow DAGs moving 40M shipment events a day from Kafka into Snowflake at 99.9% delivery.",
+      "label": "not_covered",
+      "rationale": "Snowflake is a different warehouse."
+    },
+    {
+      "id": "n_angular",
+      "origin": "profile",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "near_miss",
+      "requirement": {
+        "text": "Experience building single-page applications in Angular.",
+        "type": "required"
+      },
+      "text": "Built a React and TypeScript scheduling tool that replaced a paper process for 12 departments.",
+      "label": "not_covered",
+      "rationale": "React is a different framework."
+    },
+    {
+      "id": "n_grpc",
+      "origin": "profile",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "near_miss",
+      "requirement": {
+        "text": "Experience building gRPC services.",
+        "type": "preferred"
+      },
+      "text": "Shipped 14 REST endpoints in Spring Boot backing a customer portal used by 8,000 accounts.",
+      "label": "not_covered",
+      "rationale": "REST endpoints are not gRPC."
+    },
+    {
+      "id": "n_causal",
+      "origin": "profile",
+      "profile": "data_science_specialist_priya_raman",
+      "category": "near_miss",
+      "requirement": {
+        "text": "Experience with causal inference methods such as difference-in-differences and instrumental variables.",
+        "type": "preferred"
+      },
+      "text": "Ran an A/B testing readout on 12 store-level promotions, using bootstrap confidence intervals to flag 3 as statistically flat.",
+      "label": "not_covered",
+      "rationale": "Experimentation is related to causal inference, not those methods."
+    },
+    {
+      "id": "n_nlp",
+      "origin": "profile",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "near_miss",
+      "requirement": {
+        "text": "Experience with natural language processing.",
+        "type": "required"
+      },
+      "text": "Fine-tuned 4 image classification backbones on a 40k-image microscopy set, reaching 91% top-1.",
+      "label": "not_covered",
+      "rationale": "Vision models, not language."
+    },
+    {
+      "id": "n_powerbi",
+      "origin": "profile",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "near_miss",
+      "requirement": {
+        "text": "Experience building Power BI reports.",
+        "type": "preferred"
+      },
+      "text": "Published an interactive Tableau workbook opened 900 times in its first month.",
+      "label": "not_covered",
+      "rationale": "Tableau is a sibling tool, not Power BI."
+    },
+    {
+      "id": "n_aws_data",
+      "origin": "profile",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "near_miss",
+      "requirement": {
+        "text": "Experience with AWS data services such as Redshift and Glue.",
+        "type": "required"
+      },
+      "text": "Ingested 2 years of GTFS feeds into BigQuery and modeled on-time performance across 190 routes.",
+      "label": "not_covered",
+      "rationale": "BigQuery is Google Cloud."
+    },
+    {
+      "id": "n_recsys",
+      "origin": "profile",
+      "profile": "data_science_specialist_priya_raman",
+      "category": "near_miss",
+      "requirement": {
+        "text": "Experience building recommendation systems.",
+        "type": "required"
+      },
+      "text": "Built a customer churn model in scikit-learn over 480k subscription records, raising AUC from 0.71 to 0.83 against the incumbent rule set.",
+      "label": "not_covered",
+      "rationale": "A churn classifier is not a recommender."
+    },
+    {
+      "id": "n_java",
+      "origin": "profile",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "near_miss",
+      "requirement": {
+        "text": "Experience developing backend services in Java or Kotlin.",
+        "type": "required"
+      },
+      "text": "Built a Go service that replaced 3 cron jobs, processing 200k records an hour.",
+      "label": "not_covered",
+      "rationale": "Go is a different language."
+    },
+    {
+      "id": "n_inference_opt",
+      "origin": "profile",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "near_miss",
+      "requirement": {
+        "text": "Experience with model serving and inference optimization.",
+        "type": "preferred"
+      },
+      "text": "Cut training time 35% by moving augmentation into a prefetching data loader.",
+      "label": "not_covered",
+      "rationale": "Training speed-up, not serving or inference."
+    },
+    {
+      "id": "u_sales",
+      "origin": "profile",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "unrelated",
+      "requirement": {
+        "text": "Experience managing enterprise sales accounts.",
+        "type": "required"
+      },
+      "text": "Added dbt tests to 60 models, catching 14 schema regressions before they reached reporting.",
+      "label": "not_covered",
+      "rationale": "Unrelated field."
+    },
+    {
+      "id": "u_nursing",
+      "origin": "profile",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "unrelated",
+      "requirement": {
+        "text": "Clinical nursing experience in an acute-care setting.",
+        "type": "required"
+      },
+      "text": "Packaged the model behind a FastAPI endpoint in Docker, holding p95 latency under 80ms.",
+      "label": "not_covered",
+      "rationale": "Unrelated field."
+    },
+    {
+      "id": "u_contracts",
+      "origin": "profile",
+      "profile": "data_science_specialist_priya_raman",
+      "category": "unrelated",
+      "requirement": {
+        "text": "Experience drafting and negotiating commercial contracts.",
+        "type": "required"
+      },
+      "text": "Ran an A/B testing readout on 12 store-level promotions, using bootstrap confidence intervals to flag 3 as statistically flat.",
+      "label": "not_covered",
+      "rationale": "Unrelated field."
+    },
+    {
+      "id": "u_design",
+      "origin": "profile",
+      "profile": "ml_engineering_generalist_omar_haddad",
+      "category": "unrelated",
+      "requirement": {
+        "text": "A portfolio of graphic and brand design work.",
+        "type": "preferred"
+      },
+      "text": "Shipped a Kafka feature stream feeding 3 production models with sub-minute freshness.",
+      "label": "not_covered",
+      "rationale": "Unrelated field."
+    },
+    {
+      "id": "u_firmware",
+      "origin": "profile",
+      "profile": "data_science_specialist_priya_raman",
+      "category": "unrelated",
+      "requirement": {
+        "text": "Experience with PCB layout and embedded firmware.",
+        "type": "required"
+      },
+      "text": "Automated a weekly cohort report in pandas and matplotlib, cutting a 6-hour manual Excel process to 15 minutes.",
+      "label": "not_covered",
+      "rationale": "Unrelated field."
+    },
+    {
+      "id": "u_accounting",
+      "origin": "profile",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "unrelated",
+      "requirement": {
+        "text": "CPA certification and experience with month-end financial close.",
+        "type": "required"
+      },
+      "text": "Built a Python autograder that cut assignment turnaround from 4 days to 1.",
+      "label": "not_covered",
+      "rationale": "Unrelated field."
+    },
+    {
+      "id": "u_machining",
+      "origin": "profile",
+      "profile": "ai_engineering_specialist_ravi_deshmukh",
+      "category": "unrelated",
+      "requirement": {
+        "text": "Experience with CNC machining and precision manufacturing.",
+        "type": "required"
+      },
+      "text": "Wrote an evaluation set of 200 graded questions that gated every prompt change.",
+      "label": "not_covered",
+      "rationale": "Unrelated field."
+    },
+    {
+      "id": "u_social",
+      "origin": "profile",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "unrelated",
+      "requirement": {
+        "text": "Experience running paid social media campaigns.",
+        "type": "preferred"
+      },
+      "text": "Wrote a Node.js sync service moving 30k roster records nightly into PostgreSQL.",
+      "label": "not_covered",
+      "rationale": "Unrelated field."
+    },
+    {
+      "id": "u_recruiting",
+      "origin": "profile",
+      "profile": "ml_engineering_generalist_omar_haddad",
+      "category": "unrelated",
+      "requirement": {
+        "text": "Experience in talent acquisition and recruiting.",
+        "type": "preferred"
+      },
+      "text": "Built an Airflow retraining schedule with automated evaluation gates.",
+      "label": "not_covered",
+      "rationale": "Unrelated field."
+    },
+    {
+      "id": "u_clearance",
+      "origin": "profile",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "unrelated",
+      "requirement": {
+        "text": "Active Secret security clearance.",
+        "type": "preferred"
+      },
+      "text": "Wrote a Terraform module that provisioned the group's S3 buckets and IAM roles in 1 command.",
+      "label": "not_covered",
+      "rationale": "Unrelated requirement."
+    },
+    {
+      "id": "u_travel",
+      "origin": "profile",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "category": "unrelated",
+      "requirement": {
+        "text": "A valid driver's license and willingness to travel 25% of the time.",
+        "type": "required"
+      },
+      "text": "Shipped a Kafka consumer in Scala that backfilled 3 weeks of missing click events.",
+      "label": "not_covered",
+      "rationale": "Unrelated requirement."
+    },
+    {
+      "id": "b_communication",
+      "origin": "profile",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "boundary",
+      "requirement": {
+        "text": "Strong written communication skills.",
+        "type": "required"
+      },
+      "text": "Posts a daily digest that replaced a manual review of 3 upstream feeds.",
+      "label": "not_covered",
+      "rationale": "Automation of a review, not evidence of writing or communicating."
+    },
+    {
+      "id": "b_cross_functional",
+      "origin": "profile",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "boundary",
+      "requirement": {
+        "text": "Experience collaborating with cross-functional teams.",
+        "type": "required"
+      },
+      "text": "Partnered with 3 product teams on an A/B testing framework now used for every release readout.",
+      "label": "covered",
+      "rationale": "Worked with 3 product teams on a shared framework."
+    },
+    {
+      "id": "b_pipeline_ownership",
+      "origin": "profile",
+      "profile": "data_engineering_metric_poor_gabriel_ferreira",
+      "category": "boundary",
+      "requirement": {
+        "text": "Experience owning production data pipelines.",
+        "type": "required"
+      },
+      "text": "Maintained the Airflow pipelines that load carrier invoices into the Snowflake warehouse.",
+      "label": "covered",
+      "rationale": "Maintained the pipelines a warehouse depends on."
+    },
+    {
+      "id": "b_sql_tuning",
+      "origin": "profile",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "boundary",
+      "requirement": {
+        "text": "Experience with SQL query optimization.",
+        "type": "preferred"
+      },
+      "text": "Loaded 1.4TB of sensor archives into Postgres and cut a common query from 90 seconds to 4.",
+      "label": "covered",
+      "rationale": "Cut a common query from 90 seconds to 4."
+    },
+    {
+      "id": "b_cloud_infra",
+      "origin": "profile",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "boundary",
+      "requirement": {
+        "text": "Experience provisioning and managing cloud infrastructure.",
+        "type": "required"
+      },
+      "text": "Wrote a Terraform module that provisioned the group's S3 buckets and IAM roles in 1 command.",
+      "label": "covered",
+      "rationale": "Provisioned S3 buckets and IAM roles as code."
+    },
+    {
+      "id": "b_python_skill",
+      "origin": "profile",
+      "profile": "data_science_specialist_priya_raman",
+      "category": "boundary",
+      "requirement": {
+        "text": "Strong Python programming skills.",
+        "type": "required"
+      },
+      "text": "Automated a weekly cohort report in pandas and matplotlib, cutting a 6-hour manual Excel process to 15 minutes.",
+      "label": "covered",
+      "rationale": "pandas and matplotlib are Python, though the bullet never says so."
+    },
+    {
+      "id": "b_tdd",
+      "origin": "profile",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "boundary",
+      "requirement": {
+        "text": "Experience practicing test-driven development.",
+        "type": "preferred"
+      },
+      "text": "Raised service test coverage from 46% to 78% with JUnit and contract tests.",
+      "label": "not_covered",
+      "rationale": "Raised test coverage; nothing shows tests written first."
+    },
+    {
+      "id": "b_reproduce_research",
+      "origin": "profile",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "boundary",
+      "requirement": {
+        "text": "Ability to read and reproduce machine learning research papers.",
+        "type": "preferred"
+      },
+      "text": "Reproduced 2 published baselines within 1 point of their reported numbers.",
+      "label": "covered",
+      "rationale": "Reproduced 2 published baselines within 1 point."
+    },
+    {
+      "id": "b_containers",
+      "origin": "profile",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "boundary",
+      "requirement": {
+        "text": "Experience with containerization.",
+        "type": "preferred"
+      },
+      "text": "Wrote a Docker image that reproduced the analysis stack for 8 downstream analysts.",
+      "label": "covered",
+      "rationale": "Wrote a Docker image for 8 analysts."
+    },
+    {
+      "id": "b_team_lead",
+      "origin": "profile",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "boundary",
+      "requirement": {
+        "text": "Experience leading and managing a team.",
+        "type": "preferred"
+      },
+      "text": "Ran weekly lab sections for 30 students on Git, Linux, and testing practice.",
+      "label": "not_covered",
+      "rationale": "Taught lab sections; did not lead a team."
+    },
+    {
+      "id": "b_streaming",
+      "origin": "profile",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "category": "boundary",
+      "requirement": {
+        "text": "Experience with real-time data streaming.",
+        "type": "required"
+      },
+      "text": "Shipped a Kafka consumer in Scala that backfilled 3 weeks of missing click events.",
+      "label": "covered",
+      "rationale": "A Kafka consumer is stream processing, though this one backfilled."
+    },
+    {
+      "id": "b_mlops",
+      "origin": "profile",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "boundary",
+      "requirement": {
+        "text": "Experience with MLOps practices and experiment tracking.",
+        "type": "preferred"
+      },
+      "text": "Tracked 60 experiment runs in MLflow and wrote the comparison that selected the shipped checkpoint.",
+      "label": "covered",
+      "rationale": "MLflow run tracking and checkpoint selection."
+    },
+    {
+      "id": "b_low_latency",
+      "origin": "profile",
+      "profile": "ai_engineering_generalist_claire_bouchard",
+      "category": "boundary",
+      "requirement": {
+        "text": "Experience building low-latency, high-throughput services.",
+        "type": "required"
+      },
+      "text": "Shipped a retrieval service over 2M documents with pgvector and Redis caching at 120ms p95.",
+      "label": "covered",
+      "rationale": "120ms p95 over 2M documents; throughput is not stated."
+    },
+    {
+      "id": "b_app_security",
+      "origin": "profile",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "boundary",
+      "requirement": {
+        "text": "Experience with application security and authentication.",
+        "type": "preferred"
+      },
+      "text": "Wrote a Node.js sync service moving 30k roster records nightly into PostgreSQL.",
+      "label": "not_covered",
+      "rationale": "Nothing about security in a sync service."
+    },
+    {
+      "id": "b_big_data",
+      "origin": "profile",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "category": "boundary",
+      "requirement": {
+        "text": "Experience working with big data technologies such as Hadoop or Spark.",
+        "type": "required"
+      },
+      "text": "Built a Spark job that deduplicated 90M ad impression rows nightly, trimming runtime from 50 minutes to 18.",
+      "label": "covered",
+      "rationale": "A Spark job over 90M rows."
+    },
+    {
+      "id": "b_dev_tools",
+      "origin": "profile",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "boundary",
+      "requirement": {
+        "text": "Experience building internal developer tools.",
+        "type": "preferred"
+      },
+      "text": "Built a Python autograder that cut assignment turnaround from 4 days to 1.",
+      "label": "covered",
+      "rationale": "Built a tool the teaching staff used daily."
+    },
+    {
+      "id": "b_model_eval",
+      "origin": "profile",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "boundary",
+      "requirement": {
+        "text": "Experience with model evaluation and error analysis.",
+        "type": "required"
+      },
+      "text": "Wrote evaluation tooling that produced per-class confusion matrices for 3 papers under review.",
+      "label": "covered",
+      "rationale": "Per-class confusion matrices for 3 papers."
+    },
+    {
+      "id": "b_operate_k8s",
+      "origin": "profile",
+      "profile": "ml_engineering_generalist_omar_haddad",
+      "category": "boundary",
+      "requirement": {
+        "text": "Experience operating production Kubernetes clusters.",
+        "type": "required"
+      },
+      "text": "Runs on Kubernetes from a Docker image pinned to a reproducible CUDA build.",
+      "label": "not_covered",
+      "rationale": "Runs on Kubernetes; no operation of clusters shown."
+    }
+  ]
+}
