@@ -178,9 +178,7 @@ def test_the_checker_reads_the_recorded_answers_the_way_the_labels_say(isolated_
         assert result["requirements"][0]["by"] == fit.pair_kind(p)
         if result["requirements"][0]["covered"] != (p["label"] == "covered"):
             wrong.append(p["id"])
-    # The one covered pair under the threshold: ss_ownership_run (0.61) sits under TAU_COVER (0.65), which is
-    # set over the highest not-covered score (0.58). See REPORT.md.
-    assert wrong == ["ss_ownership_run"]
+    assert wrong == []                     # no false cover and no miss at TAU_COVER (0.65): 0.61 is the highest not covered
     stats = engine.stats()
     for point in ("requirement_covered", "education_covered"):
         assert stats[point]["hit_rate"] == 1.0 and stats[point]["jev"] == 0 and stats[point]["fallback"] == 0
@@ -231,22 +229,39 @@ def _row(pid, label, p, cat="near_miss", jev=None):
             "rationale": "r", "requirement": {"text": "r", "type": "required"}}
 
 
-def test_tau_sits_a_step_above_the_worst_not_covered_pair_and_in_the_middle_of_the_gap():
+def test_tau_is_the_grid_value_closest_to_the_middle_of_the_gap_among_those_with_no_false_cover():
     not_ = [_row(f"n{i}", "not_covered", p) for i, p in enumerate([0.02] * 8 + [0.05, 0.39])]
     cov = [_row(f"c{i}", "covered", p, cat="semantic") for i, p in enumerate([0.68, 0.80, 0.90, 0.95])]
     rows = not_ + cov
     rec = fit.recommend(rows)
     assert rec["rule"] == "all" and rec["top_not"]["id"] == "n9"
-    assert rec["candidates"] == [0.45, 0.50, 0.55, 0.60, 0.65]               # the headroom floor, and the recall ceiling
-    assert rec["tau_cover"] == 0.55                                           # farthest from 0.39 and 0.68
+    assert rec["candidates"] == [0.40, 0.45, 0.50, 0.55, 0.60, 0.65]         # no false cover, and every covered pair kept
+    assert rec["midpoint"] == 0.535 and rec["tau_cover"] == 0.55              # closest to the middle of 0.39 and 0.68
+    assert (rec["margin_below"], rec["margin_above"]) == (0.16, 0.13)
     st = fit.cover_stats(rows, rec["tau_cover"])
     assert st["fp"] == 0 and st["tp"] == 4 and st["recall"] == 1.0
     recalls = [fit.cover_stats(rows, t)["recall"] for t in fit.GRID]
     assert recalls == sorted(recalls, reverse=True)                          # a stricter threshold never gains recall
 
 
-def test_the_rule_gives_up_headroom_over_a_partial_before_it_covers_an_aspiration():
-    rows = [_row("part", "not_covered", 0.93, cat="partial"), _row("asp", "not_covered", 0.10, cat="aspiration"),
+def test_a_tie_between_two_grid_values_goes_to_the_higher_one():
+    rows = [_row("n", "not_covered", 0.40), _row("c", "covered", 0.65, cat="semantic")]       # the middle is 0.525
+    rec = fit.recommend(rows)
+    assert rec["midpoint"] == 0.525 and rec["tau_cover"] == 0.55                              # 0.50 and 0.55 are equally close
+
+
+def test_the_ownership_case_picks_065_not_070():
+    """The 0.61 (not covered) and 0.72 (covered) pair: 0.65 and 0.70 both have no false cover and full recall, the
+    middle of the gap is 0.665, and 0.65 is the closer, with 0.04 under it on one side and 0.07 on the other."""
+    rows = [_row(f"n{i}", "not_covered", p) for i, p in enumerate([0.02, 0.30, 0.58, 0.61])] + [
+        _row(f"c{i}", "covered", p, cat="semantic") for i, p in enumerate([0.72, 0.74, 0.90])]
+    rec = fit.recommend(rows)
+    assert rec["candidates"] == [0.65, 0.70] and rec["midpoint"] == 0.665 and rec["tau_cover"] == 0.65
+    assert (rec["margin_below"], rec["margin_above"]) == (0.04, 0.07)
+
+
+def test_the_rule_gives_up_a_clean_sweep_over_a_partial_before_it_covers_an_aspiration():
+    rows = [_row("part", "not_covered", 0.98, cat="partial"), _row("asp", "not_covered", 0.10, cat="aspiration"),
             _row("s", "covered", 0.97, cat="semantic")]
     rec = fit.recommend(rows)
     assert rec["rule"] == "core" and rec["tau_cover"] >= 0.15
@@ -279,9 +294,8 @@ def test_the_analysis_matches_what_the_checker_computes(isolated_engine, monkeyp
 
 
 def test_the_threshold_in_coverage_py_is_the_fit_and_covers_no_aspiration_or_near_miss(isolated_engine, monkeypatch):
-    """`TAU_COVER` is what the analysis recommends from the labels, with headroom over every not-covered pair,
-    no false cover, and every semantic match covered. A relabelled pair or a new recording that moves the fit
-    fails this."""
+    """`TAU_COVER` is what the analysis recommends from the labels: no false cover, every covered pair kept, and the
+    grid value closest to the middle of the gap. A relabelled pair or a new recording that moves the fit fails this."""
     _replay(monkeypatch)
     rows = fit.run_pairs(PAIRS)
     rec = fit.recommend(rows)
@@ -290,7 +304,9 @@ def test_the_threshold_in_coverage_py_is_the_fit_and_covers_no_aspiration_or_nea
     assert st["fp"] == 0
     for c in fit.CORE_NEGATIVE_CATEGORIES:                                   # zero covers on aspiration and near-miss
         assert fit.cover_stats([r for r in rows if r["category"] == c], TAU_COVER)["fp"] == 0
-    assert rec["rule"] == "all" and TAU_COVER - rec["top_not"]["p"] >= fit.HEADROOM - 1e-9
+    assert rec["rule"] == "all" and TAU_COVER > rec["top_not"]["p"]
+    assert (rec["margin_below"], rec["margin_above"]) == (0.04, 0.07)                   # 0.61 and 0.72: the middle is 0.665
+    assert st["recall"] == 1.0 and rec["candidates"] == [0.65, 0.70]
     assert fit.cover_stats([r for r in rows if r["category"] == "semantic"], TAU_COVER)["recall"] == 1.0
     for c in ("soft_skill", "education"):                                    # no false cover on either, by category
         assert fit.cover_stats([r for r in rows if r["category"] == c], TAU_COVER)["fp"] == 0, c

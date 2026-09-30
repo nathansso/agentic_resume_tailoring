@@ -1,5 +1,5 @@
 {
-  "_comment": "Hand-proposed (requirement, bullet) pairs for fitting the semantic-coverage threshold (issue #126). Built only from the synthetic benchmark profiles in eval/profiles/ (never personal/): every `text` is verbatim from the named profile, except the `aspiration` pairs and two `soft_skill` ones, whose bullets are synthetic (`origin: synthetic`) because no profile states an intention, or names a deadline or a process, in a bullet; an `education` pair's text is `education_text` of a profile's education entry (degree and institution, with dates only for a degree in progress); each aspiration bullet is about the tool its requirement names. The requirements are synthetic, written in job-posting style. `label` is the user-confirmed label for the original 97 pairs; the `soft_skill` and `education` labels are PROPOSED (awaiting review): covered | not_covered. `literal` pairs share the requirement's own words with the bullet (the control the literal target already catches); `semantic` pairs meet the requirement in none of its words; `partial` pairs name the tool or area but the requirement asks for more (years, leadership, scale, production); `aspiration` pairs state interest or a plan; `near_miss` pairs are a related technology or domain; `unrelated` pairs are a different field; `boundary` pairs are contestable either way; `soft_skill` pairs are soft-skill requirements (deadlines, processes, communication, collaboration, ownership, attention to detail) against bullets that are real evidence (covered) or merely adjacent (not_covered), two of them the benchmark cases at 0.58 and 0.67; `education` pairs (`kind: education`) put an education entry, as text, against degree and enrollment requirements, including a wrong field, a wrong level and an in-progress degree. Regenerate the report with `python eval/fit_coverage_threshold.py analyze`.",
+  "_comment": "Hand-labelled (requirement, bullet) pairs for fitting the semantic-coverage threshold (issue #126). Built only from the synthetic benchmark profiles in eval/profiles/ (never personal/): every `text` is verbatim from the named profile, except the `aspiration` pairs and two `soft_skill` ones, whose bullets are synthetic (`origin: synthetic`) because no profile states an intention, or names a deadline or a process, in a bullet; an `education` pair's text is `education_text` of a profile's education entry (degree and institution, with dates only for a degree in progress); each aspiration bullet is about the tool its requirement names. The requirements are synthetic, written in job-posting style. `label` is the user-confirmed label (reviewed 2026-09-30 from REVIEW.md; every proposal kept as is except `ss_ownership_run`, relabelled not_covered: maintaining pipelines is not a stated instance of taking ownership): covered | not_covered. `literal` pairs share the requirement's own words with the bullet (the control the literal target already catches); `semantic` pairs meet the requirement in none of its words; `partial` pairs name the tool or area but the requirement asks for more (years, leadership, scale, production); `aspiration` pairs state interest or a plan; `near_miss` pairs are a related technology or domain; `unrelated` pairs are a different field; `boundary` pairs are contestable either way; `soft_skill` pairs are soft-skill requirements (deadlines, processes, communication, collaboration, ownership, attention to detail) against bullets that are real evidence (covered) or merely adjacent (not_covered), two of them the benchmark cases at 0.58 and 0.67; `education` pairs (`kind: education`) put an education entry, as text, against degree and enrollment requirements, including a wrong field, a wrong level and an in-progress degree. Regenerate the report with `python eval/fit_coverage_threshold.py analyze`.",
   "version": 1,
   "labels": [
     "covered",
@@ -1278,8 +1278,7 @@
       },
       "text": "Partnered with 3 product teams on an A/B testing framework now used for every release readout.",
       "label": "covered",
-      "rationale": "Partnered with 3 product teams on a shared framework.",
-      "proposed": true
+      "rationale": "Partnered with 3 product teams on a shared framework."
     },
     {
       "id": "ss_handoff_docs",
@@ -1292,8 +1291,7 @@
       },
       "text": "Documented the deployment steps so the next intern could run a release unaided.",
       "label": "covered",
-      "rationale": "Documented the release steps so the next intern could run one unaided: a handoff.",
-      "proposed": true
+      "rationale": "Documented the release steps so the next intern could run one unaided: a handoff."
     },
     {
       "id": "ss_knowledge_share",
@@ -1306,8 +1304,7 @@
       },
       "text": "Documented the feature preparation steps so the team could rerun the study after I left.",
       "label": "covered",
-      "rationale": "Documented the steps so the team could rerun the study after leaving.",
-      "proposed": true
+      "rationale": "Documented the steps so the team could rerun the study after leaving."
     },
     {
       "id": "ss_code_review",
@@ -1320,8 +1317,7 @@
       },
       "text": "Reviewed pull requests from the rest of the team and kept the CI pipeline green.",
       "label": "covered",
-      "rationale": "Reviewed teammates' pull requests.",
-      "proposed": true
+      "rationale": "Reviewed teammates' pull requests."
     },
     {
       "id": "ss_stakeholders",
@@ -1334,8 +1330,7 @@
       },
       "text": "Reviewed annotation disagreements with the research group and revised the guidelines.",
       "label": "covered",
-      "rationale": "Resolved disagreements with the research group and revised the guidelines.",
-      "proposed": true
+      "rationale": "Resolved disagreements with the research group and revised the guidelines."
     },
     {
       "id": "ss_detail_regressions",
@@ -1348,8 +1343,7 @@
       },
       "text": "Built an evaluation harness scoring 40 scenarios per release, catching 6 regressions before launch.",
       "label": "covered",
-      "rationale": "Scored 40 scenarios per release and caught 6 regressions before launch.",
-      "proposed": true
+      "rationale": "Scored 40 scenarios per release and caught 6 regressions before launch."
     },
     {
       "id": "ss_detail_schema",
@@ -1362,8 +1356,7 @@
       },
       "text": "Added dbt tests to 60 models, catching 14 schema regressions before they reached reporting.",
       "label": "covered",
-      "rationale": "Tests caught 14 schema regressions before reporting.",
-      "proposed": true
+      "rationale": "Tests caught 14 schema regressions before reporting."
     },
     {
       "id": "ss_ownership_run",
@@ -1375,9 +1368,8 @@
         "type": "required"
       },
       "text": "Maintained the Airflow pipelines that load carrier invoices into the Snowflake warehouse.",
-      "label": "covered",
-      "rationale": "Maintained the pipelines the warehouse depends on.",
-      "proposed": true
+      "label": "not_covered",
+      "rationale": "Maintaining pipelines is not a stated instance of taking ownership, which is v2's own rule."
     },
     {
       "id": "ss_ownership_initiative",
@@ -1390,8 +1382,7 @@
       },
       "text": "Added dbt tests to the billing models after a schema change reached the reporting layer unnoticed.",
       "label": "covered",
-      "rationale": "Added tests to the billing models after a schema change slipped through.",
-      "proposed": true
+      "rationale": "Added tests to the billing models after a schema change slipped through."
     },
     {
       "id": "ss_deadline_real",
@@ -1404,8 +1395,7 @@
       },
       "text": "Delivered the client migration two weeks before the contractual deadline while the team was two engineers short.",
       "label": "covered",
-      "rationale": "Names a deadline and delivering two weeks ahead of it, short-handed.",
-      "proposed": true
+      "rationale": "Names a deadline and delivering two weeks ahead of it, short-handed."
     },
     {
       "id": "ss_process_real",
@@ -1418,8 +1408,7 @@
       },
       "text": "Followed the team's release checklist and change-approval process for 14 production releases.",
       "label": "covered",
-      "rationale": "Names the process followed and 14 releases under it.",
-      "proposed": true
+      "rationale": "Names the process followed and 14 releases under it."
     },
     {
       "id": "ss_deadline_benchmark",
@@ -1432,8 +1421,7 @@
       },
       "text": "Automated a weekly cohort report in pandas and matplotlib, cutting a 6-hour manual Excel process to 15 minutes.",
       "label": "not_covered",
-      "rationale": "An automation bullet; nothing about a deadline. Benchmark case (0.58 under v1 of the bullet question).",
-      "proposed": true
+      "rationale": "An automation bullet; nothing about a deadline. Benchmark case (0.58 under v1 of the bullet question)."
     },
     {
       "id": "ss_process_benchmark",
@@ -1446,8 +1434,7 @@
       },
       "text": "Published the work as a reproducible Jupyter notebook with 30 unit-tested transformation functions.",
       "label": "not_covered",
-      "rationale": "A notebook bullet; no established process or standard named. Benchmark case (0.67 under v1).",
-      "proposed": true
+      "rationale": "A notebook bullet; no established process or standard named. Benchmark case (0.67 under v1)."
     },
     {
       "id": "ss_comm_adjacent",
@@ -1460,8 +1447,7 @@
       },
       "text": "Built a React and TypeScript scheduling tool that replaced a paper process for 12 departments.",
       "label": "not_covered",
-      "rationale": "Built a tool; no communication shown.",
-      "proposed": true
+      "rationale": "Built a tool; no communication shown."
     },
     {
       "id": "ss_team_adjacent",
@@ -1474,8 +1460,7 @@
       },
       "text": "Built Airflow DAGs moving 40M shipment events a day from Kafka into Snowflake at 99.9% delivery.",
       "label": "not_covered",
-      "rationale": "A solo build; no other team named.",
-      "proposed": true
+      "rationale": "A solo build; no other team named."
     },
     {
       "id": "ss_detail_adjacent",
@@ -1488,8 +1473,7 @@
       },
       "text": "Cut training time 35% by moving augmentation into a prefetching data loader.",
       "label": "not_covered",
-      "rationale": "A speed-up; nothing about care or accuracy.",
-      "proposed": true
+      "rationale": "A speed-up; nothing about care or accuracy."
     },
     {
       "id": "ss_ownership_adjacent",
@@ -1502,8 +1486,7 @@
       },
       "text": "Wrote a Docker image that reproduced the analysis stack for 8 downstream analysts.",
       "label": "not_covered",
-      "rationale": "Wrote one image; no ownership from idea to launch.",
-      "proposed": true
+      "rationale": "Wrote one image; no ownership from idea to launch."
     },
     {
       "id": "ss_fast_paced",
@@ -1516,8 +1499,7 @@
       },
       "text": "Built a Go service that replaced 3 cron jobs, processing 200k records an hour.",
       "label": "not_covered",
-      "rationale": "A build; no pace or shifting priorities shown.",
-      "proposed": true
+      "rationale": "A build; no pace or shifting priorities shown."
     },
     {
       "id": "ss_agile_adjacent",
@@ -1530,8 +1512,7 @@
       },
       "text": "Raised service test coverage from 46% to 78% with JUnit and contract tests.",
       "label": "not_covered",
-      "rationale": "Raised coverage; no agile process shown.",
-      "proposed": true
+      "rationale": "Raised coverage; no agile process shown."
     },
     {
       "id": "e_bs_cs",
@@ -1545,8 +1526,7 @@
       "text": "B.S. Computer Science, Lakeshore Institute of Technology",
       "label": "covered",
       "rationale": "B.S. Computer Science, earned.",
-      "kind": "education",
-      "proposed": true
+      "kind": "education"
     },
     {
       "id": "e_bs_related_field",
@@ -1560,8 +1540,7 @@
       "text": "B.S. Computer Engineering, Porto Vista State University",
       "label": "covered",
       "rationale": "B.S. Computer Engineering is a listed field.",
-      "kind": "education",
-      "proposed": true
+      "kind": "education"
     },
     {
       "id": "e_bs_quant",
@@ -1575,8 +1554,7 @@
       "text": "B.S. Data Science, Rivermount College",
       "label": "covered",
       "rationale": "B.S. Data Science is a named field.",
-      "kind": "education",
-      "proposed": true
+      "kind": "education"
     },
     {
       "id": "e_wrong_field",
@@ -1590,8 +1568,7 @@
       "text": "B.S. Computer Science, Lakeshore Institute of Technology",
       "label": "not_covered",
       "rationale": "Computer Science is not Electrical Engineering.",
-      "kind": "education",
-      "proposed": true
+      "kind": "education"
     },
     {
       "id": "e_minor_only",
@@ -1605,8 +1582,7 @@
       "text": "B.S. Cognitive Science (Computer Science minor), Saint Clare University",
       "label": "not_covered",
       "rationale": "Computer Science is only a minor; the degree is Cognitive Science.",
-      "kind": "education",
-      "proposed": true
+      "kind": "education"
     },
     {
       "id": "e_wrong_level_master",
@@ -1620,8 +1596,7 @@
       "text": "B.S. Computer Science, Lakeshore Institute of Technology",
       "label": "not_covered",
       "rationale": "A bachelor's, where a master's is asked.",
-      "kind": "education",
-      "proposed": true
+      "kind": "education"
     },
     {
       "id": "e_wrong_level_phd",
@@ -1635,8 +1610,7 @@
       "text": "B.S. Computer Science, Ardenne Polytechnic (Expected May 2027)",
       "label": "not_covered",
       "rationale": "A bachelor's in progress, where a doctorate is asked.",
-      "kind": "education",
-      "proposed": true
+      "kind": "education"
     },
     {
       "id": "e_enrolled",
@@ -1650,8 +1624,7 @@
       "text": "B.S. Computer Science, Halden State University (Expected May 2027)",
       "label": "covered",
       "rationale": "B.S. expected May 2027: enrolled, as the entry states.",
-      "kind": "education",
-      "proposed": true
+      "kind": "education"
     },
     {
       "id": "e_pursuing_cs",
@@ -1665,8 +1638,7 @@
       "text": "B.S. Computer Science, Ardenne Polytechnic (Expected May 2027)",
       "label": "covered",
       "rationale": "B.S. Computer Science, expected: pursuing it.",
-      "kind": "education",
-      "proposed": true
+      "kind": "education"
     },
     {
       "id": "e_pursuing_stats",
@@ -1680,8 +1652,7 @@
       "text": "B.S. Statistics, Cascade State University (Expected May 2027)",
       "label": "covered",
       "rationale": "B.S. Statistics, expected.",
-      "kind": "education",
-      "proposed": true
+      "kind": "education"
     },
     {
       "id": "e_expected_not_earned",
@@ -1695,8 +1666,7 @@
       "text": "B.S. Statistics, Cascade State University (Expected May 2027)",
       "label": "not_covered",
       "rationale": "The degree is marked expected: not yet earned. Contestable.",
-      "kind": "education",
-      "proposed": true
+      "kind": "education"
     },
     {
       "id": "e_completed_not_enrolled",
@@ -1710,8 +1680,7 @@
       "text": "B.S. Computer Science, Fairmont University",
       "label": "not_covered",
       "rationale": "The entry states a finished degree and no enrollment; calling it finished needs today's date, so it is left uncovered.",
-      "kind": "education",
-      "proposed": true
+      "kind": "education"
     },
     {
       "id": "e_unrelated",
@@ -1725,8 +1694,7 @@
       "text": "B.S. Computer Science, Lakeshore Institute of Technology",
       "label": "not_covered",
       "rationale": "A degree line says nothing of a clearance.",
-      "kind": "education",
-      "proposed": true
+      "kind": "education"
     },
     {
       "id": "e_skill_kafka",
@@ -1740,8 +1708,7 @@
       "text": "B.S. Computer Science, Vellore Ridge University (Expected May 2027)",
       "label": "not_covered",
       "rationale": "A degree is not experience with a tool.",
-      "kind": "education",
-      "proposed": true
+      "kind": "education"
     },
     {
       "id": "e_skill_stats",
@@ -1755,8 +1722,7 @@
       "text": "B.S. Statistics, Cascade State University (Expected May 2027)",
       "label": "not_covered",
       "rationale": "A degree in the field is not experience modeling. Contestable.",
-      "kind": "education",
-      "proposed": true
+      "kind": "education"
     }
   ]
 }

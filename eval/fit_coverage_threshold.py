@@ -21,11 +21,11 @@ mode: a miss raises, and the run refuses to report unless the hit rate is 100%. 
 `REPORT.md` (the numbers) and `REVIEW.md` (what the user reads to adjudicate the labels, with the
 disagreements first), so re-running it after a label is corrected refits without the API.
 
-The rule for the threshold, in priority order (see `recommend`): no false cover, with a grid step of
-headroom over the highest score any not-covered pair reaches, or over the aspiration and near-miss
-pairs alone when nothing clears every pair; then the most recall on semantic matches; then the
-value farthest from both sides of the gap, because a false cover costs more than a miss and Jev's
-scores are not calibrated.
+The rule for the threshold, in priority order (see `recommend`): no false cover on any not-covered
+pair (or on the aspiration, near-miss and soft-skill pairs alone when no value manages every pair);
+then the most recall on semantic matches; then the grid value closest to the midpoint of the gap
+between the highest not-covered score and the lowest covered score it keeps, ties to the higher
+value. No fixed headroom is required: it would protect one side of the gap only.
 """
 
 from __future__ import annotations
@@ -59,7 +59,6 @@ EXPECTED_LABEL = {"literal": "covered", "semantic": "covered", "partial": "not_c
                   "aspiration": "not_covered", "near_miss": "not_covered", "unrelated": "not_covered",
                   "boundary": "mixed", "soft_skill": "mixed", "education": "mixed"}
 GRID = [round(0.30 + 0.05 * i, 2) for i in range(14)]      # 0.30 .. 0.95
-HEADROOM = 0.05              # tau sits one grid step above the worst aspiration / near-miss pair
 JEV_YES = 0.5                # Jev "says" covered at or above this yes-probability
 
 
@@ -158,15 +157,18 @@ def cover_stats(rows, tau: float) -> Dict[str, Any]:
 def recommend(rows) -> Dict[str, Any]:
     """tau_cover, in priority order:
 
-    1. No false cover, with a grid step of headroom over the highest score any not-covered
-       pair reaches (rule `all`); when no grid value clears that, the same over the aspiration
-       and near-miss pairs alone (rule `core`); when none does, the value with the fewest
-       false covers on those two (rule `fewest`).
-    2. Among the values that do, the most recall on semantic matches, then on all covered pairs.
-    3. Among those, the value farthest from both sides: it maximizes the smaller of its margin
-       over the highest not-covered score and its margin under the lowest covered score that it
-       covers (ties go to the lower value). A false cover costs more than a miss, and Jev's
-       scores are not calibrated, so the cutoff sits in the middle of the gap, not at its edge.
+    1. No false cover: the grid values under which no not-covered pair is called covered (rule
+       `all`); when there are none, the same over the aspiration, near-miss and soft-skill pairs
+       alone (rule `core`); when there are none, the values with the fewest false covers on those
+       (rule `fewest`).
+    2. Among those, the most recall on semantic matches, then on all covered pairs.
+    3. Among those, the grid value closest to the midpoint of the gap: the midpoint of the highest
+       not-covered score and the lowest covered score the value keeps. Ties go to the higher value.
+
+    A false cover costs more than a miss, but a cutoff one grid step over the worst not-covered
+    score and two hundredths under a genuine match protects only one side of the gap. Jev's scores
+    are not calibrated, so the cutoff sits in the middle of the gap. The margins on both sides are
+    reported; no fixed headroom is required.
     """
     neg = [r for r in rows if not should_cover(r)]
     pos = [r for r in rows if should_cover(r)]
@@ -175,12 +177,12 @@ def recommend(rows) -> Dict[str, Any]:
     top_core = max(core, key=lambda r: r["p"]) if core else None
     top_not = max(neg, key=lambda r: r["p"]) if neg else None
 
-    def clearing(top):
-        return [t for t in GRID if t >= (top["p"] if top else 0.0) + HEADROOM - 1e-9]
+    def clean(negatives):
+        return [t for t in GRID if cover_stats(negatives, t)["fp"] == 0]
 
-    rule, cands = "all", clearing(top_not)
+    rule, cands = "all", clean(neg)
     if not cands:
-        rule, cands = "core", clearing(top_core)
+        rule, cands = "core", clean(core)
     if not cands:
         rule = "fewest"
         fewest = min(cover_stats(core, t)["fp"] for t in GRID)
@@ -188,16 +190,16 @@ def recommend(rows) -> Dict[str, Any]:
     best = max((cover_stats(sem, t)["tp"], cover_stats(pos, t)["tp"]) for t in cands)
     cands = [t for t in cands if (cover_stats(sem, t)["tp"], cover_stats(pos, t)["tp"]) == best]
     floor = top_not if rule == "all" else top_core
-    top_p = floor["p"] if floor else 0.0
-
-    def margin(t):
-        covered = [r["p"] for r in pos if is_covered(r, t)]
-        return min(t - top_p, (min(covered) - t) if covered else 0.0)
-
-    tau = max(cands, key=lambda t: (round(margin(t), 4), -t))
-    return {"tau_cover": tau, "rule": rule, "top_core": top_core, "top_not": top_not,
-            "candidates": cands, "margin": round(margin(tau), 4),
-            "lowest_covered": min(pos, key=lambda r: r["p"]) if pos else None}
+    floor_p = floor["p"] if floor else 0.0
+    kept = [r for r in pos if is_covered(r, min(cands))]
+    lowest_kept = min(kept, key=lambda r: r["p"]) if kept else None
+    mid = (floor_p + (lowest_kept["p"] if lowest_kept else floor_p)) / 2
+    tau = min(cands, key=lambda t: (round(abs(t - mid), 6), -t))
+    covered_at = [r["p"] for r in pos if is_covered(r, tau)]
+    return {"tau_cover": tau, "rule": rule, "top_core": top_core, "top_not": top_not, "candidates": cands,
+            "midpoint": round(mid, 4), "margin_below": round(tau - floor_p, 4),
+            "margin_above": round(min(covered_at) - tau, 4) if covered_at else None,
+            "lowest_covered": min(pos, key=lambda r: r["p"]) if pos else None, "lowest_kept": lowest_kept}
 
 
 def groups(rows) -> List[tuple]:
@@ -233,9 +235,9 @@ def render_report(rows, meta: Dict[str, Any]) -> str:
     o: List[str] = []
     o.append("# Semantic coverage: threshold fit (issue #126)\n")
     o.append("Generated by `python eval/fit_coverage_threshold.py analyze` from `pairs.json` and `recordings.json`. "
-             + meta.get("labels_note", "The first 97 labels were confirmed by the user (2026-09-30); the `soft_skill` and "
-                        "`education` labels are proposed, awaiting review of `REVIEW.md`. Correct a label in `pairs.json` "
-                        "and re-run `analyze` to refit.") + "\n")
+             + meta.get("labels_note", "The labels are the ones the user confirmed from `REVIEW.md` (2026-09-30; every proposal "
+                        "kept but `ss_ownership_run`, relabelled `not_covered`); correct a label in `pairs.json` and re-run "
+                        "`analyze` to refit.") + "\n")
     o.append(f"- Recorded {meta.get('recorded', 'n/a')} with model {', '.join(meta.get('models') or ['n/a'])}, "
              f"question `{meta.get('question', VERSION)}`; {n} pairs, replayed at {meta.get('hit_rate', 'n/a')} cache hit rate.")
     o.append("- Labels: " + ", ".join(f"{l} {sum(r['label'] == l for r in rows)}" for l in LABELS)
@@ -248,24 +250,25 @@ def render_report(rows, meta: Dict[str, Any]) -> str:
 
     o.append("## Recommendation\n")
     o.append(f"**tau_cover = {tau:.2f}.**\n")
-    top, low = rec["top_not"], rec["lowest_covered"]
+    top, kept = rec["top_not"], rec["lowest_kept"]
     cand = ", ".join(f"{t:.2f}" for t in rec["candidates"])
     para = (f"A false cover tells the planner a requirement is met when it is not, and a miss only hides an improvement, so "
-            f"tau_cover is set first so that no not-covered pair is called covered, with a grid step ({HEADROOM:.2f}) of headroom. "
-            f"The highest score any not-covered pair reaches is {top['p']:.2f} (`{top['id']}`, {top['category']}); the highest "
-            f"aspiration or near-miss score is {rec['top_core']['p']:.2f} (`{rec['top_core']['id']}`). ")
+            f"tau_cover is first a value under which no not-covered pair is called covered, then the one with the most recall, "
+            f"then the grid value closest to the middle of the gap. The highest score any not-covered pair reaches is "
+            f"{top['p']:.2f} (`{top['id']}`, {top['category']}); the highest aspiration or near-miss score is "
+            f"{rec['top_core']['p']:.2f} (`{rec['top_core']['id']}`). ")
     if rec["rule"] == "all":
         missed = sorted((r for r in rows if should_cover(r) and not is_covered(r, tau)), key=lambda r: r["p"])
-        kept = min((r for r in rows if should_cover(r) and is_covered(r, tau)), key=lambda r: r["p"])
-        para += (f"The grid values that clear that and keep the best recall are {cand}; the one farthest from both sides is "
-                 f"taken: {tau:.2f}, {tau - top['p']:.2f} over the highest not-covered score and {kept['p'] - tau:.2f} under "
-                 f"the lowest covered score it keeps (`{kept['id']}`, {kept['p']:.2f}). "
+        para += (f"The grid values with no false cover and the best recall are {cand}. The lowest covered score they keep is "
+                 f"{kept['p']:.2f} (`{kept['id']}`), so the middle of the gap is {rec['midpoint']:.3f}, and the closest grid value "
+                 f"(ties to the higher) is {tau:.2f}: {rec['margin_below']:.2f} over the highest not-covered score and "
+                 f"{rec['margin_above']:.2f} under the lowest covered score it keeps. "
                  + ("It misses " + ", ".join(f"`{r['id']}` ({r['p']:.2f})" for r in missed) + ". " if missed else ""))
     elif rec["rule"] == "core":
-        para += (f"No grid value clears every not-covered pair with headroom, so {tau:.2f} is the value farthest from both "
-                 f"sides among those ({cand}) that clear the aspiration and near-miss pairs. ")
+        para += (f"No grid value clears every not-covered pair, so {tau:.2f} is the value closest to the middle of the gap "
+                 f"among those ({cand}) that clear the aspiration, near-miss and soft-skill pairs. ")
     else:
-        para += f"No grid value clears even those with headroom, so {tau:.2f} is the value with the fewest such false covers. "
+        para += f"No grid value clears even those, so {tau:.2f} is the value with the fewest such false covers. "
     para += (f"It covers {st['tp']} of {st['n_should']} covered pairs ({_cell(st['recall'])}, precision {_cell(st['precision'])}): ")
     for c in POSITIVE_CATEGORIES:
         if c in by_cat:
@@ -274,7 +277,7 @@ def render_report(rows, meta: Dict[str, Any]) -> str:
     para = para.rstrip("; ") + ". "
     para += (f"False covers over all {st['n_not']} not-covered pairs: {st['fp']}"
              + (" (" + ", ".join(f"`{i}`" for i in st["fp_ids"]) + ")" if st["fp_ids"] else "") + "; "
-             f"over the {len(core)} aspiration and near-miss pairs: {cover_stats(core, tau)['fp']}. ")
+             f"over the {len(core)} aspiration, near-miss and soft-skill pairs: {cover_stats(core, tau)['fp']}. ")
     para += ("Jev's confidence is not calibrated, so this is a cutoff on this model's scores on this set, not a probability; "
              "refit whenever the model version or the question changes.")
     o.append(para + "\n")
@@ -329,7 +332,7 @@ def render_report(rows, meta: Dict[str, Any]) -> str:
     o.append("The fit is set by the highest-scoring aspiration and near-miss pairs, the pairs most likely to be mislabelled, so it "
              "is repeated under other label sets.\n")
     body = []
-    for name, rs in (("labels as proposed", rows), ("every disagreement relabelled to Jev's answer", relabelled_to_jev(rows)),
+    for name, rs in (("labels as confirmed", rows), ("every disagreement relabelled to Jev's answer", relabelled_to_jev(rows)),
                      ("agreed pairs only (disputed pairs dropped)", agreed_only(rows))):
         rc = recommend(rs)
         t_ = rc["tau_cover"]
@@ -371,7 +374,7 @@ def render_review(rows) -> str:
     def block(i: int, r) -> str:
         return "\n".join([
             f"**{i}. `{r['id']}`** ({r['category']}, {r['origin']} {pair_kind(r)}, "
-            f"{'label proposed' if r.get('proposed') else 'label confirmed'})",
+            "label user-confirmed)",
             f"- Requirement: \"{_req(r)}\" ({r['requirement'].get('type', 'required')})",
             f"- {'Education entry' if pair_kind(r) == 'education' else 'Bullet'}: \"{r['text']}\"",
             f"- Label: `{r['label']}`. {r['rationale']}",
@@ -383,8 +386,8 @@ def render_review(rows) -> str:
          "as text). `covered`: it shows the candidate meets the requirement, even in other words or at a more specific level. "
          "`not_covered`: it does not: it only names a related tool or area, states interest or a plan, or falls short of what the "
          "requirement asks (years, leadership, production, scale; a different field or level of degree; a degree that is only "
-         "expected where an earned one is asked). The first 97 labels were confirmed by the user (2026-09-30); the `soft_skill` "
-         "and `education` labels are PROPOSED, awaiting the user's review. To change one, correct `label` in `pairs.json` and "
+         "expected where an earned one is asked). These are the labels the user confirmed (2026-09-30), kept for audit; "
+         "every proposal was kept but `ss_ownership_run`, relabelled `not_covered`. To change one, correct `label` in `pairs.json` and "
          "re-run `python eval/fit_coverage_threshold.py analyze` to refit. Disagreements with Jev come first.\n",
          f"## Disagreements with Jev ({len(dis)})\n"]
     n = 0

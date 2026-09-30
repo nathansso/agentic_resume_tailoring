@@ -70,20 +70,20 @@ EDU_VERSION = "education_covered@v1"
 ELIGIBLE = ("required", "preferred")
 TARGET = "semantic_coverage"
 
-# Fitted (#126) on the 131 pairs in eval/coverage_labels/ (the first 97 labels user-confirmed,
-# the soft_skill and education ones proposed), against jev-1.13.0's recorded answers to
-# requirement_covered@v2 (bullets) and education_covered@v1 (education entries), scoring by Jev's
-# yes-probability. Refit with `python eval/fit_coverage_threshold.py analyze` whenever the model or
-# a question changes.
-#   TAU_COVER 0.65: 0 of 72 not-covered pairs called covered (aspiration 0/11, near-miss 0/15,
-#     soft_skill 0/8, partial 0/13, unrelated 0/11, boundary 0/5, education 0/9). The highest of
-#     them is ss_process_benchmark, a soft skill at 0.58 (0.07 of headroom); the highest aspiration
-#     scores 0.06 and the highest near-miss 0.08. Covers 58 of 59 covered pairs: literal 13/13,
-#     semantic 16/16, boundary 13/13, education 6/6, soft_skill 10/11. The one miss is
-#     ss_ownership_run at 0.61, which sits 0.03 over the highest false candidate: soft-skill
-#     scores are the thin part of the gap (under v1 of the bullet question the two overlapped:
-#     0.67 not covered against 0.66 covered). 0.70 gives the same counts with 0.02 of room under
-#     the next covered score, so 0.65 is the one farthest from both sides.
+# Fitted (#126) on the 131 user-confirmed pairs in eval/coverage_labels/, against jev-1.13.0's
+# recorded answers to requirement_covered@v2 (bullets) and education_covered@v1 (education
+# entries), scoring by Jev's yes-probability. Refit with `python eval/fit_coverage_threshold.py
+# analyze` whenever the model or a question changes. The rule (`recommend`): no false cover on any
+# not-covered pair, then the most recall, then the grid value closest to the midpoint of the gap
+# between the highest not-covered score and the lowest covered score it keeps, ties to the higher.
+#   TAU_COVER 0.65: 0 of 73 not-covered pairs called covered (aspiration 0/11, near-miss 0/15,
+#     soft_skill 0/9, partial 0/13, unrelated 0/11, boundary 0/5, education 0/9) and all 58 covered
+#     pairs covered (literal 13/13, semantic 16/16, boundary 13/13, soft_skill 10/10, education
+#     6/6). The highest not-covered score is ss_ownership_run at 0.61 (0.04 under the cutoff); the
+#     lowest covered score is ss_stakeholders at 0.72 (0.07 over it); the midpoint is 0.665.
+#     0.70 gives the same counts but sits 0.09 over the worst false candidate and only 0.02 under
+#     a genuine match, which protects one side of the gap only. Soft-skill scores are the thin
+#     part: under v1 of the bullet question they overlapped (0.67 not covered, 0.66 covered).
 TAU_COVER = 0.65
 
 _ROUND = 4
