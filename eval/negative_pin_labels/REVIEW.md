@@ -1,6 +1,6 @@
 # Negative-pin labels for review (issue #232)
 
-Each pair is one pin (a topic the user said must never render) and one text a plan might write: a bullet, or an item's company or project name. `mentions`: the text mentions or refers to the pinned topic, by name, in other words, or by a product, employer or project that belongs to it. `does_not_mention`: it does not; a related but different topic is not a mention. The proposed labels are the ones to adjudicate; to change one, correct `label` in `pairs.json` and re-run `python eval/fit_negative_pin_threshold.py analyze` to refit. Disagreements with Jev come first.
+Each pair is one pin (a topic the user said must never render) and one text a plan might write: a bullet, or an item's company or project name. `mentions`: the text mentions or refers to the pinned topic, by name, in other words, or by a product, employer or project that belongs to it. `does_not_mention`: it does not; a related but different topic is not a mention. These are the labels the user confirmed (2026-09-30), kept for audit; to change one, correct `label` in `pairs.json` and re-run `python eval/fit_negative_pin_threshold.py analyze` to refit. Disagreements with Jev come first.
 
 ## Disagreements with Jev (3)
 

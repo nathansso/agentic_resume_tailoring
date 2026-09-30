@@ -17,8 +17,10 @@ Jev. All of a text's pins go in one request, with the text as the state.
 **State** is `{text, kind}`: the bullet (or the item field: title, company, name,
 description) and which of those it is. Nothing else from the resume or the knowledge graph.
 
-**What is checked.** Only text that changed against the base version: a bullet the base
-item already had, or an unchanged item field, is skipped. A text that the term match already
+**What is checked.** The per-node gate checks only text that changed against the base version:
+a bullet the base item already had, or an unchanged item field, is skipped. Finalize runs the same
+checker over the whole page (`make_pin_checker(pins, None)`), so a paraphrase already in the base
+cannot render either; answers are cached per (text, pin), so each pair costs one call once. A text that the term match already
 catches is skipped too (it is a violation regardless, and needs no call). With no key, mode
 `off`, or an API error the finding is `unchecked` and adds nothing.
 
@@ -43,7 +45,7 @@ VERSION = "negative_pin@v1"
 FIELDS = ("title", "company", "name", "description")
 LABEL = "mentions"
 
-# Fitted (#232) on the 74 proposed pairs in eval/negative_pin_labels/, against jev-1.13.0's recorded
+# Fitted (#232) on the 74 user-confirmed pairs in eval/negative_pin_labels/, against jev-1.13.0's recorded
 # answers to negative_pin@v1, scoring by Jev's yes-probability. Refit with
 # `python eval/fit_negative_pin_threshold.py analyze` whenever the model or the question changes.
 #   TAU_BLOCK 0.85: 0 of 33 not-a-mention pairs blocked; the highest of them is n_hadoop_spark, a

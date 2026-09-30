@@ -169,7 +169,7 @@ def test_the_analysis_matches_what_the_gate_computes(isolated_engine, monkeypatc
 
 
 def test_the_thresholds_in_negative_pins_py_are_the_fit_and_block_no_near_miss(isolated_engine, monkeypatch):
-    """`TAU_BLOCK` / `TAU_REVIEW` are what the analysis recommends from the proposed labels, with
+    """`TAU_BLOCK` / `TAU_REVIEW` are what the analysis recommends from the confirmed labels, with
     headroom over every not-a-mention pair, no false block, and no mention passing silently. A
     relabelled pair or a new recording that moves the fit fails this."""
     _replay(monkeypatch)

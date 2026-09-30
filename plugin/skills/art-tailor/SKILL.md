@@ -110,6 +110,11 @@ Call `execute_plan({program})`. Read the result:
 - `nodes[].review` entries with `check: "negative_pin"` (also in `negative_pins.review`):
   text that was kept but that Jev thinks may mention a pinned topic (`pin`, `where`, `p`).
   Show them to the user and ask whether the wording is acceptable; don't decide for them.
+- `committed: false` with a `preferences` violation `negative_pin:<pin>@<item> :: "<bullet>"`
+  and a "revise …" hint: finalize found text that mentions a pinned topic, possibly in other
+  words. It checks the whole page, so this can be a bullet you never touched. Revise that
+  item's bullet through `patch_plan`, or cut the item. `negative_pins.review` lists the
+  whole page's uncertain ones; show them to the user.
 - `committed: false` with `violations`: nothing was saved. Fix the plan with
   `patch_plan(program_id, edits)`, which takes JSON-pointer edits to the saved program.
   `cut_hints` say which bullets or projects to cut to fit the page. `stale_parent`

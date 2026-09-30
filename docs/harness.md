@@ -285,9 +285,10 @@ metric vector and the rule, and `harness/executor.py` runs it. The details:
     field that mentions a pinned topic in other words ("message broker" pinned, "Kafka"
     written) also gets a Jev yes/no per pin. A confident yes reverts the node as a
     `preferences` violation; an uncertain one comes back as `review` (`check:
-    negative_pin`). Only text that changed against the base is checked; the term match
-    always runs and Jev never removes one of its hits. With no key it is the term match
-    alone.
+    negative_pin`). Per node, only text that changed against the base is checked; the term match
+    always runs and Jev never removes one of its hits. Finalize runs the same check over
+    the whole page, unchanged base text included, so a base paraphrase also stops the
+    commit; each (text, pin) is one call once. With no key it is the term match alone.
 - **Line budget.** It is measured by #200's render cache. Without a LaTeX engine it
   reports `unmeasured` and doesn't block.
 - **Saving and replay.** Every program is saved (`PlanProgram`), so `patch_plan` can

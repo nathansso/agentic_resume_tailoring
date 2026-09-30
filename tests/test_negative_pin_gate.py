@@ -29,13 +29,14 @@ def noul(p):
     return {"type": "noul", "noul": p}
 
 
-def scripted(by_topic, default=0.02):
-    """The scripted Jev: `p` by a phrase in the question's topic."""
+def scripted(by_topic, default=0.02, only=None):
+    """The scripted Jev: `p` by a phrase in the question's topic, for the text `only` when given
+    (every other text scores `default`)."""
     def answer_for(state, wire):
         if wire["type"] == "choice":                       # the support check shares the transport
             return choice_answer("supported", {"supported": 0.97, "adds_unsupported": 0.02, "contradicts": 0.01})
         for phrase, p in by_topic.items():
-            if phrase in wire["instructions"]:
+            if phrase in wire["instructions"] and (only is None or state["text"] == only):
                 return noul(p)
         return noul(default)
     return answer_for
@@ -240,16 +241,17 @@ def run_weave(env, **kw):
 def test_a_paraphrased_mention_of_a_pinned_topic_is_refused_through_a_recorded_answer(auto, env, isolated_engine):
     uid, *_ = env
     _pin_pref(isolated_engine, uid, "message broker")
-    t = FakeTransport(answer_for=scripted({"message broker": 0.95}))
+    t = FakeTransport(answer_for=scripted({"message broker": 0.95}, only=WOVEN))
     auto.use(t)
     _, _, out = run_weave(env)
     node = out["nodes"][0]
     assert node["status"] == "reverted"
     assert node["reason"].startswith("hard_gate: preferences")
     assert f'negative_pin:message broker@{EXP2} :: "Led the migration from a monolith to event-driven serv' in node["reason"]
-    (call,) = pin_calls(t)
-    assert call["state"] == build_state(WOVEN, "bullet")                # the changed bullet, nothing else
-    assert out["committed"] and "negative_pins" not in out              # the revert left the page as it was
+    (call,) = [c for c in pin_calls(t) if c["state"]["text"] == WOVEN]    # asked once, however often it is scored
+    assert call["state"] == build_state(WOVEN, "bullet")
+    # The revert left the page as it was: it commits, and the whole-page check at finalize finds nothing.
+    assert out["committed"] and out["negative_pins"]["review"] == []
 
 
 def test_a_near_miss_topic_is_not_refused(auto, env, isolated_engine):
@@ -260,20 +262,20 @@ def test_a_near_miss_topic_is_not_refused(auto, env, isolated_engine):
     node = out["nodes"][0]
     assert node["status"] == "accepted" and out["committed"], node
     assert "review" not in node
-    assert out["negative_pins"] == {"checked": 1, "review": []}
+    assert out["negative_pins"]["review"] == [] and out["negative_pins"]["checked"] > 1   # the whole page
     assert out["metrics"]["final"]["gates"]["preferences"] == []
 
 
 def test_the_uncertain_band_is_surfaced_as_review_and_does_not_block(auto, env, isolated_engine):
     uid, *_ = env
     _pin_pref(isolated_engine, uid, "message broker")
-    auto.use(FakeTransport(answer_for=scripted({"message broker": 0.5})))
+    auto.use(FakeTransport(answer_for=scripted({"message broker": 0.5}, only=WOVEN)))
     _, _, out = run_weave(env)
     node = out["nodes"][0]
     entry = {"check": "negative_pin", "item": EXP2, "where": "bullet", "bullet": WOVEN[:79] + "…",
              "pin": "message broker", "label": "mentions", "p": 0.5}
     assert node["status"] == "accepted" and node["review"] == [entry]
-    assert out["negative_pins"] == {"checked": 1, "review": [entry]}
+    assert out["negative_pins"]["review"] == [entry] and out["negative_pins"]["checked"] > 1
     assert out["metrics"]["final"]["gates"]["preferences"] == []
 
 
@@ -282,11 +284,11 @@ def test_the_contract_carries_the_pin_review_and_block(auto, env, isolated_engin
 
     uid, *_ = env
     _pin_pref(isolated_engine, uid, "message broker")
-    auto.use(FakeTransport(answer_for=scripted({"message broker": 0.5})))
+    auto.use(FakeTransport(answer_for=scripted({"message broker": 0.5}, only=WOVEN)))
     _, program, _ = run_weave(env, dry_run=True)
     out = invoke("execute_plan", uid, {"program": program, "dry_run": True})
     assert out["nodes"][0]["review"][0]["check"] == "negative_pin"
-    assert out["negative_pins"]["checked"] == 1
+    assert out["negative_pins"]["checked"] > 1 and len(out["negative_pins"]["review"]) == 1
 
 
 def test_the_pins_own_statement_is_the_topic_jev_is_asked_about(auto, env, isolated_engine):
@@ -295,9 +297,9 @@ def test_the_pins_own_statement_is_the_topic_jev_is_asked_about(auto, env, isola
     t = FakeTransport(answer_for=scripted({}))
     auto.use(t)
     run_weave(env, dry_run=True)
-    (call,) = pin_calls(t)
-    (wire,) = call["questions"].values()
-    assert wire["instructions"].startswith("Does this text mention or refer to Amazon or its products?")
+    wires = [w for c in pin_calls(t) for w in c["questions"].values()]
+    assert wires and all(w["instructions"].startswith(
+        "Does this text mention or refer to Amazon or its products?") for w in wires)
 
 
 def test_no_pins_means_no_question_and_no_block_in_the_result(auto, env):
@@ -336,9 +338,11 @@ def test_a_recorded_run_replays_at_a_full_hit_rate_with_no_live_call(auto, env, 
     uid, *_ = env
     _pin_pref(isolated_engine, uid, "rabbitmq")
     _pin_pref(isolated_engine, uid, "message broker")
-    auto.use(FakeTransport(answer_for=scripted({"message broker": 0.5, "rabbitmq": 0.04})))
+    auto.use(FakeTransport(answer_for=scripted({"message broker": 0.5, "rabbitmq": 0.04}, only=WOVEN)))
     _, program, recorded = run_weave(env, dry_run=True)
-    assert recorded["negative_pins"]["checked"] == 2 and engine.stats()["negative_pin"]["jev"] == 2
+    st = engine.stats()["negative_pin"]
+    live, answered = st["jev"], st["jev"] + st["cache"]      # a text the node gate asked is a cache hit at finalize
+    assert live > 2 and recorded["negative_pins"]["checked"] == live       # every text on the page, both pins
 
     engine.reset_stats()
     auto.use(Boom())
@@ -346,7 +350,7 @@ def test_a_recorded_run_replays_at_a_full_hit_rate_with_no_live_call(auto, env, 
     replayed = _run(uid, program, dry_run=True)
     assert json.dumps(_strip(replayed), sort_keys=True) == json.dumps(_strip(recorded), sort_keys=True)
     st = engine.stats()["negative_pin"]
-    assert st["hit_rate"] == 1.0 and st["cache"] == 2 and st["jev"] == 0 and st["fallback"] == 0
+    assert st["hit_rate"] == 1.0 and st["cache"] == answered and st["jev"] == 0 and st["fallback"] == 0
 
     program["nodes"][0]["bullets"][3]["text"] += " And more."               # a text the recording never saw
     with pytest.raises(JevReplayMiss):
@@ -366,3 +370,102 @@ def test_finalize_hints_work_for_a_jev_hit(env):
     pins = [v for v in violations_ if v["check"] == "preferences"]
     assert pins == [{"check": "preferences", "hint": f"revise {KEY} so it no longer mentions 'message broker'",
                      "detail": f'negative_pin:message broker@{KEY} :: "Moved events through Kafka."'}]
+
+
+# ── the whole page at finalize (base text included) ──────────────────────────
+
+def _base_bullet(uid, n=0):
+    from harness.executor import _KG
+    return build_state(_KG(uid).source_bullets[EXP2][n], "bullet")["text"]
+
+
+def test_a_base_bullet_that_paraphrases_a_pin_is_reported_at_finalize_and_blocks_the_commit(auto, env, isolated_engine):
+    uid, job_id, _ = env
+    _pin_pref(isolated_engine, uid, "message broker")
+    text = _base_bullet(uid)
+    auto.use(FakeTransport(answer_for=scripted({"message broker": 0.95}, only=text)))
+    out = _run(uid, {"job_id": job_id, "nodes": []})                     # the plan touches nothing
+    detail = f'negative_pin:message broker@{EXP2} :: "{negative_pins._short(text)}"'
+    assert not out["committed"]
+    assert {"check": "preferences", "detail": detail,
+            "hint": f"revise {EXP2} so it no longer mentions 'message broker'"} in out["violations"]
+    assert out["metrics"]["final"]["gates"]["preferences"] == []         # the per-node gate is changed-text-only
+    assert not any(n["status"] == "reverted" for n in out["nodes"])
+
+
+def test_a_base_bullet_in_the_review_band_is_surfaced_and_does_not_block(auto, env, isolated_engine):
+    uid, job_id, _ = env
+    _pin_pref(isolated_engine, uid, "message broker")
+    text = _base_bullet(uid)
+    auto.use(FakeTransport(answer_for=scripted({"message broker": 0.5}, only=text)))
+    out = _run(uid, {"job_id": job_id, "nodes": []})
+    assert out["committed"] and not [v for v in out["violations"] if v["check"] == "preferences"]
+    assert [r["bullet"] for r in out["negative_pins"]["review"]] == [negative_pins._short(text, 80)]
+
+
+def test_a_near_miss_in_the_base_is_not_reported_at_finalize(auto, env, isolated_engine):
+    uid, job_id, _ = env
+    _pin_pref(isolated_engine, uid, "rabbitmq")
+    auto.use(FakeTransport(answer_for=scripted({"rabbitmq": 0.03})))
+    out = _run(uid, {"job_id": job_id, "nodes": []})
+    assert out["committed"] and out["violations"] == []
+    assert out["negative_pins"]["review"] == [] and out["negative_pins"]["checked"] > 1
+
+
+def test_a_second_finalize_over_the_same_page_makes_no_new_calls(auto, env, isolated_engine):
+    uid, job_id, _ = env
+    _pin_pref(isolated_engine, uid, "rabbitmq")
+    _pin_pref(isolated_engine, uid, "message broker")
+    t = FakeTransport(answer_for=scripted({}))
+    auto.use(t)
+    first = _run(uid, {"job_id": job_id, "nodes": []}, dry_run=True)
+    calls = len(t.calls)
+    assert calls > 0
+    second = _run(uid, {"job_id": job_id, "nodes": []}, dry_run=True)
+    assert len(t.calls) == calls                                          # every (text, pin) came from the cache
+    assert json.dumps(_strip(first), sort_keys=True) == json.dumps(_strip(second), sort_keys=True)
+
+
+def test_a_first_finalize_asks_once_per_text_with_every_pin_in_the_request(auto, env, isolated_engine):
+    uid, job_id, _ = env
+    for term in ("rabbitmq", "message broker"):
+        _pin_pref(isolated_engine, uid, term)
+    t = FakeTransport(answer_for=scripted({}))
+    auto.use(t)
+    out = _run(uid, {"job_id": job_id, "nodes": []}, dry_run=True)
+    calls = pin_calls(t)
+    assert len(calls) == len({c["state"]["text"] for c in calls})          # one request per distinct text
+    assert all(len(c["questions"]) == 2 for c in calls)                    # both pins in it
+    assert {c["state"]["kind"] for c in calls} >= {"bullet", "title", "company"}    # item fields too
+    assert out["negative_pins"]["checked"] == 2 * len(calls)
+
+
+def test_base_text_the_term_match_catches_is_never_sent_at_finalize(auto, env, isolated_engine):
+    uid, job_id, _ = env
+    _pin_pref(isolated_engine, uid, "kafka")
+    t = FakeTransport(answer_for=scripted({}))
+    auto.use(t)
+    out = _run(uid, {"job_id": job_id, "nodes": []}, dry_run=True)
+    assert any(v["detail"].startswith("negative_pin:kafka@") for v in out["violations"])     # the term match
+    assert pin_calls(t) and all(not negative_pins.term_pattern("kafka").search(c["state"]["text"].lower())
+                                for c in pin_calls(t))
+
+
+def test_key_unset_finalize_is_exactly_the_term_match(env, isolated_engine, monkeypatch):
+    from harness import executor
+
+    uid, job_id, _ = env
+    _pin_pref(isolated_engine, uid, "kafka")                             # on the base page: finalize has violations
+    _pin_pref(isolated_engine, uid, "message broker")
+    program = {"job_id": job_id, "nodes": []}
+    with monkeypatch.context() as m:
+        m.setattr(executor, "make_pin_checker", lambda *a, **k: (lambda content: []))
+        before_jev = _run(uid, program, dry_run=True)                    # what main computes
+    monkeypatch.setenv("ART_JEV_MODE", "auto")
+    monkeypatch.setattr(engine, "get_client", lambda: None)              # the key is unset
+    no_key = _run(uid, program, dry_run=True)
+    monkeypatch.setenv("ART_JEV_MODE", "off")
+    off = _run(uid, program, dry_run=True)
+    assert any(v["detail"].startswith("negative_pin:kafka@") for v in before_jev["violations"])
+    assert len({json.dumps(_strip(r), sort_keys=True) for r in (before_jev, no_key, off)}) == 1
+    assert "negative_pins" not in no_key

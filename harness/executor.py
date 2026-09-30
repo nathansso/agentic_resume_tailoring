@@ -52,7 +52,9 @@ from harness import ART_VERSION, tree
 from harness.acceptance import (
     Context, accept, metric_vector, preference_violations, term_pattern,
 )
-from harness.decisions.negative_pins import make_pin_checker, reviews as pin_reviews
+from harness.decisions.negative_pins import (
+    make_pin_checker, reviews as pin_reviews, violations as pin_violations,
+)
 from harness.decisions.support import make_support_checker, reviews as support_reviews
 from harness.ingest import apply_job_rules, resolve_rules
 from harness.program import Program, apply_patch, program_id
@@ -444,6 +446,14 @@ def _finalize(content: Dict, program: Dict, ctx: Context, kg: _KG,
         else:
             hint = "delete it" if v.startswith("suppressed:") else "restore it"
         violations.append({"check": "preferences", "detail": v, "hint": hint})
+    if ctx.pin_page_checker is not None:
+        # Jev over the whole page (#232): a reworded mention in text the plan never touched.
+        listed = {v["detail"] for v in violations}
+        for v in pin_violations(ctx.pin_page_checker(content)):
+            if v not in listed:
+                term, _, where = v[len("negative_pin:"):].partition("@")
+                violations.append({"check": "preferences", "detail": v,
+                                   "hint": f"revise {where.split(' :: ', 1)[0]} so it no longer mentions {term!r}"})
     for section, kind in (("experiences", "experience"), ("projects", "project")):
         if kg.of(kind) and not content.get(section):
             violations.append({"check": "non_empty_sections", "detail": section,
@@ -534,9 +544,10 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     ctx.support_checker = make_support_checker(kg.source_bullets, base)
     # The negative-pin check (#232): Jev on whether a changed bullet or item field mentions a
     # pinned topic in other words. The pin's own statement describes the topic.
-    ctx.pin_checker = make_pin_checker(
-        [{"term": t, "statement": p.get("text")} for t, p in sorted(prefs["negative_terms"].items())],
-        base) if prefs["negative_terms"] else None
+    pins = [{"term": t, "statement": p.get("text")} for t, p in sorted(prefs["negative_terms"].items())]
+    ctx.pin_checker = make_pin_checker(pins, base) if pins else None
+    # Finalize checks the whole page, so a paraphrase already in the base cannot render.
+    ctx.pin_page_checker = make_pin_checker(pins, None) if pins else None
     base_vector = metric_vector(working, ctx)
     current = base_vector
 
@@ -599,8 +610,8 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     findings = [f for f in ctx.support_checker(working) if f["status"] == "checked"]
     if findings:
         out["support"] = {"checked": len(findings), "review": support_reviews(findings)}
-    pin_findings = ([f for f in ctx.pin_checker(working) if f["status"] == "checked"]
-                    if ctx.pin_checker else [])
+    pin_findings = ([f for f in ctx.pin_page_checker(working) if f["status"] == "checked"]
+                    if ctx.pin_page_checker else [])
     if pin_findings:
         out["negative_pins"] = {"checked": len(pin_findings), "review": pin_reviews(pin_findings)}
     if violations or dry_run:

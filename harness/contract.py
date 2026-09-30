@@ -541,8 +541,8 @@ class ExecuteOutput(_Output):
                           "checked and which to review. Absent when nothing was checked "
                           "(no key, mode off, or no changed cited bullet).")
     negative_pins: Optional[Dict[str, Any]] = Field(
-        None, description="The negative-pin check (#232): how many (changed bullet or item "
-                          "field, pin) pairs Jev checked and which to review. Absent when "
+        None, description="The negative-pin check (#232): how many (bullet or item field, "
+                          "pin) pairs on the final page Jev checked and which to review. Absent when "
                           "nothing was checked (no key, mode off, or no pins).")
 
 

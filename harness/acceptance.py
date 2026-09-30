@@ -94,6 +94,9 @@ class Context:
     # bullet or item field mentions a pinned topic in other words. Injected like the support
     # checker. None (or an unchecked finding) leaves the term match as the whole gate.
     pin_checker: Optional[Callable[[Dict], List[Dict]]] = None
+    # The same check over the WHOLE page, unchanged text included, run once at finalize (#232):
+    # a paraphrase already in the base version still renders. Never part of the per-node gate.
+    pin_page_checker: Optional[Callable[[Dict], List[Dict]]] = None
 
     @property
     def jd_keywords(self) -> Set[str]:
