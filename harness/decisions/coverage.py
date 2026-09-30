@@ -8,20 +8,34 @@ requirement) and turns the answers into a second, separate target, `semantic_cov
 Neither is folded into the other, or into any composite (docs/harness.md § 5); their
 *disagreement* is the signal (see `disagreement`).
 
-**Question.** One `noul`, `requirement_covered@v1`, per requirement, worded positively: "Does
+**Question.** One `noul`, `requirement_covered@v2`, per requirement, worded positively: "Does
 this bullet show that the candidate meets this requirement: <text>?". The instructions say what
 does not count (stated interest or plans, a tool named where the requirement asks for more,
 something merely related), because cosine-close text like "eager to learn Kubernetes" entails
-nothing. Jev sees ONE bullet at a time, never the page (it is distracted by large state), so a
+nothing. v2 adds that a working-style requirement (deadlines, process, communication,
+collaboration, ownership, attention to detail) needs a stated instance: v1 covered "tight
+deadlines" at 0.58 and "established processes" at 0.67 from bullets that were merely adjacent
+(a generic automation, a notebook), overlapping genuine evidence at 0.66. Jev sees ONE bullet at a time, never the page (it is distracted by large state), so a
 page of N bullets is N requests, each carrying every eligible requirement as a question.
 
 **Which requirements.** The JD profile's `required` and `preferred` requirements (a missing
 `type` is `required`, as in `agents/keyword_weights`); `incidental` ones are mentions in passing,
 not qualifications, and are left out. Nothing here changes #151's split or #152's weights.
 
-**Covered.** A requirement is covered when some bullet on the page has p >= `TAU_COVER`. Only
-bullets count (experience and project bullets, `agents.redundancy.bullet_texts`): the skills
-line names a tool and evidences nothing.
+**Covered.** A requirement is covered when some piece of evidence on the page has p >= `TAU_COVER`.
+Evidence is the experience and project bullets (`agents.redundancy.bullet_texts`) and each
+education entry as text (`education_text`: degree, institution, dates), so "Bachelor's degree in
+Computer Science" can be covered by the degree line. The skills line names a tool and evidences
+nothing.
+
+**Education entries** are asked a separate question, `education_covered@v1`, because the
+bullet wording ("does this bullet show...") does not fit and rewording it would invalidate every
+bullet recording. It asks what the entry STATES: a degree, field, institution or enrollment. A
+degree listed as expected or in progress is not yet earned (and is enrollment in it), a related
+field, a minor or another level is not the requirement, and Jev is not asked to compare dates or
+levels beyond what is written (it is weak at both), so a requirement that needs today's date
+("currently enrolled" against a finished degree) is left uncovered. One request per entry, state
+`{text, kind: "education"}`, cached like a bullet.
 
 **The metric.** With `w(r)` the requirement's criticality (1..5, default 3):
 
@@ -49,21 +63,28 @@ from agents.redundancy import bullet_texts
 from harness.decisions.questions import Noul, canonical
 
 POINT = "requirement_covered"
-VERSION = "requirement_covered@v1"
+VERSION = "requirement_covered@v2"
+LEGACY_VERSION = "requirement_covered@v1"      # no trait clause; the benchmark was recorded with it
+EDU_POINT = "education_covered"
+EDU_VERSION = "education_covered@v1"
 ELIGIBLE = ("required", "preferred")
 TARGET = "semantic_coverage"
 
-# Fitted (#126) on the 97 proposed-label pairs in eval/coverage_labels/ (awaiting the user's
-# review), against jev-1.13.0's recorded answers to requirement_covered@v1, scoring by Jev's
-# yes-probability. Refit with `python eval/fit_coverage_threshold.py analyze` whenever the model
-# or the question changes.
-#   TAU_COVER 0.55: 0 of 55 not-covered pairs called covered (aspiration 0/11, near-miss 0/15,
-#     partial 0/13, unrelated 0/11, boundary 0/5); the highest of them is p_cicd_owner, a partial
-#     at 0.39 (0.16 of headroom), the highest aspiration scores 0.05 and the highest near-miss
-#     0.07. Covers 42 of 42 covered pairs: literal 13/13, semantic 16/16, boundary 13/13; the
-#     lowest is s_warehouse_models at 0.68 (0.13 under). Every value from 0.45 to 0.65 gives
-#     the same counts, so 0.55 is the one farthest from both sides of the gap.
-TAU_COVER = 0.55
+# Fitted (#126) on the 131 pairs in eval/coverage_labels/ (the first 97 labels user-confirmed,
+# the soft_skill and education ones proposed), against jev-1.13.0's recorded answers to
+# requirement_covered@v2 (bullets) and education_covered@v1 (education entries), scoring by Jev's
+# yes-probability. Refit with `python eval/fit_coverage_threshold.py analyze` whenever the model or
+# a question changes.
+#   TAU_COVER 0.65: 0 of 72 not-covered pairs called covered (aspiration 0/11, near-miss 0/15,
+#     soft_skill 0/8, partial 0/13, unrelated 0/11, boundary 0/5, education 0/9). The highest of
+#     them is ss_process_benchmark, a soft skill at 0.58 (0.07 of headroom); the highest aspiration
+#     scores 0.06 and the highest near-miss 0.08. Covers 58 of 59 covered pairs: literal 13/13,
+#     semantic 16/16, boundary 13/13, education 6/6, soft_skill 10/11. The one miss is
+#     ss_ownership_run at 0.61, which sits 0.03 over the highest false candidate: soft-skill
+#     scores are the thin part of the gap (under v1 of the bullet question the two overlapped:
+#     0.67 not covered against 0.66 covered). 0.70 gives the same counts with 0.02 of room under
+#     the next covered score, so 0.65 is the one farthest from both sides.
+TAU_COVER = 0.65
 
 _ROUND = 4
 REQUIREMENT_MAX_CHARS = 300
@@ -79,25 +100,92 @@ def _short(text: str, n: int = 80) -> str:
     return text if len(text) <= n else text[: n - 1] + "…"
 
 
-def question_for(requirement: str) -> Noul:
-    """The one question, for one requirement. Rewording it means bumping `VERSION`."""
+_TRAIT = (" A requirement about a working style or trait, such as meeting deadlines, following a "
+          "process, communicating, collaborating, taking ownership or attention to detail, is met "
+          "only by a bullet that states an instance of it: the deadline, the process or standard "
+          "followed, the people worked with, or what was checked, owned or caught. A technical "
+          "result alone does not show a trait.")
+
+
+def question_for(requirement: str, version: Optional[str] = None) -> Noul:
+    """The one question, for one requirement. Rewording it means bumping `VERSION`; `version`
+    asks for an earlier wording (the benchmark's recordings were made with `LEGACY_VERSION`)."""
+    version = version or VERSION
     requirement = _norm(requirement)[:REQUIREMENT_MAX_CHARS].rstrip(" .;:!?")
     return Noul(
-        VERSION,
+        version,
         f'Does this bullet show that the candidate meets this requirement: "{requirement}"? '
         "Answer yes when the bullet describes work, results or experience that satisfies it, "
         "even in different words or at a more specific level. Stated interest, plans or being "
         "eager to learn do not meet a requirement; naming a tool does not meet a requirement "
         "that asks for more than using it, such as years, leadership, ownership or production "
-        "scale; and something related or of the same kind is not the requirement itself.",
+        "scale; and something related or of the same kind is not the requirement itself."
+        + (_TRAIT if version != LEGACY_VERSION else ""),
         true="The bullet shows the candidate meets the requirement.",
         false="The bullet does not show it: it may be related, only state interest, or fall "
               "short of what the requirement asks.")
 
 
-def build_state(bullet: str) -> Dict[str, Any]:
-    """The whole state: the bullet, and nothing else from the resume or the posting."""
-    return {"bullet": _norm(bullet)}
+def education_question_for(requirement: str) -> Noul:
+    """The one question for an education entry, for one requirement. Rewording it means bumping
+    `EDU_VERSION`."""
+    requirement = _norm(requirement)[:REQUIREMENT_MAX_CHARS].rstrip(" .;:!?")
+    return Noul(
+        EDU_VERSION,
+        f'Does this education entry show that the candidate meets this requirement: "{requirement}"? '
+        "Judge only what the entry states: its degree, field and institution, and whether the degree "
+        "is earned or expected. A degree not marked expected or in progress is an earned degree. Answer yes when the entry states a degree, field or "
+        "enrollment that satisfies the requirement: an earned degree meets a requirement for that "
+        "degree; a degree marked expected is current enrollment in it and is not yet an earned "
+        "degree; an earned degree is not current enrollment. A different field, a minor, or a "
+        "different level of degree (a bachelor's where a master's is asked, or the reverse) is not "
+        "the requirement. Do not compare dates or levels beyond what is written.",
+        true="The entry states a degree, field or enrollment that satisfies the requirement.",
+        false="The entry does not state it: the field or level differs, the degree is only expected "
+              "where an earned one is asked, or the entry says nothing about it.")
+
+
+def build_state(text: str, kind: str = "bullet") -> Dict[str, Any]:
+    """The whole state: one bullet (`{bullet}`) or one education entry (`{text, kind}`), and
+    nothing else from the resume or the posting."""
+    if kind == "bullet":
+        return {"bullet": _norm(text)}
+    return {"text": _norm(text), "kind": kind}
+
+
+_IN_PROGRESS = re.compile(r"expected|anticipated|present|current|in progress|ongoing|pursuing", re.IGNORECASE)
+
+
+def education_text(entry: Dict) -> str:
+    """One education entry as the text Jev sees: `<degree>, <institution>`, and its dates only
+    when the degree is in progress (`<degree>, <institution> (Expected May 2027)`).
+
+    A finished degree's date is left out on purpose. Jev is weak on dates and, given
+    "B.S. Computer Science, <school> (2026-05)", scored "Bachelor's degree in Computer Science" at
+    0.3 to 0.4: it could not tell a past date from an expected one. An entry with no marker states
+    an earned degree, and the question says so. GPA is left out too: a minimum GPA is a comparison."""
+    def part(key):
+        return _norm(str(entry.get(key) or ""))
+    head = ", ".join(x for x in (part("degree"), part("institution")) if x)
+    start, end = part("start_date"), part("end_date")
+    ongoing = bool(_IN_PROGRESS.search(end)) or bool(start and not end)
+    dates = " – ".join(x for x in (start, end) if x) if ongoing else ""
+    return f"{head} ({dates})" if head and dates else head or dates
+
+
+def page_evidence(content: Dict) -> List[tuple]:
+    """`(kind, text)` for every distinct bullet, then every distinct education entry, in page order."""
+    out: List[tuple] = []
+    seen = set()
+    for kind, texts in (("bullet", bullet_texts(content)),
+                        ("education", [education_text(e) for e in content.get("education") or []
+                                       if isinstance(e, dict)])):
+        for t in texts:
+            t = _norm(t)
+            if t and (kind, t) not in seen:
+                seen.add((kind, t))
+                out.append((kind, t))
+    return out
 
 
 def _weight(value: Any) -> int:
@@ -134,34 +222,40 @@ def score_of(rows: Sequence[Dict]) -> Optional[float]:
     return round(100.0 * sum(r["criticality"] for r in rows if r["covered"]) / total, _ROUND)
 
 
-def make_coverage_checker(requirements: Iterable[Dict],
-                          tau: Optional[float] = None) -> Optional[Callable[[Dict], Dict]]:
+def make_coverage_checker(requirements: Iterable[Dict], tau: Optional[float] = None, *,
+                          version: Optional[str] = None,
+                          education: bool = True) -> Optional[Callable[[Dict], Dict]]:
     """`content -> result` for one job's requirements, or None when none is eligible.
 
     A result is `{status, reason, score, covered, of, requirements}`: `status` is `checked`
     (Jev or the cache answered every question), `unchecked` (the fallback answered one, and
     `reason` says why), or `none` (the page has no bullet, so there is nothing to ask).
     `requirements` holds one row per eligible requirement: `{requirement, text, type,
-    criticality, terms, p (the best bullet's), covered}`.
+    criticality, terms, p (the best evidence's), by (`bullet` or `education`), covered}`.
 
-    Memoized per bullet for the life of the checker, so the many metric vectors one plan
-    computes ask each bullet once. After the first unchecked answer the checker stays
+    Memoized per bullet and per education entry for the life of the checker, so the many metric
+    vectors one plan computes ask each once. After the first unchecked answer the checker stays
     unchecked for its life, so a run with no key or a failing API asks once, not per node.
+
+    `version` and `education=False` reproduce an earlier measurement (the benchmark's recordings
+    were made with `LEGACY_VERSION` and bullets only); the executor uses the defaults.
     """
     reqs = eligible_requirements(requirements)
     if not reqs:
         return None
-    questions = [question_for(r["text"]) for r in reqs]
+    questions = {"bullet": [question_for(r["text"], version) for r in reqs],
+                 "education": [education_question_for(r["text"]) for r in reqs]}
+    points = {"bullet": POINT, "education": EDU_POINT}
     memo: Dict[str, List[float]] = {}
     down: List[str] = []
 
-    def answers_for(bullet: str) -> Optional[List[float]]:
+    def answers_for(kind: str, text: str) -> Optional[List[float]]:
         from harness.decisions import engine
 
-        state = build_state(bullet)
+        state = build_state(text, kind)
         key = canonical(state)
         if key not in memo:
-            answers = engine.decide(POINT, state, questions, fallback=None)
+            answers = engine.decide(points[kind], state, questions[kind], fallback=None)
             failed = next((a for a in answers if a.fell_back), None)
             if failed is not None:
                 down.append(failed.reason or "fallback")
@@ -169,23 +263,28 @@ def make_coverage_checker(requirements: Iterable[Dict],
             memo[key] = [round(float(a.p), _ROUND) for a in answers]
         return memo[key]
 
+    def unchecked() -> Dict:
+        return {"status": "unchecked", "reason": down[0], "score": None, "covered": 0,
+                "of": len(reqs), "requirements": []}
+
     def check(content: Dict) -> Dict:
         cutoff = TAU_COVER if tau is None else tau
         if down:
-            return {"status": "unchecked", "reason": down[0], "score": None, "covered": 0,
-                    "of": len(reqs), "requirements": []}
-        bullets = list(dict.fromkeys(_norm(b) for b in bullet_texts(content) if _norm(b)))
-        if not bullets:
+            return unchecked()
+        evidence = [e for e in page_evidence(content) if education or e[0] == "bullet"]
+        if not evidence:
             return {"status": "none", "reason": "no_bullets", "score": None, "covered": 0,
                     "of": len(reqs), "requirements": []}
         best = [0.0] * len(reqs)
-        for bullet in bullets:
-            answers = answers_for(bullet)
+        by = ["bullet"] * len(reqs)
+        for kind, text in evidence:
+            answers = answers_for(kind, text)
             if answers is None:
-                return {"status": "unchecked", "reason": down[0], "score": None, "covered": 0,
-                        "of": len(reqs), "requirements": []}
-            best = [max(b, p) for b, p in zip(best, answers)]
-        rows = [{**r, "p": p, "covered": p >= cutoff - 1e-9} for r, p in zip(reqs, best)]
+                return unchecked()
+            for i, p in enumerate(answers):
+                if p > best[i]:
+                    best[i], by[i] = p, kind
+        rows = [{**r, "p": p, "by": k, "covered": p >= cutoff - 1e-9} for r, p, k in zip(reqs, best, by)]
         return {"status": "checked", "reason": None, "score": score_of(rows),
                 "covered": sum(r["covered"] for r in rows), "of": len(rows), "requirements": rows}
 
@@ -201,8 +300,11 @@ def _term_pattern(term: str) -> "re.Pattern":
 
 def terms_on_page(content: Dict, terms: Iterable[str]) -> Dict[str, List[str]]:
     """`{present, missing}`: which of `terms` the page's text contains, in the terms' order.
-    The page text is the one the literal `coverage` target reads, skills line included."""
-    haystack = ATSScoringEngine.flatten_tailored_text(content).lower()
+    The page text is the one the literal `coverage` target reads, skills line included, plus the
+    education entries (evidence here, so their words count as present)."""
+    haystack = "\n".join([ATSScoringEngine.flatten_tailored_text(content),
+                          *(education_text(e) for e in content.get("education") or []
+                            if isinstance(e, dict))]).lower()
     present, missing = [], []
     for term in terms:
         (present if _term_pattern(term).search(haystack) else missing).append(term)
@@ -212,9 +314,10 @@ def terms_on_page(content: Dict, terms: Iterable[str]) -> Dict[str, List[str]]:
 def disagreement(result: Dict, content: Dict) -> Dict[str, List[Dict]]:
     """Where the literal and the semantic reading of the page part ways, per requirement.
 
-    - `semantic_only`: covered by some bullet, but some of its terms are not on the page. The
-      claim is already true and just not in the posting's words: keyword-weave candidates
-      (`missing` lists the words to weave, which the cited evidence must still support).
+    - `semantic_only`: covered by some bullet (or education entry: `by: education`), but some of
+      its terms are not on the page. The claim is already true and just not in the posting's
+      words: keyword-weave candidates (`missing` lists the words to weave, which the cited
+      evidence must still support).
     - `literal_only`: not covered, yet some of its terms are on the page. The stuffing
       signature: the word is there and no bullet shows the requirement (`present` lists them).
 
@@ -230,7 +333,8 @@ def disagreement(result: Dict, content: Dict) -> Dict[str, List[Dict]]:
         seen = terms_on_page(content, r["terms"])
         base = {"requirement": r["requirement"], "text": _short(r["text"]), "p": r["p"]}
         if r["covered"] and seen["missing"]:
-            out["semantic_only"].append({**base, "missing": seen["missing"]})
+            via = {"by": "education"} if r.get("by") == "education" else {}
+            out["semantic_only"].append({**base, **via, "missing": seen["missing"]})
         elif not r["covered"] and seen["present"]:
             out["literal_only"].append({**base, "present": seen["present"]})
     return out

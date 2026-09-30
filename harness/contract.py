@@ -554,7 +554,7 @@ class ExecuteOutput(_Output):
         None, description="Semantic requirement coverage of the final page (#126), a target "
                           "beside the literal coverage: score (0-100, criticality-weighted), "
                           "covered, of, and two lists of requirements where the literal and "
-                          "semantic readings disagree. semantic_only: a bullet shows the "
+                          "semantic readings disagree. semantic_only: a bullet (or, with by: education, a degree line) shows the "
                           "requirement but `missing` terms are not on the page (keyword-weave "
                           "candidates, if the cited evidence supports the words). literal_only: "
                           "`present` terms are on the page but no bullet shows the requirement "

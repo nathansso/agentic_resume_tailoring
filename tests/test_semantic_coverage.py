@@ -16,8 +16,9 @@ from harness.acceptance import Context, TARGETS, accept, metric_vector
 from harness.decisions import coverage, engine
 from harness.decisions.client import JevReplayMiss
 from harness.decisions.coverage import (
-    TAU_COVER, VERSION, build_state, disagreement, eligible_requirements, make_coverage_checker,
-    node_detail, question_for, score_of, summary,
+    EDU_VERSION, LEGACY_VERSION, TAU_COVER, VERSION, build_state, disagreement, education_question_for,
+    education_text, eligible_requirements, make_coverage_checker, node_detail, page_evidence, question_for,
+    score_of, summary,
 )
 from test_executor import EXP, EXP2, _run, _strip, env  # noqa: F401  (fixture)
 from test_jev import Boom, FakeTransport, auto, choice_answer  # noqa: F401  (fixture)
@@ -38,10 +39,11 @@ def scripted(yes=(), default=0.02):
     def answer_for(state, wire):
         if wire["type"] == "choice":                                   # the support check
             return choice_answer("supported", {"supported": 0.97, "adds_unsupported": 0.02, "contradicts": 0.01})
-        if not wire["instructions"].startswith("Does this bullet show"):
+        if not wire["instructions"].startswith(("Does this bullet show", "Does this education entry show")):
             return noul(default)
+        text = state.get("bullet") or state.get("text")                 # a bullet, or an education entry
         for bullet_part, requirement_part in yes:
-            if bullet_part in state["bullet"] and requirement_part in wire["instructions"]:
+            if bullet_part in text and requirement_part in wire["instructions"]:
                 return noul(0.95)
         return noul(default)
     return answer_for
@@ -69,7 +71,7 @@ def req(text, rtype="required", criticality=3, terms=(), ordinal=None):
 
 def test_the_question_is_versioned_positive_a_noul_and_says_interest_does_not_count():
     q = question_for(DATA_ENG)
-    assert q.version == VERSION == "requirement_covered@v1" and q.point == "requirement_covered" and q.kind == "noul"
+    assert q.version == VERSION == "requirement_covered@v2" and q.point == "requirement_covered" and q.kind == "noul"
     assert q.instructions.startswith(
         'Does this bullet show that the candidate meets this requirement: "Experience with data engineering at scale"?')
     assert "eager to learn" in q.instructions and "do not meet a requirement" in q.instructions
@@ -78,8 +80,17 @@ def test_the_question_is_versioned_positive_a_noul_and_says_interest_does_not_co
     assert 0.0 < TAU_COVER < 1.0
 
 
+def test_v2_asks_a_working_style_requirement_for_a_stated_instance_and_v1_does_not():
+    v2, v1 = question_for(K8S), question_for(K8S, LEGACY_VERSION)
+    assert "meeting deadlines" in v2.instructions and "states an instance" in v2.instructions
+    assert "working style" not in v1.instructions and v1.version == "requirement_covered@v1"
+    assert v2.instructions.startswith(v1.instructions)               # v2 only adds the clause
+    assert v1.canonical() != v2.canonical()                          # so the recordings cannot be confused
+
+
 def test_the_state_is_the_bullet_and_nothing_else():
     assert build_state("  Built   ETL\npipelines ") == {"bullet": "Built ETL pipelines"}
+    assert build_state(" B.S.  Computer Science ", "education") == {"text": "B.S. Computer Science", "kind": "education"}
 
 
 # ── which requirements, and the formula ──────────────────────────────────────
@@ -316,9 +327,89 @@ def test_a_new_requirement_is_the_only_new_question_for_a_bullet_already_asked(a
     assert K8S.rstrip(".") in next(iter(t.calls[1]["questions"].values()))["instructions"]
 
 
+# ── education entries as evidence ────────────────────────────────────────────
+
+BS = {"degree": "B.S. Computer Science", "institution": "Lakeshore Institute of Technology",
+      "start_date": None, "end_date": "2026-05", "gpa": "3.8"}
+BS_EXPECTED = {**BS, "end_date": "Expected May 2027"}
+DEGREE = "Bachelor's degree in Computer Science or a related field."
+
+
+def with_education(content, *entries):
+    return {**content, "education": list(entries)}
+
+
+def test_an_education_entry_is_text_with_dates_only_while_the_degree_is_in_progress():
+    assert education_text(BS) == "B.S. Computer Science, Lakeshore Institute of Technology"      # no date, no GPA
+    assert education_text(BS_EXPECTED) == "B.S. Computer Science, Lakeshore Institute of Technology (Expected May 2027)"
+    assert education_text({**BS, "start_date": "2024", "end_date": None}) == (
+        "B.S. Computer Science, Lakeshore Institute of Technology (2024)")                        # started, not finished
+    assert education_text({**BS, "end_date": "Present", "start_date": "2024"}).endswith("(2024 – Present)")
+    assert education_text({"degree": None, "institution": "City University"}) == "City University"
+    assert education_text({}) == ""
+
+
+def test_the_education_question_asks_what_the_entry_states_and_never_to_compare_dates_or_levels():
+    q = education_question_for(DEGREE)
+    assert q.version == EDU_VERSION == "education_covered@v1" and q.point == "education_covered" and q.kind == "noul"
+    assert q.instructions.startswith('Does this education entry show that the candidate meets this requirement: "Bachelor')
+    assert "what the entry states" in q.instructions.lower() or "Judge only what the entry states" in q.instructions
+    assert "expected" in q.instructions and "Do not compare dates or levels" in q.instructions
+    assert question_for(DEGREE).canonical() != q.canonical()            # a separate question: the bullet wording does not fit
+
+
+def test_education_is_evidence_after_the_bullets_and_the_skills_line_is_not(auto):
+    content = with_education(page(ETL, skills=["Python"]), BS, BS, BS_EXPECTED)
+    assert page_evidence(content) == [("bullet", ETL), ("education", education_text(BS)),
+                                      ("education", education_text(BS_EXPECTED))]      # distinct entries only
+
+
+def test_an_education_entry_covers_a_degree_requirement_and_is_asked_once_per_entry_and_cached(auto):
+    t = FakeTransport(answer_for=scripted([("B.S. Computer Science", "Bachelor's degree")]))
+    auto.use(t)
+    checker = make_coverage_checker([req(DEGREE, terms=["bachelor", "computer science"], ordinal=0),
+                                     req("Master's degree required.", ordinal=1)])
+    content = with_education(page("Wrote a Go service."), BS)
+    result = checker(content)
+    assert [(r["requirement"], r["covered"], r["by"]) for r in result["requirements"]] == [(0, True, "education"), (1, False, "bullet")]
+    edu_calls = [c for c in t.calls if c["state"].get("kind") == "education"]
+    assert len(edu_calls) == 1 and edu_calls[0]["state"] == build_state(education_text(BS), "education")
+    assert len(edu_calls[0]["questions"]) == 2                          # every eligible requirement, one request
+    checker(content), make_coverage_checker([req(DEGREE), req("Master's degree required.")])(content)
+    assert len([c for c in t.calls if c["state"].get("kind") == "education"]) == 1     # cached, by the checker and the engine
+    assert engine.stats()["education_covered"]["cache"] >= 2
+    dis = disagreement(result, content)
+    assert dis["semantic_only"] == [{"requirement": 0, "text": DEGREE, "p": 0.95, "by": "education", "missing": ["bachelor"]}]
+
+
+def test_a_wrong_level_degree_does_not_cover_and_an_in_progress_one_covers_enrollment(auto):
+    auto.use(FakeTransport(answer_for=scripted([("Expected May 2027", "Currently enrolled")])))
+    checker = make_coverage_checker([req("Master's degree in Computer Science required.", ordinal=0),
+                                     req("Currently enrolled in a bachelor's or master's program.", ordinal=1)])
+    assert [r["covered"] for r in checker(with_education(page("Wrote docs."), BS))["requirements"]] == [False, False]
+    assert [r["covered"] for r in checker(with_education(page("Wrote docs."), BS_EXPECTED))["requirements"]] == [False, True]
+
+
+def test_a_page_with_only_education_is_checked_and_one_with_nothing_is_not(auto):
+    t = FakeTransport(answer_for=scripted([("B.S.", "Bachelor's degree")]))
+    auto.use(t)
+    checker = make_coverage_checker([req(DEGREE)])
+    assert checker({"experiences": [], "projects": [], "education": [BS]})["score"] == 100.0
+    assert checker({"experiences": [], "projects": [], "education": []})["status"] == "none"
+
+
+def test_education_is_not_asked_when_a_measurement_is_pinned_to_bullets(auto):
+    t = FakeTransport(answer_for=scripted())
+    auto.use(t)
+    checker = make_coverage_checker([req(DEGREE)], version=LEGACY_VERSION, education=False)
+    checker(with_education(page(ETL), BS))
+    assert len(t.calls) == 1 and "bullet" in t.calls[0]["state"]
+    assert next(iter(t.calls[0]["questions"].values()))["instructions"].count("working style") == 0     # the v1 wording
+
+
 # ── through the executor ─────────────────────────────────────────────────────
 
-REQS = [req("Experience building and deploying event-driven services.", "required", 4, ["event-driven", "kafka"]),
+REQS =[req("Experience building and deploying event-driven services.", "required", 4, ["event-driven", "kafka"]),
         req("Experience with Kubernetes.", "preferred", 2, ["kubernetes"]),
         req("Experience monitoring machine learning systems.", "required", 3, ["observability"]),
         req("Free lunch is provided.", "incidental", 1, ["lunch"])]
@@ -402,6 +493,21 @@ def test_the_contract_carries_the_node_detail_and_the_finalize_block(auto, env):
     assert out["semantic_coverage"]["score"] == 100.0 and out["semantic_coverage"]["semantic_only"][0]["requirement"] == 2
     no_jev = invoke("execute_plan", uid, {"program": {"job_id": job_id, "nodes": []}, "dry_run": True})
     assert no_jev["semantic_coverage"] is not None                      # the recorded answers above are cached
+
+
+def test_the_pages_education_entry_covers_a_degree_requirement_through_the_executor(auto, env):
+    uid, job_id = _open(env, [req("Bachelor's degree in Computer Science.", "required", 4, ["bachelor", "computer science"]),
+                              req("Master's degree required.", "preferred", 1, ["master"])])
+    t = FakeTransport(answer_for=scripted([("City University", "Bachelor's degree")]))
+    auto.use(t)
+    out = _run(uid, {"job_id": job_id, "nodes": []}, dry_run=True)
+    block = out["semantic_coverage"]
+    assert block["covered"] == 1 and block["of"] == 2 and block["score"] == 80.0               # 100 * 4 / 5
+    assert block["semantic_only"] == [{"requirement": 0, "text": "Bachelor's degree in Computer Science.", "p": 0.95,
+                                       "by": "education", "missing": ["bachelor"]}]
+    edu = [c for c in t.calls if c["state"].get("kind") == "education"]
+    assert [c["state"]["text"] for c in edu] == ["B.S. Computer Science, City University"] and len(edu[0]["questions"]) == 2
+    assert out["metrics"]["final"]["targets"]["semantic_coverage"] == 80.0
 
 
 def test_a_program_may_name_semantic_coverage_as_a_target():

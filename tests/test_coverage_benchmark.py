@@ -10,14 +10,14 @@ import sys
 from pathlib import Path
 
 from eval import coverage_benchmark as bench
-from harness.decisions.coverage import VERSION
+from harness.decisions.coverage import LEGACY_VERSION
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_the_benchmark_recordings_replay_at_a_full_hit_rate_and_the_committed_report_is_current(tmp_path):
     doc = json.loads(bench.RECORDINGS_PATH.read_text(encoding="utf-8"))
-    assert {d["question_version"] for d in doc["decisions"]} == {VERSION}
+    assert {d["question_version"] for d in doc["decisions"]} == {LEGACY_VERSION}     # recorded before v2 and education
     assert {d["point"] for d in doc["decisions"]} == {"requirement_covered"}
     report = tmp_path / "BENCHMARK.md"
     proc = subprocess.run([sys.executable, str(ROOT / "eval" / "coverage_benchmark.py"), "analyze", "--report", str(report)],
