@@ -509,7 +509,9 @@ class NodeResult(_Model):
     deltas: Dict[str, Optional[float]] = Field(default_factory=dict)
     review: Optional[List[Dict[str, Any]]] = Field(
         None, description="Bullets Jev could not clearly call supported by their cited "
-                          "evidence (item, bullet, label, p). Show them to the user.")
+                          "evidence (item, bullet, label, p), and bullets or item fields it "
+                          "thinks may mention a pinned topic in other words (check: "
+                          "negative_pin, item, where, bullet, pin, p). Show them to the user.")
 
 
 class Violation(_Model):
@@ -538,6 +540,10 @@ class ExecuteOutput(_Output):
         None, description="The cited-bullet support check (#193): how many bullets Jev "
                           "checked and which to review. Absent when nothing was checked "
                           "(no key, mode off, or no changed cited bullet).")
+    negative_pins: Optional[Dict[str, Any]] = Field(
+        None, description="The negative-pin check (#232): how many (changed bullet or item "
+                          "field, pin) pairs Jev checked and which to review. Absent when "
+                          "nothing was checked (no key, mode off, or no pins).")
 
 
 def _executor():

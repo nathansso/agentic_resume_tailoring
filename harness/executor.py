@@ -52,6 +52,7 @@ from harness import ART_VERSION, tree
 from harness.acceptance import (
     Context, accept, metric_vector, preference_violations, term_pattern,
 )
+from harness.decisions.negative_pins import make_pin_checker, reviews as pin_reviews
 from harness.decisions.support import make_support_checker, reviews as support_reviews
 from harness.ingest import apply_job_rules, resolve_rules
 from harness.program import Program, apply_patch, program_id
@@ -531,6 +532,11 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     # The cited-bullet support check (#193): Jev, through the cached engine.
     # Built here, not in `_context`, because it reads the base for "original".
     ctx.support_checker = make_support_checker(kg.source_bullets, base)
+    # The negative-pin check (#232): Jev on whether a changed bullet or item field mentions a
+    # pinned topic in other words. The pin's own statement describes the topic.
+    ctx.pin_checker = make_pin_checker(
+        [{"term": t, "statement": p.get("text")} for t, p in sorted(prefs["negative_terms"].items())],
+        base) if prefs["negative_terms"] else None
     base_vector = metric_vector(working, ctx)
     current = base_vector
 
@@ -565,6 +571,8 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
         touched = {key, (node.get("replacement_key") or "").strip().lower()}
         review = support_reviews([f for f in ctx.support_checker(candidate)
                                   if f["item"] in touched])
+        if ctx.pin_checker:
+            review += pin_reviews([f for f in ctx.pin_checker(candidate) if f["item"] in touched])
         if review:
             row["review"] = review
         results.append(row)
@@ -591,6 +599,10 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     findings = [f for f in ctx.support_checker(working) if f["status"] == "checked"]
     if findings:
         out["support"] = {"checked": len(findings), "review": support_reviews(findings)}
+    pin_findings = ([f for f in ctx.pin_checker(working) if f["status"] == "checked"]
+                    if ctx.pin_checker else [])
+    if pin_findings:
+        out["negative_pins"] = {"checked": len(pin_findings), "review": pin_reviews(pin_findings)}
     if violations or dry_run:
         return out
 
