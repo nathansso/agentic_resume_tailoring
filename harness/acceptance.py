@@ -21,7 +21,6 @@ Deterministic: every float is rounded, every list sorted. Model-free by rule
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set
 
@@ -34,6 +33,7 @@ from agents.redundancy import (
     bullet_texts as all_bullets, bullet_tokens, leading_verb_entropy, mtld,
     term_document_frequency,
 )
+from harness.decisions.negative_pins import term_pattern, violations as pin_finding_violations
 from harness.decisions.support import violations as support_finding_violations
 
 TARGETS = ("coverage", "relevance_density")
@@ -90,6 +90,13 @@ class Context:
     # the Jev engine and injected by the executor, like `line_counter`, so this
     # module stays model-free. None (or an unchecked finding) adds nothing.
     support_checker: Optional[Callable[[Dict], List[Dict]]] = None
+    # The negative-pin check (#232): `content -> findings`, Jev's yes/no on whether a changed
+    # bullet or item field mentions a pinned topic in other words. Injected like the support
+    # checker. None (or an unchecked finding) leaves the term match as the whole gate.
+    pin_checker: Optional[Callable[[Dict], List[Dict]]] = None
+    # The same check over the WHOLE page, unchanged text included, run once at finalize (#232):
+    # a paraphrase already in the base version still renders. Never part of the per-node gate.
+    pin_page_checker: Optional[Callable[[Dict], List[Dict]]] = None
 
     @property
     def jd_keywords(self) -> Set[str]:
@@ -111,17 +118,15 @@ def preference_violations(content: Dict, ctx: Context) -> List[str]:
               for s in content.get("skills_ranked") or []}
     out += [f"suppressed:skill:{s}" for s in sorted(skills & ctx.suppressed_skills)]
     out += negative_pin_violations(content, ctx.negative_terms)
+    if ctx.pin_checker is not None:
+        # Jev only adds: a reworded mention the term match cannot see. One mention, one violation.
+        out += [v for v in pin_finding_violations(ctx.pin_checker(content)) if v not in out]
     return out
 
 
 def _short(text: str, n: int = 60) -> str:
     text = " ".join((text or "").split())
     return text if len(text) <= n else text[: n - 1] + "…"
-
-
-def term_pattern(term: str) -> "re.Pattern":
-    """`term` as a whole word or phrase, case-insensitive."""
-    return re.compile(r"(?<![a-z0-9])" + re.escape(term.lower()) + r"(?![a-z0-9])")
 
 
 def _page_items(content: Dict):
@@ -310,4 +315,4 @@ def accept(before: Dict, after: Dict, *, improves: Iterable[str] = (),
 
 
 __all__ = ["Context", "DEFAULT_TOLERANCES", "GATES", "GUARDS", "TARGETS", "accept",
-           "consistency_violations", "metric_vector", "preference_violations"]
+           "consistency_violations", "metric_vector", "preference_violations", "term_pattern"]
