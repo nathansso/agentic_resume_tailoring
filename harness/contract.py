@@ -512,6 +512,12 @@ class NodeResult(_Model):
                           "evidence (item, bullet, label, p), and bullets or item fields it "
                           "thinks may mention a pinned topic in other words (check: "
                           "negative_pin, item, where, bullet, pin, p). Show them to the user.")
+    semantic: Optional[Dict[str, Any]] = Field(
+        None, description="What this node did (for a reverted node, would have done) to semantic "
+                          "requirement coverage (#126), as "
+                          "requirement ordinals from open_job: covered, of, gained (now "
+                          "evidenced by a bullet), lost, and the page's semantic_only and "
+                          "literal_only (see semantic_coverage). Absent when Jev did not answer.")
 
 
 class Violation(_Model):
@@ -544,6 +550,17 @@ class ExecuteOutput(_Output):
         None, description="The negative-pin check (#232): how many (bullet or item field, "
                           "pin) pairs on the final page Jev checked and which to review. Absent when "
                           "nothing was checked (no key, mode off, or no pins).")
+    semantic_coverage: Optional[Dict[str, Any]] = Field(
+        None, description="Semantic requirement coverage of the final page (#126), a target "
+                          "beside the literal coverage: score (0-100, criticality-weighted), "
+                          "covered, of, and two lists of requirements where the literal and "
+                          "semantic readings disagree. semantic_only: a bullet shows the "
+                          "requirement but `missing` terms are not on the page (keyword-weave "
+                          "candidates, if the cited evidence supports the words). literal_only: "
+                          "`present` terms are on the page but no bullet shows the requirement "
+                          "(the stuffing signature). Absent when Jev did not answer (no key, "
+                          "mode off, an API error) or the job has no required or preferred "
+                          "requirement.")
 
 
 def _executor():

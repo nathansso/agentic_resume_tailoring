@@ -10,8 +10,12 @@ has a role:
 - **Guards** (`stuffing`, `verb_entropy`, `mtld`, `duplication`): may not
   regress by more than a tolerance. A node may tighten a tolerance, never
   loosen one (`harness/program.py` enforces that).
-- **Targets** (`coverage`, `relevance_density`): an action must improve at
-  least one, unless it is a delete the user or a preference asked for.
+- **Targets** (`coverage`, `relevance_density`, `semantic_coverage`): an action
+  must improve at least one, unless it is a delete the user or a preference
+  asked for. `semantic_coverage` (#126) is Jev's reading of whether the bullets
+  evidence each requirement, beside the literal `coverage`; it is its own
+  target, never combined with another, and absent (not zero) when Jev did not
+  answer, so a run with no key reads exactly as it did before.
 - **Report only** (`ats`): the ATS composite is monotone non-decreasing in
   text (#127), so it is shown and never decides anything.
 
@@ -36,7 +40,8 @@ from agents.redundancy import (
 from harness.decisions.negative_pins import term_pattern, violations as pin_finding_violations
 from harness.decisions.support import violations as support_finding_violations
 
-TARGETS = ("coverage", "relevance_density")
+TARGETS = ("coverage", "relevance_density", "semantic_coverage")
+OPTIONAL_TARGETS = ("semantic_coverage",)    # present only when Jev answered (#126)
 GUARDS = ("stuffing", "verb_entropy", "mtld", "duplication")
 GATES = ("preferences", "faithfulness", "citations", "bullet_lines", "consistency")
 
@@ -97,6 +102,11 @@ class Context:
     # The same check over the WHOLE page, unchanged text included, run once at finalize (#232):
     # a paraphrase already in the base version still renders. Never part of the per-node gate.
     pin_page_checker: Optional[Callable[[Dict], List[Dict]]] = None
+    # Semantic requirement coverage (#126): `content -> result`, Jev's yes/no per (bullet,
+    # requirement) over the job's required and preferred requirements
+    # (`harness.decisions.coverage.make_coverage_checker`). Injected like the checkers above.
+    # None, or a result that is not `checked`, leaves `semantic_coverage` out of the vector.
+    coverage_checker: Optional[Callable[[Dict], Dict]] = None
 
     @property
     def jd_keywords(self) -> Set[str]:
@@ -252,6 +262,10 @@ def metric_vector(content: Dict, ctx: Context) -> Dict[str, Any]:
             text, ctx.jd_text or "", ctx.keyword_weights)["score"]),
         "relevance_density": _r(relevance_density(" ".join(bullets), ctx.jd_keywords)),
     }
+    if ctx.coverage_checker is not None:
+        semantic = ctx.coverage_checker(content)
+        if semantic.get("status") == "checked":
+            targets["semantic_coverage"] = _r(semantic["score"])
     ats = ATSScoringEngine.score_tailored(
         content, ctx.jd_text or "", ctx.matched_skills, keyword_weights=ctx.keyword_weights)
     report = {"ats": _r(ats.get("composite"))}
@@ -279,7 +293,7 @@ def accept(before: Dict, after: Dict, *, improves: Iterable[str] = (),
     2. No guard regresses by more than its tolerance.
     3. At least one of `improves` (every target when empty) strictly improves,
        or the action is `requested` (a delete a preference or the user asked
-       for).
+       for). `semantic_coverage` is a target only when both vectors carry it.
     """
     tol = {**DEFAULT_TOLERANCES, **(tolerances or {})}
     new_violations = {}
@@ -295,12 +309,17 @@ def accept(before: Dict, after: Dict, *, improves: Iterable[str] = (),
         moved = _guard_regression(guard, before["guards"].get(guard), after["guards"].get(guard))
         if moved > tol[guard] + _EPS:
             regressed[guard] = _r(moved)
-    wanted = list(improves) or list(TARGETS)
+    # An optional target counts only when both vectors carry it: with no answer from Jev it is
+    # not a target that did not move, it is not there. A node that names only absent targets
+    # is judged on the rest.
+    live = [t for t in TARGETS if t not in OPTIONAL_TARGETS
+            or (t in before["targets"] and t in after["targets"])]
+    wanted = [t for t in improves if t in live] or live
     improved = sorted(t for t in wanted
                       if (after["targets"].get(t) or 0.0)
                       > (before["targets"].get(t) or 0.0) + _EPS)
     deltas = {t: _r((after["targets"].get(t) or 0.0) - (before["targets"].get(t) or 0.0))
-              for t in TARGETS}
+              for t in live}
 
     if new_violations:
         reason = "hard_gate: " + "; ".join(f"{g} {v}" for g, v in new_violations.items())
@@ -314,5 +333,5 @@ def accept(before: Dict, after: Dict, *, improves: Iterable[str] = (),
             "deltas": deltas, "gate_violations": new_violations, "guard_regressions": regressed}
 
 
-__all__ = ["Context", "DEFAULT_TOLERANCES", "GATES", "GUARDS", "TARGETS", "accept",
+__all__ = ["Context", "DEFAULT_TOLERANCES", "GATES", "GUARDS", "OPTIONAL_TARGETS", "TARGETS", "accept",
            "consistency_violations", "metric_vector", "preference_violations", "term_pattern"]

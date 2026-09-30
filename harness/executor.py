@@ -52,6 +52,9 @@ from harness import ART_VERSION, tree
 from harness.acceptance import (
     Context, accept, metric_vector, preference_violations, term_pattern,
 )
+from harness.decisions.coverage import (
+    make_coverage_checker, node_detail as coverage_node_detail, summary as coverage_summary,
+)
 from harness.decisions.negative_pins import (
     make_pin_checker, reviews as pin_reviews, violations as pin_violations,
 )
@@ -533,8 +536,9 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     ctx, prefs = _context(user_id, job, kg, prog["finalize"]["max_bullet_lines"])
     pref_ids = {str(p.get("preference_id")).lower()
                 for p in services.load_preferences(user_id)}
+    requirements = job_requirements(user_id, job_id)
     base = head["content"] if head else kg_default_content(
-        user_id, job.description or "", kg, job_requirements(user_id, job_id))
+        user_id, job.description or "", kg, requirements)
     # Job-scoped rules answered for this posting (#192), e.g. the graduation
     # date a post-internship enrollment requirement calls for.
     rules_applied = apply_job_rules(base, resolve_rules(user_id, job_id))
@@ -548,6 +552,9 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     ctx.pin_checker = make_pin_checker(pins, base) if pins else None
     # Finalize checks the whole page, so a paraphrase already in the base cannot render.
     ctx.pin_page_checker = make_pin_checker(pins, None) if pins else None
+    # Semantic requirement coverage (#126): Jev's yes/no per (bullet, requirement) over the
+    # posting's required and preferred requirements, a target beside the literal `coverage`.
+    ctx.coverage_checker = make_coverage_checker(requirements)
     base_vector = metric_vector(working, ctx)
     current = base_vector
 
@@ -579,6 +586,12 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
         row.update(status="accepted" if verdict["accepted"] else "reverted",
                    reason=verdict["reason"], improved=verdict["improved"],
                    deltas=verdict["deltas"])
+        if ctx.coverage_checker:
+            # What this node did to the requirements' semantic coverage (#126), compactly.
+            detail = coverage_node_detail(ctx.coverage_checker(working),
+                                          ctx.coverage_checker(candidate), candidate)
+            if detail:
+                row["semantic"] = detail
         touched = {key, (node.get("replacement_key") or "").strip().lower()}
         review = support_reviews([f for f in ctx.support_checker(candidate)
                                   if f["item"] in touched])
@@ -614,6 +627,10 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
                     if ctx.pin_page_checker else [])
     if pin_findings:
         out["negative_pins"] = {"checked": len(pin_findings), "review": pin_reviews(pin_findings)}
+    # Only when Jev (or its cache) answered: with no key the result is what it was before #126.
+    semantic = coverage_summary(ctx.coverage_checker(working), working) if ctx.coverage_checker else None
+    if semantic:
+        out["semantic_coverage"] = semantic
     if violations or dry_run:
         return out
 

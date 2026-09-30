@@ -12,6 +12,9 @@ boundary test (`tests/test_harness_boundary.py`) keeps it that way.
 - `engine`: `decide(point, state, questions, fallback)` and its three modes.
 - `recordings`: export and import of cache rows, and the `art jev` commands.
 - `support`: the first decision point, the cited-bullet support check.
+- `negative_pins`: does a changed text mention a pinned topic in other words (#232).
+- `coverage`: does a bullet show the candidate meets a posting requirement (#126), the
+  `semantic_coverage` target.
 
 Nothing is imported here eagerly, so `harness.acceptance` can read the support
 thresholds without loading the client or the database.
