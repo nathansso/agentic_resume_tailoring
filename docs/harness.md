@@ -108,6 +108,7 @@ every deterministic computation in code.
 | Decision point | Question type | Decides | Fallback |
 |---|---|---|---|
 | Cited-bullet support (#193) | choice per revised bullet | Whether the cited evidence supports the new bullet: `supported`, `adds_unsupported`, `contradicts`. Scored by p(adds_unsupported) + p(contradicts), which is 1 − p(supported). Blocks at a score ≥ 0.85, surfaces 0.35–0.85 as `review` (fitted on 89 labelled pairs, #237; `eval/support_labels/REPORT.md`) | Unchecked; lexical drift still gates |
+| Negative-pin mention (#232) | noul per (changed bullet or item field, pin) | Whether a changed text mentions or refers to a pinned topic in other words (a paraphrase, or a product, employer or project of the topic). Asked positively, never "does it avoid", and with the pin's statement stripped of its directive, or the bare term when a negation or comparison would remain. Blocks at p ≥ 0.85 as a `preferences` violation in the term match's format, surfaces 0.15–0.85 as `review` (fitted on 74 labelled pairs, #232; `eval/negative_pin_labels/REPORT.md`). Jev only adds hits; the term match always runs | Unchecked; the term match alone gates |
 | Memory gate (#202) | noul, choice, score | Is the message a standing preference; emphasize or suppress; strength 1–5 (#129's scale) | Heuristics, then host extraction |
 | Variant choice (#199) | choice per item, with no-match | Which approved bullet variant fits the job; no-match means the host writes a new one | Retrieval similarity |
 | Track baseline (#199) | choice | Which baseline a new job branches from | Role-family lookup |
@@ -144,7 +145,7 @@ And pooling hid real results: the per-stratum spread in #172 vanished when poole
 | Metric | Monotone in text? | Role | Source |
 |---|---|---|---|
 | Citation faithfulness | No | **Hard gate** | #198 |
-| Hard-preference and negative-pin compliance | No | **Hard gate** | `agents/arbitration.py`, #202 |
+| Hard-preference and negative-pin compliance | No | **Hard gate** | `agents/arbitration.py`, #202; reworded pin mentions by Jev, #232 |
 | Numeric and entity consistency | No | **Hard gate** | #123 |
 | Rendered lines per bullet ≤ 2 | No | **Hard gate** | #200 |
 | Term stuffing (bullet-level term DF) | Yes, upward | Guard | `agents/redundancy.py` (#122) |
@@ -280,6 +281,13 @@ metric vector and the rule, and `harness/executor.py` runs it. The details:
   - A pinned term already on the page (from KG text) fails finalize with a "revise …"
     hint.
   - A suppression keyed `skill:` still only drops the skill.
+  - **Reworded mentions (#232).** The term match is literal, so a changed bullet or item
+    field that mentions a pinned topic in other words ("message broker" pinned, "Kafka"
+    written) also gets a Jev yes/no per pin. A confident yes reverts the node as a
+    `preferences` violation; an uncertain one comes back as `review` (`check:
+    negative_pin`). Only text that changed against the base is checked; the term match
+    always runs and Jev never removes one of its hits. With no key it is the term match
+    alone.
 - **Line budget.** It is measured by #200's render cache. Without a LaTeX engine it
   reports `unmeasured` and doesn't block.
 - **Saving and replay.** Every program is saved (`PlanProgram`), so `patch_plan` can

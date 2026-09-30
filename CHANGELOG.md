@@ -12,6 +12,50 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 232 — Negative pins catch reworded mentions, with a Jev check behind the preferences gate
+**Status:** complete | **Tests:** 1896 pass on SQLite (50 new), 18 skipped
+
+The negative-pin gate (#198) matched pinned terms as whole words, so a bullet that mentioned a suppressed topic in other words ("message broker" pinned, "Kafka" written; "Amazon" pinned, "AWS" written) reached the page. A changed bullet or item field now also gets a Jev yes/no per pin, and a confident yes fails the same `preferences` gate.
+
+### What shipped
+
+- **`harness/decisions/negative_pins.py`, decision point `negative_pin@v1`.** One `noul` per pin, built per topic and worded positively: "Does this text mention or refer to <topic>? …". It never asks "does it avoid", because Jev reads negation literally. All of a text's pins go in one request, with the text as the state, `{text, kind}` (`kind` is `bullet`, or the item field `title`, `company`, `name`, `description`). Answers are cached per (text, pin) through the engine.
+- **The topic is the pin's own statement, minus its directive.** `pin_topic` strips a leading "Never mention …", "Leave out …", "Skip anything about …" and uses what is left ("Amazon or its products"). When a negation or a comparison would remain ("Never mention Java, I want to be seen as a Go developer, not a Java one"), or the remainder is over 120 characters, or there is no statement, it uses the bare term, so the negation never reaches Jev.
+- **What is checked.** Only bullets and item fields that changed against the base version (a reordered or untouched bullet is skipped; a replaced item is all new text). A text the term match already catches is skipped as well, since it is a violation regardless and needs no call.
+- **Wiring.** `Context.pin_checker`, injected by the executor like `support_checker`, so `harness/acceptance.py` stays model-free. A hit at p ≥ `TAU_BLOCK` adds `negative_pin:<pin>@<key> :: "<bullet>"` (or `:: <field>`) to the `preferences` gate, in exactly the term match's format, and `preference_violations` de-duplicates, so one mention is one violation. The term match is unchanged and always runs; Jev only adds. `_finalize`'s "revise … so it no longer mentions …" hint applies to Jev hits unchanged. With no key, mode `off` or an API error the checker's findings are `unchecked` and the result is byte-identical to before.
+- **The uncertain band, `TAU_REVIEW` ≤ p < `TAU_BLOCK`, comes back as `review`.** Node rows' existing `review` list now also carries pin entries (`check: "negative_pin"`, `item`, `where`, `bullet`, `pin`, `label: "mentions"`, `p`), so the host shows one list; the support check's entries are unchanged. A new top-level `negative_pins: {checked, review}` sits beside `support`, present only when Jev or the cache answered. `NodeResult.review` and `ExecuteOutput.negative_pins` are in the contract.
+- **The labelled set, `eval/negative_pin_labels/pairs.json`.** 74 (text, pin) pairs over the synthetic benchmark profiles (never `personal/`; every text is verbatim from a profile, the pins are synthetic): direct 11 (the term is in the text: the control), paraphrase 14, indirect by product, employer or project name 10, near-miss 16, unrelated 11, negation or comparison in the pin's statement 12. 41 are labelled `mentions`, 33 `does_not_mention`; 9 are item fields. **The labels are proposals and await the user's review of `REVIEW.md`.**
+- **The recordings and `eval/fit_negative_pin_threshold.py`.** `record` ran every pair once through ART's engine (`negative_pins.question_for`, `pin_topic`, `build_state`, `jev-1.13.0`) against a private SQLite store: 74 live answers in 50 requests (pairs sharing a text share a request), about 22.6k input and 1.4k output tokens. `analyze` replays them in `replay` mode at a 100% hit rate and writes `REPORT.md` and `REVIEW.md`. It reuses `fit_support_threshold.py`'s store pinning and table helpers.
+- **`TAU_BLOCK` = 0.85, `TAU_REVIEW` = 0.15**, chosen by: zero blocks on near-miss and unrelated pairs first, with a grid step of headroom over the highest score any not-a-mention pair reaches, then the most recall on paraphrase (the lowest such threshold). Results:
+
+  | | value |
+  |---|---|
+  | False blocks on the 33 not-a-mention pairs | 0 (near-miss 0/16, unrelated 0/11, negation 0/6) |
+  | Highest not-a-mention score (headroom) | 0.76, `n_hadoop_spark`, a near-miss (0.09); highest unrelated 0.05 |
+  | Blocked, all mentions | 38 of 41 (93%), precision 100% |
+  | Recall by category | direct 11/11, paraphrase 14/14, indirect 7/10, negation 6/6 |
+  | Review band [0.15, 0.85) | 4 pairs: 3 mentions (`i_ms_github` 0.27, `i_employer_field` 0.42, `i_meta_react` 0.57), 1 not (`n_hadoop_spark`) |
+  | Mentions passing silently | 0 |
+  | Label vs Jev (at 0.5) | 71 of 74 agree; 3 disagreements |
+
+  The fit is sensitive to one label: relabelling `n_hadoop_spark` (is "Spark" a mention of Hadoop?) to Jev's answer refits to 0.50 / 0.45; `REPORT.md` shows it.
+- **Tests (50 new).** `tests/test_negative_pin_gate.py`: the question and the topic rule, all of a text's pins in one request, changed-only checking, the term match's texts never sent, per-(text, pin) caching, the thresholds and the review entry, a Jev hit reading exactly like a term hit and de-duplicating with it, no key / mode off / API error equal to the term match, a paraphrased mention refused through a recorded answer, a near-miss not refused, the review band surfaced and not blocking, the contract carrying the new fields, a run's recordings replaying at a 100% hit rate with no live call, and finalize hints for Jev hits. `tests/test_negative_pin_labels.py`: schema, at least 6 pairs per category, only `direct` pairs contain the term, negation statements never reach Jev, text verbatim from a synthetic profile, every pair replays from the recordings, the analysis rule, the analysis matches `violations` and `reviews`, the constants in `negative_pins.py` equal the fit, and the committed `REPORT.md` and `REVIEW.md` are current.
+- **`docs/harness.md` § 4** has the new row, § 5 and the negative-pin bullet note it; `plugin/skills/art-tailor/SKILL.md` says how the host reads pin violations and reviews.
+
+### Deviations from spec
+
+- **The state is `{text, kind}`, not the bullet alone.** Item fields (title, company, name, description) are checked too, as the scope says, so the state names which one it is and the question says "text". The bullet is still all that is sent for a bullet.
+- **The statement is not passed verbatim.** The issue says the topic is the pin's statement; a statement is often a directive ("Never mention Kafka") or carries a negation, which Jev is weak on, so the directive is stripped and a remaining negation or comparison falls back to the term. Not measured: how Jev answers the raw statements, since only one recording run was authorised.
+- **A text the term match catches is not sent.** It saves the call; the labelled `direct` pairs were still recorded, to measure Jev on the control.
+- **Base text is not checked.** Only changed text is, so a paraphrase already in the base version (a KG source bullet the user wrote themselves) is not caught by Jev, and finalize does not report it. A pinned term already on the page still fails finalize through the term match, as before.
+- **Jev hits revert the node through the gate rather than refusing it at arbitration.** `_refusal` still term-matches; a reworded mention is found by the acceptance rule and reads `hard_gate: preferences …`.
+- **`review` is one list, `negative_pins` a sibling block.** Pin entries are distinguished by `check: "negative_pin"` in the node rows' `review`; the counts sit in their own top-level block so `support` keeps its meaning.
+- **The labelled set is small and one label decides the block threshold.** Jev agreed with 71 of 74 labels; the near-miss `n_hadoop_spark` at 0.76 sets `TAU_BLOCK`. `TAU_REVIEW` 0.15 is the widest band the noise cap allows and sits 0.02 over the highest near-miss score under it (0.13); expect some near-miss review noise. Refit when the model version or the question changes.
+- **No live test was added.** The real answers are the committed recordings, replayed offline.
+- **The Postgres leg was not run locally.** Nothing here touches storage beyond the existing `JevDecision` rows.
+
+---
+
 ## Issue 237 — Fitted thresholds for the support check, on a labelled set of real Jev answers
 **Status:** complete | **Tests:** 1846 pass on SQLite (15 new), 18 skipped
 

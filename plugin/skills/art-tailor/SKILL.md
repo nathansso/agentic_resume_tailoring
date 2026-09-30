@@ -100,8 +100,16 @@ Call `execute_plan({program})`. Read the result:
   - A `reverted` reason of `faithfulness` naming `unsupported:` or `contradicts:` means
     an independent check found the bullet claims more than (or the opposite of) the
     evidence it cites. Reword it to what the cited bullets say, or cite better evidence.
+  - A `reverted` reason of `preferences` naming `negative_pin:<pin>@<item> :: "<bullet>"`
+    means the bullet mentions a topic the user pinned, possibly in other words (a
+    paraphrase, or a product, employer or project of that topic), so no pinned word need
+    appear. Rewrite it so it no longer refers to the topic, or drop the claim. A `:: company`
+    or `:: name` detail means the item's own name refers to it: leave that item out of the plan.
 - `nodes[].review` (and `support.review`): bullets that were kept but that the same check
   could not clearly call supported (`label`, `p`). Show them to the user; don't drop them.
+- `nodes[].review` entries with `check: "negative_pin"` (also in `negative_pins.review`):
+  text that was kept but that Jev thinks may mention a pinned topic (`pin`, `where`, `p`).
+  Show them to the user and ask whether the wording is acceptable; don't decide for them.
 - `committed: false` with `violations`: nothing was saved. Fix the plan with
   `patch_plan(program_id, edits)`, which takes JSON-pointer edits to the saved program.
   `cut_hints` say which bullets or projects to cut to fit the page. `stale_parent`
