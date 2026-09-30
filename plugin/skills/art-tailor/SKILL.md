@@ -126,6 +126,13 @@ Call `execute_plan({program})`. Read the result:
     the page. The claim is true and just isn't in the posting's words, so these are the
     `keyword_weave` candidates. Weave a missing term into that bullet only when the cited
     evidence supports the word; if it doesn't, leave the bullet alone.
+  - An education entry counts as evidence too: "Bachelor's degree in Computer Science" is
+    covered by the degree line. Such an entry is marked `by: education`, and its `missing`
+    terms ("bachelor") are not words to weave into a bullet: the degree line already shows
+    the requirement, and the page only lacks the posting's wording. A degree marked expected
+    shows enrollment, not an earned degree; a finished degree is judged without its date, and
+    ART does not compare levels or dates, so a requirement that hinges on either ("graduating
+    before June", "Master's required") stays uncovered: read the posting and ask the user.
   - `literal_only`: `present` terms are on the page (a skills line counts) but no bullet shows
     the requirement. That is the stuffing signature. Do not add the term to more bullets.
     Look for real evidence of it (`kg_search`) and revise a bullet around that, or tell the
