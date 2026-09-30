@@ -1,0 +1,1613 @@
+{
+  "decisions": [
+    {
+      "answer": {
+        "noul": 0.97,
+        "type": "noul"
+      },
+      "cache_key": "06fb68dceeaf99df974f5875fe25bb2f84b0043596bb4144806b2e83af60ad85",
+      "created_at": "2026-09-30T00:04:37.073611",
+      "input_tokens": 210.33333333333334,
+      "output_tokens": 18.333333333333332,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to deep learning? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.99,
+        "type": "noul"
+      },
+      "cache_key": "09fa3fc08fae3845561918d727a0df0a099a01cf0357e8623da429c70cca0067",
+      "created_at": "2026-09-30T00:04:29.884683",
+      "input_tokens": 400.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Redis? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.99,
+        "type": "noul"
+      },
+      "cache_key": "0b8b751328204a1b598585529ae14f65974f33dd5b8de60b0b50973319869ee5",
+      "created_at": "2026-09-30T00:04:27.480816",
+      "input_tokens": 212.33333333333334,
+      "output_tokens": 18.333333333333332,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to retrieval-augmented generation? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.99,
+        "type": "noul"
+      },
+      "cache_key": "1090c8bbbd8f3330622f1f87f640bdc91d46087375a881170fc8133e9a5dedef",
+      "created_at": "2026-09-30T00:04:29.271848",
+      "input_tokens": 405.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to MongoDB? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "14ffeb72dba1654b63fe0a740cf33878a26835edf88f2806ee8ee1b8c01b7d27",
+      "created_at": "2026-09-30T00:04:49.418826",
+      "input_tokens": 254.5,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to research experience? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.76,
+        "type": "noul"
+      },
+      "cache_key": "1a72356c753934589bc939ef0f52b5277b826226fbfdc5087dc860414de403e8",
+      "created_at": "2026-09-30T00:04:50.074966",
+      "input_tokens": 407.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Hadoop? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.98,
+        "type": "noul"
+      },
+      "cache_key": "1f23a2ffb3012c173d06028373d770dca4c2d7410b30b4526f3f682458d45911",
+      "created_at": "2026-09-30T00:04:39.988955",
+      "input_tokens": 403.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to automated testing? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.96,
+        "type": "noul"
+      },
+      "cache_key": "20175f673033414baa63f25cb66061a93c84def64778291279a6182e4c488007",
+      "created_at": "2026-09-30T00:04:35.757136",
+      "input_tokens": 404.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to edge computing? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "22b057bf277fe8cf6b0fcb4cf84ac9ec807b600a138a67c27c3ca809157cfc94",
+      "created_at": "2026-09-30T00:04:50.742082",
+      "input_tokens": 388.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Ardent Chat? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.98,
+        "type": "noul"
+      },
+      "cache_key": "266689f06b0333f8d75da9337df8ddb4da0b88242c951046eb8440f70b29c0ae",
+      "created_at": "2026-09-30T00:04:48.810207",
+      "input_tokens": 261.5,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to machine learning? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.98,
+        "type": "noul"
+      },
+      "cache_key": "2cfe69db05d7f9f732468455fcf0f3fc86ee5bf335f5f984b23b0de502d6e705",
+      "created_at": "2026-09-30T00:04:38.748572",
+      "input_tokens": 397.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to containers? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.97,
+        "type": "noul"
+      },
+      "cache_key": "33bd2c8b4c7b2d83c2bbe71bb91c3df9cff9b2593020313b04bfa75a1f7a473e",
+      "created_at": "2026-09-30T00:04:41.730340",
+      "input_tokens": 209.0,
+      "output_tokens": 18.333333333333332,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Google Cloud? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.94,
+        "type": "noul"
+      },
+      "cache_key": "3684d206d38eed6ea677421df27d4e4ac2c018be50f478e876e93b1244696af3",
+      "created_at": "2026-09-30T00:04:41.735459",
+      "input_tokens": 209.0,
+      "output_tokens": 18.333333333333332,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Alphabet companies? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.01,
+        "type": "noul"
+      },
+      "cache_key": "38de7f88e877d273764bcf359aa985e9500f53227333feca57a2629ebb4559b6",
+      "created_at": "2026-09-30T00:04:54.724173",
+      "input_tokens": 400.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to military service? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.99,
+        "type": "noul"
+      },
+      "cache_key": "39918b17713becb9d091dabe2fbbf42a6c9f3985a970352eb5ca19199b08eef0",
+      "created_at": "2026-09-30T00:04:26.149283",
+      "input_tokens": 406.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Docker? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.99,
+        "type": "noul"
+      },
+      "cache_key": "3da1b0fdf789cd957c61324bcb63a05f61e78dd55896b44e6ca4171d3019fc84",
+      "created_at": "2026-09-30T00:04:25.533062",
+      "input_tokens": 182.0,
+      "output_tokens": 18.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Airflow? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "3fb07a8cb775d5cc2d46521052db375a7e941dc2c54e6101c2bb671b04bb9093",
+      "created_at": "2026-09-30T00:04:40.576127",
+      "input_tokens": 253.5,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Azure? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.05,
+        "type": "noul"
+      },
+      "cache_key": "4466ad8bf9cf2a1289e9e07d2526f16638f1d5bf33dc656eade9fdc29f7e731e",
+      "created_at": "2026-09-30T00:04:55.945395",
+      "input_tokens": 383.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Stripe? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.01,
+        "type": "noul"
+      },
+      "cache_key": "46b9d8080fac9d25ae6bb563c6ec8b9b5039a5809cf01da81fa4682a8a58f89a",
+      "created_at": "2026-09-30T00:04:25.534060",
+      "input_tokens": 182.0,
+      "output_tokens": 18.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to kafka? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.99,
+        "type": "noul"
+      },
+      "cache_key": "47cc367d3f7920914c3054c1b30dc05f1b52b02cc5c3a4d084c384987c12aa81",
+      "created_at": "2026-09-30T00:04:26.744279",
+      "input_tokens": 258.0,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Terraform? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.95,
+        "type": "noul"
+      },
+      "cache_key": "4c4bc937b85b482eedca7eee828f2dd02b7454491c16e0ce6e3e1f0a44055ebc",
+      "created_at": "2026-09-30T00:04:56.545622",
+      "input_tokens": 402.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to fabricated answers? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.01,
+        "type": "noul"
+      },
+      "cache_key": "5a5b7f6a179f505c12d22345d434d4e6675073433922dac470a9a7f0055faea9",
+      "created_at": "2026-09-30T00:04:52.128508",
+      "input_tokens": 399.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Kubernetes? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.07,
+        "type": "noul"
+      },
+      "cache_key": "60587d68521889b53d50cae579b87b31db530b9ca3ebb92e649f58a324c81204",
+      "created_at": "2026-09-30T00:04:39.366203",
+      "input_tokens": 206.66666666666666,
+      "output_tokens": 18.333333333333332,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to backend work? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.99,
+        "type": "noul"
+      },
+      "cache_key": "640ffd69855ae4b1014d900f9d039b7a8f011953841323d5b8e62b5b4944f0b9",
+      "created_at": "2026-09-30T00:04:28.075957",
+      "input_tokens": 260.0,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Kafka? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "657c8e418ca6df069deac002ee9015e42fa8f992d7fe165ac3c3555d924bfb55",
+      "created_at": "2026-09-30T00:04:41.735459",
+      "input_tokens": 209.0,
+      "output_tokens": 18.333333333333332,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Snowflake? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.01,
+        "type": "noul"
+      },
+      "cache_key": "65d19bd4397c1829c6953d044ea8f5ceadbff132891c61ffa6de0edc8735575b",
+      "created_at": "2026-09-30T00:04:25.533062",
+      "input_tokens": 182.0,
+      "output_tokens": 18.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to game development? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.13,
+        "type": "noul"
+      },
+      "cache_key": "687ce3d1016ed07263a57d2ed00c7d58a0bab6e7732a4a762b18086d0c7a1091",
+      "created_at": "2026-09-30T00:04:46.146290",
+      "input_tokens": 398.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to reinforcement learning? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.86,
+        "type": "noul"
+      },
+      "cache_key": "6cafca33d74cdaf32d7929ca67a86dc340f8a840530983d917b4f7ddec1be0c3",
+      "created_at": "2026-09-30T00:04:37.763644",
+      "input_tokens": 258.0,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to data warehouses? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.27,
+        "type": "noul"
+      },
+      "cache_key": "744f0fd2c24c0e01688731046d447c602e1e23ce2726904c588b6b17c5007fc1",
+      "created_at": "2026-09-30T00:04:33.124296",
+      "input_tokens": 254.0,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Microsoft products? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.07,
+        "type": "noul"
+      },
+      "cache_key": "74c164ae6e7413b4583e5232ba045c6fef871dc7bd8224308af0c0ff7545d422",
+      "created_at": "2026-09-30T00:04:51.354490",
+      "input_tokens": 385.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Prompt Ledger? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.99,
+        "type": "noul"
+      },
+      "cache_key": "798cb91fa1151a49fcd271d9dfac0d13a8f4ac2179a7850e6cd52bd443a95203",
+      "created_at": "2026-09-30T00:04:28.681664",
+      "input_tokens": 397.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Tableau? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "7adc7cbb0d3cbcd7a25a5d2de049424e2ada80c226042794d41aee71216ef186",
+      "created_at": "2026-09-30T00:04:48.810207",
+      "input_tokens": 261.5,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to healthcare analytics? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.97,
+        "type": "noul"
+      },
+      "cache_key": "8131cc4bd5d7bc06f84f6396c91381ddfb86f728331d4a7cf4a5d5e6367f9da4",
+      "created_at": "2026-09-30T00:04:41.141026",
+      "input_tokens": 258.0,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Amazon Web Services? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.91,
+        "type": "noul"
+      },
+      "cache_key": "8132f7d95f4911ec0c44f948c34b016d8f6113d8173e93307cfc809515e6c172",
+      "created_at": "2026-09-30T00:04:54.073786",
+      "input_tokens": 256.5,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to java? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.9,
+        "type": "noul"
+      },
+      "cache_key": "8194acc094f989a45678bf6272e63c1122b7e5552dc0aa25266178a5e233ef98",
+      "created_at": "2026-09-30T00:04:44.295010",
+      "input_tokens": 393.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to My election data project, Ballot Tally? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "8326173e04ebe08ef0631ef3c486b2309ed1c2e795e80c27d4ca8cfdfddf3b4c",
+      "created_at": "2026-09-30T00:04:44.919423",
+      "input_tokens": 399.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to MongoDB? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.99,
+        "type": "noul"
+      },
+      "cache_key": "84c22d9f3bd0bfcd503bfda844e5e1ff627c23cb5561d257b4ad857e3d7f96ea",
+      "created_at": "2026-09-30T00:04:30.523177",
+      "input_tokens": 401.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to FastAPI? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.01,
+        "type": "noul"
+      },
+      "cache_key": "89bdbbc6687e734657929a8df54d12eaf116b87dbcf8d8da1832ae7b7157ba00",
+      "created_at": "2026-09-30T00:04:52.751510",
+      "input_tokens": 407.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Salesforce? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.01,
+        "type": "noul"
+      },
+      "cache_key": "8acbf3e5f0c1eac1992d4e9590bd1a1034f4e9763e0bf4c8c2b3c01d1b3e60a0",
+      "created_at": "2026-09-30T00:04:55.342921",
+      "input_tokens": 387.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Goldman Sachs? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.97,
+        "type": "noul"
+      },
+      "cache_key": "91b3dd249479696d8eba53ca0b6355e00a1cde0ec9f26ddadb00cb005972c9c5",
+      "created_at": "2026-09-30T00:04:31.791481",
+      "input_tokens": 386.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Transit Pulse? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "95042bf8b7e2650c5ab00066c9265fbcb6d63ce028d2169fe14bb9af7589a884",
+      "created_at": "2026-09-30T00:04:37.073611",
+      "input_tokens": 210.33333333333334,
+      "output_tokens": 18.333333333333332,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to tensorflow? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.42,
+        "type": "noul"
+      },
+      "cache_key": "9e5b298e171c5c9a0a91e96dcf6eb49cea4cec18e3e389baefdfe170e090453c",
+      "created_at": "2026-09-30T00:04:42.965121",
+      "input_tokens": 393.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to My first data engineering job, at Corvid Logistics? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.01,
+        "type": "noul"
+      },
+      "cache_key": "a0de981d544e39d41d2ee8daf6a5a5646b6ee95b2e5718cfaed9709c07a03571",
+      "created_at": "2026-09-30T00:04:37.763644",
+      "input_tokens": 258.0,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to blockchain? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "a6967f0ea401f7d282787cbb1bfe2b4912a13ae0103d703f8929e8bdd4941d9b",
+      "created_at": "2026-09-30T00:04:37.073611",
+      "input_tokens": 210.33333333333334,
+      "output_tokens": 18.333333333333332,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to TensorFlow? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.97,
+        "type": "noul"
+      },
+      "cache_key": "aea579bf9335db6f9e3ffff18bc5df53a966e50c30d8431944da41e195c69783",
+      "created_at": "2026-09-30T00:04:35.109450",
+      "input_tokens": 254.5,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to teaching experience? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "afeae02118ccf1654f9955d89556b27e8be94948533c80842543201f830d00ba",
+      "created_at": "2026-09-30T00:04:47.543245",
+      "input_tokens": 399.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to gRPC? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.57,
+        "type": "noul"
+      },
+      "cache_key": "b33df68d7ce169faa4e416d0a1f91bb12d2b0b203641c47221c11b0a989293b1",
+      "created_at": "2026-09-30T00:04:42.343704",
+      "input_tokens": 406.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to anything made by Meta? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "b505a10a4e5bb5d187e2abe18b74538b6eccb865dc154e3cf6d13c34a9202ad4",
+      "created_at": "2026-09-30T00:04:32.466400",
+      "input_tokens": 255.5,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to java? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.99,
+        "type": "noul"
+      },
+      "cache_key": "b63c4bfc9156ffe560f0b44cea677a6c3726b5056ed1f80994802180c5b8d22b",
+      "created_at": "2026-09-30T00:04:36.468948",
+      "input_tokens": 403.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to experiment tracking? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.01,
+        "type": "noul"
+      },
+      "cache_key": "c107a36f2c10ae499d346507edd634c6d3cbd83d680552db65d83a910ca8c87d",
+      "created_at": "2026-09-30T00:04:54.073786",
+      "input_tokens": 256.5,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to CUDA? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.98,
+        "type": "noul"
+      },
+      "cache_key": "c1ca9b2a24d529dce3a2608aad2970c4e5bf7306827e8dd0e6b64ffae4e0d6c8",
+      "created_at": "2026-09-30T00:04:39.366203",
+      "input_tokens": 206.66666666666666,
+      "output_tokens": 18.333333333333332,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to frontend development? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.99,
+        "type": "noul"
+      },
+      "cache_key": "c4063fb09f0e154c7bffb37128ca5f926ed3de15cb5cd775ae8476324cab80cb",
+      "created_at": "2026-09-30T00:04:40.576127",
+      "input_tokens": 253.5,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Amazon or its products? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.03,
+        "type": "noul"
+      },
+      "cache_key": "c415c49fe08a0875da1e3ee7c66ab2083759a0bcbbd1541393bb310cf783c667",
+      "created_at": "2026-09-30T00:04:27.480816",
+      "input_tokens": 212.33333333333334,
+      "output_tokens": 18.333333333333332,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to fine-tuning? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.04,
+        "type": "noul"
+      },
+      "cache_key": "c5f076e9a26f3c01a37c245861b9a74baed287eae88c4b22af1f3345817963d4",
+      "created_at": "2026-09-30T00:04:46.778331",
+      "input_tokens": 254.0,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to unit testing? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.94,
+        "type": "noul"
+      },
+      "cache_key": "cc9fbc8bd07b24c1c5ce503f82213b604a596f8deeaf4c5df12785fc65e88fae",
+      "created_at": "2026-09-30T00:04:26.745278",
+      "input_tokens": 258.0,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to HashiCorp tooling? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "cd5df1fd1bba5423217224986abcf500f2615d7e0c54fef62d28071e9a847562",
+      "created_at": "2026-09-30T00:04:39.366203",
+      "input_tokens": 206.66666666666666,
+      "output_tokens": 18.333333333333332,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Angular? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.95,
+        "type": "noul"
+      },
+      "cache_key": "d36fbc9bf7e446f80dd6c5295bd012020ee8e146c3f09c61f88e8265cd5816af",
+      "created_at": "2026-09-30T00:04:43.669018",
+      "input_tokens": 392.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to My ingestion side project, Slate Ingest? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "d5100d9876a28e6f87b38e9bcc2100c45febd32609630f35df0b7856024c6c2d",
+      "created_at": "2026-09-30T00:04:49.418826",
+      "input_tokens": 254.5,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Rust? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.98,
+        "type": "noul"
+      },
+      "cache_key": "d59dcb9df58aecbaae9238f5b760a3738f4df1ddd2e9221844b53375fd85805d",
+      "created_at": "2026-09-30T00:04:28.075957",
+      "input_tokens": 260.0,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to data pipelines? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.97,
+        "type": "noul"
+      },
+      "cache_key": "d951e76f9a8758ca119b0b319908afaefd6176a4a5f8f1f26d80a13857acfdc8",
+      "created_at": "2026-09-30T00:04:46.778331",
+      "input_tokens": 254.0,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to quality assurance? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.99,
+        "type": "noul"
+      },
+      "cache_key": "d9810f383b93d4ed9bcd0c47f26dff735e2b3414e5ac0e825de3aca42bf0da7f",
+      "created_at": "2026-09-30T00:04:33.124296",
+      "input_tokens": 254.0,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to continuous integration? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.12,
+        "type": "noul"
+      },
+      "cache_key": "d9847733aa6b192a10ed2940c2d86a69ac23af8065b26a8e09d606e8378e4716",
+      "created_at": "2026-09-30T00:04:45.530306",
+      "input_tokens": 414.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to fine-tuning language models? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.99,
+        "type": "noul"
+      },
+      "cache_key": "dadd3de6eb6231dde6aa133564da8f8a8cb912ce19badf0410fe72a1780849fa",
+      "created_at": "2026-09-30T00:04:27.480816",
+      "input_tokens": 212.33333333333334,
+      "output_tokens": 18.333333333333332,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to pgvector? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.02,
+        "type": "noul"
+      },
+      "cache_key": "dcb64a8c668e2406e2fd4bb27f148cf83ae5c961b3f4533eaa3ec5cf02927312",
+      "created_at": "2026-09-30T00:04:48.186407",
+      "input_tokens": 394.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Redis? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.98,
+        "type": "noul"
+      },
+      "cache_key": "dd671919bb50478f713e69e1edb9ec90b91a81456bb0c11998e5fb80f1d8cab0",
+      "created_at": "2026-09-30T00:04:31.189543",
+      "input_tokens": 386.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Ardent Chat? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.98,
+        "type": "noul"
+      },
+      "cache_key": "df8d820f81ce9cf629e7f183877251670beb841640cdad4e7fdf889759372c41",
+      "created_at": "2026-09-30T00:04:32.466400",
+      "input_tokens": 255.5,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to scheduled jobs? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.01,
+        "type": "noul"
+      },
+      "cache_key": "e6c029fbe8f41f56d3667bcc769e85f35d32b6817ea4c068e66ab1619b0acf59",
+      "created_at": "2026-09-30T00:04:25.533062",
+      "input_tokens": 182.0,
+      "output_tokens": 18.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Kafka? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.98,
+        "type": "noul"
+      },
+      "cache_key": "eb56614589dd231c22bb6ce664f64ff6f77c16b1f037cde65d0009ee66d1cbb9",
+      "created_at": "2026-09-30T00:04:41.141026",
+      "input_tokens": 258.0,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to cloud storage? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.01,
+        "type": "noul"
+      },
+      "cache_key": "eecb090b18b11898dda70071b1a5a84f493c61c9b2ff794b9fff11ebaab79bb9",
+      "created_at": "2026-09-30T00:04:53.455604",
+      "input_tokens": 412.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to iOS development? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.01,
+        "type": "noul"
+      },
+      "cache_key": "f3f39303bd2ade6d3bae2c0c029c1712fc93bb78ee6d63f19c66f0c056186c5e",
+      "created_at": "2026-09-30T00:04:35.109450",
+      "input_tokens": 254.5,
+      "output_tokens": 19.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to Figma? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.99,
+        "type": "noul"
+      },
+      "cache_key": "f8537476097ae2a20d19baf6d20f127a35a9584e53bfa0432ce7dbe02f6c2098",
+      "created_at": "2026-09-30T00:04:34.446607",
+      "input_tokens": 401.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to AI agents? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.98,
+        "type": "noul"
+      },
+      "cache_key": "faacc419b4d2e437579583158cc4952041f3ef62a1072357922c78e0034198a5",
+      "created_at": "2026-09-30T00:04:33.807784",
+      "input_tokens": 403.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to experimentation? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "noul": 0.05,
+        "type": "noul"
+      },
+      "cache_key": "ff2eeb7db8cf9f5d3375dc276ec0d397229aa4bf38578d9ca5bec0182d329c64",
+      "created_at": "2026-09-30T00:04:57.159131",
+      "input_tokens": 403.0,
+      "output_tokens": 21.0,
+      "point": "negative_pin",
+      "question": {
+        "criteria": {
+          "false": "The text does not refer to the topic; it may concern something related.",
+          "true": "The text mentions or refers to the topic."
+        },
+        "instructions": "Does this text mention or refer to user studies? Answer yes when it names it, uses another name for it, names a tool, product, employer or project that belongs to it, or describes it in other words. A topic that is only related, or of the same kind, is not a mention.",
+        "type": "noul"
+      },
+      "question_version": "negative_pin@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    }
+  ],
+  "exported_at": "2026-09-30T00:04:57",
+  "format": "art-jev-recordings",
+  "version": 1
+}

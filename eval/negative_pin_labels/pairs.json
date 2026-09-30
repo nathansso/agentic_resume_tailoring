@@ -1,0 +1,972 @@
+{
+  "_comment": "Hand-proposed labelled (text, pin) pairs for fitting the negative-pin check's thresholds (issue #232). Built only from the synthetic benchmark profiles in eval/profiles/ (never personal/): every `text` is verbatim from the named profile (a bullet, or an item's company or project name). The pins are synthetic. `label` is the proposed label, awaiting user review of REVIEW.md: mentions | does_not_mention. `direct` pairs contain the pinned term as a word, the control the term match already catches; every other category has no term match, so a hit there is one only Jev can add. `near_miss` pairs are related to the pinned topic but are not it, and must not block. `negation` pairs have a pin statement that carries a negation or a comparison. `kind` is the state's kind (bullet, or an item field). Regenerate the report with `python eval/fit_negative_pin_threshold.py analyze`.",
+  "version": 1,
+  "labels": [
+    "mentions",
+    "does_not_mention"
+  ],
+  "pairs": [
+    {
+      "id": "d_airflow",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "direct",
+      "kind": "bullet",
+      "pin": {
+        "term": "airflow",
+        "statement": "Never mention Airflow"
+      },
+      "text": "Migrated 3 lab pipelines from cron scripts to Airflow, with retries and alerting.",
+      "label": "mentions",
+      "rationale": "Names Airflow."
+    },
+    {
+      "id": "d_docker",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "direct",
+      "kind": "bullet",
+      "pin": {
+        "term": "docker",
+        "statement": "Leave out Docker"
+      },
+      "text": "Packaged the model behind a FastAPI endpoint in Docker, holding p95 latency under 80ms.",
+      "label": "mentions",
+      "rationale": "Names Docker."
+    },
+    {
+      "id": "d_terraform",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "direct",
+      "kind": "bullet",
+      "pin": {
+        "term": "terraform",
+        "statement": "Never include Terraform"
+      },
+      "text": "Deployed with Docker and Terraform on AWS, holding 99% uptime over 6 months.",
+      "label": "mentions",
+      "rationale": "Names Terraform."
+    },
+    {
+      "id": "d_pgvector",
+      "profile": "ai_engineering_specialist_ravi_deshmukh",
+      "category": "direct",
+      "kind": "bullet",
+      "pin": {
+        "term": "pgvector",
+        "statement": "Do not mention pgvector"
+      },
+      "text": "Built a RAG pipeline over 120k support documents with pgvector, lifting answer accuracy from 61% to 79%.",
+      "label": "mentions",
+      "rationale": "Names pgvector."
+    },
+    {
+      "id": "d_kafka",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "direct",
+      "kind": "bullet",
+      "pin": {
+        "term": "kafka",
+        "statement": "Never mention Kafka"
+      },
+      "text": "Built Airflow DAGs moving 40M shipment events a day from Kafka into Snowflake at 99.9% delivery.",
+      "label": "mentions",
+      "rationale": "Names Kafka."
+    },
+    {
+      "id": "d_tableau",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "direct",
+      "kind": "bullet",
+      "pin": {
+        "term": "tableau",
+        "statement": "Avoid mentioning Tableau"
+      },
+      "text": "Published an interactive Tableau workbook opened 900 times in its first month.",
+      "label": "mentions",
+      "rationale": "Names Tableau."
+    },
+    {
+      "id": "d_mongodb",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "direct",
+      "kind": "bullet",
+      "pin": {
+        "term": "mongodb",
+        "statement": "Skip anything about MongoDB"
+      },
+      "text": "Parses 50k PGN games into MongoDB and reports opening win rates by rating band.",
+      "label": "mentions",
+      "rationale": "Names MongoDB."
+    },
+    {
+      "id": "d_redis",
+      "profile": "ai_engineering_generalist_claire_bouchard",
+      "category": "direct",
+      "kind": "bullet",
+      "pin": {
+        "term": "redis",
+        "statement": "Never mention Redis"
+      },
+      "text": "Caches 20k judgments in Redis to keep a full re-run under a minute.",
+      "label": "mentions",
+      "rationale": "Names Redis."
+    },
+    {
+      "id": "d_fastapi",
+      "profile": "ai_engineering_specialist_ravi_deshmukh",
+      "category": "direct",
+      "kind": "bullet",
+      "pin": {
+        "term": "fastapi",
+        "statement": "Please never mention FastAPI"
+      },
+      "text": "Serves verification from FastAPI within a 200ms budget per response.",
+      "label": "mentions",
+      "rationale": "Names FastAPI."
+    },
+    {
+      "id": "d_company_field",
+      "profile": "ai_engineering_generalist_claire_bouchard",
+      "category": "direct",
+      "kind": "company",
+      "pin": {
+        "term": "ardent chat",
+        "statement": "Never mention Ardent Chat"
+      },
+      "text": "Ardent Chat",
+      "label": "mentions",
+      "rationale": "The employer field is the pinned name."
+    },
+    {
+      "id": "d_name_field",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "direct",
+      "kind": "name",
+      "pin": {
+        "term": "transit pulse",
+        "statement": "Never mention Transit Pulse"
+      },
+      "text": "Transit Pulse",
+      "label": "mentions",
+      "rationale": "The project name field is the pinned name."
+    },
+    {
+      "id": "p_cron",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "paraphrase",
+      "kind": "bullet",
+      "pin": {
+        "term": "scheduled jobs",
+        "statement": "Don't mention scheduled jobs"
+      },
+      "text": "Built a Go service that replaced 3 cron jobs, processing 200k records an hour.",
+      "label": "mentions",
+      "rationale": "Cron jobs are scheduled jobs."
+    },
+    {
+      "id": "p_ci",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "paraphrase",
+      "kind": "bullet",
+      "pin": {
+        "term": "continuous integration",
+        "statement": "Leave out continuous integration"
+      },
+      "text": "Added GitHub Actions CI that ran 220 tests on every pull request.",
+      "label": "mentions",
+      "rationale": "CI is continuous integration."
+    },
+    {
+      "id": "p_ab",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "paraphrase",
+      "kind": "bullet",
+      "pin": {
+        "term": "experimentation",
+        "statement": "Never mention experimentation"
+      },
+      "text": "Partnered with 3 product teams on an A/B testing framework now used for every release readout.",
+      "label": "mentions",
+      "rationale": "An A/B testing framework is experimentation."
+    },
+    {
+      "id": "p_rag",
+      "profile": "ai_engineering_specialist_ravi_deshmukh",
+      "category": "paraphrase",
+      "kind": "bullet",
+      "pin": {
+        "term": "retrieval-augmented generation",
+        "statement": "Never mention retrieval-augmented generation"
+      },
+      "text": "Built a RAG pipeline over 120k support documents with pgvector, lifting answer accuracy from 61% to 79%.",
+      "label": "mentions",
+      "rationale": "RAG is retrieval-augmented generation."
+    },
+    {
+      "id": "p_agents",
+      "profile": "ai_engineering_specialist_ravi_deshmukh",
+      "category": "paraphrase",
+      "kind": "bullet",
+      "pin": {
+        "term": "ai agents",
+        "statement": "Do not bring up AI agents"
+      },
+      "text": "Built LangChain agents that call 6 campus APIs and return grounded answers with citations.",
+      "label": "mentions",
+      "rationale": "LangChain agents are AI agents."
+    },
+    {
+      "id": "p_teaching",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "paraphrase",
+      "kind": "bullet",
+      "pin": {
+        "term": "teaching",
+        "statement": "Never mention teaching experience"
+      },
+      "text": "Ran weekly lab sections for 30 students on Git, Linux, and testing practice.",
+      "label": "mentions",
+      "rationale": "Running lab sections for students is teaching."
+    },
+    {
+      "id": "p_edge",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "paraphrase",
+      "kind": "bullet",
+      "pin": {
+        "term": "edge computing",
+        "statement": "Don't bring up edge computing"
+      },
+      "text": "Distilled a detector to 8MB for edge devices, retaining 88% of teacher mAP.",
+      "label": "mentions",
+      "rationale": "Edge devices are edge computing."
+    },
+    {
+      "id": "p_tracking",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "paraphrase",
+      "kind": "bullet",
+      "pin": {
+        "term": "experiment tracking",
+        "statement": "Never mention experiment tracking"
+      },
+      "text": "Tracked 60 experiment runs in MLflow and wrote the comparison that selected the shipped checkpoint.",
+      "label": "mentions",
+      "rationale": "Tracking runs in MLflow is experiment tracking."
+    },
+    {
+      "id": "p_deeplearning",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "paraphrase",
+      "kind": "bullet",
+      "pin": {
+        "term": "deep learning",
+        "statement": "Never mention deep learning"
+      },
+      "text": "Trained a PyTorch sequence model on 1.1M clinical events, improving readmission recall by 12 points over the baseline.",
+      "label": "mentions",
+      "rationale": "A PyTorch sequence model is deep learning."
+    },
+    {
+      "id": "p_dwh",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "paraphrase",
+      "kind": "bullet",
+      "pin": {
+        "term": "data warehouse",
+        "statement": "Don't mention data warehouses"
+      },
+      "text": "Cut warehouse spend 28% by repartitioning the 12 largest Parquet tables and pruning unused columns.",
+      "label": "mentions",
+      "rationale": "Warehouse spend is data-warehouse work."
+    },
+    {
+      "id": "p_pipelines",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "paraphrase",
+      "kind": "bullet",
+      "pin": {
+        "term": "data pipelines",
+        "statement": "Never mention data pipelines"
+      },
+      "text": "Built Airflow DAGs moving 40M shipment events a day from Kafka into Snowflake at 99.9% delivery.",
+      "label": "mentions",
+      "rationale": "DAGs moving events between systems are data pipelines."
+    },
+    {
+      "id": "p_containers",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "paraphrase",
+      "kind": "bullet",
+      "pin": {
+        "term": "containers",
+        "statement": "Don't mention containers"
+      },
+      "text": "Wrote a Docker image that reproduced the analysis stack for 8 downstream analysts.",
+      "label": "mentions",
+      "rationale": "A Docker image is a container."
+    },
+    {
+      "id": "p_frontend",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "paraphrase",
+      "kind": "bullet",
+      "pin": {
+        "term": "frontend development",
+        "statement": "Never mention frontend development"
+      },
+      "text": "Built a React and TypeScript scheduling tool that replaced a paper process for 12 departments.",
+      "label": "mentions",
+      "rationale": "A React and TypeScript tool is frontend development."
+    },
+    {
+      "id": "p_testing",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "paraphrase",
+      "kind": "bullet",
+      "pin": {
+        "term": "automated testing",
+        "statement": "Never mention automated testing"
+      },
+      "text": "Raised service test coverage from 46% to 78% with JUnit and contract tests.",
+      "label": "mentions",
+      "rationale": "JUnit and contract tests are automated testing."
+    },
+    {
+      "id": "i_amazon_aws",
+      "profile": "ai_engineering_generalist_claire_bouchard",
+      "category": "indirect",
+      "kind": "bullet",
+      "pin": {
+        "term": "amazon",
+        "statement": "Never mention Amazon or its products"
+      },
+      "text": "Deployed the stack on AWS with Docker behind a Next.js frontend.",
+      "label": "mentions",
+      "rationale": "AWS is an Amazon product."
+    },
+    {
+      "id": "i_amazon_s3",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "indirect",
+      "kind": "bullet",
+      "pin": {
+        "term": "amazon web services",
+        "statement": "Leave out Amazon Web Services"
+      },
+      "text": "Wrote a Terraform module that provisioned the group's S3 buckets and IAM roles in 1 command.",
+      "label": "mentions",
+      "rationale": "S3 and IAM are AWS services."
+    },
+    {
+      "id": "i_google_bq",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "indirect",
+      "kind": "bullet",
+      "pin": {
+        "term": "google cloud",
+        "statement": "Don't mention Google Cloud"
+      },
+      "text": "Ingested 2 years of GTFS feeds into BigQuery and modeled on-time performance across 190 routes.",
+      "label": "mentions",
+      "rationale": "BigQuery is a Google Cloud product."
+    },
+    {
+      "id": "i_alphabet_bq",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "indirect",
+      "kind": "bullet",
+      "pin": {
+        "term": "alphabet",
+        "statement": "Never mention Alphabet companies"
+      },
+      "text": "Ingested 2 years of GTFS feeds into BigQuery and modeled on-time performance across 190 routes.",
+      "label": "mentions",
+      "rationale": "BigQuery is an Alphabet product (via Google)."
+    },
+    {
+      "id": "i_meta_react",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "indirect",
+      "kind": "bullet",
+      "pin": {
+        "term": "meta",
+        "statement": "Never mention anything made by Meta"
+      },
+      "text": "Real-time queue used by 400 students across 6 courses, built in React and Node.js.",
+      "label": "mentions",
+      "rationale": "React is made by Meta."
+    },
+    {
+      "id": "i_ms_github",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "indirect",
+      "kind": "bullet",
+      "pin": {
+        "term": "microsoft",
+        "statement": "Don't mention Microsoft products"
+      },
+      "text": "Added GitHub Actions CI that ran 220 tests on every pull request.",
+      "label": "mentions",
+      "rationale": "GitHub is owned by Microsoft."
+    },
+    {
+      "id": "i_hashicorp_tf",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "indirect",
+      "kind": "bullet",
+      "pin": {
+        "term": "hashicorp",
+        "statement": "Never mention HashiCorp tooling"
+      },
+      "text": "Deployed with Docker and Terraform on AWS, holding 99% uptime over 6 months.",
+      "label": "mentions",
+      "rationale": "Terraform is HashiCorp's."
+    },
+    {
+      "id": "i_employer_field",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "indirect",
+      "kind": "company",
+      "pin": {
+        "term": "my first data engineering job",
+        "statement": "My first data engineering job, at Corvid Logistics"
+      },
+      "text": "Corvid Logistics",
+      "label": "mentions",
+      "rationale": "The statement names the employer, so the company field refers to the pinned job."
+    },
+    {
+      "id": "i_project_field",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "indirect",
+      "kind": "name",
+      "pin": {
+        "term": "my ingestion side project",
+        "statement": "My ingestion side project, Slate Ingest"
+      },
+      "text": "Slate Ingest",
+      "label": "mentions",
+      "rationale": "The statement names the project, so the project name refers to it."
+    },
+    {
+      "id": "i_election_field",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "indirect",
+      "kind": "name",
+      "pin": {
+        "term": "my election data project",
+        "statement": "My election data project, Ballot Tally"
+      },
+      "text": "Ballot Tally",
+      "label": "mentions",
+      "rationale": "The statement names the project, so the project name refers to it."
+    },
+    {
+      "id": "n_tf_pytorch",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "near_miss",
+      "kind": "bullet",
+      "pin": {
+        "term": "tensorflow",
+        "statement": "Never mention TensorFlow"
+      },
+      "text": "Trained a PyTorch sequence model on 1.1M clinical events, improving readmission recall by 12 points over the baseline.",
+      "label": "does_not_mention",
+      "rationale": "PyTorch is a rival framework, not TensorFlow."
+    },
+    {
+      "id": "n_mongo_postgres",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "near_miss",
+      "kind": "bullet",
+      "pin": {
+        "term": "mongodb",
+        "statement": "Never mention MongoDB"
+      },
+      "text": "Next.js and Postgres app that settles group expenses in the fewest transfers.",
+      "label": "does_not_mention",
+      "rationale": "Postgres is a different database."
+    },
+    {
+      "id": "n_kafka_airflow",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "near_miss",
+      "kind": "bullet",
+      "pin": {
+        "term": "kafka",
+        "statement": "Never mention Kafka"
+      },
+      "text": "Migrated 3 lab pipelines from cron scripts to Airflow, with retries and alerting.",
+      "label": "does_not_mention",
+      "rationale": "Airflow is an orchestrator, not a message broker."
+    },
+    {
+      "id": "n_angular_react",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "near_miss",
+      "kind": "bullet",
+      "pin": {
+        "term": "angular",
+        "statement": "Never mention Angular"
+      },
+      "text": "Built a React and TypeScript scheduling tool that replaced a paper process for 12 departments.",
+      "label": "does_not_mention",
+      "rationale": "React is a different frontend framework."
+    },
+    {
+      "id": "n_azure_aws",
+      "profile": "ai_engineering_generalist_claire_bouchard",
+      "category": "near_miss",
+      "kind": "bullet",
+      "pin": {
+        "term": "azure",
+        "statement": "Never mention Azure"
+      },
+      "text": "Deployed the stack on AWS with Docker behind a Next.js frontend.",
+      "label": "does_not_mention",
+      "rationale": "AWS is a different cloud."
+    },
+    {
+      "id": "n_snowflake_bq",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "near_miss",
+      "kind": "bullet",
+      "pin": {
+        "term": "snowflake",
+        "statement": "Never mention Snowflake"
+      },
+      "text": "Ingested 2 years of GTFS feeds into BigQuery and modeled on-time performance across 190 routes.",
+      "label": "does_not_mention",
+      "rationale": "BigQuery is a different warehouse."
+    },
+    {
+      "id": "n_llm_finetune",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "near_miss",
+      "kind": "bullet",
+      "pin": {
+        "term": "llm fine-tuning",
+        "statement": "Never mention fine-tuning language models"
+      },
+      "text": "Fine-tuned 4 image classification backbones on a 40k-image microscopy set, reaching 91% top-1.",
+      "label": "does_not_mention",
+      "rationale": "Fine-tuning, but of image models, not language models."
+    },
+    {
+      "id": "n_rl_replay",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "near_miss",
+      "kind": "bullet",
+      "pin": {
+        "term": "reinforcement learning",
+        "statement": "Never mention reinforcement learning"
+      },
+      "text": "Implemented 5 replay strategies and measured forgetting across a 10-task sequence.",
+      "label": "does_not_mention",
+      "rationale": "Continual learning replay is not reinforcement learning."
+    },
+    {
+      "id": "n_unit_e2e",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "near_miss",
+      "kind": "bullet",
+      "pin": {
+        "term": "unit testing",
+        "statement": "Never mention unit testing"
+      },
+      "text": "Wrote Cypress end-to-end tests covering the 5 highest-traffic user flows.",
+      "label": "does_not_mention",
+      "rationale": "End-to-end tests are not unit tests."
+    },
+    {
+      "id": "n_grpc_rest",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "near_miss",
+      "kind": "bullet",
+      "pin": {
+        "term": "grpc",
+        "statement": "Never mention gRPC"
+      },
+      "text": "Added GraphQL resolvers for 9 entity types behind an existing REST gateway.",
+      "label": "does_not_mention",
+      "rationale": "GraphQL and REST are different API styles."
+    },
+    {
+      "id": "n_redis_sqlite",
+      "profile": "ai_engineering_specialist_ravi_deshmukh",
+      "category": "near_miss",
+      "kind": "bullet",
+      "pin": {
+        "term": "redis",
+        "statement": "Never mention Redis"
+      },
+      "text": "Stores runs in SQLite and exports a side-by-side comparison report.",
+      "label": "does_not_mention",
+      "rationale": "SQLite is a different store."
+    },
+    {
+      "id": "n_healthcare_students",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "near_miss",
+      "kind": "bullet",
+      "pin": {
+        "term": "healthcare analytics",
+        "statement": "Never mention healthcare analytics"
+      },
+      "text": "Trained a gradient-boosted retention model on 22,000 student records, beating the prior heuristic by 14 points of recall.",
+      "label": "does_not_mention",
+      "rationale": "A retention model on student records is not healthcare."
+    },
+    {
+      "id": "n_research_grading",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "near_miss",
+      "kind": "bullet",
+      "pin": {
+        "term": "research experience",
+        "statement": "Never mention research experience"
+      },
+      "text": "Graded and gave written feedback on 120 data-structures assignments a term.",
+      "label": "does_not_mention",
+      "rationale": "Grading coursework is not research."
+    },
+    {
+      "id": "n_hadoop_spark",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "near_miss",
+      "kind": "bullet",
+      "pin": {
+        "term": "hadoop",
+        "statement": "Never mention Hadoop"
+      },
+      "text": "Parsed 3,100 county result files with pandas and Spark, reconciling 5 conflicting schemas.",
+      "label": "does_not_mention",
+      "rationale": "Spark is not Hadoop."
+    },
+    {
+      "id": "n_other_employer",
+      "profile": "ai_engineering_generalist_claire_bouchard",
+      "category": "near_miss",
+      "kind": "company",
+      "pin": {
+        "term": "ardent chat",
+        "statement": "Never mention Ardent Chat"
+      },
+      "text": "Saint Clare University Digital Learning",
+      "label": "does_not_mention",
+      "rationale": "A different employer."
+    },
+    {
+      "id": "n_sibling_project",
+      "profile": "ai_engineering_specialist_ravi_deshmukh",
+      "category": "near_miss",
+      "kind": "name",
+      "pin": {
+        "term": "prompt ledger",
+        "statement": "Never mention Prompt Ledger"
+      },
+      "text": "Cite Guard",
+      "label": "does_not_mention",
+      "rationale": "A different project by the same author."
+    },
+    {
+      "id": "u_k8s",
+      "profile": "ai_engineering_specialist_ravi_deshmukh",
+      "category": "unrelated",
+      "kind": "bullet",
+      "pin": {
+        "term": "kubernetes",
+        "statement": "Never mention Kubernetes"
+      },
+      "text": "Wrote an evaluation set of 200 graded questions that gated every prompt change.",
+      "label": "does_not_mention",
+      "rationale": "Nothing to do with it."
+    },
+    {
+      "id": "u_rust",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "unrelated",
+      "kind": "bullet",
+      "pin": {
+        "term": "rust",
+        "statement": "Never mention Rust"
+      },
+      "text": "Graded and gave written feedback on 120 data-structures assignments a term.",
+      "label": "does_not_mention",
+      "rationale": "Nothing to do with it."
+    },
+    {
+      "id": "u_gamedev",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "unrelated",
+      "kind": "bullet",
+      "pin": {
+        "term": "game development",
+        "statement": "Never mention game development"
+      },
+      "text": "Migrated 3 lab pipelines from cron scripts to Airflow, with retries and alerting.",
+      "label": "does_not_mention",
+      "rationale": "Nothing to do with it."
+    },
+    {
+      "id": "u_salesforce",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "unrelated",
+      "kind": "bullet",
+      "pin": {
+        "term": "salesforce",
+        "statement": "Never mention Salesforce"
+      },
+      "text": "Loaded 1.4TB of sensor archives into Postgres and cut a common query from 90 seconds to 4.",
+      "label": "does_not_mention",
+      "rationale": "Nothing to do with it."
+    },
+    {
+      "id": "u_ios",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "unrelated",
+      "kind": "bullet",
+      "pin": {
+        "term": "ios development",
+        "statement": "Never mention iOS development"
+      },
+      "text": "Cut a checkout page's p95 render from 1.8s to 600ms by batching 5 sequential API calls.",
+      "label": "does_not_mention",
+      "rationale": "Nothing to do with it."
+    },
+    {
+      "id": "u_blockchain",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "unrelated",
+      "kind": "bullet",
+      "pin": {
+        "term": "blockchain",
+        "statement": "Never mention blockchain"
+      },
+      "text": "Cut warehouse spend 28% by repartitioning the 12 largest Parquet tables and pruning unused columns.",
+      "label": "does_not_mention",
+      "rationale": "Nothing to do with it."
+    },
+    {
+      "id": "u_cuda",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "unrelated",
+      "kind": "bullet",
+      "pin": {
+        "term": "cuda",
+        "statement": "Never mention CUDA"
+      },
+      "text": "Shipped 14 REST endpoints in Spring Boot backing a customer portal used by 8,000 accounts.",
+      "label": "does_not_mention",
+      "rationale": "Nothing to do with it."
+    },
+    {
+      "id": "u_military",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "unrelated",
+      "kind": "bullet",
+      "pin": {
+        "term": "military service",
+        "statement": "Never mention military service"
+      },
+      "text": "Wrote evaluation tooling that produced per-class confusion matrices for 3 papers under review.",
+      "label": "does_not_mention",
+      "rationale": "Nothing to do with it."
+    },
+    {
+      "id": "u_figma",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "unrelated",
+      "kind": "bullet",
+      "pin": {
+        "term": "figma",
+        "statement": "Never mention Figma"
+      },
+      "text": "Ran weekly lab sections for 30 students on Git, Linux, and testing practice.",
+      "label": "does_not_mention",
+      "rationale": "Nothing to do with it."
+    },
+    {
+      "id": "u_employer_field",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "unrelated",
+      "kind": "company",
+      "pin": {
+        "term": "goldman sachs",
+        "statement": "Never mention Goldman Sachs"
+      },
+      "text": "Halcyon Health Analytics",
+      "label": "does_not_mention",
+      "rationale": "A different employer."
+    },
+    {
+      "id": "u_name_field",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "unrelated",
+      "kind": "name",
+      "pin": {
+        "term": "stripe",
+        "statement": "Never mention Stripe"
+      },
+      "text": "Path Finder",
+      "label": "does_not_mention",
+      "rationale": "Nothing to do with it."
+    },
+    {
+      "id": "g_tf_only_pytorch",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "negation",
+      "kind": "bullet",
+      "pin": {
+        "term": "tensorflow",
+        "statement": "Never mention TensorFlow; I only worked in PyTorch"
+      },
+      "text": "Trained a PyTorch sequence model on 1.1M clinical events, improving readmission recall by 12 points over the baseline.",
+      "label": "does_not_mention",
+      "rationale": "The statement names PyTorch, which the bullet uses, but the pinned topic is TensorFlow."
+    },
+    {
+      "id": "g_kafka_less",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "negation",
+      "kind": "bullet",
+      "pin": {
+        "term": "kafka",
+        "statement": "Don't talk about Kafka, I used it far less than Airflow"
+      },
+      "text": "Migrated 3 lab pipelines from cron scripts to Airflow, with retries and alerting.",
+      "label": "does_not_mention",
+      "rationale": "The statement names Airflow as the thing used more; the pinned topic is Kafka."
+    },
+    {
+      "id": "g_java_go",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "negation",
+      "kind": "bullet",
+      "pin": {
+        "term": "java",
+        "statement": "Never mention Java, I want to come across as a Go developer, not a Java one"
+      },
+      "text": "Built a Go service that replaced 3 cron jobs, processing 200k records an hour.",
+      "label": "does_not_mention",
+      "rationale": "The statement names Go, which the bullet uses; the pinned topic is Java."
+    },
+    {
+      "id": "g_java_spring",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "negation",
+      "kind": "bullet",
+      "pin": {
+        "term": "java",
+        "statement": "Don't say I know Java, I'd rather be seen as a JavaScript developer"
+      },
+      "text": "Shipped 14 REST endpoints in Spring Boot backing a customer portal used by 8,000 accounts.",
+      "label": "mentions",
+      "rationale": "Spring Boot is a Java framework."
+    },
+    {
+      "id": "g_finetune_retrieval",
+      "profile": "ai_engineering_specialist_ravi_deshmukh",
+      "category": "negation",
+      "kind": "bullet",
+      "pin": {
+        "term": "fine-tuning",
+        "statement": "Nothing about fine-tuning; my work is retrieval, not training"
+      },
+      "text": "Built a RAG pipeline over 120k support documents with pgvector, lifting answer accuracy from 61% to 79%.",
+      "label": "does_not_mention",
+      "rationale": "The bullet is retrieval work, which the statement says it is not about."
+    },
+    {
+      "id": "g_deep_classical",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "category": "negation",
+      "kind": "bullet",
+      "pin": {
+        "term": "deep learning",
+        "statement": "Do not describe this as deep learning, it was classical ML"
+      },
+      "text": "Trained a PyTorch sequence model on 1.1M clinical events, improving readmission recall by 12 points over the baseline.",
+      "label": "mentions",
+      "rationale": "A PyTorch sequence model is deep learning, whatever the statement says."
+    },
+    {
+      "id": "g_ml_analytics",
+      "profile": "data_science_generalist_danielle_okafor",
+      "category": "negation",
+      "kind": "bullet",
+      "pin": {
+        "term": "machine learning",
+        "statement": "I don't want machine learning on this one, keep it analytics only"
+      },
+      "text": "Trained a gradient-boosted retention model on 22,000 student records, beating the prior heuristic by 14 points of recall.",
+      "label": "mentions",
+      "rationale": "A gradient-boosted model is machine learning."
+    },
+    {
+      "id": "g_fabricated",
+      "profile": "ai_engineering_generalist_claire_bouchard",
+      "category": "negation",
+      "kind": "bullet",
+      "pin": {
+        "term": "fabricated answers",
+        "statement": "Don't mention fabricated answers, focus on retrieval quality instead"
+      },
+      "text": "Reduced hallucination reports 30% by adding grounded citation rendering to the response path.",
+      "label": "mentions",
+      "rationale": "Hallucination reports are about fabricated answers."
+    },
+    {
+      "id": "g_qa",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "category": "negation",
+      "kind": "bullet",
+      "pin": {
+        "term": "quality assurance",
+        "statement": "Don't mention quality assurance, I'm applying as a developer rather than a tester"
+      },
+      "text": "Wrote Cypress end-to-end tests covering the 5 highest-traffic user flows.",
+      "label": "mentions",
+      "rationale": "End-to-end tests are quality-assurance work."
+    },
+    {
+      "id": "g_cloud_storage",
+      "profile": "data_engineering_specialist_wei_lin_tan",
+      "category": "negation",
+      "kind": "bullet",
+      "pin": {
+        "term": "cloud storage",
+        "statement": "Skip cloud storage, it's not relevant to data engineering roles"
+      },
+      "text": "Wrote a Terraform module that provisioned the group's S3 buckets and IAM roles in 1 command.",
+      "label": "mentions",
+      "rationale": "S3 buckets are cloud storage."
+    },
+    {
+      "id": "g_user_studies",
+      "profile": "ai_engineering_specialist_ravi_deshmukh",
+      "category": "negation",
+      "kind": "bullet",
+      "pin": {
+        "term": "user studies",
+        "statement": "No user studies, I did benchmarks not surveys"
+      },
+      "text": "Ran a 3-model comparison on a 400-question benchmark and published the scoring rubric.",
+      "label": "does_not_mention",
+      "rationale": "A benchmark comparison is not a user study."
+    },
+    {
+      "id": "g_backend_frontend",
+      "profile": "software_engineering_specialist_julia_brandt",
+      "category": "negation",
+      "kind": "bullet",
+      "pin": {
+        "term": "backend work",
+        "statement": "Never mention backend work; I'm going for frontend roles, not backend ones"
+      },
+      "text": "Built a React and TypeScript scheduling tool that replaced a paper process for 12 departments.",
+      "label": "does_not_mention",
+      "rationale": "The bullet is frontend work, which the statement is asking for."
+    }
+  ]
+}
