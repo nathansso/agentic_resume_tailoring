@@ -70,7 +70,10 @@ Draft a plan program for `execute_plan`. Its input schema is published with the 
   - `delete`: drop the item. Set `because` to `user:<what they asked>` or
     `pref:<preference_id>`.
   - `accept.improves`: the targets a node should raise (`coverage`,
-    `relevance_density`).
+    `relevance_density`, `semantic_coverage`). `semantic_coverage` counts a requirement as
+    met when some bullet shows it, in any words; a node that only makes a requirement
+    evident can be accepted on it alone. It exists only when ART's Jev check answers: with
+    no key it is absent and a node is judged on the other two.
 - **skills**: an ordered list of skill names from the graph, with posting terms first.
 - Keep each bullet to two rendered lines and the whole page to one.
 - **Leave `finalize` out.** Its defaults are ART's calibrated one-page budget: 60 lines,
@@ -115,6 +118,28 @@ Call `execute_plan({program})`. Read the result:
   words. It checks the whole page, so this can be a bullet you never touched. Revise that
   item's bullet through `patch_plan`, or cut the item. `negative_pins.review` lists the
   whole page's uncertain ones; show them to the user.
+- `semantic_coverage` (top level, and `nodes[].semantic` for each node's effect, by requirement
+  number from `open_job`): how well the page's bullets show each required or preferred
+  requirement, beside the literal `coverage`. The two lists are your planning signal; they
+  never decide anything on their own.
+  - `semantic_only`: a bullet already shows the requirement, but `missing` terms are not on
+    the page. The claim is true and just isn't in the posting's words, so these are the
+    `keyword_weave` candidates. Weave a missing term into that bullet only when the cited
+    evidence supports the word; if it doesn't, leave the bullet alone.
+  - An education entry counts as evidence too: "Bachelor's degree in Computer Science" is
+    covered by the degree line. Such an entry is marked `by: education`, and its `missing`
+    terms ("bachelor") are not words to weave into a bullet: the degree line already shows
+    the requirement, and the page only lacks the posting's wording. A degree marked expected
+    shows enrollment, not an earned degree; a finished degree is judged without its date, and
+    ART does not compare levels or dates, so a requirement that hinges on either ("graduating
+    before June", "Master's required") stays uncovered: read the posting and ask the user.
+  - `literal_only`: `present` terms are on the page (a skills line counts) but no bullet shows
+    the requirement. That is the stuffing signature. Do not add the term to more bullets.
+    Look for real evidence of it (`kg_search`) and revise a bullet around that, or tell the
+    user the graph holds none.
+  - A requirement in neither list is either shown in the posting's own words (good) or not
+    shown at all. Never claim it to fill the gap.
+  - Absent (no key, or no required or preferred requirement): plan on `coverage` alone.
 - `committed: false` with `violations`: nothing was saved. Fix the plan with
   `patch_plan(program_id, edits)`, which takes JSON-pointer edits to the saved program.
   `cut_hints` say which bullets or projects to cut to fit the page. `stale_parent`

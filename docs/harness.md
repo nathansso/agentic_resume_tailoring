@@ -109,6 +109,7 @@ every deterministic computation in code.
 |---|---|---|---|
 | Cited-bullet support (#193) | choice per revised bullet | Whether the cited evidence supports the new bullet: `supported`, `adds_unsupported`, `contradicts`. Scored by p(adds_unsupported) + p(contradicts), which is 1 − p(supported). Blocks at a score ≥ 0.85, surfaces 0.35–0.85 as `review` (fitted on 89 labelled pairs, #237; `eval/support_labels/REPORT.md`) | Unchecked; lexical drift still gates |
 | Negative-pin mention (#232) | noul per (changed bullet or item field, pin) | Whether a changed text mentions or refers to a pinned topic in other words (a paraphrase, or a product, employer or project of the topic). Asked positively, never "does it avoid", and with the pin's statement stripped of its directive, or the bare term when a negation or comparison would remain. Blocks at p ≥ 0.85 as a `preferences` violation in the term match's format, surfaces 0.15–0.85 as `review` (fitted on 74 labelled pairs, #232; `eval/negative_pin_labels/REPORT.md`). Jev only adds hits; the term match always runs | Unchecked; the term match alone gates |
+| Requirement coverage (#126) | noul per (bullet or education entry, requirement) | Whether one bullet, or one education entry as text, shows the candidate meets one required or preferred requirement of the posting (`incidental` ones are left out), by that text alone, never the page. Asked positively ("Does this bullet show that the candidate meets this requirement: …?"), with stated interest, plans and "eager to learn" named as not meeting it, and (v2) a working-style requirement (deadlines, process, communication, collaboration, ownership, attention to detail) asked for a stated instance. An education entry gets its own question (`education_covered@v1`): it asks what the entry states, treats a degree marked expected as enrollment and not as an earned degree, and never compares dates or levels; a finished degree is shown without its date, because Jev reads a past date as a future one. A requirement is covered when some bullet or entry scores p ≥ 0.65 (fitted on 131 pairs, #126; `eval/coverage_labels/REPORT.md`); `semantic_coverage` is the criticality-weighted share covered, a **target** beside the literal `coverage`, never combined with it. Answers are cached per (bullet or entry, requirement), so a node pays for the bullets it changed only | Unchecked; the target is absent and only the literal targets decide |
 | Memory gate (#202) | noul, choice, score | Is the message a standing preference; emphasize or suppress; strength 1–5 (#129's scale) | Heuristics, then host extraction |
 | Variant choice (#199) | choice per item, with no-match | Which approved bullet variant fits the job; no-match means the host writes a new one | Retrieval similarity |
 | Track baseline (#199) | choice | Which baseline a new job branches from | Role-family lookup |
@@ -154,6 +155,7 @@ And pooling hid real results: the per-stratum spread in #172 vanished when poole
 | MTLD (dilution) | No | Guard | `agents/redundancy.py` |
 | Edit distance from the approved variant | Yes | Guard | #199 |
 | Supportable weighted coverage | Yes, but flat on unsupported terms | Target | `agents/keyword_weights.py` (#125) |
+| Semantic requirement coverage | Only in what a bullet evidences | Target | `harness/decisions/coverage.py`, Jev, #126 |
 | Relevance density | No | Target | promoted from `eval/metrics._keyword_relevance` |
 | Page count and line budget | Yes | Finalize | `agents/layout.py`, #200 |
 | Non-empty sections, skills cap | No | Finalize | `agents/tailor_planner.py` |
@@ -170,6 +172,20 @@ A stuffing edit fails the target test (unsupported terms weigh zero) or the stuf
 A preference-driven delete passes, and relevance density usually rises. Tolerances are
 fitted per guard on the human anchor set (#127) and ship in the policy artifact. Nothing
 combines metrics into one number.
+
+**Literal and semantic coverage (#126).** `coverage` is what an ATS filter sees: substring
+matching over the posting's keywords. `semantic_coverage` is what a recruiter sees: whether
+some bullet (or education entry) shows each required or preferred requirement (`100 × Σ criticality of covered ÷ Σ
+criticality of all eligible`). They are two targets with their own roles; an action may be
+accepted on either alone, and neither is weighted into the other or into a composite (the
+`_WEIGHTS` rebalancing #126 once proposed is dropped under this rule). Their disagreement is
+the planner's signal, per requirement: **`semantic_only`**, covered by a bullet (or, marked `by: education`, a degree line) while some of
+its terms are not on the page (the claim is already true and not in the posting's words, so
+`keyword_weave` candidates, with the cited evidence still deciding what may be woven), and
+**`literal_only`**, some of its terms on the page while no bullet shows it (the stuffing
+signature). With no key, mode `off` or an API error the target is absent from every vector and
+result, not zero, and a node judged on `semantic_coverage` alone is judged on the literal
+targets instead.
 
 ## 6. A tailoring run
 
