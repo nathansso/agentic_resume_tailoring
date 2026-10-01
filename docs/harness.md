@@ -111,8 +111,8 @@ every deterministic computation in code.
 | Negative-pin mention (#232) | noul per (changed bullet or item field, pin) | Whether a changed text mentions or refers to a pinned topic in other words (a paraphrase, or a product, employer or project of the topic). Asked positively, never "does it avoid", and with the pin's statement stripped of its directive, or the bare term when a negation or comparison would remain. Blocks at p ≥ 0.85 as a `preferences` violation in the term match's format, surfaces 0.15–0.85 as `review` (fitted on 74 labelled pairs, #232; `eval/negative_pin_labels/REPORT.md`). Jev only adds hits; the term match always runs | Unchecked; the term match alone gates |
 | Requirement coverage (#126) | noul per (bullet or education entry, requirement) | Whether one bullet, or one education entry as text, shows the candidate meets one required or preferred requirement of the posting (`incidental` ones are left out), by that text alone, never the page. Asked positively ("Does this bullet show that the candidate meets this requirement: …?"), with stated interest, plans and "eager to learn" named as not meeting it, and (v2) a working-style requirement (deadlines, process, communication, collaboration, ownership, attention to detail) asked for a stated instance. An education entry gets its own question (`education_covered@v1`): it asks what the entry states, treats a degree marked expected as enrollment and not as an earned degree, and never compares dates or levels; a finished degree is shown without its date, because Jev reads a past date as a future one. A requirement is covered when some bullet or entry scores p ≥ 0.65 (fitted on 131 pairs, #126; `eval/coverage_labels/REPORT.md`); `semantic_coverage` is the criticality-weighted share covered, a **target** beside the literal `coverage`, never combined with it. Answers are cached per (bullet or entry, requirement), so a node pays for the bullets it changed only | Unchecked; the target is absent and only the literal targets decide |
 | Memory gate (#202) | noul, choice, score | Is the message a standing preference; emphasize or suppress; strength 1–5 (#129's scale) | Heuristics, then host extraction |
-| Variant choice (#199) | choice per item, with no-match | Which approved bullet variant fits the job; no-match means the host writes a new one | Retrieval similarity |
-| Track baseline (#199) | choice | Which baseline a new job branches from | Role-family lookup |
+| Variant choice (#199) | choice per item, with no-match | Which approved bullet variant fits the job; no-match means the host writes a new one | Term overlap (shipped in #229): the approved variant whose content tokens best overlap the job's weighted terms (`relevance_density`'s tokenization, each term at its weight over the heaviest's, so uniform weights give exactly `relevance_density`), at or above `VARIANT_MATCH_FLOOR` (0.10); below it, no-match |
+| Track baseline (#199) | choice | Which baseline a new job branches from | Role-family lookup (shipped in #229): the track whose name equals the job's role family, else none. The family is the host's (`open_job` `metadata.role_family`), else a deterministic title keyword map (`agents/job_card.TITLE_ROLE_FAMILIES`), else `other`; never the LLM classifier |
 | Eligibility rules (#192) | noul per rule | Job-scoped variables (e.g. graduation date when the posting requires post-internship enrollment) | Host asks the user |
 | Semantic duplicates (#113) | noul per pair | Whether two bullets say the same thing, for the duplication guard, without torch | Embedding cosine with `[embed]`, else term overlap |
 | Action ranking (#193) | choice per item | Priors for `suggest_actions`; probabilities become logged propensities, reweighted by the ranker | Uniform over valid actions |
@@ -153,7 +153,7 @@ And pooling hid real results: the per-stratum spread in #172 vanished when poole
 | Semantic duplication | Yes, upward | Guard | `agents/redundancy.py`, Jev |
 | Leading-verb entropy | No | Guard | `agents/redundancy.py` |
 | MTLD (dilution) | No | Guard | `agents/redundancy.py` |
-| Edit distance from the approved variant | Yes | Guard | #199 |
+| Edit distance from the approved variant (`variant_drift`) | Yes | Guard, default tolerance 0.35, judged on the node's own bullets rather than against the parent | `harness/acceptance.py`, #229 |
 | Supportable weighted coverage | Yes, but flat on unsupported terms | Target | `agents/keyword_weights.py` (#125) |
 | Semantic requirement coverage | Only in what a bullet evidences | Target | `harness/decisions/coverage.py`, Jev, #126 |
 | Relevance density | No | Target | promoted from `eval/metrics._keyword_relevance` |
@@ -229,9 +229,9 @@ code or a cached Jev decision.
   "parent": "5b1e…",
   "nodes": [
     { "id": "exp1", "op": "revise", "item_key": "exp:data scientist|acme analytics",
-      "from_variant": "var:acme-analytics#model-default",
       "strategy": "keyword_weave", "keywords": ["causal inference"],
       "bullets": [{ "text": "Designed a CUPED-adjusted A/B framework ...",
+                    "from_variant": "3b9c1d2e-…",
                     "cites": ["exp:data scientist|acme analytics#b2", "skill:experimentation"] }],
       "accept": { "improves": ["coverage", "relevance_density"] } },
     { "id": "swap", "op": "replace", "item_key": "proj:todo app",
@@ -321,14 +321,50 @@ library) and **rules** (preferences). ART used to go straight from facts to gene
 bullets. Starting from approved text makes runs cheaper, more consistent, and faithful by
 construction.
 
-- **Bullet library.** `BulletVariant` rows hold the item key, text, tags (track, job),
-  status, cites, rendered line count and source node. Plan nodes start `from_variant`;
-  edit distance from it is a guard, and a no-match is the only path to writing from raw
-  facts.
-- **Promotion.** A committed bullet with a user score ≥ 4 becomes a draft variant, and the
-  user confirms it.
-- **Track baselines.** Pinned tree nodes tagged with a track. A new job's root is a copy of
-  the chosen baseline.
+- **Bullet library (#229).** `BulletVariant` rows (one table, scoped per user) hold the item
+  key, text, tags (`track`, `job_id`), status (`draft` or `approved`), cites, rendered line
+  count (from the block render cache, when a LaTeX engine is available) and source node.
+  - *Getting text in.* The user's curated library arrives through `upsert_items`, kind
+    `variant` (`{item_key, text, cites?, tags?}`), **approved**, because the user wrote it.
+    `item_key` must be an existing experience or project, a record is de-duplicated on
+    (item key, whitespace- and case-normalized text), and cites default to the item itself
+    so the citations gate resolves it. `get_item` lists an item's approved variants only.
+  - *Starting from one.* `suggest_actions` names the best approved variant per item, and a
+    plan bullet starts from it with `bullets[].from_variant` (`ProgramNode.from_variant` is
+    shorthand for a one-bullet revise). Only an approved variant of that very item is
+    accepted: an unknown id, another user's, a draft or another item's is refused at
+    arbitration. A bullet that names a variant, or is verbatim one, needs no `cites` and
+    inherits the variant's. A `no_match` is the only path to writing from raw facts.
+  - *The edit-distance guard.* `variant_drift` is the largest normalized token-level
+    Levenshtein distance (edits over the longer token count, lowercased, edge punctuation
+    ignored) between a bullet and the variant it names; 0 when no bullet names one. The
+    default tolerance is 0.35 (about one token in three). It is a guard like the others: a
+    node may tighten it and never loosen it. Unlike the relative guards it is judged against
+    the tolerance itself, not against the parent's value, and per node.
+  - *Gates.* A bullet verbatim an approved variant is the user's own confirmed wording, so
+    the support check (#193) and the consistency gate (#123) skip it exactly as they skip a
+    verbatim source bullet. A lightly edited variant is checked normally. **Negative pins
+    still apply with no exception**: a pinned fact never renders, variant or not. The
+    coverage check (#126) never skipped source bullets and asks per bullet text, so variant
+    text is covered like any bullet.
+- **Promotion (#229).** `promote_bullet(node, bullet)` makes a **draft** variant from a
+  bullet on a committed node of the user's own job, tagged with the job and its role family,
+  citing what the bullet cited on that node. A draft is never offered to a plan.
+  `approve_variant` is the only way to approve one, owner only, and nothing approves itself.
+  Score-based promotion (a committed bullet with a user score ≥ 4) waits for a feedback tool
+  (#202).
+- **Track baselines (#229).** `save_baseline(node, track)` pins a tree node for a track
+  (`TrackBaseline`, one per user and track; saving again replaces it; the track is lowercased,
+  with spaces and hyphens as `_`). `open_job` picks the baseline whose track equals the job's
+  role family (see § 4 for how the family is found) and reports it as
+  `{track, node_id, applies}`. While the job has no history its first version is a copy of
+  that node's content, not the whole KG: item content stays as the baseline has it; skills are
+  re-ranked against this posting with the KG default's ranking, over the baseline's own skill
+  set; job-scoped rule fields go back to the stored value so another job's answer never leaks,
+  and this posting's answers are applied as for any base. The baseline is recorded in the
+  first node's provenance (`baseline`: track, node, role family, how the family was found).
+  A job with no matching track starts from the whole KG exactly as before. Deleting a job
+  deletes the baselines that pinned its nodes.
 - **Job-scoped rules.** Profile fields with conditional values, evaluated per posting by
   Jev (#192).
 - **Line budget.** A per-bullet two-line gate, a page line budget, and "anything restored
@@ -349,15 +385,16 @@ construction.
 | | `art_pins` | → strength-5 preferences and negative pins, verbatim |
 | Retrieval | `kg_search` | query, kinds → items with keys and evidence IDs |
 | | `list_items` | kind → every key and title, no query needed (#191) |
-| | `get_item` | key → record, evidence, approved variants |
+| | `get_item` | key → record, evidence; an experience or project also lists its approved variants (id, text, tags, cites) (#229) |
 | | `get_profile` | → name and contact details for the header (#191) |
 | Ingest & library | `ingest_schema` | kind → JSON schema the host fills |
-| | `upsert_items` | records with evidence → keys, merges, conflicts |
-| | `promote_bullet` | node, bullet → draft variant |
-| | `save_baseline` | node, track → pinned baseline |
-| Jobs | `open_job` | JD text, requirements → job id, baseline, rules, schema errors |
+| | `upsert_items` | records with evidence → keys, merges, conflicts; kind `variant` imports the user's curated bullets, approved (#229) |
+| | `promote_bullet` | node, bullet, optional item key and track → a **draft** variant, or the existing one (#229) |
+| | `approve_variant` | variant id → the variant, approved; only after the user said yes (#229) |
+| | `save_baseline` | node, track → pinned baseline, and the node the track pointed at before (#229) |
+| Jobs | `open_job` | JD text, requirements, optional `role_family` → job id, role family and how it was found, baseline `{track, node_id, applies}`, rules, schema errors |
 | | `list_jobs` | filter → jobs with status, HEAD, last score |
-| | `suggest_actions` | job, node → per item: variant, ranked actions, propensities |
+| | `suggest_actions` | job, optional node (HEAD by default) → per item: the best approved variant with its score or `no_match`, the valid actions with uniform propensities, `source: "fallback"` (#229; Jev ranking and choice are #199 and #193) |
 | Execute & history | `execute_plan` | program → node results, metric vectors, refusals, violations |
 | | `patch_plan` | saved program id, pointer edits → same |
 | | `checkout` | node → moves HEAD |
@@ -392,7 +429,8 @@ thresholds τ from that result.
 
 Each committed change is a node whose parent is the version it revised. That includes host
 runs (`source=host`) and editor edits (`source=editor`). Revert moves HEAD, and baselines
-are pinned nodes. Two siblings share a context, so each sibling pair is a preference label
+are pinned nodes (`TrackBaseline`, #229): a job's first node records the baseline it was
+copied from in its provenance. Two siblings share a context, so each sibling pair is a preference label
 for #174. Provenance on every node covers the host, host version, model ID if reported,
 ART version, policy artifact version, and the briefing hash. Existing `UserJobResult` rows
 migrate as a linear chain.
@@ -403,7 +441,7 @@ migrate as a linear chain.
 |---|---|
 | KG (experiences, education, projects, skills, achievements, evidence) | SQLite, existing tables |
 | Preferences, persona, pins, negative pins, job-scoped rules | SQLite |
-| Bullet library, track baselines | SQLite, new tables |
+| Bullet library, track baselines, each job's role family | SQLite, `BulletVariant`, `TrackBaseline`, `JobRoleFamily` (additive; #229) |
 | Job records (company, role, posting, URL, status: drafting / applied / interview / closed) | SQLite, `JobDescription` + status |
 | JD profiles, term weights, eligibility answers | SQLite, `JDProfile` |
 | Every tailored version: program, snapshot, metric vector, provenance | SQLite, `TailorNode` |

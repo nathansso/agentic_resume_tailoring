@@ -84,7 +84,26 @@ but Dec 2027 when a role needs me enrolled after the internship"), record a rule
 
 Tailoring then asks that question of every posting.
 
-## 7. Confirm
+## 7. Their curated bullet library and track baselines
+
+If the user keeps approved bullet wordings of their own (a library file, a doc, tailored
+resumes they are proud of), import them. They wrote it, so it arrives approved and
+tailoring starts from it instead of regenerating.
+
+- Call `ingest_schema("variant")`, and fill one record per bullet with `upsert_items`, kind
+  `variant`: `item_key` (the experience or project from `list_items`), `text` exactly as the
+  user has it, and optionally `cites` (the item key, or `<key>#b<n>` for the source bullet it
+  rewrites; omit it to cite the item) and `tags: {track}`.
+- Read the results: `created`, `merged` and `unchanged` are fine. `invalid` names the problem,
+  usually an `item_key` that is not in the graph yet; store the item first.
+- Import only wording the user gave you. Never write a variant yourself; a bullet from a
+  tailoring run becomes a variant only through `promote_bullet` and the user's approval.
+- A resume the user wants as the starting point for a kind of role: find its version with
+  `history`, then call `save_baseline(node_id, track)`. Name the track after the role family
+  (`data_science`, `machine_learning`, `software_engineering`, ...). A new job in that role
+  family then starts as a copy of it. Saving a track again replaces its baseline.
+
+## 8. Confirm
 
 Call `list_items` again and summarize what is stored by kind. Point out anything that
 looks duplicated or thin, and ask the user whether to fix it.
