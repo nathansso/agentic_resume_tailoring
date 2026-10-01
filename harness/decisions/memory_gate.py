@@ -58,7 +58,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Collection, Dict, List, Optional, Sequence, Tuple
 
 from harness.decisions.questions import Answer, Choice, Noul, Score, canonical
 
@@ -69,6 +69,10 @@ DIRECTIONS = ("emphasize", "suppress", "format_rule", "none")
 NO_MATCH = "no_match"
 PIN_STRENGTH = 5            # a strength-5 preference is a hard gate: never written by the gate
 AUTO_MAX_STRENGTH = PIN_STRENGTH - 1
+# The code rules, each of which only ever removes a write. Thresholds are fitted as if they did not exist
+# (`eval/fit_memory_gate_threshold.py`): they are defence in depth, never grounds for a looser threshold.
+CODE_RULES = ("hard", "section", "backstop", "named")
+HI_FLOOR = 0.5              # a write needs Jev to call the message more likely than not a lasting preference
 HARD_MASS = 0.25            # a safety margin, not a fit: this much probability on level 5 is enough to ask the user
 MAX_CHARS = 1200            # a longer message is pasted material, not a statement
 MAX_AUTO_TEXT = 300         # a longer message is not stored verbatim as the preference text
@@ -79,21 +83,23 @@ _ROUND = 4
 # preferences, 44 not), against jev-1.13.0's recorded answers to memory_gate@v1, scoring by Jev's
 # yes-probability. Refit with `python eval/fit_memory_gate_threshold.py analyze` whenever the model
 # or a question changes. The rules (`recommend`) are in priority order, each then taking the grid
-# value closest to the middle of its gap, ties to the higher:
+# value closest to the middle of its gap, ties to the higher. **TAU_HI is fitted as if the code rules
+# (CODE_RULES: strength 5, HARD_MASS, the section rule, the negation backstop) did not exist**: they
+# only ever remove writes, are defence in depth, and are never grounds for a looser threshold. It is
+# also floored at HI_FLOOR, so a write needs Jev to call the message more likely than not a preference.
 #   TAU_TARGET 0.75: no wrong binding among the true preferences Jev binds to an item the message
 #     names (55 right, 1 wrong: en_coursework, 0.63), then the most right ones. All 55 right named
 #     bindings score >= 0.85. The name check (`names_target`) already removes en_gpa (0.92, bound to
 #     the education section) and fr_past_tense (0.87, a tense rule bound to the experience section).
-#   TAU_HI 0.15: no grid value gives a wrong automatic write, so the set cannot say where one starts:
-#     the most writes (26) is a plateau from 0.05 to 0.30 and 0.15 is its middle (the lowest right write scores 0.31). Before the section rule the only wrong write
-#     was js_edu_first (0.63), a section target the gate no longer writes, and the fit was 0.65.
-#     This threshold is therefore set by the rules, not by evidence of where wrong writes begin:
-#     what keeps a one-off request from being written is the other conditions (a named target,
-#     agreeing negation, strength under 5, HARD_MASS), not p. Add adversarial messages and refit.
-#   TAU_LO 0.10: 0 of the 57 true preferences Jev is asked about are dropped (the lowest is
-#     js_rivermount, 0.31); it is the highest grid value under TAU_HI.
-TAU_LO = 0.10
-TAU_HI = 0.15
+#   TAU_HI 0.65: 0 wrong of 29 writes without the code rules. The highest would-be wrong write is
+#     js_edu_first (0.63, a section target where the label says format rule and Jev says emphasize)
+#     and the lowest right write is 0.68: the gap is 0.05 wide, and every grid value from 0.50 to 0.60
+#     writes it. With the code rules on the gate writes 15, none wrong.
+#   TAU_LO 0.25: 0 of the 57 true preferences Jev is asked about are dropped (the lowest is
+#     js_rivermount, 0.31) and 0 non-preferences land between TAU_LO and TAU_HI (the highest
+#     non-preference scores 0.17).
+TAU_LO = 0.25
+TAU_HI = 0.65
 TAU_TARGET = 0.75
 
 
@@ -453,10 +459,11 @@ def route_prefilter(text: str, pre: Prefilter) -> Optional[Dict[str, Any]]:
 def route(text: str, pre: Prefilter, guess: Optional[Guess], *, job_known: bool = False,
           write_ok: bool = True, unavailable: Optional[str] = None,
           tau_lo: Optional[float] = None, tau_hi: Optional[float] = None,
-          tau_target: Optional[float] = None, backstop: bool = True) -> Dict[str, Any]:
+          tau_target: Optional[float] = None, without: Collection[str] = ()) -> Dict[str, Any]:
     """The routing decision for one message: `{action, reason, candidate, negated, p, source,
-    guess, cues, text, scope}`. `action` is `drop`, `host` or `write`. Pure. `backstop=False`
-    skips the negation check; it exists only so the fit can measure what that check catches."""
+    guess, cues, text, scope}`. `action` is `drop`, `host` or `write`. Pure. `without` names code
+    rules to skip (`CODE_RULES`); it exists only so the fit can choose thresholds as if those rules
+    did not exist and measure what each one removes. Nothing in the product passes it."""
     lo = TAU_LO if tau_lo is None else tau_lo
     hi = TAU_HI if tau_hi is None else tau_hi
     tgt = TAU_TARGET if tau_target is None else tau_target
@@ -474,18 +481,18 @@ def route(text: str, pre: Prefilter, guess: Optional[Guess], *, job_known: bool 
     if guess.p < hi - 1e-9:
         return host("uncertain")
     # p >= TAU_HI: written only when nothing below objects.
-    if guess.strength >= PIN_STRENGTH or guess.hard_p >= HARD_MASS - 1e-9:
+    if "hard" not in without and (guess.strength >= PIN_STRENGTH or guess.hard_p >= HARD_MASS - 1e-9):
         return host("hard_preference")
-    if (guess.target_key or "").startswith("section:"):
+    if "section" not in without and (guess.target_key or "").startswith("section:"):
         return host("section_target")
     if guess.direction == "format_rule":
         return host("format_rule")
     if guess.direction not in ("emphasize", "suppress"):
         return host("no_direction")
-    if (guess.target_key is None or not guess.target_named
+    if (guess.target_key is None or ("named" not in without and not guess.target_named)
             or (guess.target_p or 0.0) < tgt - 1e-9):
         return host("no_target")
-    if backstop and ((pre.negated and guess.direction != "suppress")
+    if "backstop" not in without and ((pre.negated and guess.direction != "suppress")
                      or (guess.direction == "suppress" and not pre.negated)):
         return host("negation_disagrees")
     if scope == "job" and not job_known:

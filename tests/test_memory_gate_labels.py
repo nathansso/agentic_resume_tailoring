@@ -300,7 +300,36 @@ def test_the_constants_in_memory_gate_equal_the_fit(replayed):
     rows = replayed[0]
     rec = fit.recommend(rows)
     assert (mg.TAU_LO, mg.TAU_HI, mg.TAU_TARGET) == (rec["tau_lo"], rec["tau_hi"], rec["tau_target"])
+    assert (mg.TAU_LO, mg.TAU_HI, mg.TAU_TARGET) == (0.25, 0.65, 0.75)
     assert mg.TAU_LO < mg.TAU_HI and 0 < mg.TAU_TARGET < 1
+
+
+def test_tau_hi_has_a_hard_floor_a_write_needs_jev_to_say_more_likely_than_not(replayed):
+    rows = replayed[0]
+    assert mg.HI_FLOOR == 0.5 and mg.TAU_HI >= mg.HI_FLOOR
+    hi = fit.fit_hi(rows, 0.0, mg.TAU_TARGET)
+    assert min(hi["table"]) >= mg.HI_FLOOR and hi["tau_hi"] >= mg.HI_FLOOR
+    # even a set with no wrong write anywhere cannot pull it under the floor
+    safe = [r for r in rows if r["id"] not in hi["danger_ids"]]
+    assert fit.fit_hi(safe, 0.0, mg.TAU_TARGET)["tau_hi"] >= mg.HI_FLOOR
+    assert fit.recommend(safe)["tau_hi"] >= mg.HI_FLOOR
+
+
+def test_tau_hi_is_fitted_as_if_the_code_rules_did_not_exist(replayed):
+    """The section rule, the strength-5 rule and the negation backstop only remove writes, so they must
+    never loosen a threshold: js_edu_first is a wrong write without them and still sets the boundary."""
+    rows = replayed[0]
+    assert set(fit.FIT_WITHOUT) == {"hard", "section", "backstop"} and set(fit.FIT_WITHOUT) <= set(mg.CODE_RULES)
+    hi = fit.fit_hi(rows, 0.0, mg.TAU_TARGET)
+    assert hi["without"] == list(fit.FIT_WITHOUT) and hi["tau_hi"] == mg.TAU_HI == 0.65
+    assert "js_edu_first" in hi["danger_ids"] and hi["danger_id"] == "js_edu_first" and hi["danger_max"] == 0.63
+    assert hi["wrong"] == 0 and hi["kept_min"] == 0.68 and hi["candidates"] == [0.65]
+    # with the rules on (what the gate does) the same row is a host hand-off, yet the fit does not use that
+    on = fit.fit_hi(rows, 0.0, mg.TAU_TARGET, without=())
+    assert on["tau_hi"] == mg.HI_FLOOR and on["danger_ids"] == []
+    assert on["tau_hi"] != hi["tau_hi"]                            # fitted that way the threshold would loosen
+    # dropping the name check as well does not move it
+    assert fit.fit_hi(rows, 0.0, mg.TAU_TARGET, fit.FIT_WITHOUT + ("named",))["tau_hi"] == 0.65
 
 
 def test_the_gate_writes_no_wrong_preference_on_the_set_and_never_a_hard_one(replayed):
@@ -330,7 +359,8 @@ def test_every_true_preference_the_gate_is_asked_about_is_kept_and_no_non_prefer
 def test_a_preference_about_a_whole_section_goes_to_the_host_at_every_threshold(replayed):
     rows = replayed[0]
     by_id = {r["id"]: r for r in rows}
-    d = fit.route_row(by_id["js_edu_first"])
+    assert fit.route_row(by_id["js_edu_first"])["action"] == "host"                  # 0.63: under TAU_HI at the shipped values
+    d = fit.route_row(by_id["js_edu_first"], 0.0, 0.0, 0.0)                         # and with every threshold open
     assert (d["action"], d["reason"]) == ("host", "section_target")
     for t in fit.GRID:
         for lo in (0.0, 0.05):
@@ -345,11 +375,12 @@ def test_a_preference_about_a_whole_section_goes_to_the_host_at_every_threshold(
 def test_the_thresholds_sit_inside_their_gaps(replayed):
     rows = replayed[0]
     writes = [r for r in rows if fit.route_row(r)["action"] == "write"]
-    assert min(r["guess"].p for r in writes) >= mg.TAU_HI
+    assert len(writes) == 15 and min(r["guess"].p for r in writes) >= mg.TAU_HI
+    # without the code rules the lowest right write is 0.03 above TAU_HI and the highest wrong one 0.02 below it
+    bare = [r for r in rows if fit.route_row(r, mg.TAU_LO, mg.TAU_HI, mg.TAU_TARGET, without=fit.FIT_WITHOUT)["action"] == "write"]
+    assert len(bare) == 29 and min(r["guess"].p for r in bare) - mg.TAU_HI <= 0.05
     prefs = [r for r in rows if fit.reachable(r) and r["is_preference"]]
     assert min(r["guess"].p for r in prefs) >= mg.TAU_LO + 0.05
-    hi = fit.fit_hi(rows, 0.0, mg.TAU_TARGET)
-    assert mg.TAU_HI in hi["candidates"] and hi["wrong"] == 0     # the writes-maximising plateau holds the chosen value
 
 
 def test_jev_beats_the_heuristics_alone_on_precision_without_losing_recall(replayed):
@@ -360,7 +391,7 @@ def test_jev_beats_the_heuristics_alone_on_precision_without_losing_recall(repla
     jev = fit.prf(rows, truth, lambda r: r["jev_pref"])
     assert kept["precision"] >= 0.9 and heur["precision"] < 0.85
     wrote = fit.prf(rows, truth, lambda r: fit.route_row(r)["action"] == "write")
-    assert wrote["precision"] == 1.0 and wrote["tp"] >= 20
+    assert wrote["precision"] == 1.0 and wrote["tp"] == 15
     assert kept["recall"] >= heur["recall"]                          # the prefilter bounds recall; Jev adds none and removes none
     assert jev["precision"] == 1.0 and jev["recall"] > 0.7
 

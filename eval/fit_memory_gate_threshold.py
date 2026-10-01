@@ -27,7 +27,11 @@ The rules, in priority order:
   right ones, then the grid value closest to the middle of the gap.
 - **TAU_HI**: no wrong automatic write (a non-preference, a wrong direction, a wrong target, a
   strength more than one off, a wrong scope), then the most automatic writes, then the middle of
-  the gap, ties to the higher value.
+  the gap, ties to the higher value, over the grid values at or above `HI_FLOOR` (0.5: a write
+  needs Jev to call the message more likely than not a preference). **Chosen as if the code rules
+  `FIT_WITHOUT` (strength 5 and `HARD_MASS`, the section rule, the negation backstop) did not
+  exist**: they only remove writes, so a message that is a wrong write without them still counts
+  as one. They are defence in depth, never grounds for a looser threshold.
 - **TAU_LO**: no true preference dropped, then the fewest hand-offs of non-preferences, then the
   middle of the gap, ties to the higher value.
 """
@@ -130,11 +134,11 @@ def run_context(pairs: Sequence[Dict[str, Any]], catalog) -> List[Dict[str, Any]
 # ── routing a row ────────────────────────────────────────────────────────────
 
 def route_row(row, tau_lo: Optional[float] = None, tau_hi: Optional[float] = None,
-              tau_target: Optional[float] = None, backstop: bool = True) -> Dict[str, Any]:
+              tau_target: Optional[float] = None, without: Sequence[str] = ()) -> Dict[str, Any]:
     """The routing decision `observe` would take for this message, the job known."""
     from harness.decisions import memory_gate as mg
     return mg.route(row["message"], row["pre"], row["guess"], job_known=True, write_ok=True,
-                    tau_lo=tau_lo, tau_hi=tau_hi, tau_target=tau_target, backstop=backstop)
+                    tau_lo=tau_lo, tau_hi=tau_hi, tau_target=tau_target, without=without)
 
 
 def reachable(row) -> bool:
@@ -194,33 +198,47 @@ def fit_target(rows) -> Dict[str, Any]:
             "lowest_kept": min(kept) if kept else None}
 
 
-def fit_hi(rows, tau_lo: float, tau_target: float) -> Dict[str, Any]:
-    """TAU_HI: no wrong automatic write, then the most automatic writes, then the middle of the gap."""
+FIT_WITHOUT = ("hard", "section", "backstop")      # the code rules TAU_HI is fitted without
+
+
+def fit_hi(rows, tau_lo: float, tau_target: float, without: Sequence[str] = FIT_WITHOUT) -> Dict[str, Any]:
+    """TAU_HI: no wrong automatic write, then the most automatic writes, then the middle of the gap, over
+    the grid values at or above `HI_FLOOR`. **Chosen as if the code rules in `without` did not exist**: a
+    message that is a wrong write without them (the strength-5 rule, the section rule, the negation
+    backstop) still counts as one, so a rule is defence in depth and never grounds for a looser threshold.
+    The target still has to be named in the message (the bindings TAU_TARGET is fitted on)."""
+    from harness.decisions.memory_gate import HI_FLOOR
+
+    def route(r, t):
+        return route_row(r, tau_lo, t, tau_target, without=without)
+
     def stats(t):
         wrong = autos = 0
         for r in rows:
-            d = route_row(r, tau_lo, t, tau_target)
+            d = route(r, t)
             autos += d["action"] == "write"
             wrong += write_is_wrong(r, d)
         return wrong, autos
-    table = {t: stats(t) for t in GRID if t > tau_lo}
+    table = {t: stats(t) for t in GRID if t > tau_lo and t >= HI_FLOOR - 1e-9}
     best = min((w, -a) for w, a in table.values())
     cands = [t for t, (w, a) in table.items() if (w, -a) == best]
     # The wrong writes the candidates avoid are the ones whose other conditions pass and whose p is under them.
     danger = []
     for r in rows:
-        d = route_row(r, tau_lo, 0.0 + 1e-9, tau_target)        # everything but p: would it write at any p?
+        d = route(r, 0.0 + 1e-9)                                  # everything but p: would it write at any p?
         if d["action"] == "write" and write_is_wrong(r, d):
-            danger.append(r["guess"].p)
+            danger.append((r["guess"].p, r["id"]))
     kept = []
     for r in rows:
-        d = route_row(r, tau_lo, min(cands), tau_target)
+        d = route(r, min(cands))
         if d["action"] == "write" and not write_is_wrong(r, d):
             kept.append(r["guess"].p)
-    floor_p = max((p for p in danger if p < min(cands) - 1e-9), default=0.0)
+    floor_p = max((p for p, _ in danger if p < min(cands) - 1e-9), default=0.0)
     tau = _mid_pick(cands, floor_p, kept)
+    top = max(danger, default=(None, None))
     return {"tau_hi": tau, "wrong": table[tau][0], "autos": table[tau][1], "table": table,
-            "candidates": cands, "danger_max": max(danger, default=None), "kept_min": min(kept, default=None)}
+            "candidates": cands, "danger_max": top[0], "danger_id": top[1], "kept_min": min(kept, default=None),
+            "without": list(without), "danger_ids": sorted(i for _, i in danger)}
 
 
 def fit_lo(rows, tau_hi: float) -> Dict[str, Any]:
@@ -392,11 +410,17 @@ def render_report(rows, ctx_rows, meta: Dict[str, Any]) -> str:
              + (f": {', '.join('`'+i+'`' for i in tg['right_unnamed_ids'])}" if tg["right_unnamed_ids"] else "")
              + f"). At {ttg:.2f} the threshold keeps {tg['kept_right']} of {tg['right']} right named bindings" +
              (f" (the lowest kept scores {tg['lowest_kept']:.2f})" if tg["lowest_kept"] is not None else "") + ".")
-    o.append(f"- **TAU_HI {thi:.2f}**: automatic writes {len(writes)}, wrong {len(wrong)}"
-             + (f", highest-scoring would-be wrong write {hi['danger_max']:.2f}" if hi["danger_max"] is not None else "")
-             + (f", lowest-scoring right write {hi['kept_min']:.2f}" if hi["kept_min"] is not None else "") + ". "
-             f"Candidates with the fewest wrong and the most writes: {', '.join(f'{c:.2f}' for c in hi['candidates'])}; "
-             "the middle of the gap picks one.")
+    from harness.decisions.memory_gate import HI_FLOOR
+    sens = fit_hi(rows, 0.0, ttg, FIT_WITHOUT + ("named",))
+    o.append(f"- **TAU_HI {thi:.2f}**: fitted **as if the code rules ({', '.join(FIT_WITHOUT)}) did not exist**, over the grid "
+             f"values at or above the floor {HI_FLOOR:.2f} (a write needs Jev to call the message more likely than not a lasting "
+             f"preference). Without them there are {hi['autos']} writes and {hi['wrong']} wrong at {thi:.2f}; the wrong writes the "
+             f"rules would otherwise leave are {', '.join('`'+i+'`' for i in hi['danger_ids']) or 'none'}, the highest-scoring one "
+             f"below the candidates `{hi['danger_id']}` at {hi['danger_max']:.2f} and the lowest-scoring right write "
+             f"{hi['kept_min']:.2f}. Candidates with the fewest wrong and the most writes: "
+             f"{', '.join(f'{c:.2f}' for c in hi['candidates'])}; the middle of the gap picks one. With the rules on, the gate "
+             f"writes {len(writes)} and {len(wrong)} are wrong. Sensitivity: also dropping the name check, TAU_HI is {sens['tau_hi']:.2f} "
+             f"(with {sens['wrong']} wrong write no threshold avoids: the bindings TAU_TARGET is fitted on are the named ones).")
     o.append(f"- **TAU_LO {tlo:.2f}**: of the {len([r for r in reach if r['is_preference']])} true preferences Jev is asked about, "
              f"{lo['dropped_prefs']} are dropped"
              + ("" if lo["met"] else " (no grid value drops none, so this is the lowest)")
@@ -536,7 +560,7 @@ def render_report(rows, ctx_rows, meta: Dict[str, Any]) -> str:
     o.append("What each rule is for, counted on this set at the fitted thresholds:\n")
     hard = [r for r in rows if route_row(r, tlo, thi, ttg)["reason"] == "hard_preference"]
     held_back = [r for r in rows if route_row(r, tlo, thi, ttg)["reason"] == "negation_disagrees"]
-    bare = [route_row(r, tlo, thi, ttg, backstop=False) for r in rows]
+    bare = [route_row(r, tlo, thi, ttg, without=("backstop",)) for r in rows]
     bare_wrong = [r for r, d in zip(rows, bare) if write_is_wrong(r, d)]
     body = [["strength 5 is never written (safety rule)",
              f"{len(hard)} messages Jev is confident are preferences were held back as strength 5 or likely 5 "
@@ -550,9 +574,12 @@ def render_report(rows, ctx_rows, meta: Dict[str, Any]) -> str:
 
     # grids
     o.append("## TAU_HI grid\n")
-    o.append("At each TAU_HI (TAU_TARGET fixed): automatic writes and how many are wrong.\n")
-    o.append(_table(["TAU_HI", "writes", "wrong"],
-                    [[f"{t:.2f}", a, w] for t, (w, a) in hi["table"].items()]))
+    o.append("At each TAU_HI at or above the floor (TAU_TARGET fixed): automatic writes and how many are wrong, **without** "
+             "the code rules (what the fit chooses on) and **with** them (what the gate does).\n")
+    on = {t: (sum(write_is_wrong(r, route_row(r, tlo, t, ttg)) for r in rows),
+              sum(route_row(r, tlo, t, ttg)["action"] == "write" for r in rows)) for t in hi["table"]}
+    o.append(_table(["TAU_HI", "writes (rules off)", "wrong (rules off)", "writes (rules on)", "wrong (rules on)"],
+                    [[f"{t:.2f}", a, w, on[t][1], on[t][0]] for t, (w, a) in hi["table"].items()]))
     o.append("")
     o.append("## TAU_LO grid\n")
     o.append(f"At each TAU_LO (TAU_HI fixed at {thi:.2f}): true preferences dropped (of those Jev is asked about), and the "

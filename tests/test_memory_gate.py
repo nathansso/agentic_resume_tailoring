@@ -243,7 +243,7 @@ def test_a_negation_that_disagrees_with_jevs_direction_goes_to_the_host():
     assert _route("Never mention Python.", _guess(direction="suppress", strength=3))["action"] == "write"
     assert _route("Please lead with Python.", _guess(direction="emphasize"))["action"] == "write"
     # the check can be turned off only for the fit's ablation
-    assert _route("Don't stop mentioning Python.", _guess(), backstop=False)["action"] == "write"
+    assert _route("Don't stop mentioning Python.", _guess(), without=("backstop",))["action"] == "write"
 
 
 @pytest.mark.parametrize("guess,reason", [
