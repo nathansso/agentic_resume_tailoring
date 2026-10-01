@@ -667,6 +667,64 @@ def test_a_verbatim_variant_is_not_sent_to_jev_through_the_plan(auto, env):
     assert lightly["nodes"][0]["status"] == "accepted"
     asked = [c["state"]["bullet"] for c in t.calls if "bullet" in c["state"] and "evidence" in c["state"]]
     assert LIGHT in asked                                  # an edited variant is checked normally
+    (call,) = [c for c in t.calls if c["state"].get("bullet") == LIGHT and "evidence" in c["state"]]
+    assert WOVEN in call["state"]["evidence"]              # and the variant it names is evidence
+
+
+# ── the named variant is evidence for its edited bullet ──────────────────────
+
+EDITED = NUMERIC + " every night"          # not verbatim, so checked; keeps the variant-only 37%
+
+
+def test_the_variants_own_text_is_consistency_evidence_for_the_bullet_that_names_it():
+    from harness.acceptance import Context, consistency_violations
+
+    key = "exp:engineer|acme"
+    page = _page(EDITED, [f"{key}#b0"])
+    named = Context(jd_text="x", source_bullets=SRC, cite_status=lambda c: None,
+                    approved_variants={key: {NUMERIC}},
+                    variant_evidence={(key, EDITED): NUMERIC})
+    assert consistency_violations(page, named) == []                   # 37% was approved in the variant
+    plain = Context(jd_text="x", source_bullets=SRC, cite_status=lambda c: None,
+                    approved_variants={key: {NUMERIC}})
+    assert [v for v in consistency_violations(page, plain) if "37%" in v]    # no from_variant: flagged
+    other = Context(jd_text="x", source_bullets=SRC, cite_status=lambda c: None,
+                    approved_variants={key: {NUMERIC}},
+                    variant_evidence={(key, "some other bullet"): NUMERIC})
+    assert consistency_violations(page, other) != []                   # only the bullet that names it
+    changed = _page(EDITED.replace("37%", "38%"), [f"{key}#b0"])
+    assert consistency_violations(changed, Context(
+        jd_text="x", source_bullets=SRC, cite_status=lambda c: None, approved_variants={key: {NUMERIC}},
+        variant_evidence={(key, EDITED.replace("37%", "38%")): NUMERIC})) != []   # a new number still is
+
+
+def test_the_support_state_carries_the_variant_text_and_only_for_the_bullet_that_names_it(auto):
+    from harness.decisions.support import make_support_checker
+
+    t = FakeTransport(answer_for=_jev)
+    auto.use(t)
+    key = "exp:engineer|acme"
+    page = _page(EDITED, [f"{key}#b0"])
+    make_support_checker(SRC, None, {key: {NUMERIC}}, {(key, EDITED): NUMERIC})(page)
+    assert t.calls[-1]["state"]["evidence"] == ["Built retail demand forecasting models", NUMERIC]
+    make_support_checker(SRC, None, {key: {NUMERIC}})(page)             # no from_variant: nothing extra
+    assert t.calls[-1]["state"]["evidence"] == ["Built retail demand forecasting models"]
+    assert len(t.calls) == 2                                              # different state, different key
+
+
+def test_through_the_plan_a_kept_variant_number_passes_only_when_the_variant_is_named(env):
+    uid, job_id, _ = env
+    text = WOVEN[:-1] + ", cutting deploy time by 63%."
+    vid = _vid(_import(uid, EXP2, text, cites=[f"{EXP2}#b3"]))
+    edited = text.replace("Led the migration", "Drove the migration")
+    named = _plan(uid, job_id, [_revise(EXP2, _weave_bullets(uid, vid, edited))], dry_run=True)
+    assert named["nodes"][0]["status"] == "accepted", named["nodes"][0]
+    assert not any("63%" in v for v in named["metrics"]["final"]["gates"]["consistency"])
+    unnamed = _plan(uid, job_id, [_revise(EXP2, _weave_bullets(uid, None, edited))], dry_run=True)
+    assert unnamed["nodes"][0]["status"] == "reverted" and "63%" in unnamed["nodes"][0]["reason"]
+    # A draft variant is never evidence: naming it is refused outright.
+    draft = _plan(uid, job_id, [_revise(EXP2, _weave_bullets(uid, str(uuid4()), edited))], dry_run=True)
+    assert draft["nodes"][0]["status"] == "refused"
 
 
 @pytest.mark.parametrize("term_in_variant", ["kafka"])

@@ -144,7 +144,9 @@ def _page_items(content: Dict):
 
 def make_support_checker(source_bullets: Dict[str, List[str]],
                          base_content: Optional[Dict] = None,
-                         approved: Optional[Dict[str, Any]] = None) -> Callable[[Dict], List[Dict]]:
+                         approved: Optional[Dict[str, Any]] = None,
+                         variant_evidence: Optional[Dict[Tuple[str, str], str]] = None,
+                         ) -> Callable[[Dict], List[Dict]]:
     """`content -> findings`, one per bullet that needs checking.
 
     A finding is `{item, bullet, status, label, p, probabilities, source,
@@ -153,6 +155,9 @@ def make_support_checker(source_bullets: Dict[str, List[str]],
     the checker, so the many metric vectors one plan computes ask each bullet
     once (and the engine's cache makes a rerun ask nothing). `approved` maps an item key to
     the normalized text of its approved library variants (#229), skipped like source bullets.
+    `variant_evidence` maps `(item key, normalized bullet)` to the approved variant the bullet
+    names: that text is added to the bullet's `evidence` (user-confirmed wording), and a bullet
+    naming none gets nothing extra. It is read at each call, so the executor can update it.
     """
     base = {key: [b for b in item.get("bullets") or [] if b]
             for key, item in _page_items(base_content or {})}
@@ -175,6 +180,9 @@ def make_support_checker(source_bullets: Dict[str, List[str]],
                 if not named:
                     continue                                   # uncited: the citations gate's
                 evidence = resolve_evidence(named, source_bullets)
+                variant = _norm((variant_evidence or {}).get((key, _norm(bullet)), ""))
+                if variant and variant not in evidence:
+                    evidence.append(variant)
                 if not evidence:
                     findings.append(_unchecked(key, bullet, "no_evidence_text"))
                     continue

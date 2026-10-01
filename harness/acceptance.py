@@ -130,6 +130,10 @@ class Context:
     # `(item key, normalized bullet) -> variant text` for the bullets the node under test says
     # start from a variant; what `variant_drift` measures. Set by the executor per node.
     variant_origin: Dict[Tuple[str, str], str] = field(default_factory=dict)
+    # The same mapping for every bullet the executor knows names an approved variant, accepted
+    # nodes included: the variant's own text is extra evidence for that bullet in the consistency
+    # gate and the support check (#229). Only the named, approved variant counts.
+    variant_evidence: Dict[Tuple[str, str], str] = field(default_factory=dict)
 
     @property
     def jd_keywords(self) -> Set[str]:
@@ -228,7 +232,7 @@ def consistency_violations(content: Dict, ctx: Context) -> List[str]:
         return []
     return sorted({f"consistency:{_short(b, 40)}:{tok}"
                    for _, b, toks in consistency_check(content, ctx.source_bullets,
-                                                       ctx.approved_variants)
+                                                       ctx.approved_variants, ctx.variant_evidence)
                    for tok in toks})
 
 

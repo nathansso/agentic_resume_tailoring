@@ -674,7 +674,12 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     working = copy.deepcopy(base)
     # The cited-bullet support check (#193): Jev, through the cached engine.
     # Built here, not in `_context`, because it reads the base for "original".
-    ctx.support_checker = make_support_checker(kg.source_bullets, base, kg.approved_texts)
+    # A bullet that names an approved variant gets that variant's text as extra evidence (#229),
+    # in this dict, shared with the checker and `ctx`: the accepted nodes' variant bullets plus,
+    # while a node is evaluated, its own.
+    evidence: Dict[Tuple[str, str], str] = {}
+    ctx.variant_evidence = evidence
+    ctx.support_checker = make_support_checker(kg.source_bullets, base, kg.approved_texts, evidence)
     # The negative-pin check (#232): Jev on whether a changed bullet or item field mentions a
     # pinned topic in other words. The pin's own statement describes the topic.
     pins = [{"term": t, "statement": p.get("text")} for t, p in sorted(prefs["negative_terms"].items())]
@@ -705,6 +710,7 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
         # variant_drift is a property of this node's bullets alone (#229).
         origin = _variant_origin(node, kg)
         ctx.variant_origin = origin
+        evidence.update(origin)
         vector = metric_vector(candidate, ctx)
         ctx.variant_origin = {}
         verdict = accept(current, vector, improves=node["accept"]["improves"],
@@ -738,6 +744,8 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
         if verdict["accepted"]:
             working, current = candidate, vector
             accepted_origin.update(origin)
+        evidence.clear()
+        evidence.update(accepted_origin)
 
     skill_notes = _apply_skills(working, prog.get("skills"), kg, ctx)
     if prog.get("section_order") is not None:

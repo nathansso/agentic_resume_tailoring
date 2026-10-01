@@ -343,7 +343,7 @@ construction.
     the tolerance itself, not against the parent's value, and per node.
   - *Gates.* A bullet verbatim an approved variant is the user's own confirmed wording, so
     the support check (#193) and the consistency gate (#123) skip it exactly as they skip a
-    verbatim source bullet. A lightly edited variant is checked normally. **Negative pins
+    verbatim source bullet. A lightly edited variant is checked normally, with the approved variant it names (`from_variant`) added to that bullet's evidence in both checks, so a number or name the user approved there is not flagged; a bullet naming none gets nothing extra. **Negative pins
     still apply with no exception**: a pinned fact never renders, variant or not. The
     coverage check (#126) never skipped source bullets and asks per bullet text, so variant
     text is covered like any bullet.

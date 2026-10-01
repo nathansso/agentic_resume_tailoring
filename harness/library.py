@@ -61,7 +61,10 @@ ROLE_FAMILIES = tuple(f.value for f in RoleFamily)
 # at its weight relative to the heaviest term, so with uniform weights it is exactly
 # `relevance_density`. 0.10 is a bullet whose tokens barely touch the posting (one or two
 # stray terms in a typical 12-20 token bullet); a real match is usually well above it.
-# Provisional, like the guard tolerances: #199's Jev choice replaces the rule.
+# PROVISIONAL, like the guard tolerances: picked by reasoning, not fitted on real library use
+# (there is none yet), and #199's Jev choice replaces the rule. Real scores run low because the
+# weights are relative to the heaviest term: a bullet made of the posting's top six terms
+# scored about 0.30.
 VARIANT_MATCH_FLOOR = 0.10
 
 _ROUND = 4
