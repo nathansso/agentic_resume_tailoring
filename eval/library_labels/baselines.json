@@ -1,0 +1,1528 @@
+{
+ "_comment": "Synthetic labelled set for fitting the track-baseline choice (issue #199): one job, asked against four fixed saved tracks. A title from eval/jd_dataset or a synthetic title, with requirements written the way a host would extract them. The label is the acceptable tracks (a hybrid job accepts two) or none. Labels are planner-reviewed, pending user spot-check. Recordings are in recordings.json; re-run `python eval/fit_library_thresholds.py analyze` after correcting a label.",
+ "version": 1,
+ "status": "planner-reviewed, pending user spot-check",
+ "categories": [
+  "clear_match",
+  "hybrid_title",
+  "title_mismatch",
+  "no_track",
+  "near_miss"
+ ],
+ "tracks": [
+  {
+   "track": "data_science",
+   "title": "Data Scientist"
+  },
+  {
+   "track": "machine_learning",
+   "title": "Machine Learning Engineer"
+  },
+  {
+   "track": "data_engineering",
+   "title": "Data Engineer"
+  },
+  {
+   "track": "software_engineering",
+   "title": "Software Engineer"
+  }
+ ],
+ "cases": [
+  {
+   "id": "c_ds_mastercard",
+   "category": "clear_match",
+   "title": "Data Scientist I",
+   "requirements": [
+    {
+     "text": "Apply data science techniques to large datasets, from development to deployment support",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Build and deploy interactive dashboards with data engineers and developers",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Communicate with clients and stakeholders and make sure their requirements are met",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Strong foundation in statistics and machine learning",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Proficiency in Python and SQL",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Run customer trials and present results",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [
+    "data_science"
+   ],
+   "rationale": "Statistics, analysis and client-facing results: data science.",
+   "origin": "title from eval/jd_dataset/mastercard_data_scientist_i.json"
+  },
+  {
+   "id": "c_de_tebra",
+   "category": "clear_match",
+   "title": "Data Engineer",
+   "requirements": [
+    {
+     "text": "Build and maintain scalable data pipelines for batch and real-time processing",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Turn raw healthcare data into high-quality datasets and real-time features for machine learning models",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Strong SQL and Python",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Experience with a cloud data warehouse such as Snowflake or BigQuery",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Improve data quality with tests, monitoring and governance",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Experience with workflow orchestration tools such as Airflow",
+     "type": "required",
+     "criticality": 2
+    },
+    {
+     "text": "Work with ML engineers, data scientists and software engineers",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [
+    "data_engineering"
+   ],
+   "rationale": "Pipelines, warehouse, orchestration and data quality: data engineering.",
+   "origin": "title from eval/jd_dataset/tebra_data_engineer.json"
+  },
+  {
+   "id": "c_ml_nextdoor",
+   "category": "clear_match",
+   "title": "Machine Learning Engineer New Grad",
+   "requirements": [
+    {
+     "text": "Train, evaluate and deploy machine learning models for ranking and recommendation",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Strong Python; experience with PyTorch or TensorFlow",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Build data and training pipelines that scale to large datasets",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Monitor deployed models for quality, drift and latency",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Run online experiments to measure model impact",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Solid grounding in machine learning and statistics fundamentals",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [
+    "machine_learning"
+   ],
+   "rationale": "Train, deploy and monitor models: machine learning engineering.",
+   "origin": "title from eval/jd_dataset/nextdoor_machine_learning_engineer_new_grad.json"
+  },
+  {
+   "id": "c_swe_ascend",
+   "category": "clear_match",
+   "title": "Software Engineer",
+   "requirements": [
+    {
+     "text": "Design and build the APIs and backend services a financial platform runs on",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Write clean, well-tested, maintainable code",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Experience with relational databases and SQL",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Ship features end to end, from design through production",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Familiarity with cloud infrastructure and containers",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Strong computer science fundamentals, including data structures and algorithms",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [
+    "software_engineering"
+   ],
+   "rationale": "Backend services, APIs and tested code: software engineering.",
+   "origin": "title from eval/jd_dataset/ascend_software_engineer.json"
+  },
+  {
+   "id": "c_ds_mg",
+   "category": "clear_match",
+   "title": "Junior Data Scientist - Fraud & AML Monitoring",
+   "requirements": [
+    {
+     "text": "Use data to monitor for and detect fraud and financial crime",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Build reports and dashboards that stakeholders rely on to make decisions",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Solid foundation in statistics and data analysis",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Proficiency in SQL and Python or R",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Present analytical findings to non-technical colleagues",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Care for data accuracy and quality",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [
+    "data_science"
+   ],
+   "rationale": "Statistics, SQL and reporting on fraud: data science.",
+   "origin": "title from eval/jd_dataset/m_g_junior_data_scientist_fraud_aml_monitoring.json"
+  },
+  {
+   "id": "c_de_rbi",
+   "category": "clear_match",
+   "title": "Data Engineer 1",
+   "requirements": [
+    {
+     "text": "Design, build and maintain data pipelines and ETL processes",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Strong programming skills in Python",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Hands-on experience with AWS services such as S3, Glue, EMR, SQS and Athena",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Infrastructure as code, for example Terraform or CloudFormation",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Work with data scientists and analysts to keep data accurate and consistent",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Experience with SQL and relational databases",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [
+    "data_engineering"
+   ],
+   "rationale": "ETL pipelines on AWS: data engineering.",
+   "origin": "title from eval/jd_dataset/rbi_data_engineer_1.json"
+  },
+  {
+   "id": "c_ml_milwaukee",
+   "category": "clear_match",
+   "title": "Machine Learning Engineer I",
+   "requirements": [
+    {
+     "text": "Deploy machine learning models on embedded and edge devices",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Applied experience with supervised and unsupervised learning, such as classification and anomaly detection",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Experience with deep learning methods such as CNNs, autoencoders or transformers",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Time series or signal processing experience",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Proficiency in Python and C or C++",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Version control and modern software development tools",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [
+    "machine_learning"
+   ],
+   "rationale": "Deploying deep learning models on edge devices: machine learning engineering.",
+   "origin": "title from eval/jd_dataset/milwaukee_tool_machine_learning_engineer_i.json"
+  },
+  {
+   "id": "c_swe_fullstack",
+   "category": "clear_match",
+   "title": "Full Stack Developer",
+   "requirements": [
+    {
+     "text": "Build server-side application logic with Python frameworks such as Flask, Django or FastAPI",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Build responsive user interfaces with JavaScript and a modern framework such as React",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Design and consume REST APIs",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Work with relational and NoSQL databases",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Write automated tests and use Git and CI/CD",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Work in an agile team",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [
+    "software_engineering"
+   ],
+   "rationale": "Server-side code, a React front end and REST APIs: software engineering.",
+   "origin": "title from eval/jd_dataset/accenture_federal_services_full_stack_developer.json"
+  },
+  {
+   "id": "h_ds_ml_cathexis",
+   "category": "hybrid_title",
+   "title": "Data Scientist/Machine Learning Engineer",
+   "requirements": [
+    {
+     "text": "Applied machine learning experience: regression, classification, supervised and unsupervised learning",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Strong mathematical background in linear algebra, calculus, probability and statistics",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Excellent Python programming skills",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Experience with scalable machine learning, such as MapReduce and streaming",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Ability to drive a project independently and in a team",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "MS or PhD in computer science, electrical engineering or statistics preferred",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [
+    "data_science",
+    "machine_learning"
+   ],
+   "rationale": "Both halves of the title are real: modelling and statistics, and scalable machine learning.",
+   "origin": "title from eval/jd_dataset/cathexis_data_scientist_machine_learning_engineer.json"
+  },
+  {
+   "id": "h_de_ds_capgemini",
+   "category": "hybrid_title",
+   "title": "Junior Data Engineer/Junior Data Scientist",
+   "requirements": [
+    {
+     "text": "Build ETL pipelines and prepare datasets in SQL and Python",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Apply statistical analysis and modelling to answer business questions",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Create dashboards and reports for stakeholders",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Work with cloud data platforms",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Communicate technical results to non-technical teams",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Degree in a quantitative or computing field",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [
+    "data_engineering",
+    "data_science"
+   ],
+   "rationale": "Pipelines and analysis are both asked for.",
+   "origin": "title from eval/jd_dataset/capgemini_junior_data_engineer_junior_data_scientist.json"
+  },
+  {
+   "id": "h_analytics_eng_doordash",
+   "category": "hybrid_title",
+   "title": "Analytics Engineer, Data Science",
+   "requirements": [
+    {
+     "text": "Build tested, documented dbt models that analysts and scientists query",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Define metrics and own the data behind experiment readouts",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Strong SQL and a working knowledge of Python",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Partner with data scientists and product managers on analyses",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Improve the reliability and discoverability of core datasets",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Experience with A/B testing and statistical analysis is a plus",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [
+    "data_science",
+    "data_engineering"
+   ],
+   "rationale": "Warehouse modelling in service of analysis and experiments.",
+   "origin": "title from eval/jd_dataset/doordash_usa_analytics_engineer_data_science.json"
+  },
+  {
+   "id": "h_data_ai_arizent",
+   "category": "hybrid_title",
+   "title": "Data & AI Engineer",
+   "requirements": [
+    {
+     "text": "Build data pipelines that feed machine learning and generative AI features",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Deploy and operate models in production on a cloud platform",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Strong Python and SQL",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Work with data scientists to turn prototypes into services",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Monitor data quality and model behaviour",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Experience with orchestration tools such as Airflow",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [
+    "data_engineering",
+    "machine_learning"
+   ],
+   "rationale": "Pipelines that feed models, and deploying them.",
+   "origin": "title from eval/jd_dataset/arizent_data_ai_engineer.json"
+  },
+  {
+   "id": "h_swe_data_roblox",
+   "category": "hybrid_title",
+   "title": "Software Engineer - Data Engineering",
+   "requirements": [
+    {
+     "text": "Build and improve the data pipelines, datasets and internal tools that power decisions",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Turn ambiguous data needs into reliable, reusable data assets",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Improve data quality, observability and reliability across the stack",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Strong programming skills in Python or Java",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Partner with engineers, data scientists and product teams",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Take ownership of projects early",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [
+    "data_engineering",
+    "software_engineering"
+   ],
+   "rationale": "Software craft applied to data pipelines.",
+   "origin": "title from eval/jd_dataset/roblox_software_engineer_data_engineering.json"
+  },
+  {
+   "id": "h_ml_ds",
+   "category": "hybrid_title",
+   "title": "ML Data Scientist",
+   "requirements": [
+    {
+     "text": "Train predictive models and run offline evaluations",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Feature engineering on large tabular and event data",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Design and analyse online experiments",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Take models from notebook to production with engineers",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Strong Python, SQL and statistics",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Explain model behaviour to product partners",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [
+    "data_science",
+    "machine_learning"
+   ],
+   "rationale": "Modelling and experiment analysis, with some productionizing.",
+   "origin": "synthetic"
+  },
+  {
+   "id": "h_swe_ml_platform",
+   "category": "hybrid_title",
+   "title": "Software Engineer, Machine Learning Platform",
+   "requirements": [
+    {
+     "text": "Build the services and APIs that train and serve machine learning models",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Strong Python or Go",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Experience with containers and Kubernetes",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Build tooling and automation for data scientists and ML engineers",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Design for reliability, scale and observability",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Write tested, maintainable code",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [
+    "software_engineering",
+    "machine_learning"
+   ],
+   "rationale": "Software engineering for an ML platform.",
+   "origin": "synthetic"
+  },
+  {
+   "id": "m_analyst_pipelines",
+   "category": "title_mismatch",
+   "title": "Data Analyst",
+   "requirements": [
+    {
+     "text": "Build and maintain Airflow pipelines that load the company's warehouse",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Write production SQL and Python to transform raw event data",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Model warehouse tables with dbt and add tests and freshness checks",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Monitor pipeline failures and fix them",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Work with analysts who consume the data",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Experience with Snowflake or BigQuery",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [
+    "data_engineering"
+   ],
+   "rationale": "The title says analyst; every duty is pipeline and warehouse engineering.",
+   "origin": "synthetic"
+  },
+  {
+   "id": "m_swe_models",
+   "category": "title_mismatch",
+   "title": "Software Engineer",
+   "requirements": [
+    {
+     "text": "Train and evaluate deep learning models in PyTorch on GPUs",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Run experiments and read the literature to improve model accuracy",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Build data loaders and training pipelines that scale",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Ship trained models to production services",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Strong Python and machine learning fundamentals",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Track model quality after release",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [
+    "machine_learning"
+   ],
+   "rationale": "The title says software engineer; the work is training and shipping models.",
+   "origin": "synthetic"
+  },
+  {
+   "id": "m_mle_webapps",
+   "category": "title_mismatch",
+   "title": "Machine Learning Engineer",
+   "requirements": [
+    {
+     "text": "Build REST APIs and backend services in Python",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Build the React front end customers use",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Design PostgreSQL schemas and write migrations",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Write automated tests and maintain CI/CD",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Work in an agile team shipping weekly",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Experience deploying services on AWS",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [
+    "software_engineering"
+   ],
+   "rationale": "The title says machine learning; there is no model work in the duties.",
+   "origin": "synthetic"
+  },
+  {
+   "id": "m_scientist_etl",
+   "category": "title_mismatch",
+   "title": "Data Scientist",
+   "requirements": [
+    {
+     "text": "Build and maintain ETL pipelines into the data warehouse",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Own orchestration and scheduling of daily batch jobs",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Keep warehouse tables accurate, documented and tested",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Write SQL and Python to move data between systems",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Work with the analysts who read the tables",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Experience with cloud data platforms",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [
+    "data_engineering"
+   ],
+   "rationale": "The title says data scientist; the duties are pipelines and warehousing.",
+   "origin": "synthetic"
+  },
+  {
+   "id": "m_research_ranking",
+   "category": "title_mismatch",
+   "title": "Research Scientist",
+   "requirements": [
+    {
+     "text": "Develop ranking and recommendation models and ship them to production",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Design and run online A/B tests to measure model impact",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Train deep learning models on large behavioural datasets",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Strong Python and PyTorch",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Monitor deployed models for drift",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Publish and read machine learning research",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [
+    "machine_learning"
+   ],
+   "rationale": "The title says research; the duties are building and shipping models.",
+   "origin": "synthetic"
+  },
+  {
+   "id": "m_analytics_eng_stats",
+   "category": "title_mismatch",
+   "title": "Analytics Engineer",
+   "requirements": [
+    {
+     "text": "Fit statistical and causal models to estimate the effect of product changes",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Design experiments and analyse their results",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Forecast demand and report uncertainty",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Strong statistics, R or Python",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Present findings to leadership",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "SQL for data extraction",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [
+    "data_science"
+   ],
+   "rationale": "The title says analytics engineer; the duties are statistical modelling and experiments.",
+   "origin": "synthetic"
+  },
+  {
+   "id": "m_data_engineer_services",
+   "category": "title_mismatch",
+   "title": "Data Engineer",
+   "requirements": [
+    {
+     "text": "Build backend microservices and REST APIs in Go",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Design and operate services on Kubernetes",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Build internal tools used by other engineering teams",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Write automated tests and review code",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Strong computer science fundamentals",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Experience with relational databases",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [
+    "software_engineering"
+   ],
+   "rationale": "The title says data engineer; the duties are backend services.",
+   "origin": "synthetic"
+  },
+  {
+   "id": "n_product_manager",
+   "category": "no_track",
+   "title": "Product Manager",
+   "requirements": [
+    {
+     "text": "Own the roadmap and prioritize features for a B2B product",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Write product requirements and work with engineering to ship them",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Run customer interviews and synthesize feedback",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Define success metrics and track them",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Communicate strategy to executives",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Experience in enterprise software",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [],
+   "rationale": "A product role: none of the four tracks.",
+   "origin": "synthetic"
+  },
+  {
+   "id": "n_ux_designer",
+   "category": "no_track",
+   "title": "UX Designer",
+   "requirements": [
+    {
+     "text": "Design user flows, wireframes and high-fidelity prototypes",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Run usability tests and turn findings into design changes",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Maintain a design system in Figma",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Collaborate with product managers and engineers",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Portfolio demonstrating end-to-end design work",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Knowledge of accessibility standards",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [],
+   "rationale": "A design role: none of the four tracks.",
+   "origin": "synthetic"
+  },
+  {
+   "id": "n_timing_analysis",
+   "category": "no_track",
+   "title": "Physical Design Engineer - Static Timing Analysis",
+   "requirements": [
+    {
+     "text": "Hands-on static timing analysis and timing closure for ASIC designs",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Knowledge of physical design flows: floorplanning, place and route and clock tree synthesis",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Scripting in Tcl and Python to automate design flows",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Experience with Synopsys PrimeTime or similar sign-off tools",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Understanding of deep sub-micron process technology",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "BS or MS in electrical engineering",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [],
+   "rationale": "Chip design: none of the four tracks.",
+   "origin": "title from eval/jd_dataset/amazon_physical_design_engineer_static_timing_analysis_.json"
+  },
+  {
+   "id": "n_security_analyst",
+   "category": "no_track",
+   "title": "Cybersecurity Analyst",
+   "requirements": [
+    {
+     "text": "Monitor security alerts and investigate incidents",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Perform vulnerability assessments and recommend fixes",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Knowledge of network protocols and firewalls",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Maintain incident response runbooks",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Security certification such as Security+ preferred",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Communicate risks to non-technical staff",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [],
+   "rationale": "A security operations role: none of the four tracks.",
+   "origin": "synthetic"
+  },
+  {
+   "id": "n_account_exec",
+   "category": "no_track",
+   "title": "Account Executive",
+   "requirements": [
+    {
+     "text": "Own a quota and close new business",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Run discovery calls and product demonstrations",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Build and manage a sales pipeline in a CRM",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Negotiate contracts with customers",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Collaborate with marketing on campaigns",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Two years of B2B sales experience",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [],
+   "rationale": "A sales role: none of the four tracks.",
+   "origin": "synthetic"
+  },
+  {
+   "id": "n_mechanical",
+   "category": "no_track",
+   "title": "Mechanical Design Engineer",
+   "requirements": [
+    {
+     "text": "Design mechanical components and assemblies in SolidWorks",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Run tolerance analysis and finite element simulations",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Prepare drawings for manufacturing",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Work with suppliers on prototypes and production",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Test prototypes and iterate on designs",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "BS in mechanical engineering",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [],
+   "rationale": "A mechanical role: none of the four tracks.",
+   "origin": "synthetic"
+  },
+  {
+   "id": "n_recruiter",
+   "category": "no_track",
+   "title": "Technical Recruiter",
+   "requirements": [
+    {
+     "text": "Source and screen engineering candidates",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Partner with hiring managers on role requirements",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Manage candidates through an applicant tracking system",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Schedule interviews and keep candidates informed",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Report on hiring pipeline metrics",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Experience recruiting for technical roles",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [],
+   "rationale": "A recruiting role: none of the four tracks.",
+   "origin": "synthetic"
+  },
+  {
+   "id": "x_data_annotation",
+   "category": "near_miss",
+   "title": "Data Annotation Specialist",
+   "requirements": [
+    {
+     "text": "Label images and text to the project's guidelines for machine learning training data",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Review other annotators' work for consistency",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Flag ambiguous examples to the machine learning team",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Keep annotation throughput and quality targets",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Attention to detail",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "No programming experience required",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [],
+   "rationale": "Machine learning vocabulary, but the job is labelling, not modelling or engineering.",
+   "origin": "synthetic"
+  },
+  {
+   "id": "x_data_governance",
+   "category": "near_miss",
+   "title": "Data Governance Analyst",
+   "requirements": [
+    {
+     "text": "Maintain the data catalog and business glossary",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Define data quality rules with business owners and track exceptions",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Document data lineage for regulatory audits",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Run data stewardship meetings and training",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Knowledge of privacy and compliance regulations",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Basic SQL for checking data",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [],
+   "rationale": "Data vocabulary, but the work is policy and stewardship, not building pipelines or models.",
+   "origin": "synthetic"
+  },
+  {
+   "id": "x_solutions_engineer",
+   "category": "near_miss",
+   "title": "Solutions Engineer, Data Platform",
+   "requirements": [
+    {
+     "text": "Run technical demos of the data platform for prospective customers",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Scope and support customer proofs of concept",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Answer technical questions on sales calls",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Work with account executives to close deals",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Write sample queries and scripts to illustrate the product",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Excellent presentation skills",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [],
+   "rationale": "Data platform vocabulary, but a pre-sales role: demos and customer calls.",
+   "origin": "synthetic"
+  },
+  {
+   "id": "x_tech_writer_ml",
+   "category": "near_miss",
+   "title": "Technical Writer, Machine Learning Documentation",
+   "requirements": [
+    {
+     "text": "Write and maintain documentation for machine learning APIs and tutorials",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Interview engineers and researchers to understand features",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Edit release notes and guides",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Keep documentation in version control",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Excellent written English",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Familiarity with machine learning concepts",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [],
+   "rationale": "Machine learning vocabulary, but a writing role.",
+   "origin": "synthetic"
+  },
+  {
+   "id": "x_it_support",
+   "category": "near_miss",
+   "title": "IT Support Specialist",
+   "requirements": [
+    {
+     "text": "Resolve hardware and software tickets for employees",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Set up laptops and manage user accounts",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Write simple SQL queries to look up records in the ticketing system",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Document solutions in the knowledge base",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Customer service mindset",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "CompTIA A+ preferred",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [],
+   "rationale": "A little SQL and scripting, but a help desk job.",
+   "origin": "synthetic"
+  },
+  {
+   "id": "x_qa_manual",
+   "category": "near_miss",
+   "title": "QA Analyst (Manual Testing)",
+   "requirements": [
+    {
+     "text": "Execute manual test plans for web and mobile releases",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Log defects with clear reproduction steps",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Verify fixes and regression-test releases",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Work with developers to triage bugs",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Attention to detail",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "No coding required",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [],
+   "rationale": "Software vocabulary, but manual testing with no engineering.",
+   "origin": "synthetic"
+  },
+  {
+   "id": "x_financial_analyst",
+   "category": "near_miss",
+   "title": "Financial Analyst",
+   "requirements": [
+    {
+     "text": "Build Excel models to forecast revenue and budgets",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Prepare monthly variance reports for finance leadership",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Analyse spending trends and flag anomalies",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Support the annual planning cycle",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Strong Excel; SQL a plus",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Bachelor's degree in finance or accounting",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ],
+   "best": [],
+   "rationale": "Forecasting and analysis vocabulary, but a finance role in Excel.",
+   "origin": "synthetic"
+  }
+ ]
+}

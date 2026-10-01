@@ -1,0 +1,1647 @@
+{
+ "_comment": "Synthetic labelled set for fitting the bullet-library variant choice (issue #199). Every item is an experience or project from a synthetic eval/profiles/ profile (never personal/), its variants are alternative phrasings of that item's own bullets, each angled toward a role track, and each case is one job (a title from eval/jd_dataset and requirements written the way a host would extract them) asked about one item's approved variants. The label is the set of acceptable variants (`best`, empty when none fits) and the variants that clearly do not fit (`poor_fit`). Labels are planner-reviewed, pending user spot-check. Recordings of Jev's answers are in recordings.json; re-run `python eval/fit_library_thresholds.py analyze` after correcting a label.",
+ "version": 1,
+ "status": "planner-reviewed, pending user spot-check",
+ "id_namespace": "6f2c1d3a-5b9e-4c1d-9a77-0c0ffee0199a",
+ "categories": [
+  "clear_best",
+  "close_call",
+  "no_match",
+  "synonym",
+  "keyword_trap",
+  "single"
+ ],
+ "jobs": {
+  "ds_esri": {
+   "title": "Data Scientist I",
+   "origin": "title from eval/jd_dataset/esri_data_scientist_i.json; requirements written in a host's style",
+   "requirements": [
+    {
+     "text": "Map business problems to machine learning or other advanced analytics approaches",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Build predictive models using statistics and machine learning, including feature engineering and model selection",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Write clean, version-controlled Python to process large datasets",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Deploy models to production in a cloud environment",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Explain results and recommendations clearly to customers",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Degree in statistics, data science, computer science or a related field",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ]
+  },
+  "ds_mg": {
+   "title": "Junior Data Scientist - Fraud & AML Monitoring",
+   "origin": "title from eval/jd_dataset/m_g_junior_data_scientist_fraud_aml_monitoring.json; requirements written in a host's style",
+   "requirements": [
+    {
+     "text": "Use data to monitor for and detect fraud and financial crime",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Build reports and dashboards that stakeholders rely on to make decisions",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Solid foundation in statistics and data analysis",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Proficiency in SQL and Python or R",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Present analytical findings to non-technical colleagues",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Care for data accuracy and quality",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ]
+  },
+  "de_tebra": {
+   "title": "Data Engineer",
+   "origin": "title from eval/jd_dataset/tebra_data_engineer.json; requirements written in a host's style",
+   "requirements": [
+    {
+     "text": "Build and maintain scalable data pipelines for batch and real-time processing",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Turn raw healthcare data into high-quality datasets and real-time features for machine learning models",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Strong SQL and Python",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Experience with a cloud data warehouse such as Snowflake or BigQuery",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Improve data quality with tests, monitoring and governance",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Experience with workflow orchestration tools such as Airflow",
+     "type": "required",
+     "criticality": 2
+    },
+    {
+     "text": "Work with ML engineers, data scientists and software engineers",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ]
+  },
+  "de_rbi": {
+   "title": "Data Engineer 1",
+   "origin": "title from eval/jd_dataset/rbi_data_engineer_1.json; requirements written in a host's style",
+   "requirements": [
+    {
+     "text": "Design, build and maintain data pipelines and ETL processes",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Strong programming skills in Python",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Hands-on experience with AWS services such as S3, Glue, EMR, SQS and Athena",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Infrastructure as code, for example Terraform or CloudFormation",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Work with data scientists and analysts to keep data accurate and consistent",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Experience with SQL and relational databases",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ]
+  },
+  "ml_next": {
+   "title": "Machine Learning Engineer New Grad",
+   "origin": "title from eval/jd_dataset/nextdoor_machine_learning_engineer_new_grad.json; requirements written in a host's style",
+   "requirements": [
+    {
+     "text": "Train, evaluate and deploy machine learning models for ranking and recommendation",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Strong Python; experience with PyTorch or TensorFlow",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Build data and training pipelines that scale to large datasets",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Monitor deployed models for quality, drift and latency",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Run online experiments to measure model impact",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Solid grounding in machine learning and statistics fundamentals",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ]
+  },
+  "ml_milw": {
+   "title": "Machine Learning Engineer I",
+   "origin": "title from eval/jd_dataset/milwaukee_tool_machine_learning_engineer_i.json; requirements written in a host's style",
+   "requirements": [
+    {
+     "text": "Deploy machine learning models on embedded and edge devices",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Applied experience with supervised and unsupervised learning, such as classification and anomaly detection",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Experience with deep learning methods such as CNNs, autoencoders or transformers",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Time series or signal processing experience",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Proficiency in Python and C or C++",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Version control and modern software development tools",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ]
+  },
+  "swe_asc": {
+   "title": "Software Engineer",
+   "origin": "title from eval/jd_dataset/ascend_software_engineer.json; requirements written in a host's style",
+   "requirements": [
+    {
+     "text": "Design and build the APIs and backend services a financial platform runs on",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Write clean, well-tested, maintainable code",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Experience with relational databases and SQL",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Ship features end to end, from design through production",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Familiarity with cloud infrastructure and containers",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Strong computer science fundamentals, including data structures and algorithms",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ]
+  },
+  "swe_fs": {
+   "title": "Full Stack Developer",
+   "origin": "title from eval/jd_dataset/accenture_federal_services_full_stack_developer.json; requirements written in a host's style",
+   "requirements": [
+    {
+     "text": "Build server-side application logic with Python frameworks such as Flask, Django or FastAPI",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Build responsive user interfaces with JavaScript and a modern framework such as React",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Design and consume REST APIs",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Work with relational and NoSQL databases",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Write automated tests and use Git and CI/CD",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Work in an agile team",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ]
+  },
+  "fe_amz": {
+   "title": "Front End Engineer - AWS APO Engineering",
+   "origin": "title from eval/jd_dataset/amazon_front_end_engineer_aws_apo_engineering.json; requirements written in a host's style",
+   "requirements": [
+    {
+     "text": "Build responsive web applications with React and TypeScript",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Expert HTML, CSS and JavaScript",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Design accessible, reusable user interface components",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Optimize front end performance and write front end tests",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Partner with designers and product managers",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Consume REST and GraphQL APIs",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ]
+  },
+  "hw_amz": {
+   "title": "Physical Design Engineer - Static Timing Analysis - Annapurna Labs - Cloud Scale Machine Learning",
+   "origin": "title from eval/jd_dataset/amazon_physical_design_engineer_static_timing_analysis_.json; requirements written in a host's style",
+   "requirements": [
+    {
+     "text": "Hands-on static timing analysis and timing closure for ASIC designs",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Knowledge of physical design flows: floorplanning, place and route and clock tree synthesis",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Scripting in Tcl and Python to automate design flows",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Experience with Synopsys PrimeTime or similar sign-off tools",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Understanding of deep sub-micron process technology",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "BS or MS in electrical engineering",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ]
+  },
+  "de_swbc": {
+   "title": "Junior Data Engineer",
+   "origin": "title from eval/jd_dataset/swbc_junior_data_engineer.json; requirements written in a host's style",
+   "requirements": [
+    {
+     "text": "Build and maintain data pipelines with guidance from senior engineers",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Write SQL and Python scripts to move and transform data",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Help improve data quality, performance and reliability",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Familiarity with cloud platforms and automation practices",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Work closely with cross-functional teams",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Detail-oriented and eager to learn",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ]
+  },
+  "swe_reactor": {
+   "title": "Reactor Software Engineer 1/2",
+   "origin": "title from eval/jd_dataset/antares_nuclear_reactor_software_engineer_1_2.json; requirements written in a host's style",
+   "requirements": [
+    {
+     "text": "Build software that operates and tests hardware systems and hardware-in-the-loop environments",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Process and stream live telemetry and instrument signals",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Strong C++ or Python",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Build operator tools and simulations",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Design systems that respond predictably in off-nominal conditions",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Test automation practices",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ]
+  }
+ },
+ "items": {
+  "fair": {
+   "profile": "data_science_specialist_priya_raman",
+   "kind": "experience",
+   "title": "Data Science Intern @ Fairhaven Retail Group",
+   "bullets": [
+    "Built a customer churn model in scikit-learn over 480k subscription records, raising AUC from 0.71 to 0.83 against the incumbent rule set.",
+    "Ran an A/B testing readout on 12 store-level promotions, using bootstrap confidence intervals to flag 3 as statistically flat.",
+    "Automated a weekly cohort report in pandas and matplotlib, cutting a 6-hour manual Excel process to 15 minutes."
+   ],
+   "variants": {
+    "f_churn": {
+     "text": "Trained a scikit-learn churn classifier on 480k subscription records, raising AUC from 0.71 to 0.83 against the rule-based baseline.",
+     "base": "Built a customer churn model in scikit-learn over 480k subscription records, raising AUC from 0.71 to 0.83 against the incumbent rule set.",
+     "angle": "ds"
+    },
+    "f_ab": {
+     "text": "Ran A/B test readouts for 12 store promotions, using bootstrap confidence intervals to show that 3 were statistically flat.",
+     "base": "Ran an A/B testing readout on 12 store-level promotions, using bootstrap confidence intervals to flag 3 as statistically flat.",
+     "angle": "ds"
+    },
+    "f_report": {
+     "text": "Automated the weekly cohort report in pandas and matplotlib, replacing a 6-hour manual Excel process with a 15-minute run.",
+     "base": "Automated a weekly cohort report in pandas and matplotlib, cutting a 6-hour manual Excel process to 15 minutes.",
+     "angle": "analytics"
+    },
+    "f_pipeline": {
+     "text": "Replaced a manual 6-hour Excel reporting routine with a scheduled Python pipeline that builds the weekly cohort report in 15 minutes.",
+     "base": "Automated a weekly cohort report in pandas and matplotlib, cutting a 6-hour manual Excel process to 15 minutes.",
+     "angle": "de"
+    },
+    "f_churn_syn": {
+     "text": "Developed a classifier that predicts which of 480k subscribers will cancel, lifting AUC from 0.71 to 0.83 over the existing rule set.",
+     "base": "Built a customer churn model in scikit-learn over 480k subscription records, raising AUC from 0.71 to 0.83 against the incumbent rule set.",
+     "angle": "ds"
+    }
+   }
+  },
+  "casc": {
+   "profile": "data_science_specialist_priya_raman",
+   "kind": "experience",
+   "title": "Undergraduate Data Assistant @ Cascade State University Statistics Department",
+   "bullets": [
+    "Cleaned and joined 9 semesters of enrollment data in SQL and pandas, resolving 4,200 duplicate student records.",
+    "Fit mixed-effects models in R to estimate course-level grade variation across 38 sections.",
+    "Wrote a seaborn plotting toolkit reused by 5 graduate researchers for thesis figures."
+   ],
+   "variants": {
+    "c_clean": {
+     "text": "Cleaned and joined 9 semesters of enrollment data in SQL and pandas, resolving 4,200 duplicate student records.",
+     "base": "Cleaned and joined 9 semesters of enrollment data in SQL and pandas, resolving 4,200 duplicate student records.",
+     "angle": "ds"
+    },
+    "c_mixed": {
+     "text": "Fit mixed-effects models in R to estimate how grades vary across 38 course sections.",
+     "base": "Fit mixed-effects models in R to estimate course-level grade variation across 38 sections.",
+     "angle": "stats"
+    },
+    "c_toolkit": {
+     "text": "Wrote a reusable seaborn plotting toolkit that 5 graduate researchers adopted for their thesis figures.",
+     "base": "Wrote a seaborn plotting toolkit reused by 5 graduate researchers for thesis figures.",
+     "angle": "swe"
+    },
+    "c_dedupe": {
+     "text": "Built SQL and pandas jobs that merged 9 semesters of enrollment data and removed 4,200 duplicate student records.",
+     "base": "Cleaned and joined 9 semesters of enrollment data in SQL and pandas, resolving 4,200 duplicate student records.",
+     "angle": "de"
+    },
+    "c_clean_syn": {
+     "text": "Reconciled 9 semesters of student records, eliminating 4,200 duplicates.",
+     "base": "Cleaned and joined 9 semesters of enrollment data in SQL and pandas, resolving 4,200 duplicate student records.",
+     "angle": "ds"
+    }
+   }
+  },
+  "north": {
+   "profile": "data_engineering_generalist_adaeze_nwosu",
+   "kind": "experience",
+   "title": "Data Engineering Intern @ Northgate Media",
+   "bullets": [
+    "Built a Spark job that deduplicated 90M ad impression rows nightly, trimming runtime from 50 minutes to 18.",
+    "Modeled 8 core marketing tables in dbt with documented tests and freshness checks.",
+    "Shipped a Kafka consumer in Scala that backfilled 3 weeks of missing click events."
+   ],
+   "variants": {
+    "n_spark": {
+     "text": "Built a nightly Spark job that deduplicates 90M ad impression rows, cutting runtime from 50 minutes to 18.",
+     "base": "Built a Spark job that deduplicated 90M ad impression rows nightly, trimming runtime from 50 minutes to 18.",
+     "angle": "de"
+    },
+    "n_dbt": {
+     "text": "Modeled 8 core marketing tables in dbt, with documented tests and freshness checks.",
+     "base": "Modeled 8 core marketing tables in dbt with documented tests and freshness checks.",
+     "angle": "de"
+    },
+    "n_kafka": {
+     "text": "Shipped a Scala Kafka consumer that backfilled three weeks of missing click events.",
+     "base": "Shipped a Kafka consumer in Scala that backfilled 3 weeks of missing click events.",
+     "angle": "de"
+    },
+    "n_kafka_syn": {
+     "text": "Wrote a Scala service that reads click-event messages from Kafka and refilled a three-week gap.",
+     "base": "Shipped a Kafka consumer in Scala that backfilled 3 weeks of missing click events.",
+     "angle": "de"
+    }
+   }
+  },
+  "tess": {
+   "profile": "ml_engineering_generalist_omar_haddad",
+   "kind": "experience",
+   "title": "Associate Machine Learning Engineer @ Tessellate Robotics",
+   "bullets": [
+    "Built a Ray-backed training pipeline that cut a 9-hour job to 2 hours across 4 GPUs.",
+    "Shipped a Kafka feature stream feeding 3 production models with sub-minute freshness.",
+    "Added drift monitoring in Grafana that caught a 7% input distribution shift within a day."
+   ],
+   "variants": {
+    "t_ray": {
+     "text": "Built a Ray-backed training pipeline that cut a 9-hour training job to 2 hours across 4 GPUs.",
+     "base": "Built a Ray-backed training pipeline that cut a 9-hour job to 2 hours across 4 GPUs.",
+     "angle": "ml"
+    },
+    "t_kafka": {
+     "text": "Shipped a Kafka feature stream that feeds 3 production models with sub-minute freshness.",
+     "base": "Shipped a Kafka feature stream feeding 3 production models with sub-minute freshness.",
+     "angle": "de"
+    },
+    "t_drift": {
+     "text": "Added Grafana drift monitoring that caught a 7% input distribution shift within a day.",
+     "base": "Added drift monitoring in Grafana that caught a 7% input distribution shift within a day.",
+     "angle": "ml"
+    },
+    "t_drift_syn": {
+     "text": "Set up Grafana monitoring that flagged a 7% change in incoming feature values within a day.",
+     "base": "Added drift monitoring in Grafana that caught a 7% input distribution shift within a day.",
+     "angle": "ml"
+    }
+   }
+  },
+  "bright": {
+   "profile": "ml_engineering_generalist_omar_haddad",
+   "kind": "experience",
+   "title": "Machine Learning Intern @ Brightwater University Applied AI Center",
+   "bullets": [
+    "Trained demand models in scikit-learn and PyTorch on 300k transactions for 2 campus partners.",
+    "Built an Airflow retraining schedule with automated evaluation gates.",
+    "Wrote a Terraform stack provisioning the team's SageMaker training environment."
+   ],
+   "variants": {
+    "b_demand": {
+     "text": "Trained demand models in scikit-learn and PyTorch on 300k transactions for 2 campus partners.",
+     "base": "Trained demand models in scikit-learn and PyTorch on 300k transactions for 2 campus partners.",
+     "angle": "ml"
+    },
+    "b_airflow": {
+     "text": "Built an Airflow retraining schedule with automated evaluation gates.",
+     "base": "Built an Airflow retraining schedule with automated evaluation gates.",
+     "angle": "de"
+    },
+    "b_terraform": {
+     "text": "Wrote a Terraform stack that provisions the team's SageMaker training environment.",
+     "base": "Wrote a Terraform stack provisioning the team's SageMaker training environment.",
+     "angle": "infra"
+    },
+    "b_terraform_syn": {
+     "text": "Scripted the provisioning of the team's SageMaker training environment.",
+     "base": "Wrote a Terraform stack provisioning the team's SageMaker training environment.",
+     "angle": "infra"
+    }
+   }
+  },
+  "nwind": {
+   "profile": "software_engineering_generalist_devon_whitaker",
+   "kind": "experience",
+   "title": "Software Engineering Intern @ Northwind Systems",
+   "bullets": [
+    "Built a Go service that replaced 3 cron jobs, processing 200k records an hour.",
+    "Added GraphQL resolvers for 9 entity types behind an existing REST gateway.",
+    "Wrote Cypress end-to-end tests covering the 5 highest-traffic user flows."
+   ],
+   "variants": {
+    "w_go": {
+     "text": "Built a Go service that replaced 3 cron jobs and processes 200k records an hour.",
+     "base": "Built a Go service that replaced 3 cron jobs, processing 200k records an hour.",
+     "angle": "swe"
+    },
+    "w_graphql": {
+     "text": "Added GraphQL resolvers for 9 entity types on top of the existing REST gateway.",
+     "base": "Added GraphQL resolvers for 9 entity types behind an existing REST gateway.",
+     "angle": "swe"
+    },
+    "w_cypress": {
+     "text": "Wrote Cypress end-to-end tests covering the 5 highest-traffic user flows.",
+     "base": "Wrote Cypress end-to-end tests covering the 5 highest-traffic user flows.",
+     "angle": "swe"
+    },
+    "w_go_de": {
+     "text": "Replaced 3 cron jobs with a Go service that processes 200k records an hour.",
+     "base": "Built a Go service that replaced 3 cron jobs, processing 200k records an hour.",
+     "angle": "de"
+    },
+    "w_graphql_syn": {
+     "text": "Exposed 9 entity types through a query layer that sits over the existing endpoint gateway.",
+     "base": "Added GraphQL resolvers for 9 entity types behind an existing REST gateway.",
+     "angle": "swe"
+    }
+   }
+  },
+  "halden": {
+   "profile": "software_engineering_generalist_devon_whitaker",
+   "kind": "experience",
+   "title": "Teaching Assistant @ Halden State University Computer Science Department",
+   "bullets": [
+    "Graded and gave written feedback on 120 data-structures assignments a term.",
+    "Built a Python autograder that cut assignment turnaround from 4 days to 1.",
+    "Ran weekly lab sections for 30 students on Git, Linux, and testing practice."
+   ],
+   "variants": {
+    "h_grade": {
+     "text": "Graded and wrote feedback on 120 data-structures assignments each term.",
+     "base": "Graded and gave written feedback on 120 data-structures assignments a term.",
+     "angle": "teaching"
+    },
+    "h_autograder": {
+     "text": "Built a Python autograder that cut assignment turnaround from 4 days to 1.",
+     "base": "Built a Python autograder that cut assignment turnaround from 4 days to 1.",
+     "angle": "swe"
+    },
+    "h_lab": {
+     "text": "Led weekly lab sections for 30 students on Git, Linux and testing practice.",
+     "base": "Ran weekly lab sections for 30 students on Git, Linux, and testing practice.",
+     "angle": "teaching"
+    }
+   }
+  },
+  "halc": {
+   "profile": "data_science_generalist_danielle_okafor",
+   "kind": "experience",
+   "title": "Associate Data Scientist @ Halcyon Health Analytics",
+   "bullets": [
+    "Built demand forecasts for 34 clinic sites in Python and statsmodels, reducing weekly schedule error by 19%.",
+    "Shipped a dbt model layer over Snowflake that consolidated 6 reporting pipelines into 1 tested source.",
+    "Partnered with 3 product teams on an A/B testing framework now used for every release readout."
+   ],
+   "variants": {
+    "hc_forecast": {
+     "text": "Built demand forecasts for 34 clinic sites in Python and statsmodels, reducing weekly schedule error by 19%.",
+     "base": "Built demand forecasts for 34 clinic sites in Python and statsmodels, reducing weekly schedule error by 19%.",
+     "angle": "ds"
+    },
+    "hc_dbt": {
+     "text": "Shipped a dbt model layer over Snowflake that consolidated 6 reporting pipelines into 1 tested source.",
+     "base": "Shipped a dbt model layer over Snowflake that consolidated 6 reporting pipelines into 1 tested source.",
+     "angle": "de"
+    },
+    "hc_ab": {
+     "text": "Partnered with 3 product teams on an A/B testing framework now used for every release readout.",
+     "base": "Partnered with 3 product teams on an A/B testing framework now used for every release readout.",
+     "angle": "ds"
+    },
+    "hc_forecast_ml": {
+     "text": "Trained forecasting models in Python and statsmodels for 34 clinic sites, cutting weekly schedule error by 19%.",
+     "base": "Built demand forecasts for 34 clinic sites in Python and statsmodels, reducing weekly schedule error by 19%.",
+     "angle": "ml"
+    }
+   }
+  },
+  "feed": {
+   "profile": "data_engineering_generalist_adaeze_nwosu",
+   "kind": "project",
+   "title": "Feed Forge",
+   "bullets": [
+    "Kafka-to-Postgres connector with schema evolution and a replay mode, handling 5k messages a second on a laptop.",
+    "Added Terraform and Docker Compose so a full stack starts from 1 command."
+   ],
+   "variants": {
+    "fe_connector": {
+     "text": "Wrote a Kafka-to-Postgres connector with schema evolution and a replay mode that handles 5k messages a second on a laptop.",
+     "base": "Kafka-to-Postgres connector with schema evolution and a replay mode, handling 5k messages a second on a laptop.",
+     "angle": "de"
+    },
+    "fe_terraform": {
+     "text": "Added Terraform and Docker Compose so the whole stack starts from one command.",
+     "base": "Added Terraform and Docker Compose so a full stack starts from 1 command.",
+     "angle": "infra"
+    }
+   }
+  },
+  "signal": {
+   "profile": "ml_engineering_generalist_omar_haddad",
+   "kind": "project",
+   "title": "Signal Sift",
+   "bullets": [
+    "Detects anomalies in 12-channel accelerometer streams with a lightweight autoencoder.",
+    "Serves predictions from a FastAPI container backed by Redis for recent-window state."
+   ],
+   "variants": {
+    "s_auto": {
+     "text": "Detects anomalies in 12-channel accelerometer streams with a lightweight autoencoder.",
+     "base": "Detects anomalies in 12-channel accelerometer streams with a lightweight autoencoder.",
+     "angle": "ml"
+    },
+    "s_serve": {
+     "text": "Serves predictions from a FastAPI container backed by Redis for recent-window state.",
+     "base": "Serves predictions from a FastAPI container backed by Redis for recent-window state.",
+     "angle": "swe"
+    },
+    "s_auto_syn": {
+     "text": "Spots unusual patterns in 12-channel accelerometer streams using a small neural network.",
+     "base": "Detects anomalies in 12-channel accelerometer streams with a lightweight autoencoder.",
+     "angle": "ml"
+    }
+   }
+  },
+  "churn": {
+   "profile": "data_science_specialist_priya_raman",
+   "kind": "project",
+   "title": "Churn Explorer",
+   "bullets": [
+    "Interactive retention dashboard over a public telecom dataset, segmenting 7,000 customers by tenure and contract type.",
+    "Implemented survival analysis and surfaced per-segment hazard curves with matplotlib."
+   ],
+   "variants": {
+    "ce_dash": {
+     "text": "Built an interactive retention dashboard over a public telecom dataset, segmenting 7,000 customers by tenure and contract type.",
+     "base": "Interactive retention dashboard over a public telecom dataset, segmenting 7,000 customers by tenure and contract type.",
+     "angle": "ds"
+    },
+    "ce_surv": {
+     "text": "Implemented survival analysis and surfaced per-segment hazard curves with matplotlib.",
+     "base": "Implemented survival analysis and surfaced per-segment hazard curves with matplotlib.",
+     "angle": "stats"
+    }
+   }
+  },
+  "split": {
+   "profile": "software_engineering_generalist_devon_whitaker",
+   "kind": "project",
+   "title": "Split Sum",
+   "bullets": [
+    "Next.js and Postgres app that settles group expenses in the fewest transfers.",
+    "Deployed with Docker and Terraform on AWS, holding 99% uptime over 6 months."
+   ],
+   "variants": {
+    "sp_app": {
+     "text": "Built a Next.js and Postgres app that settles group expenses in the fewest transfers.",
+     "base": "Next.js and Postgres app that settles group expenses in the fewest transfers.",
+     "angle": "swe"
+    },
+    "sp_deploy": {
+     "text": "Deployed with Docker and Terraform on AWS, holding 99% uptime over 6 months.",
+     "base": "Deployed with Docker and Terraform on AWS, holding 99% uptime over 6 months.",
+     "angle": "swe"
+    },
+    "sp_app_syn": {
+     "text": "Created a Next.js web app, backed by Postgres, that works out the fewest payments needed to settle a group's costs.",
+     "base": "Next.js and Postgres app that settles group expenses in the fewest transfers.",
+     "angle": "swe"
+    }
+   }
+  },
+  "chess": {
+   "profile": "software_engineering_generalist_devon_whitaker",
+   "kind": "project",
+   "title": "Chess Ledger",
+   "bullets": [
+    "Parses 50k PGN games into MongoDB and reports opening win rates by rating band.",
+    "Serves the results through a Redis-cached REST API."
+   ],
+   "variants": {
+    "ch_parse": {
+     "text": "Parses 50k PGN games into MongoDB and reports opening win rates by rating band.",
+     "base": "Parses 50k PGN games into MongoDB and reports opening win rates by rating band.",
+     "angle": "de"
+    },
+    "ch_api": {
+     "text": "Serves the results through a Redis-cached REST API.",
+     "base": "Serves the results through a Redis-cached REST API.",
+     "angle": "swe"
+    }
+   }
+  }
+ },
+ "cases": [
+  {
+   "id": "a_esri_churn",
+   "category": "clear_best",
+   "job": "ds_esri",
+   "item": "fair",
+   "variants": [
+    "f_churn",
+    "f_report",
+    "f_ab"
+   ],
+   "best": [
+    "f_churn"
+   ],
+   "poor_fit": [
+    "f_report"
+   ],
+   "rationale": "Esri wants predictive models; the churn classifier is exactly that. The report automation shows no modelling."
+  },
+  {
+   "id": "a_mg_dashboard",
+   "category": "clear_best",
+   "job": "ds_mg",
+   "item": "churn",
+   "variants": [
+    "ce_dash",
+    "ce_surv"
+   ],
+   "best": [
+    "ce_dash"
+   ],
+   "poor_fit": [],
+   "rationale": "The fraud-monitoring role asks for dashboards stakeholders use; only the dashboard bullet shows one."
+  },
+  {
+   "id": "a_tebra_connector",
+   "category": "clear_best",
+   "job": "de_tebra",
+   "item": "feed",
+   "variants": [
+    "fe_connector",
+    "fe_terraform"
+   ],
+   "best": [
+    "fe_connector"
+   ],
+   "poor_fit": [],
+   "rationale": "Tebra asks for real-time pipelines; the Kafka-to-Postgres connector is one. The Terraform bullet is infrastructure."
+  },
+  {
+   "id": "a_milw_autoencoder",
+   "category": "clear_best",
+   "job": "ml_milw",
+   "item": "signal",
+   "variants": [
+    "s_auto",
+    "s_serve"
+   ],
+   "best": [
+    "s_auto"
+   ],
+   "poor_fit": [],
+   "rationale": "Edge ML on signals: the autoencoder anomaly detector on accelerometer streams is the match."
+  },
+  {
+   "id": "a_fs_app",
+   "category": "clear_best",
+   "job": "swe_fs",
+   "item": "split",
+   "variants": [
+    "sp_app",
+    "sp_deploy"
+   ],
+   "best": [
+    "sp_app"
+   ],
+   "poor_fit": [],
+   "rationale": "A full stack role wants an application with a UI and a database; the Next.js and Postgres bullet shows both."
+  },
+  {
+   "id": "a_fe_app",
+   "category": "clear_best",
+   "job": "fe_amz",
+   "item": "split",
+   "variants": [
+    "sp_app",
+    "sp_deploy"
+   ],
+   "best": [
+    "sp_app"
+   ],
+   "poor_fit": [
+    "sp_deploy"
+   ],
+   "rationale": "A front end role wants web application work; the Next.js app is it. Deployment and uptime show no front end work."
+  },
+  {
+   "id": "a_asc_autograder",
+   "category": "clear_best",
+   "job": "swe_asc",
+   "item": "halden",
+   "variants": [
+    "h_grade",
+    "h_autograder",
+    "h_lab"
+   ],
+   "best": [
+    "h_autograder"
+   ],
+   "poor_fit": [
+    "h_grade",
+    "h_lab"
+   ],
+   "rationale": "The backend role asks for built software; the autograder is a built tool. Grading and running labs are teaching."
+  },
+  {
+   "id": "a_swbc_clean",
+   "category": "clear_best",
+   "job": "de_swbc",
+   "item": "casc",
+   "variants": [
+    "c_clean",
+    "c_mixed",
+    "c_toolkit"
+   ],
+   "best": [
+    "c_clean"
+   ],
+   "poor_fit": [
+    "c_mixed"
+   ],
+   "rationale": "A junior data engineer moves and cleans data in SQL and Python; the cleaning bullet does. A statistical model is not that."
+  },
+  {
+   "id": "b_esri_forecast",
+   "category": "close_call",
+   "job": "ds_esri",
+   "item": "halc",
+   "variants": [
+    "hc_forecast",
+    "hc_dbt",
+    "hc_ab",
+    "hc_forecast_ml"
+   ],
+   "best": [
+    "hc_forecast",
+    "hc_forecast_ml"
+   ],
+   "poor_fit": [
+    "hc_dbt"
+   ],
+   "rationale": "Both phrasings of the forecasting bullet show predictive modelling; the dbt consolidation does not."
+  },
+  {
+   "id": "b_next_forecast",
+   "category": "close_call",
+   "job": "ml_next",
+   "item": "halc",
+   "variants": [
+    "hc_forecast",
+    "hc_dbt",
+    "hc_ab",
+    "hc_forecast_ml"
+   ],
+   "best": [
+    "hc_forecast",
+    "hc_forecast_ml"
+   ],
+   "poor_fit": [
+    "hc_dbt"
+   ],
+   "rationale": "Training and tuning forecasting models fits an ML role in either phrasing; the dbt layer is data modelling."
+  },
+  {
+   "id": "b_mg_data",
+   "category": "close_call",
+   "job": "ds_mg",
+   "item": "casc",
+   "variants": [
+    "c_clean",
+    "c_dedupe",
+    "c_mixed",
+    "c_toolkit"
+   ],
+   "best": [
+    "c_clean",
+    "c_dedupe",
+    "c_mixed"
+   ],
+   "poor_fit": [
+    "c_toolkit"
+   ],
+   "rationale": "The role asks for data quality and a statistical foundation: cleaning (either phrasing) and the mixed-effects models both serve it. A plotting toolkit is neither."
+  },
+  {
+   "id": "b_rbi_infra",
+   "category": "close_call",
+   "job": "de_rbi",
+   "item": "bright",
+   "variants": [
+    "b_demand",
+    "b_airflow",
+    "b_terraform"
+   ],
+   "best": [
+    "b_airflow",
+    "b_terraform"
+   ],
+   "poor_fit": [
+    "b_demand"
+   ],
+   "rationale": "Pipelines and infrastructure as code on AWS: the Airflow retraining schedule and the Terraform SageMaker stack both fit. Demand modelling does not."
+  },
+  {
+   "id": "b_asc_services",
+   "category": "close_call",
+   "job": "swe_asc",
+   "item": "nwind",
+   "variants": [
+    "w_go",
+    "w_graphql",
+    "w_cypress",
+    "w_go_de"
+   ],
+   "best": [
+    "w_go",
+    "w_graphql",
+    "w_go_de"
+   ],
+   "poor_fit": [],
+   "rationale": "Backend services and APIs: the Go service (either phrasing) and the GraphQL resolvers both fit; the end-to-end tests fit less."
+  },
+  {
+   "id": "b_fs_api_tests",
+   "category": "close_call",
+   "job": "swe_fs",
+   "item": "nwind",
+   "variants": [
+    "w_go",
+    "w_graphql",
+    "w_cypress"
+   ],
+   "best": [
+    "w_graphql",
+    "w_cypress"
+   ],
+   "poor_fit": [],
+   "rationale": "A full stack role asks for REST APIs and automated tests: the GraphQL resolvers and the Cypress tests both fit."
+  },
+  {
+   "id": "b_swbc_pipelines",
+   "category": "close_call",
+   "job": "de_swbc",
+   "item": "north",
+   "variants": [
+    "n_spark",
+    "n_dbt",
+    "n_kafka"
+   ],
+   "best": [
+    "n_spark",
+    "n_dbt"
+   ],
+   "poor_fit": [],
+   "rationale": "A junior pipeline role: the nightly Spark job and the tested dbt models both show pipelines and quality; the Kafka backfill is a closer second."
+  },
+  {
+   "id": "b_mg_reports",
+   "category": "close_call",
+   "job": "ds_mg",
+   "item": "fair",
+   "variants": [
+    "f_churn",
+    "f_ab",
+    "f_report"
+   ],
+   "best": [
+    "f_report",
+    "f_ab"
+   ],
+   "poor_fit": [],
+   "rationale": "Reports stakeholders use, and findings shared with non-technical colleagues: the cohort report and the A/B readouts both fit."
+  },
+  {
+   "id": "c_fe_fairhaven",
+   "category": "no_match",
+   "job": "fe_amz",
+   "item": "fair",
+   "variants": [
+    "f_churn",
+    "f_ab",
+    "f_report"
+   ],
+   "best": [],
+   "poor_fit": [
+    "f_churn",
+    "f_ab",
+    "f_report"
+   ],
+   "rationale": "A front end role; none of the data science bullets show front end work."
+  },
+  {
+   "id": "c_hw_tess",
+   "category": "no_match",
+   "job": "hw_amz",
+   "item": "tess",
+   "variants": [
+    "t_ray",
+    "t_kafka",
+    "t_drift"
+   ],
+   "best": [],
+   "poor_fit": [
+    "t_ray",
+    "t_kafka",
+    "t_drift"
+   ],
+   "rationale": "Chip timing analysis; none of the ML infrastructure bullets touch hardware design."
+  },
+  {
+   "id": "c_hw_north",
+   "category": "no_match",
+   "job": "hw_amz",
+   "item": "north",
+   "variants": [
+    "n_spark",
+    "n_dbt",
+    "n_kafka"
+   ],
+   "best": [],
+   "poor_fit": [
+    "n_spark",
+    "n_dbt",
+    "n_kafka"
+   ],
+   "rationale": "Chip timing analysis; none of the data engineering bullets touch hardware design."
+  },
+  {
+   "id": "c_fe_north",
+   "category": "no_match",
+   "job": "fe_amz",
+   "item": "north",
+   "variants": [
+    "n_spark",
+    "n_dbt",
+    "n_kafka"
+   ],
+   "best": [],
+   "poor_fit": [
+    "n_spark",
+    "n_dbt",
+    "n_kafka"
+   ],
+   "rationale": "A front end role; none of the data engineering bullets show front end work."
+  },
+  {
+   "id": "c_reactor_casc",
+   "category": "no_match",
+   "job": "swe_reactor",
+   "item": "casc",
+   "variants": [
+    "c_clean",
+    "c_mixed",
+    "c_toolkit"
+   ],
+   "best": [],
+   "poor_fit": [
+    "c_clean",
+    "c_mixed",
+    "c_toolkit"
+   ],
+   "rationale": "Reactor control software; none of the statistics assistant's bullets show systems or hardware software."
+  },
+  {
+   "id": "c_reactor_halc",
+   "category": "no_match",
+   "job": "swe_reactor",
+   "item": "halc",
+   "variants": [
+    "hc_forecast",
+    "hc_dbt",
+    "hc_ab"
+   ],
+   "best": [],
+   "poor_fit": [
+    "hc_forecast",
+    "hc_dbt",
+    "hc_ab"
+   ],
+   "rationale": "Reactor control software; none of the analytics bullets show systems or hardware software."
+  },
+  {
+   "id": "c_hw_halc",
+   "category": "no_match",
+   "job": "hw_amz",
+   "item": "halc",
+   "variants": [
+    "hc_forecast",
+    "hc_dbt",
+    "hc_ab"
+   ],
+   "best": [],
+   "poor_fit": [
+    "hc_forecast",
+    "hc_dbt",
+    "hc_ab"
+   ],
+   "rationale": "Chip timing analysis; none of the analytics bullets touch hardware design."
+  },
+  {
+   "id": "c_esri_halden",
+   "category": "no_match",
+   "job": "ds_esri",
+   "item": "halden",
+   "variants": [
+    "h_grade",
+    "h_autograder",
+    "h_lab"
+   ],
+   "best": [],
+   "poor_fit": [
+    "h_grade",
+    "h_autograder",
+    "h_lab"
+   ],
+   "rationale": "A data science role; none of the teaching assistant bullets show analytics or modelling."
+  },
+  {
+   "id": "d_esri_classifier",
+   "category": "synonym",
+   "job": "ds_esri",
+   "item": "fair",
+   "variants": [
+    "f_churn_syn",
+    "f_report",
+    "f_ab"
+   ],
+   "best": [
+    "f_churn_syn"
+   ],
+   "poor_fit": [
+    "f_report"
+   ],
+   "rationale": "'Classifier that predicts which subscribers will cancel' is predictive modelling in other words; the report automation shares the posting's Python and says nothing of modelling."
+  },
+  {
+   "id": "d_next_alerts",
+   "category": "synonym",
+   "job": "ml_next",
+   "item": "tess",
+   "variants": [
+    "t_drift_syn",
+    "t_ray",
+    "t_kafka"
+   ],
+   "best": [
+    "t_drift_syn"
+   ],
+   "poor_fit": [],
+   "rationale": "Alerts that flag a shift in incoming feature values is watching a model for drift in other words."
+  },
+  {
+   "id": "d_tebra_backfill",
+   "category": "synonym",
+   "job": "de_tebra",
+   "item": "north",
+   "variants": [
+    "n_kafka_syn",
+    "n_spark",
+    "n_dbt"
+   ],
+   "best": [
+    "n_kafka_syn",
+    "n_spark"
+   ],
+   "poor_fit": [],
+   "rationale": "Reading messages from Kafka and refilling a gap is a streaming pipeline in other words; the nightly Spark job is a batch pipeline."
+  },
+  {
+   "id": "d_rbi_scripted_env",
+   "category": "synonym",
+   "job": "de_rbi",
+   "item": "bright",
+   "variants": [
+    "b_terraform_syn",
+    "b_demand",
+    "b_airflow"
+   ],
+   "best": [
+    "b_terraform_syn",
+    "b_airflow"
+   ],
+   "poor_fit": [
+    "b_demand"
+   ],
+   "rationale": "Scripting the provisioning of a cloud environment so it can be rebuilt is infrastructure as code in other words."
+  },
+  {
+   "id": "d_asc_query_layer",
+   "category": "synonym",
+   "job": "swe_asc",
+   "item": "nwind",
+   "variants": [
+    "w_graphql_syn",
+    "w_cypress",
+    "w_go"
+   ],
+   "best": [
+    "w_graphql_syn",
+    "w_go"
+   ],
+   "poor_fit": [],
+   "rationale": "A query layer over a gateway is an API in other words; the Go service is a backend service."
+  },
+  {
+   "id": "d_mg_reconcile",
+   "category": "synonym",
+   "job": "ds_mg",
+   "item": "casc",
+   "variants": [
+    "c_clean_syn",
+    "c_toolkit",
+    "c_mixed"
+   ],
+   "best": [
+    "c_clean_syn",
+    "c_mixed"
+   ],
+   "poor_fit": [
+    "c_toolkit"
+   ],
+   "rationale": "Reconciling records and eliminating duplicates is data accuracy in other words; a plotting toolkit does not show it."
+  },
+  {
+   "id": "d_fs_webapp",
+   "category": "synonym",
+   "job": "swe_fs",
+   "item": "split",
+   "variants": [
+    "sp_app_syn",
+    "sp_deploy"
+   ],
+   "best": [
+    "sp_app_syn"
+   ],
+   "poor_fit": [],
+   "rationale": "A Next.js web app on Postgres is a UI over a relational database, in framework and product names the posting does not use."
+  },
+  {
+   "id": "d_milw_unusual",
+   "category": "synonym",
+   "job": "ml_milw",
+   "item": "signal",
+   "variants": [
+    "s_auto_syn",
+    "s_serve"
+   ],
+   "best": [
+    "s_auto_syn"
+   ],
+   "poor_fit": [],
+   "rationale": "Spotting unusual patterns in sensor streams with a small neural network is anomaly detection in other words."
+  },
+  {
+   "id": "e_asc_grading",
+   "category": "keyword_trap",
+   "job": "swe_asc",
+   "item": "halden",
+   "variants": [
+    "h_grade",
+    "h_autograder"
+   ],
+   "best": [
+    "h_autograder"
+   ],
+   "poor_fit": [
+    "h_grade"
+   ],
+   "rationale": "'Data-structures assignments' matches the posting's data structures, but grading them is teaching; the autograder is built software."
+  },
+  {
+   "id": "e_fs_labs",
+   "category": "keyword_trap",
+   "job": "swe_fs",
+   "item": "halden",
+   "variants": [
+    "h_lab",
+    "h_autograder"
+   ],
+   "best": [
+    "h_autograder"
+   ],
+   "poor_fit": [
+    "h_lab"
+   ],
+   "rationale": "Labs on Git and testing repeat the posting's Git and testing, but running a lab is teaching; the autograder is built in Python."
+  },
+  {
+   "id": "e_esri_terraform",
+   "category": "keyword_trap",
+   "job": "ds_esri",
+   "item": "bright",
+   "variants": [
+    "b_terraform",
+    "b_demand"
+   ],
+   "best": [
+    "b_demand"
+   ],
+   "poor_fit": [
+    "b_terraform"
+   ],
+   "rationale": "The SageMaker training environment repeats cloud and machine learning terms, but Terraform provisioning shows no modelling; the demand models do."
+  },
+  {
+   "id": "e_tebra_training",
+   "category": "keyword_trap",
+   "job": "de_tebra",
+   "item": "tess",
+   "variants": [
+    "t_ray",
+    "t_kafka",
+    "t_drift"
+   ],
+   "best": [
+    "t_kafka"
+   ],
+   "poor_fit": [],
+   "rationale": "The Kafka feature stream is the real-time ML data pipeline; the GPU training pipeline repeats 'pipeline' and 'machine learning' in a different job."
+  },
+  {
+   "id": "e_hw_autograder",
+   "category": "keyword_trap",
+   "job": "hw_amz",
+   "item": "halden",
+   "variants": [
+    "h_autograder",
+    "h_grade"
+   ],
+   "best": [],
+   "poor_fit": [
+    "h_autograder",
+    "h_grade"
+   ],
+   "rationale": "A Python autograder repeats the posting's Python scripting and automation, but nothing in the item shows chip design."
+  },
+  {
+   "id": "e_rbi_forecast",
+   "category": "keyword_trap",
+   "job": "de_rbi",
+   "item": "halc",
+   "variants": [
+    "hc_dbt",
+    "hc_forecast",
+    "hc_ab"
+   ],
+   "best": [
+    "hc_dbt"
+   ],
+   "poor_fit": [],
+   "rationale": "The dbt consolidation of reporting pipelines is pipeline work; the forecasting bullet repeats the posting's Python."
+  },
+  {
+   "id": "e_next_teaching",
+   "category": "keyword_trap",
+   "job": "ml_next",
+   "item": "halden",
+   "variants": [
+    "h_grade",
+    "h_lab",
+    "h_autograder"
+   ],
+   "best": [],
+   "poor_fit": [
+    "h_grade",
+    "h_lab",
+    "h_autograder"
+   ],
+   "rationale": "Python, Linux and testing words appear, but none of the teaching assistant bullets shows training or deploying models."
+  },
+  {
+   "id": "e_esri_go",
+   "category": "keyword_trap",
+   "job": "ds_esri",
+   "item": "nwind",
+   "variants": [
+    "w_go",
+    "w_graphql",
+    "w_cypress"
+   ],
+   "best": [],
+   "poor_fit": [
+    "w_go",
+    "w_graphql",
+    "w_cypress"
+   ],
+   "rationale": "'Processes 200k records an hour' echoes processing large datasets, but it is a service, not data science; none shows modelling."
+  },
+  {
+   "id": "f_esri_churn",
+   "category": "single",
+   "job": "ds_esri",
+   "item": "fair",
+   "variants": [
+    "f_churn"
+   ],
+   "best": [
+    "f_churn"
+   ],
+   "poor_fit": [],
+   "rationale": "The only variant is the churn classifier, which is the job."
+  },
+  {
+   "id": "f_tebra_connector",
+   "category": "single",
+   "job": "de_tebra",
+   "item": "feed",
+   "variants": [
+    "fe_connector"
+   ],
+   "best": [
+    "fe_connector"
+   ],
+   "poor_fit": [],
+   "rationale": "The only variant is a streaming connector, which fits the pipeline role."
+  },
+  {
+   "id": "f_fs_app",
+   "category": "single",
+   "job": "swe_fs",
+   "item": "split",
+   "variants": [
+    "sp_app"
+   ],
+   "best": [
+    "sp_app"
+   ],
+   "poor_fit": [],
+   "rationale": "The only variant is the web app on Postgres, which fits."
+  },
+  {
+   "id": "f_milw_auto",
+   "category": "single",
+   "job": "ml_milw",
+   "item": "signal",
+   "variants": [
+    "s_auto"
+   ],
+   "best": [
+    "s_auto"
+   ],
+   "poor_fit": [],
+   "rationale": "The only variant is the autoencoder, which fits the edge ML role."
+  },
+  {
+   "id": "f_fe_churn",
+   "category": "single",
+   "job": "fe_amz",
+   "item": "fair",
+   "variants": [
+    "f_churn"
+   ],
+   "best": [],
+   "poor_fit": [
+    "f_churn"
+   ],
+   "rationale": "A churn classifier is not front end work."
+  },
+  {
+   "id": "f_hw_connector",
+   "category": "single",
+   "job": "hw_amz",
+   "item": "feed",
+   "variants": [
+    "fe_connector"
+   ],
+   "best": [],
+   "poor_fit": [
+    "fe_connector"
+   ],
+   "rationale": "A Kafka connector is not chip design."
+  },
+  {
+   "id": "f_reactor_chess",
+   "category": "single",
+   "job": "swe_reactor",
+   "item": "chess",
+   "variants": [
+    "ch_parse"
+   ],
+   "best": [],
+   "poor_fit": [
+    "ch_parse"
+   ],
+   "rationale": "Parsing chess games into MongoDB is not reactor control software."
+  },
+  {
+   "id": "f_hw_autoencoder",
+   "category": "single",
+   "job": "hw_amz",
+   "item": "signal",
+   "variants": [
+    "s_auto"
+   ],
+   "best": [],
+   "poor_fit": [
+    "s_auto"
+   ],
+   "rationale": "An anomaly detector on accelerometer streams is not chip timing analysis."
+  }
+ ]
+}

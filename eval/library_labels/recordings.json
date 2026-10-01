@@ -1,0 +1,2637 @@
+{
+  "decisions": [
+    {
+      "answer": {
+        "choice": "none",
+        "confidence": 1.0,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.0,
+          "machine_learning": 0.0,
+          "none": 1.0,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "0508901d67c568b8e858a5d3fac12aa1d45877ddab62841cb2b95cafc145fc2a",
+      "created_at": "2026-10-01T18:19:32.846254",
+      "input_tokens": 549.0,
+      "output_tokens": 63.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "none",
+        "confidence": 0.77,
+        "probabilities": {
+          "data_engineering": 0.1,
+          "data_science": 0.0,
+          "machine_learning": 0.0,
+          "none": 0.82,
+          "software_engineering": 0.08
+        },
+        "type": "choice"
+      },
+      "cache_key": "09ffee71b78c4dfee3a2a6dea5bd5b51029a6c9e856ed2988e9e0829e078723c",
+      "created_at": "2026-10-01T18:19:35.123463",
+      "input_tokens": 549.0,
+      "output_tokens": 63.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "none",
+        "confidence": 0.97,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.0,
+          "machine_learning": 0.0,
+          "none": 0.98,
+          "software_engineering": 0.02
+        },
+        "type": "choice"
+      },
+      "cache_key": "163ea7903cbd1662ffba1162a867aa4281259e2ded2ae3434237df505a57b699",
+      "created_at": "2026-10-01T18:19:34.034281",
+      "input_tokens": 541.0,
+      "output_tokens": 63.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "data_science",
+        "confidence": 0.97,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.98,
+          "machine_learning": 0.0,
+          "none": 0.02,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "2c3459442c342f478d43622eb6c3d8e114b1d2d72529df3eacd824d8381dc703",
+      "created_at": "2026-10-01T18:19:30.909535",
+      "input_tokens": 540.0,
+      "output_tokens": 66.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "none",
+        "confidence": 1.0,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.0,
+          "machine_learning": 0.0,
+          "none": 1.0,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "2cd8fb54f5225e3af26560bd3e5609dec731944f55996a03067773e90b8e1a05",
+      "created_at": "2026-10-01T18:19:32.066932",
+      "input_tokens": 551.0,
+      "output_tokens": 63.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "machine_learning",
+        "confidence": 0.88,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.06,
+          "machine_learning": 0.9,
+          "none": 0.04,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "2d3f5dd663db9a3726c9d9df65e2c7836d1ca9dde6a34b740b3f2c01e28d512b",
+      "created_at": "2026-10-01T18:19:30.518913",
+      "input_tokens": 549.0,
+      "output_tokens": 64.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "software_engineering",
+        "confidence": 1.0,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.0,
+          "machine_learning": 0.0,
+          "none": 0.0,
+          "software_engineering": 1.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "347273b699c2514f1cab909d19fa3fec045601d49cdb3b2948b9f338e4ac5f41",
+      "created_at": "2026-10-01T18:19:24.102771",
+      "input_tokens": 560.0,
+      "output_tokens": 66.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "data_engineering",
+        "confidence": 0.99,
+        "probabilities": {
+          "data_engineering": 1.0,
+          "data_science": 0.0,
+          "machine_learning": 0.0,
+          "none": 0.0,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "361a811e245286f5e5ec22a5ef063982521e3636d43843ca9548f905c658a889",
+      "created_at": "2026-10-01T18:19:24.884071",
+      "input_tokens": 573.0,
+      "output_tokens": 66.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "none",
+        "confidence": 0.99,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.0,
+          "machine_learning": 0.0,
+          "none": 1.0,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "387e9d49f5b496fe49371a1bef315376586d461d74673221a3a9e97b7a8a769b",
+      "created_at": "2026-10-01T18:19:32.431978",
+      "input_tokens": 576.0,
+      "output_tokens": 63.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "data_engineering",
+        "confidence": 0.99,
+        "probabilities": {
+          "data_engineering": 1.0,
+          "data_science": 0.0,
+          "machine_learning": 0.0,
+          "none": 0.0,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "3c1b4187ab8e2d04b3b64b8397172b37bb4eed5c01244cb8f1e620eaf214c894",
+      "created_at": "2026-10-01T18:19:28.914595",
+      "input_tokens": 559.0,
+      "output_tokens": 66.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "data_science",
+        "confidence": 0.98,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.99,
+          "machine_learning": 0.0,
+          "none": 0.01,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "3d931ab8e8c4cf186ebdd06dbb3a43c7a5a72c1bcb120d75ed0a6fac48e10993",
+      "created_at": "2026-10-01T18:19:24.490963",
+      "input_tokens": 565.0,
+      "output_tokens": 66.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "data_engineering",
+        "confidence": 0.87,
+        "probabilities": {
+          "data_engineering": 0.9,
+          "data_science": 0.04,
+          "machine_learning": 0.0,
+          "none": 0.06,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "4144e1f8d8e79104a611e3ed38b747ca25c6be0636d9a8e587f088013172b993",
+      "created_at": "2026-10-01T18:19:26.852231",
+      "input_tokens": 568.0,
+      "output_tokens": 66.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "data_engineering",
+        "confidence": 0.99,
+        "probabilities": {
+          "data_engineering": 0.99,
+          "data_science": 0.0,
+          "machine_learning": 0.0,
+          "none": 0.01,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "5354d49b14d419768e4650e168fa94cfb14f14eb8ce6c8859b911eb35f5e44b8",
+      "created_at": "2026-10-01T18:19:27.672800",
+      "input_tokens": 565.0,
+      "output_tokens": 66.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "machine_learning",
+        "confidence": 0.97,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.0,
+          "machine_learning": 0.98,
+          "none": 0.02,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "5e53161d0e00e4595d0eee5d5b492087150ab5c521ce64b5796811df4880b437",
+      "created_at": "2026-10-01T18:19:25.260219",
+      "input_tokens": 570.0,
+      "output_tokens": 64.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "none",
+        "confidence": 0.98,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.01,
+          "machine_learning": 0.0,
+          "none": 0.99,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "5f08fcb3c6a299e44af96460fcfec8bb0bf9c5012e637bc2bad70f26e23884e2",
+      "created_at": "2026-10-01T18:19:36.601610",
+      "input_tokens": 543.0,
+      "output_tokens": 63.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "machine_learning",
+        "confidence": 0.92,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.0,
+          "machine_learning": 0.93,
+          "none": 0.01,
+          "software_engineering": 0.05
+        },
+        "type": "choice"
+      },
+      "cache_key": "69dc989e5ca03aacf6a1452d57103d8003b832e3dd76da3403ec912fee6ed74c",
+      "created_at": "2026-10-01T18:19:29.264407",
+      "input_tokens": 550.0,
+      "output_tokens": 64.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "software_engineering",
+        "confidence": 0.97,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.0,
+          "machine_learning": 0.02,
+          "none": 0.01,
+          "software_engineering": 0.97
+        },
+        "type": "choice"
+      },
+      "cache_key": "710668ce9bb0d9b35088d86c9d9dedc0f82c18060e408010c2f5eee1ab7ed0dc",
+      "created_at": "2026-10-01T18:19:29.647268",
+      "input_tokens": 546.0,
+      "output_tokens": 66.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "none",
+        "confidence": 1.0,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.0,
+          "machine_learning": 0.0,
+          "none": 1.0,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "75cebb191b0e19dbcc4991302b4fcab12cf3c6fffcccdb79de9349db3f188924",
+      "created_at": "2026-10-01T18:19:31.673119",
+      "input_tokens": 550.0,
+      "output_tokens": 63.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "data_engineering",
+        "confidence": 0.99,
+        "probabilities": {
+          "data_engineering": 0.99,
+          "data_science": 0.0,
+          "machine_learning": 0.0,
+          "none": 0.01,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "78c85506c6da7686e603763221e167bc3cb00c3822d9a9dbd60774942fde5d20",
+      "created_at": "2026-10-01T18:19:23.184924",
+      "input_tokens": 584.0,
+      "output_tokens": 66.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "none",
+        "confidence": 1.0,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.0,
+          "machine_learning": 0.0,
+          "none": 1.0,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "79c57994e7f9abb38762da69c44fe5c67295e106fb44ef002e563a41f56dc513",
+      "created_at": "2026-10-01T18:19:35.822194",
+      "input_tokens": 546.0,
+      "output_tokens": 63.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "none",
+        "confidence": 1.0,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.0,
+          "machine_learning": 0.0,
+          "none": 1.0,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "825463f00856901e872e77f2111f62ec7f0d587bcdce6d217368708d0af310f0",
+      "created_at": "2026-10-01T18:19:33.312853",
+      "input_tokens": 546.0,
+      "output_tokens": 63.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "data_science",
+        "confidence": 0.99,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.99,
+          "machine_learning": 0.0,
+          "none": 0.01,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "84bbd069def12156f2dda4e77e0ef562a36a96cad4370cf92812c00dee148286",
+      "created_at": "2026-10-01T18:18:56.279435",
+      "input_tokens": 564.0,
+      "output_tokens": 66.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "none",
+        "confidence": 0.72,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.0,
+          "machine_learning": 0.21,
+          "none": 0.78,
+          "software_engineering": 0.01
+        },
+        "type": "choice"
+      },
+      "cache_key": "8d471485440c1ca11a2a38240f6bc13d3feb533a9ced0bd0eae2529ae74a5e3e",
+      "created_at": "2026-10-01T18:19:35.469077",
+      "input_tokens": 544.0,
+      "output_tokens": 63.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "data_engineering",
+        "confidence": 0.8,
+        "probabilities": {
+          "data_engineering": 0.84,
+          "data_science": 0.0,
+          "machine_learning": 0.12,
+          "none": 0.04,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "970fd17a2c838f9185fd9cf480c86a47d7a2e40c716c6779795cdba367ae149f",
+      "created_at": "2026-10-01T18:19:27.266459",
+      "input_tokens": 556.0,
+      "output_tokens": 66.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "data_engineering",
+        "confidence": 0.34,
+        "probabilities": {
+          "data_engineering": 0.48,
+          "data_science": 0.39,
+          "machine_learning": 0.0,
+          "none": 0.13,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "9eae570edce1be36868e0e66dd0afa7c62606ba9748870ae197c810cc01e3875",
+      "created_at": "2026-10-01T18:19:26.428066",
+      "input_tokens": 560.0,
+      "output_tokens": 66.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "software_engineering",
+        "confidence": 0.99,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.0,
+          "machine_learning": 0.0,
+          "none": 0.0,
+          "software_engineering": 1.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "a8c20772744130b7bd8fd683d03951c48a0017daf7bc626715d47887485156d4",
+      "created_at": "2026-10-01T18:19:25.641495",
+      "input_tokens": 564.0,
+      "output_tokens": 66.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "none",
+        "confidence": 0.99,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.0,
+          "machine_learning": 0.0,
+          "none": 0.99,
+          "software_engineering": 0.01
+        },
+        "type": "choice"
+      },
+      "cache_key": "a9bd61da02afaee904fc9f25e8550471ba32db3cca94d39a51983682a5460bdd",
+      "created_at": "2026-10-01T18:19:36.251364",
+      "input_tokens": 541.0,
+      "output_tokens": 63.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "none",
+        "confidence": 0.97,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.01,
+          "machine_learning": 0.02,
+          "none": 0.97,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "b1368ebe27e71a998154eb7b8d31485e8543f7965165f31c244fdcdc337a9ee1",
+      "created_at": "2026-10-01T18:19:34.387179",
+      "input_tokens": 548.0,
+      "output_tokens": 63.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "software_engineering",
+        "confidence": 0.93,
+        "probabilities": {
+          "data_engineering": 0.05,
+          "data_science": 0.0,
+          "machine_learning": 0.0,
+          "none": 0.01,
+          "software_engineering": 0.94
+        },
+        "type": "choice"
+      },
+      "cache_key": "c2e9b780d6e72e2d92c2fe4dd639ffde56a5bcdabd91acdb595d5ea0a2452064",
+      "created_at": "2026-10-01T18:19:31.311498",
+      "input_tokens": 542.0,
+      "output_tokens": 66.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "data_science",
+        "confidence": 0.57,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.66,
+          "machine_learning": 0.31,
+          "none": 0.03,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "c38737d73571fa39696b20605e2083b100beef301c01e1c70c49d3fa65976254",
+      "created_at": "2026-10-01T18:19:28.092182",
+      "input_tokens": 546.0,
+      "output_tokens": 66.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "none",
+        "confidence": 1.0,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.0,
+          "machine_learning": 0.0,
+          "none": 1.0,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "c638661c9ec875dd2df0c21e4cc89d156321fab17097444444848e72cdf99b16",
+      "created_at": "2026-10-01T18:19:33.681121",
+      "input_tokens": 544.0,
+      "output_tokens": 63.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "machine_learning",
+        "confidence": 0.7,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.19,
+          "machine_learning": 0.77,
+          "none": 0.04,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "c7ec17c6be2057847e467989be90d7006692261c205ec0dfae5d9719712a6951",
+      "created_at": "2026-10-01T18:19:26.031419",
+      "input_tokens": 576.0,
+      "output_tokens": 64.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "none",
+        "confidence": 0.9,
+        "probabilities": {
+          "data_engineering": 0.08,
+          "data_science": 0.0,
+          "machine_learning": 0.0,
+          "none": 0.92,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "d5516ff3122542086c3a5b53fd47f84a14990b26c5121b6ae80d918d77c3ef03",
+      "created_at": "2026-10-01T18:19:34.771797",
+      "input_tokens": 549.0,
+      "output_tokens": 63.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "software_engineering",
+        "confidence": 0.69,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.0,
+          "machine_learning": 0.22,
+          "none": 0.03,
+          "software_engineering": 0.75
+        },
+        "type": "choice"
+      },
+      "cache_key": "da5a3286e6ddae58008f05649eae4907e1da03c77b717d02f0e5aac1cf08dafb",
+      "created_at": "2026-10-01T18:19:28.502979",
+      "input_tokens": 556.0,
+      "output_tokens": 66.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "data_engineering",
+        "confidence": 1.0,
+        "probabilities": {
+          "data_engineering": 1.0,
+          "data_science": 0.0,
+          "machine_learning": 0.0,
+          "none": 0.0,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "e5121cc614804b78d2dcd842e19cb623cd68acba532fce435a10f04067804d4b",
+      "created_at": "2026-10-01T18:19:30.154415",
+      "input_tokens": 553.0,
+      "output_tokens": 66.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "machine_learning",
+        "confidence": 0.99,
+        "probabilities": {
+          "data_engineering": 0.0,
+          "data_science": 0.0,
+          "machine_learning": 0.99,
+          "none": 0.01,
+          "software_engineering": 0.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "fb28b56b94358dc55d8b94f323d68ae3969113458dac854f726932338465b737",
+      "created_at": "2026-10-01T18:19:23.568347",
+      "input_tokens": 564.0,
+      "output_tokens": 64.0,
+      "point": "track_baseline",
+      "question": {
+        "criteria": {
+          "data_engineering": "A saved resume track for data engineering roles, started from a job titled \"Data Engineer\".",
+          "data_science": "A saved resume track for data science roles, started from a job titled \"Data Scientist\".",
+          "machine_learning": "A saved resume track for machine learning roles, started from a job titled \"Machine Learning Engineer\".",
+          "none": null,
+          "software_engineering": "A saved resume track for software engineering roles, started from a job titled \"Software Engineer\"."
+        },
+        "instructions": "Which saved resume track should this job's resume start from? Each track is the resume the candidate built for one kind of role. Choose the track whose role matches the work this job actually asks for, judging by its requirements more than by the job title alone. Choose none when no saved track matches the job.",
+        "type": "choice"
+      },
+      "question_version": "track_baseline@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "c8dd20f8-2560-5e5b-905f-6160934f53a4",
+        "confidence": 0.24,
+        "probabilities": {
+          "4c4755fe-b32e-590d-97a9-0e8e9e4e64ae": 0.2,
+          "c8dd20f8-2560-5e5b-905f-6160934f53a4": 0.42,
+          "f9195a04-52ad-5e3a-acb1-2a26564328c0": 0.09,
+          "no_match": 0.29
+        },
+        "type": "choice"
+      },
+      "cache_key": "02a3e0509cf64516c998749b9987100558ab05cd7b2cdcc540a784b98ee54ac9",
+      "created_at": "2026-10-01T18:19:09.947569",
+      "input_tokens": 707.0,
+      "output_tokens": 179.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "4c4755fe-b32e-590d-97a9-0e8e9e4e64ae": "Trained a scikit-learn churn classifier on 480k subscription records, raising AUC from 0.71 to 0.83 against the rule-based baseline.",
+          "c8dd20f8-2560-5e5b-905f-6160934f53a4": "Automated the weekly cohort report in pandas and matplotlib, replacing a 6-hour manual Excel process with a 15-minute run.",
+          "f9195a04-52ad-5e3a-acb1-2a26564328c0": "Ran A/B test readouts for 12 store promotions, using bootstrap confidence intervals to show that 3 were statistically flat.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "945f245d-b466-5c04-aff8-b8897fbf0144",
+        "confidence": 0.86,
+        "probabilities": {
+          "945f245d-b466-5c04-aff8-b8897fbf0144": 0.89,
+          "a7f04ac6-fef1-56a0-a853-50853687d5ce": 0.01,
+          "cc3a39d7-886a-570e-99ae-70c24cb98295": 0.0,
+          "no_match": 0.1
+        },
+        "type": "choice"
+      },
+      "cache_key": "1122777918a4d5aa00e3257039be38a3085d79fde80854ffeaeaa74bc6d41555",
+      "created_at": "2026-10-01T18:19:17.948542",
+      "input_tokens": 685.0,
+      "output_tokens": 167.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "945f245d-b466-5c04-aff8-b8897fbf0144": "Shipped a Kafka feature stream that feeds 3 production models with sub-minute freshness.",
+          "a7f04ac6-fef1-56a0-a853-50853687d5ce": "Added Grafana drift monitoring that caught a 7% input distribution shift within a day.",
+          "cc3a39d7-886a-570e-99ae-70c24cb98295": "Built a Ray-backed training pipeline that cut a 9-hour training job to 2 hours across 4 GPUs.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "no_match",
+        "confidence": 0.43,
+        "probabilities": {
+          "09516cf8-aa28-5f9d-8b4b-d294d4a58cc5": 0.01,
+          "c820f9ad-799b-5f34-9b6c-04f56eb72f68": 0.01,
+          "ef8310d2-d8ff-5729-b0b3-ab05e29c7441": 0.41,
+          "no_match": 0.57
+        },
+        "type": "choice"
+      },
+      "cache_key": "138fbddc959070f37bb9d4a4bb5e8944c5ecc2be25cbd37c0c7be4e4d9dc2954",
+      "created_at": "2026-10-01T18:19:19.152419",
+      "input_tokens": 664.0,
+      "output_tokens": 140.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "09516cf8-aa28-5f9d-8b4b-d294d4a58cc5": "Graded and wrote feedback on 120 data-structures assignments each term.",
+          "c820f9ad-799b-5f34-9b6c-04f56eb72f68": "Led weekly lab sections for 30 students on Git, Linux and testing practice.",
+          "ef8310d2-d8ff-5729-b0b3-ab05e29c7441": "Built a Python autograder that cut assignment turnaround from 4 days to 1.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "ef8310d2-d8ff-5729-b0b3-ab05e29c7441",
+        "confidence": 0.41,
+        "probabilities": {
+          "09516cf8-aa28-5f9d-8b4b-d294d4a58cc5": 0.03,
+          "c820f9ad-799b-5f34-9b6c-04f56eb72f68": 0.02,
+          "ef8310d2-d8ff-5729-b0b3-ab05e29c7441": 0.56,
+          "no_match": 0.39
+        },
+        "type": "choice"
+      },
+      "cache_key": "152f10af9e025308c1b231a8fda90457b08873d4ed5f4a241c3ee5832e378908",
+      "created_at": "2026-10-01T18:19:06.132627",
+      "input_tokens": 660.0,
+      "output_tokens": 168.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "09516cf8-aa28-5f9d-8b4b-d294d4a58cc5": "Graded and wrote feedback on 120 data-structures assignments each term.",
+          "c820f9ad-799b-5f34-9b6c-04f56eb72f68": "Led weekly lab sections for 30 students on Git, Linux and testing practice.",
+          "ef8310d2-d8ff-5729-b0b3-ab05e29c7441": "Built a Python autograder that cut assignment turnaround from 4 days to 1.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "no_match",
+        "confidence": 0.99,
+        "probabilities": {
+          "4c4755fe-b32e-590d-97a9-0e8e9e4e64ae": 0.0,
+          "c8dd20f8-2560-5e5b-905f-6160934f53a4": 0.0,
+          "f9195a04-52ad-5e3a-acb1-2a26564328c0": 0.0,
+          "no_match": 1.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "1c72c1ecb93c82ddaddda975bf01f925427f12ec41872e7afe96da4bb23d4fff",
+      "created_at": "2026-10-01T18:19:10.324649",
+      "input_tokens": 703.0,
+      "output_tokens": 146.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "4c4755fe-b32e-590d-97a9-0e8e9e4e64ae": "Trained a scikit-learn churn classifier on 480k subscription records, raising AUC from 0.71 to 0.83 against the rule-based baseline.",
+          "c8dd20f8-2560-5e5b-905f-6160934f53a4": "Automated the weekly cohort report in pandas and matplotlib, replacing a 6-hour manual Excel process with a 15-minute run.",
+          "f9195a04-52ad-5e3a-acb1-2a26564328c0": "Ran A/B test readouts for 12 store promotions, using bootstrap confidence intervals to show that 3 were statistically flat.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "ef8310d2-d8ff-5729-b0b3-ab05e29c7441",
+        "confidence": 0.64,
+        "probabilities": {
+          "c820f9ad-799b-5f34-9b6c-04f56eb72f68": 0.04,
+          "ef8310d2-d8ff-5729-b0b3-ab05e29c7441": 0.76,
+          "no_match": 0.2
+        },
+        "type": "choice"
+      },
+      "cache_key": "1e202e2d27a1c245268ddf278d249ecd4bb469163bd3f44e8a463a87fe992e4d",
+      "created_at": "2026-10-01T18:19:17.144266",
+      "input_tokens": 605.0,
+      "output_tokens": 131.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "c820f9ad-799b-5f34-9b6c-04f56eb72f68": "Led weekly lab sections for 30 students on Git, Linux and testing practice.",
+          "ef8310d2-d8ff-5729-b0b3-ab05e29c7441": "Built a Python autograder that cut assignment turnaround from 4 days to 1.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "no_match",
+        "confidence": 0.99,
+        "probabilities": {
+          "7e63f9b1-d2e8-5e7b-b935-7f2e859434a3": 0.0,
+          "no_match": 1.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "24794f36a344b599d7ffd892713d63bb0337c1a51d4d68268e0120ee5e31e9b8",
+      "created_at": "2026-10-01T18:19:22.814964",
+      "input_tokens": 563.0,
+      "output_tokens": 67.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "7e63f9b1-d2e8-5e7b-b935-7f2e859434a3": "Detects anomalies in 12-channel accelerometer streams with a lightweight autoencoder.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "c6de9e72-c28d-53f7-a527-e46ac94635c5",
+        "confidence": 0.07,
+        "probabilities": {
+          "c6de9e72-c28d-53f7-a527-e46ac94635c5": 0.54,
+          "no_match": 0.46
+        },
+        "type": "choice"
+      },
+      "cache_key": "2e948976d1ebdc774a5e4667090598f51cfcce4049c6f6c450baebeb600d20a0",
+      "created_at": "2026-10-01T18:19:20.384250",
+      "input_tokens": 565.0,
+      "output_tokens": 93.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "c6de9e72-c28d-53f7-a527-e46ac94635c5": "Wrote a Kafka-to-Postgres connector with schema evolution and a replay mode that handles 5k messages a second on a laptop.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "ef8310d2-d8ff-5729-b0b3-ab05e29c7441",
+        "confidence": 0.38,
+        "probabilities": {
+          "09516cf8-aa28-5f9d-8b4b-d294d4a58cc5": 0.04,
+          "ef8310d2-d8ff-5729-b0b3-ab05e29c7441": 0.58,
+          "no_match": 0.38
+        },
+        "type": "choice"
+      },
+      "cache_key": "39a0f730d49e96701647069a4b5127ae96ef2a01583b328611ff0a1bf5875478",
+      "created_at": "2026-10-01T18:19:16.771372",
+      "input_tokens": 599.0,
+      "output_tokens": 128.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "09516cf8-aa28-5f9d-8b4b-d294d4a58cc5": "Graded and wrote feedback on 120 data-structures assignments each term.",
+          "ef8310d2-d8ff-5729-b0b3-ab05e29c7441": "Built a Python autograder that cut assignment turnaround from 4 days to 1.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "no_match",
+        "confidence": 0.94,
+        "probabilities": {
+          "0be70fd9-348d-5862-a7ad-f4974385d584": 0.03,
+          "1e938063-659c-5407-8fef-3e2fec1119dd": 0.0,
+          "9d4c6a17-f8b0-5dad-9213-ce2b539277ed": 0.01,
+          "no_match": 0.96
+        },
+        "type": "choice"
+      },
+      "cache_key": "3b471f0b8082d166ef043370d1a89049812cdf202a90a993e23e256729ed1eb7",
+      "created_at": "2026-10-01T18:19:11.954153",
+      "input_tokens": 667.0,
+      "output_tokens": 138.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "0be70fd9-348d-5862-a7ad-f4974385d584": "Wrote a reusable seaborn plotting toolkit that 5 graduate researchers adopted for their thesis figures.",
+          "1e938063-659c-5407-8fef-3e2fec1119dd": "Fit mixed-effects models in R to estimate how grades vary across 38 course sections.",
+          "9d4c6a17-f8b0-5dad-9213-ce2b539277ed": "Cleaned and joined 9 semesters of enrollment data in SQL and pandas, resolving 4,200 duplicate student records.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "6d91b534-c5db-5c56-b460-1f0e12626a68",
+        "confidence": 0.81,
+        "probabilities": {
+          "5815e8c8-6d36-5bac-9b12-ca83e911f0e9": 0.0,
+          "6d91b534-c5db-5c56-b460-1f0e12626a68": 0.86,
+          "e59539a5-5fe8-5c12-98fe-49173023d991": 0.07,
+          "no_match": 0.07
+        },
+        "type": "choice"
+      },
+      "cache_key": "3d95bafd5483574404944355d03a2ba32e67af2115da665f430018b2bed18890",
+      "created_at": "2026-10-01T18:19:15.154010",
+      "input_tokens": 663.0,
+      "output_tokens": 175.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "5815e8c8-6d36-5bac-9b12-ca83e911f0e9": "Wrote Cypress end-to-end tests covering the 5 highest-traffic user flows.",
+          "6d91b534-c5db-5c56-b460-1f0e12626a68": "Built a Go service that replaced 3 cron jobs and processes 200k records an hour.",
+          "e59539a5-5fe8-5c12-98fe-49173023d991": "Exposed 9 entity types through a query layer that sits over the existing endpoint gateway.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "no_match",
+        "confidence": 0.99,
+        "probabilities": {
+          "46ec7207-29c9-5454-911f-4ba56b472211": 0.0,
+          "8e9650c0-88b6-52bb-8eac-208b24f3c033": 0.0,
+          "dfa9e4ac-9ce2-5082-b640-052dfe856b20": 0.0,
+          "no_match": 1.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "48fbb6a836e1f8a163a4a972ec0cb82e05a14eefcab400307cd5a9952e474273",
+      "created_at": "2026-10-01T18:19:11.563737",
+      "input_tokens": 672.0,
+      "output_tokens": 143.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "46ec7207-29c9-5454-911f-4ba56b472211": "Built a nightly Spark job that deduplicates 90M ad impression rows, cutting runtime from 50 minutes to 18.",
+          "8e9650c0-88b6-52bb-8eac-208b24f3c033": "Modeled 8 core marketing tables in dbt, with documented tests and freshness checks.",
+          "dfa9e4ac-9ce2-5082-b640-052dfe856b20": "Shipped a Scala Kafka consumer that backfilled three weeks of missing click events.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "no_match",
+        "confidence": 1.0,
+        "probabilities": {
+          "46ec7207-29c9-5454-911f-4ba56b472211": 0.0,
+          "8e9650c0-88b6-52bb-8eac-208b24f3c033": 0.0,
+          "dfa9e4ac-9ce2-5082-b640-052dfe856b20": 0.0,
+          "no_match": 1.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "55d986189e313fc913eac4817b6091b2f39b08aa8244bc6c916a32ed268394c8",
+      "created_at": "2026-10-01T18:19:11.107581",
+      "input_tokens": 697.0,
+      "output_tokens": 143.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "46ec7207-29c9-5454-911f-4ba56b472211": "Built a nightly Spark job that deduplicates 90M ad impression rows, cutting runtime from 50 minutes to 18.",
+          "8e9650c0-88b6-52bb-8eac-208b24f3c033": "Modeled 8 core marketing tables in dbt, with documented tests and freshness checks.",
+          "dfa9e4ac-9ce2-5082-b640-052dfe856b20": "Shipped a Scala Kafka consumer that backfilled three weeks of missing click events.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "8ff13305-8c5f-57cc-bd37-a0f1bc1a71c4",
+        "confidence": 0.65,
+        "probabilities": {
+          "8ff13305-8c5f-57cc-bd37-a0f1bc1a71c4": 0.72,
+          "ae58e3e4-7ad4-51ca-b856-a83b77524eab": 0.25,
+          "b0c01135-fefc-58cb-9fbd-d7a21d8a0d9b": 0.0,
+          "e27589b4-50de-5071-8820-682263a507a7": 0.0,
+          "no_match": 0.03
+        },
+        "type": "choice"
+      },
+      "cache_key": "63a8063658ca54744e03011da5dd4412ea80df13301e7348741762a792f9ba11",
+      "created_at": "2026-10-01T18:19:07.031655",
+      "input_tokens": 750.0,
+      "output_tokens": 207.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "8ff13305-8c5f-57cc-bd37-a0f1bc1a71c4": "Built demand forecasts for 34 clinic sites in Python and statsmodels, reducing weekly schedule error by 19%.",
+          "ae58e3e4-7ad4-51ca-b856-a83b77524eab": "Trained forecasting models in Python and statsmodels for 34 clinic sites, cutting weekly schedule error by 19%.",
+          "b0c01135-fefc-58cb-9fbd-d7a21d8a0d9b": "Shipped a dbt model layer over Snowflake that consolidated 6 reporting pipelines into 1 tested source.",
+          "e27589b4-50de-5071-8820-682263a507a7": "Partnered with 3 product teams on an A/B testing framework now used for every release readout.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "4c4755fe-b32e-590d-97a9-0e8e9e4e64ae",
+        "confidence": 0.96,
+        "probabilities": {
+          "4c4755fe-b32e-590d-97a9-0e8e9e4e64ae": 0.97,
+          "c8dd20f8-2560-5e5b-905f-6160934f53a4": 0.0,
+          "f9195a04-52ad-5e3a-acb1-2a26564328c0": 0.0,
+          "no_match": 0.03
+        },
+        "type": "choice"
+      },
+      "cache_key": "63c6c25a4f5c581f94717fd227b6930f8fa2aa625a7f7ce4d0895e399597f08e",
+      "created_at": "2026-10-01T18:18:55.928746",
+      "input_tokens": 711.0,
+      "output_tokens": 177.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "4c4755fe-b32e-590d-97a9-0e8e9e4e64ae": "Trained a scikit-learn churn classifier on 480k subscription records, raising AUC from 0.71 to 0.83 against the rule-based baseline.",
+          "c8dd20f8-2560-5e5b-905f-6160934f53a4": "Automated the weekly cohort report in pandas and matplotlib, replacing a 6-hour manual Excel process with a 15-minute run.",
+          "f9195a04-52ad-5e3a-acb1-2a26564328c0": "Ran A/B test readouts for 12 store promotions, using bootstrap confidence intervals to show that 3 were statistically flat.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "no_match",
+        "confidence": 1.0,
+        "probabilities": {
+          "c6de9e72-c28d-53f7-a527-e46ac94635c5": 0.0,
+          "no_match": 1.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "64e61865d5ad06a8806486d8c3347e11d4f402fba15a880f16d4c9a275af3292",
+      "created_at": "2026-10-01T18:19:22.012754",
+      "input_tokens": 567.0,
+      "output_tokens": 64.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "c6de9e72-c28d-53f7-a527-e46ac94635c5": "Wrote a Kafka-to-Postgres connector with schema evolution and a replay mode that handles 5k messages a second on a laptop.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "no_match",
+        "confidence": 0.99,
+        "probabilities": {
+          "4c4755fe-b32e-590d-97a9-0e8e9e4e64ae": 0.0,
+          "no_match": 1.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "6c1bb328fb4c6b1b46f0d104e9d57b272ba8a0c586e9dcea45ba56700cb27e13",
+      "created_at": "2026-10-01T18:19:21.614452",
+      "input_tokens": 562.0,
+      "output_tokens": 66.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "4c4755fe-b32e-590d-97a9-0e8e9e4e64ae": "Trained a scikit-learn churn classifier on 480k subscription records, raising AUC from 0.71 to 0.83 against the rule-based baseline.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "d5137445-db55-55fa-9194-36006f1402c8",
+        "confidence": 0.23,
+        "probabilities": {
+          "0be70fd9-348d-5862-a7ad-f4974385d584": 0.02,
+          "1e938063-659c-5407-8fef-3e2fec1119dd": 0.06,
+          "9d4c6a17-f8b0-5dad-9213-ce2b539277ed": 0.28,
+          "d5137445-db55-55fa-9194-36006f1402c8": 0.38,
+          "no_match": 0.26
+        },
+        "type": "choice"
+      },
+      "cache_key": "7649013930a6d7bdbcbc043dea748b664618b0971dc6eb1d3abd371ba6060b22",
+      "created_at": "2026-10-01T18:19:07.906167",
+      "input_tokens": 744.0,
+      "output_tokens": 208.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "0be70fd9-348d-5862-a7ad-f4974385d584": "Wrote a reusable seaborn plotting toolkit that 5 graduate researchers adopted for their thesis figures.",
+          "1e938063-659c-5407-8fef-3e2fec1119dd": "Fit mixed-effects models in R to estimate how grades vary across 38 course sections.",
+          "9d4c6a17-f8b0-5dad-9213-ce2b539277ed": "Cleaned and joined 9 semesters of enrollment data in SQL and pandas, resolving 4,200 duplicate student records.",
+          "d5137445-db55-55fa-9194-36006f1402c8": "Built SQL and pandas jobs that merged 9 semesters of enrollment data and removed 4,200 duplicate student records.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "291a248c-5669-507f-b17e-88482a8458cd",
+        "confidence": 0.33,
+        "probabilities": {
+          "1719fe3f-c32d-582b-9903-e09d2f4c30a3": 0.01,
+          "291a248c-5669-507f-b17e-88482a8458cd": 0.56,
+          "no_match": 0.43
+        },
+        "type": "choice"
+      },
+      "cache_key": "77e35b0e24e2d3af1b5247aa1faff9ed37abb7da6c4940dafac1ffb9a9846e74",
+      "created_at": "2026-10-01T18:19:05.737123",
+      "input_tokens": 600.0,
+      "output_tokens": 138.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "1719fe3f-c32d-582b-9903-e09d2f4c30a3": "Deployed with Docker and Terraform on AWS, holding 99% uptime over 6 months.",
+          "291a248c-5669-507f-b17e-88482a8458cd": "Built a Next.js and Postgres app that settles group expenses in the fewest transfers.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "no_match",
+        "confidence": 0.83,
+        "probabilities": {
+          "5815e8c8-6d36-5bac-9b12-ca83e911f0e9": 0.0,
+          "6bef9b4c-adc6-5da2-86a7-28e74c9a267c": 0.01,
+          "6d91b534-c5db-5c56-b460-1f0e12626a68": 0.12,
+          "no_match": 0.87
+        },
+        "type": "choice"
+      },
+      "cache_key": "7bab66212952e39a949c8e5ea7ffed2a482ac72b9ee02ce09c28fa7aa1197499",
+      "created_at": "2026-10-01T18:19:19.584883",
+      "input_tokens": 670.0,
+      "output_tokens": 141.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "5815e8c8-6d36-5bac-9b12-ca83e911f0e9": "Wrote Cypress end-to-end tests covering the 5 highest-traffic user flows.",
+          "6bef9b4c-adc6-5da2-86a7-28e74c9a267c": "Added GraphQL resolvers for 9 entity types on top of the existing REST gateway.",
+          "6d91b534-c5db-5c56-b460-1f0e12626a68": "Built a Go service that replaced 3 cron jobs and processes 200k records an hour.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "no_match",
+        "confidence": 0.97,
+        "probabilities": {
+          "1cfe526e-b562-5024-b995-ae83ac4399f4": 0.02,
+          "no_match": 0.98
+        },
+        "type": "choice"
+      },
+      "cache_key": "7d8237f0dbddf37486a9227b3d10b9891c72879c8a39f2e843f10f9ff69461fd",
+      "created_at": "2026-10-01T18:19:22.416882",
+      "input_tokens": 532.0,
+      "output_tokens": 64.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "1cfe526e-b562-5024-b995-ae83ac4399f4": "Parses 50k PGN games into MongoDB and reports opening win rates by rating band.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "7e63f9b1-d2e8-5e7b-b935-7f2e859434a3",
+        "confidence": 0.84,
+        "probabilities": {
+          "7e63f9b1-d2e8-5e7b-b935-7f2e859434a3": 0.92,
+          "no_match": 0.08
+        },
+        "type": "choice"
+      },
+      "cache_key": "7f1bfad3ba458964f99e48a0afe520826a711751e8a764e9329300d766db4ef3",
+      "created_at": "2026-10-01T18:19:21.157103",
+      "input_tokens": 547.0,
+      "output_tokens": 99.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "7e63f9b1-d2e8-5e7b-b935-7f2e859434a3": "Detects anomalies in 12-channel accelerometer streams with a lightweight autoencoder.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "no_match",
+        "confidence": 0.4,
+        "probabilities": {
+          "09516cf8-aa28-5f9d-8b4b-d294d4a58cc5": 0.02,
+          "c820f9ad-799b-5f34-9b6c-04f56eb72f68": 0.01,
+          "ef8310d2-d8ff-5729-b0b3-ab05e29c7441": 0.43,
+          "no_match": 0.54
+        },
+        "type": "choice"
+      },
+      "cache_key": "7f9f95152a2e9094865238d0f40170653ecb087eedcaf5cba8cf34a9ee8b3d97",
+      "created_at": "2026-10-01T18:19:13.225676",
+      "input_tokens": 669.0,
+      "output_tokens": 140.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "09516cf8-aa28-5f9d-8b4b-d294d4a58cc5": "Graded and wrote feedback on 120 data-structures assignments each term.",
+          "c820f9ad-799b-5f34-9b6c-04f56eb72f68": "Led weekly lab sections for 30 students on Git, Linux and testing practice.",
+          "ef8310d2-d8ff-5729-b0b3-ab05e29c7441": "Built a Python autograder that cut assignment turnaround from 4 days to 1.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "291a248c-5669-507f-b17e-88482a8458cd",
+        "confidence": 0.76,
+        "probabilities": {
+          "1719fe3f-c32d-582b-9903-e09d2f4c30a3": 0.01,
+          "291a248c-5669-507f-b17e-88482a8458cd": 0.84,
+          "no_match": 0.15
+        },
+        "type": "choice"
+      },
+      "cache_key": "80dac139b70a5f801f32e573e4a54f5d2fdf9b75537b7215ab7288f4084afc18",
+      "created_at": "2026-10-01T18:19:05.389356",
+      "input_tokens": 603.0,
+      "output_tokens": 138.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "1719fe3f-c32d-582b-9903-e09d2f4c30a3": "Deployed with Docker and Terraform on AWS, holding 99% uptime over 6 months.",
+          "291a248c-5669-507f-b17e-88482a8458cd": "Built a Next.js and Postgres app that settles group expenses in the fewest transfers.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "cc3a39d7-886a-570e-99ae-70c24cb98295",
+        "confidence": 0.41,
+        "probabilities": {
+          "4a9cf705-8503-5fe9-87e0-74f767eeb76a": 0.13,
+          "945f245d-b466-5c04-aff8-b8897fbf0144": 0.11,
+          "cc3a39d7-886a-570e-99ae-70c24cb98295": 0.56,
+          "no_match": 0.2
+        },
+        "type": "choice"
+      },
+      "cache_key": "83b34c61dddab29387c96dc82c06c877b095004cd0d33ce7daaebdf0156d7f4d",
+      "created_at": "2026-10-01T18:19:13.993727",
+      "input_tokens": 669.0,
+      "output_tokens": 172.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "4a9cf705-8503-5fe9-87e0-74f767eeb76a": "Set up Grafana monitoring that flagged a 7% change in incoming feature values within a day.",
+          "945f245d-b466-5c04-aff8-b8897fbf0144": "Shipped a Kafka feature stream that feeds 3 production models with sub-minute freshness.",
+          "cc3a39d7-886a-570e-99ae-70c24cb98295": "Built a Ray-backed training pipeline that cut a 9-hour training job to 2 hours across 4 GPUs.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "no_match",
+        "confidence": 0.93,
+        "probabilities": {
+          "8ff13305-8c5f-57cc-bd37-a0f1bc1a71c4": 0.04,
+          "b0c01135-fefc-58cb-9fbd-d7a21d8a0d9b": 0.0,
+          "e27589b4-50de-5071-8820-682263a507a7": 0.01,
+          "no_match": 0.95
+        },
+        "type": "choice"
+      },
+      "cache_key": "8c7371a9264d09ec4f3dc5534e5de1b6cfd090968160277f42e54d607ee67ef2",
+      "created_at": "2026-10-01T18:19:12.416016",
+      "input_tokens": 673.0,
+      "output_tokens": 142.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "8ff13305-8c5f-57cc-bd37-a0f1bc1a71c4": "Built demand forecasts for 34 clinic sites in Python and statsmodels, reducing weekly schedule error by 19%.",
+          "b0c01135-fefc-58cb-9fbd-d7a21d8a0d9b": "Shipped a dbt model layer over Snowflake that consolidated 6 reporting pipelines into 1 tested source.",
+          "e27589b4-50de-5071-8820-682263a507a7": "Partnered with 3 product teams on an A/B testing framework now used for every release readout.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "bf6a9afa-81d6-57c8-a6c0-f542c9d15fbb",
+        "confidence": 0.9,
+        "probabilities": {
+          "57fa4cd2-4b2a-5402-95b9-41a3573f3acb": 0.0,
+          "bf6a9afa-81d6-57c8-a6c0-f542c9d15fbb": 0.94,
+          "no_match": 0.06
+        },
+        "type": "choice"
+      },
+      "cache_key": "8cff860b25e85b34f09f3d4a263d5432c5acda91183e9c6795c1dc0e04161a1f",
+      "created_at": "2026-10-01T18:19:16.391217",
+      "input_tokens": 603.0,
+      "output_tokens": 130.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "57fa4cd2-4b2a-5402-95b9-41a3573f3acb": "Serves predictions from a FastAPI container backed by Redis for recent-window state.",
+          "bf6a9afa-81d6-57c8-a6c0-f542c9d15fbb": "Spots unusual patterns in 12-channel accelerometer streams using a small neural network.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "711fafd4-bbfc-538f-814b-30796d002123",
+        "confidence": 0.86,
+        "probabilities": {
+          "1719fe3f-c32d-582b-9903-e09d2f4c30a3": 0.0,
+          "711fafd4-bbfc-538f-814b-30796d002123": 0.91,
+          "no_match": 0.09
+        },
+        "type": "choice"
+      },
+      "cache_key": "8f58dc1ed6c84e4d83b7ee867a47ce2b37524f45493e0d6743fac6cb8ed2b73b",
+      "created_at": "2026-10-01T18:19:15.967778",
+      "input_tokens": 610.0,
+      "output_tokens": 134.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "1719fe3f-c32d-582b-9903-e09d2f4c30a3": "Deployed with Docker and Terraform on AWS, holding 99% uptime over 6 months.",
+          "711fafd4-bbfc-538f-814b-30796d002123": "Created a Next.js web app, backed by Postgres, that works out the fewest payments needed to settle a group's costs.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "b0c01135-fefc-58cb-9fbd-d7a21d8a0d9b",
+        "confidence": 0.62,
+        "probabilities": {
+          "8ff13305-8c5f-57cc-bd37-a0f1bc1a71c4": 0.1,
+          "b0c01135-fefc-58cb-9fbd-d7a21d8a0d9b": 0.72,
+          "e27589b4-50de-5071-8820-682263a507a7": 0.0,
+          "no_match": 0.18
+        },
+        "type": "choice"
+      },
+      "cache_key": "942414003cb3de07c90e4106a949be73220a966d4f3c4366283f3f5f308bcf83",
+      "created_at": "2026-10-01T18:19:18.755551",
+      "input_tokens": 689.0,
+      "output_tokens": 171.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "8ff13305-8c5f-57cc-bd37-a0f1bc1a71c4": "Built demand forecasts for 34 clinic sites in Python and statsmodels, reducing weekly schedule error by 19%.",
+          "b0c01135-fefc-58cb-9fbd-d7a21d8a0d9b": "Shipped a dbt model layer over Snowflake that consolidated 6 reporting pipelines into 1 tested source.",
+          "e27589b4-50de-5071-8820-682263a507a7": "Partnered with 3 product teams on an A/B testing framework now used for every release readout.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "46ec7207-29c9-5454-911f-4ba56b472211",
+        "confidence": 0.39,
+        "probabilities": {
+          "46ec7207-29c9-5454-911f-4ba56b472211": 0.54,
+          "8e9650c0-88b6-52bb-8eac-208b24f3c033": 0.33,
+          "dfa9e4ac-9ce2-5082-b640-052dfe856b20": 0.01,
+          "no_match": 0.11
+        },
+        "type": "choice"
+      },
+      "cache_key": "968f529c3c68838fa0a6df4450a9f17fb392f579161819b3ee114bc601c21164",
+      "created_at": "2026-10-01T18:19:09.562977",
+      "input_tokens": 664.0,
+      "output_tokens": 175.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "46ec7207-29c9-5454-911f-4ba56b472211": "Built a nightly Spark job that deduplicates 90M ad impression rows, cutting runtime from 50 minutes to 18.",
+          "8e9650c0-88b6-52bb-8eac-208b24f3c033": "Modeled 8 core marketing tables in dbt, with documented tests and freshness checks.",
+          "dfa9e4ac-9ce2-5082-b640-052dfe856b20": "Shipped a Scala Kafka consumer that backfilled three weeks of missing click events.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "291a248c-5669-507f-b17e-88482a8458cd",
+        "confidence": 0.42,
+        "probabilities": {
+          "291a248c-5669-507f-b17e-88482a8458cd": 0.71,
+          "no_match": 0.29
+        },
+        "type": "choice"
+      },
+      "cache_key": "973ae45302ff73b86ef5924e007dfc57b6affee0cd28f8144adc4cd8533a943f",
+      "created_at": "2026-10-01T18:19:20.785909",
+      "input_tokens": 538.0,
+      "output_tokens": 99.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "291a248c-5669-507f-b17e-88482a8458cd": "Built a Next.js and Postgres app that settles group expenses in the fewest transfers.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "no_match",
+        "confidence": 0.2,
+        "probabilities": {
+          "6547ef8d-5256-54eb-9945-b3ef218f9fc3": 0.21,
+          "6f4d7053-35f8-5f5f-8a83-00a17e03c111": 0.06,
+          "7eded929-b511-59a6-8a45-880090e2a615": 0.33,
+          "no_match": 0.4
+        },
+        "type": "choice"
+      },
+      "cache_key": "a0e8e577f8e4b1ef9270562562b60c69616a62efed37053297a2ca4c4fb97fb1",
+      "created_at": "2026-10-01T18:19:14.767491",
+      "input_tokens": 679.0,
+      "output_tokens": 144.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "6547ef8d-5256-54eb-9945-b3ef218f9fc3": "Scripted the provisioning of the team's SageMaker training environment.",
+          "6f4d7053-35f8-5f5f-8a83-00a17e03c111": "Trained demand models in scikit-learn and PyTorch on 300k transactions for 2 campus partners.",
+          "7eded929-b511-59a6-8a45-880090e2a615": "Built an Airflow retraining schedule with automated evaluation gates.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "6d91b534-c5db-5c56-b460-1f0e12626a68",
+        "confidence": 0.47,
+        "probabilities": {
+          "27b76192-968c-5393-a1f3-4f4e9df08c8c": 0.07,
+          "5815e8c8-6d36-5bac-9b12-ca83e911f0e9": 0.0,
+          "6bef9b4c-adc6-5da2-86a7-28e74c9a267c": 0.23,
+          "6d91b534-c5db-5c56-b460-1f0e12626a68": 0.58,
+          "no_match": 0.12
+        },
+        "type": "choice"
+      },
+      "cache_key": "a2052af155537b4c0c34da8d42b57bdc87a68feb7ee34eae073d2a3c4805bd93",
+      "created_at": "2026-10-01T18:19:08.737651",
+      "input_tokens": 727.0,
+      "output_tokens": 212.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "27b76192-968c-5393-a1f3-4f4e9df08c8c": "Replaced 3 cron jobs with a Go service that processes 200k records an hour.",
+          "5815e8c8-6d36-5bac-9b12-ca83e911f0e9": "Wrote Cypress end-to-end tests covering the 5 highest-traffic user flows.",
+          "6bef9b4c-adc6-5da2-86a7-28e74c9a267c": "Added GraphQL resolvers for 9 entity types on top of the existing REST gateway.",
+          "6d91b534-c5db-5c56-b460-1f0e12626a68": "Built a Go service that replaced 3 cron jobs and processes 200k records an hour.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "no_match",
+        "confidence": 0.76,
+        "probabilities": {
+          "09516cf8-aa28-5f9d-8b4b-d294d4a58cc5": 0.03,
+          "ef8310d2-d8ff-5729-b0b3-ab05e29c7441": 0.13,
+          "no_match": 0.84
+        },
+        "type": "choice"
+      },
+      "cache_key": "a23e0f3769e68617e5da9cf7bd3be84604768a95030dfc197f1f84d842fb3ab9",
+      "created_at": "2026-10-01T18:19:18.387797",
+      "input_tokens": 625.0,
+      "output_tokens": 100.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "09516cf8-aa28-5f9d-8b4b-d294d4a58cc5": "Graded and wrote feedback on 120 data-structures assignments each term.",
+          "ef8310d2-d8ff-5729-b0b3-ab05e29c7441": "Built a Python autograder that cut assignment turnaround from 4 days to 1.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "7e63f9b1-d2e8-5e7b-b935-7f2e859434a3",
+        "confidence": 0.92,
+        "probabilities": {
+          "57fa4cd2-4b2a-5402-95b9-41a3573f3acb": 0.0,
+          "7e63f9b1-d2e8-5e7b-b935-7f2e859434a3": 0.95,
+          "no_match": 0.05
+        },
+        "type": "choice"
+      },
+      "cache_key": "a6398284df9119b4679c486ce372caae378d09eedd591414422cb1e62ed0a916",
+      "created_at": "2026-10-01T18:19:05.040748",
+      "input_tokens": 607.0,
+      "output_tokens": 138.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "57fa4cd2-4b2a-5402-95b9-41a3573f3acb": "Serves predictions from a FastAPI container backed by Redis for recent-window state.",
+          "7e63f9b1-d2e8-5e7b-b935-7f2e859434a3": "Detects anomalies in 12-channel accelerometer streams with a lightweight autoencoder.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "no_match",
+        "confidence": 0.99,
+        "probabilities": {
+          "8ff13305-8c5f-57cc-bd37-a0f1bc1a71c4": 0.01,
+          "b0c01135-fefc-58cb-9fbd-d7a21d8a0d9b": 0.0,
+          "e27589b4-50de-5071-8820-682263a507a7": 0.0,
+          "no_match": 0.99
+        },
+        "type": "choice"
+      },
+      "cache_key": "a76a13f8253d1266247e5d76ece4c6578fb6015da3a24b2ec776191c4624bb7e",
+      "created_at": "2026-10-01T18:19:12.807141",
+      "input_tokens": 702.0,
+      "output_tokens": 142.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "8ff13305-8c5f-57cc-bd37-a0f1bc1a71c4": "Built demand forecasts for 34 clinic sites in Python and statsmodels, reducing weekly schedule error by 19%.",
+          "b0c01135-fefc-58cb-9fbd-d7a21d8a0d9b": "Shipped a dbt model layer over Snowflake that consolidated 6 reporting pipelines into 1 tested source.",
+          "e27589b4-50de-5071-8820-682263a507a7": "Partnered with 3 product teams on an A/B testing framework now used for every release readout.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "1e938063-659c-5407-8fef-3e2fec1119dd",
+        "confidence": 0.16,
+        "probabilities": {
+          "0be70fd9-348d-5862-a7ad-f4974385d584": 0.12,
+          "1e938063-659c-5407-8fef-3e2fec1119dd": 0.37,
+          "46f7be66-33b6-553b-8573-fa4e7053d65a": 0.25,
+          "no_match": 0.26
+        },
+        "type": "choice"
+      },
+      "cache_key": "a86c14606ed05a2cc330de727e06b83ba5ceb3262be66528186b33dcc4a4e424",
+      "created_at": "2026-10-01T18:19:15.571583",
+      "input_tokens": 670.0,
+      "output_tokens": 171.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "0be70fd9-348d-5862-a7ad-f4974385d584": "Wrote a reusable seaborn plotting toolkit that 5 graduate researchers adopted for their thesis figures.",
+          "1e938063-659c-5407-8fef-3e2fec1119dd": "Fit mixed-effects models in R to estimate how grades vary across 38 course sections.",
+          "46f7be66-33b6-553b-8573-fa4e7053d65a": "Reconciled 9 semesters of student records, eliminating 4,200 duplicates.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "ae58e3e4-7ad4-51ca-b856-a83b77524eab",
+        "confidence": 0.19,
+        "probabilities": {
+          "8ff13305-8c5f-57cc-bd37-a0f1bc1a71c4": 0.2,
+          "ae58e3e4-7ad4-51ca-b856-a83b77524eab": 0.35,
+          "b0c01135-fefc-58cb-9fbd-d7a21d8a0d9b": 0.01,
+          "e27589b4-50de-5071-8820-682263a507a7": 0.23,
+          "no_match": 0.21
+        },
+        "type": "choice"
+      },
+      "cache_key": "a8d64c959405a44f3bfbff4d8387b990abd72e2dcc83ccd8d89cf7ea68e8293c",
+      "created_at": "2026-10-01T18:19:07.509125",
+      "input_tokens": 745.0,
+      "output_tokens": 206.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "8ff13305-8c5f-57cc-bd37-a0f1bc1a71c4": "Built demand forecasts for 34 clinic sites in Python and statsmodels, reducing weekly schedule error by 19%.",
+          "ae58e3e4-7ad4-51ca-b856-a83b77524eab": "Trained forecasting models in Python and statsmodels for 34 clinic sites, cutting weekly schedule error by 19%.",
+          "b0c01135-fefc-58cb-9fbd-d7a21d8a0d9b": "Shipped a dbt model layer over Snowflake that consolidated 6 reporting pipelines into 1 tested source.",
+          "e27589b4-50de-5071-8820-682263a507a7": "Partnered with 3 product teams on an A/B testing framework now used for every release readout.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "af4686f5-3f4c-5111-966f-5fdd29f5749f",
+        "confidence": 0.95,
+        "probabilities": {
+          "af4686f5-3f4c-5111-966f-5fdd29f5749f": 0.97,
+          "c8dd20f8-2560-5e5b-905f-6160934f53a4": 0.0,
+          "f9195a04-52ad-5e3a-acb1-2a26564328c0": 0.0,
+          "no_match": 0.03
+        },
+        "type": "choice"
+      },
+      "cache_key": "cc551b281c0091687c567293cc0e8e5a028bb2a85b4b8a7fef9cb18dc302deba",
+      "created_at": "2026-10-01T18:19:13.615523",
+      "input_tokens": 712.0,
+      "output_tokens": 179.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "af4686f5-3f4c-5111-966f-5fdd29f5749f": "Developed a classifier that predicts which of 480k subscribers will cancel, lifting AUC from 0.71 to 0.83 over the existing rule set.",
+          "c8dd20f8-2560-5e5b-905f-6160934f53a4": "Automated the weekly cohort report in pandas and matplotlib, replacing a 6-hour manual Excel process with a 15-minute run.",
+          "f9195a04-52ad-5e3a-acb1-2a26564328c0": "Ran A/B test readouts for 12 store promotions, using bootstrap confidence intervals to show that 3 were statistically flat.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "5815e8c8-6d36-5bac-9b12-ca83e911f0e9",
+        "confidence": 0.19,
+        "probabilities": {
+          "5815e8c8-6d36-5bac-9b12-ca83e911f0e9": 0.39,
+          "6bef9b4c-adc6-5da2-86a7-28e74c9a267c": 0.29,
+          "6d91b534-c5db-5c56-b460-1f0e12626a68": 0.05,
+          "no_match": 0.27
+        },
+        "type": "choice"
+      },
+      "cache_key": "dfcefdaadd301cfb1e7263b2292e88442f40f24f89c4d1c20bac76a9fc82aaa6",
+      "created_at": "2026-10-01T18:19:09.153833",
+      "input_tokens": 665.0,
+      "output_tokens": 171.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "5815e8c8-6d36-5bac-9b12-ca83e911f0e9": "Wrote Cypress end-to-end tests covering the 5 highest-traffic user flows.",
+          "6bef9b4c-adc6-5da2-86a7-28e74c9a267c": "Added GraphQL resolvers for 9 entity types on top of the existing REST gateway.",
+          "6d91b534-c5db-5c56-b460-1f0e12626a68": "Built a Go service that replaced 3 cron jobs and processes 200k records an hour.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "no_match",
+        "confidence": 0.23,
+        "probabilities": {
+          "acc645b1-ab26-5ac8-b87a-e8bc971d7a9e": 0.1,
+          "b897f61b-a7e6-5431-a31b-288254d25a0d": 0.41,
+          "no_match": 0.49
+        },
+        "type": "choice"
+      },
+      "cache_key": "e0d049c26efed66d37824c777c6085e3942bd04abc77fac05f9eecfb7c56843b",
+      "created_at": "2026-10-01T18:19:04.330660",
+      "input_tokens": 601.0,
+      "output_tokens": 101.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "acc645b1-ab26-5ac8-b87a-e8bc971d7a9e": "Implemented survival analysis and surfaced per-segment hazard curves with matplotlib.",
+          "b897f61b-a7e6-5431-a31b-288254d25a0d": "Built an interactive retention dashboard over a public telecom dataset, segmenting 7,000 customers by tenure and contract type.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "6f4d7053-35f8-5f5f-8a83-00a17e03c111",
+        "confidence": 0.85,
+        "probabilities": {
+          "6109e096-4db4-563f-b7cc-2776fe6f92a9": 0.01,
+          "6f4d7053-35f8-5f5f-8a83-00a17e03c111": 0.89,
+          "no_match": 0.1
+        },
+        "type": "choice"
+      },
+      "cache_key": "e7bf7e2c332b509fdeb1f8b51ec249d2c1ea703d586d830c1fdb602ae3c8a78c",
+      "created_at": "2026-10-01T18:19:17.528998",
+      "input_tokens": 623.0,
+      "output_tokens": 141.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "6109e096-4db4-563f-b7cc-2776fe6f92a9": "Wrote a Terraform stack that provisions the team's SageMaker training environment.",
+          "6f4d7053-35f8-5f5f-8a83-00a17e03c111": "Trained demand models in scikit-learn and PyTorch on 300k transactions for 2 campus partners.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "c6de9e72-c28d-53f7-a527-e46ac94635c5",
+        "confidence": 0.71,
+        "probabilities": {
+          "a25ae52d-66e3-5dec-82c0-33d75ad0f3b2": 0.01,
+          "c6de9e72-c28d-53f7-a527-e46ac94635c5": 0.81,
+          "no_match": 0.18
+        },
+        "type": "choice"
+      },
+      "cache_key": "ec5bf68246b363248d0ad5ba51ce7f18b378347329562f57c807053c9ab2039b",
+      "created_at": "2026-10-01T18:19:04.698090",
+      "input_tokens": 623.0,
+      "output_tokens": 131.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "a25ae52d-66e3-5dec-82c0-33d75ad0f3b2": "Added Terraform and Docker Compose so the whole stack starts from one command.",
+          "c6de9e72-c28d-53f7-a527-e46ac94635c5": "Wrote a Kafka-to-Postgres connector with schema evolution and a replay mode that handles 5k messages a second on a laptop.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "8e9650c0-88b6-52bb-8eac-208b24f3c033",
+        "confidence": 0.24,
+        "probabilities": {
+          "46ec7207-29c9-5454-911f-4ba56b472211": 0.33,
+          "8e9650c0-88b6-52bb-8eac-208b24f3c033": 0.44,
+          "d8d08d57-6acd-5184-a798-c2a0786d6f01": 0.06,
+          "no_match": 0.17
+        },
+        "type": "choice"
+      },
+      "cache_key": "eca18363683715183e6af72b443742bec0b2e45e51ea81105f35e36c24fbcc1a",
+      "created_at": "2026-10-01T18:19:14.395337",
+      "input_tokens": 700.0,
+      "output_tokens": 177.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "46ec7207-29c9-5454-911f-4ba56b472211": "Built a nightly Spark job that deduplicates 90M ad impression rows, cutting runtime from 50 minutes to 18.",
+          "8e9650c0-88b6-52bb-8eac-208b24f3c033": "Modeled 8 core marketing tables in dbt, with documented tests and freshness checks.",
+          "d8d08d57-6acd-5184-a798-c2a0786d6f01": "Wrote a Scala service that reads click-event messages from Kafka and refilled a three-week gap.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "9d4c6a17-f8b0-5dad-9213-ce2b539277ed",
+        "confidence": 0.98,
+        "probabilities": {
+          "0be70fd9-348d-5862-a7ad-f4974385d584": 0.0,
+          "1e938063-659c-5407-8fef-3e2fec1119dd": 0.0,
+          "9d4c6a17-f8b0-5dad-9213-ce2b539277ed": 0.98,
+          "no_match": 0.02
+        },
+        "type": "choice"
+      },
+      "cache_key": "eef326bf693a303056f69dddd2cf5bcd975e99db4a0abf6564ff78a6a957033d",
+      "created_at": "2026-10-01T18:19:06.599953",
+      "input_tokens": 663.0,
+      "output_tokens": 166.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "0be70fd9-348d-5862-a7ad-f4974385d584": "Wrote a reusable seaborn plotting toolkit that 5 graduate researchers adopted for their thesis figures.",
+          "1e938063-659c-5407-8fef-3e2fec1119dd": "Fit mixed-effects models in R to estimate how grades vary across 38 course sections.",
+          "9d4c6a17-f8b0-5dad-9213-ce2b539277ed": "Cleaned and joined 9 semesters of enrollment data in SQL and pandas, resolving 4,200 duplicate student records.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "6109e096-4db4-563f-b7cc-2776fe6f92a9",
+        "confidence": 0.62,
+        "probabilities": {
+          "6109e096-4db4-563f-b7cc-2776fe6f92a9": 0.71,
+          "6f4d7053-35f8-5f5f-8a83-00a17e03c111": 0.01,
+          "7eded929-b511-59a6-8a45-880090e2a615": 0.11,
+          "no_match": 0.17
+        },
+        "type": "choice"
+      },
+      "cache_key": "f1d6e11306e358b905da0b042fef97846ec0a9a83afd2ec2375b5b7a996f053b",
+      "created_at": "2026-10-01T18:19:08.308245",
+      "input_tokens": 682.0,
+      "output_tokens": 175.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "6109e096-4db4-563f-b7cc-2776fe6f92a9": "Wrote a Terraform stack that provisions the team's SageMaker training environment.",
+          "6f4d7053-35f8-5f5f-8a83-00a17e03c111": "Trained demand models in scikit-learn and PyTorch on 300k transactions for 2 campus partners.",
+          "7eded929-b511-59a6-8a45-880090e2a615": "Built an Airflow retraining schedule with automated evaluation gates.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "no_match",
+        "confidence": 0.99,
+        "probabilities": {
+          "945f245d-b466-5c04-aff8-b8897fbf0144": 0.0,
+          "a7f04ac6-fef1-56a0-a853-50853687d5ce": 0.0,
+          "cc3a39d7-886a-570e-99ae-70c24cb98295": 0.0,
+          "no_match": 1.0
+        },
+        "type": "choice"
+      },
+      "cache_key": "f8d50e81d214ffeb09792e951643c8716732e7623ba10899e387608fda1eddcb",
+      "created_at": "2026-10-01T18:19:10.745478",
+      "input_tokens": 687.0,
+      "output_tokens": 139.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "945f245d-b466-5c04-aff8-b8897fbf0144": "Shipped a Kafka feature stream that feeds 3 production models with sub-minute freshness.",
+          "a7f04ac6-fef1-56a0-a853-50853687d5ce": "Added Grafana drift monitoring that caught a 7% input distribution shift within a day.",
+          "cc3a39d7-886a-570e-99ae-70c24cb98295": "Built a Ray-backed training pipeline that cut a 9-hour training job to 2 hours across 4 GPUs.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    },
+    {
+      "answer": {
+        "choice": "4c4755fe-b32e-590d-97a9-0e8e9e4e64ae",
+        "confidence": 0.56,
+        "probabilities": {
+          "4c4755fe-b32e-590d-97a9-0e8e9e4e64ae": 0.78,
+          "no_match": 0.22
+        },
+        "type": "choice"
+      },
+      "cache_key": "ffa7cc87b3b6456d5711b2a7923b8ff1ed10641e578f7417941f94c808f9f901",
+      "created_at": "2026-10-01T18:19:19.987654",
+      "input_tokens": 570.0,
+      "output_tokens": 97.0,
+      "point": "variant_choice",
+      "question": {
+        "criteria": {
+          "4c4755fe-b32e-590d-97a9-0e8e9e4e64ae": "Trained a scikit-learn churn classifier on 480k subscription records, raising AUC from 0.71 to 0.83 against the rule-based baseline.",
+          "no_match": null
+        },
+        "instructions": "Which approved resume bullet best fits this job? Read the job's requirements and choose the bullet that shows the kind of work, skills and results the job asks for, even when it is worded differently from the posting. A bullet that only repeats the posting's keywords while describing a different kind of role does not fit. Choose no_match when none of the bullets shows work the job asks for.",
+        "type": "choice"
+      },
+      "question_version": "variant_choice@v1",
+      "requested_model": "jev-1.13.0",
+      "resolved_model": "jev-1.13.0"
+    }
+  ],
+  "exported_at": "2026-10-01T18:19:36",
+  "format": "art-jev-recordings",
+  "version": 1
+}
