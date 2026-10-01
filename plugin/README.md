@@ -51,5 +51,4 @@ If a hook fails, it stays silent rather than blocking your message.
 
 ## Not yet
 
-The approved-bullet library (`/art:library`, #199) and scoring a result as feedback are
-planned and not part of this version.
+Scoring a result as feedback (`record_feedback`) is planned and not part of this version.
