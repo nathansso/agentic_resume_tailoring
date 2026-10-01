@@ -2,8 +2,9 @@
 
 `harness/decisions/library.py` asks Jev two `choice` questions: which approved variant of an item fits a
 job (`variant_choice@v1`, over the variants plus `no_match`) and which saved track a job starts from
-(`track_baseline@v1`, over the tracks plus `none`). A pick needs Jev's probability for it to be at least
-`TAU_VARIANT` / `TAU_BASELINE`. This script fits both on `eval/library_labels/variants.json` and
+(`track_baseline@v1`, over the tracks plus `none`). A variant is picked (its likeliest one) when the probability
+Jev puts on any variant, one minus its `no_match`, is at least `TAU_VARIANT`; a track is picked when Jev's own
+choice is a track and its probability is at least `TAU_BASELINE`. This script fits both on `eval/library_labels/variants.json` and
 `baselines.json`, synthetic cases labelled by hand, and compares Jev with the #229 fallbacks (word overlap,
 and the role-family lookup) on the same cases. It is the shape of `eval/fit_memory_gate_threshold.py` (#202),
 whose store pinning and table helpers it reuses:
@@ -33,7 +34,9 @@ it more likely than not), each then taking the grid value closest to the middle 
 
 **Both are fitted as if the code rules did not exist** (#202's rule): the host's explicit `role_family` winning
 without a question, the drift guard, and the fallbacks are defence in depth and never grounds for a looser
-threshold. The fit sees Jev's raw argmax and its probability, nothing else.
+threshold. The fit sees Jev's raw answer and nothing else: each row's candidate pick (`pick0`: its likeliest
+variant, or its own track choice) and the score the threshold gates (`score`: the mass off `no_match`, or the
+track's probability).
 """
 
 from __future__ import annotations
@@ -130,15 +133,22 @@ def fallback_baseline(doc: Dict[str, Any], case: Dict[str, Any]) -> Optional[str
 
 
 def variant_row(doc, case, decision) -> Dict[str, Any]:
+    """A variant case with Jev's answer. `pick0` is the variant the shipped rule would pick (its likeliest)
+    and `score` what the threshold gates (the mass off `no_match`); `jev_pick` is Jev's own choice (None
+    when it chose `no_match`) and `p` its probability, for the first design's argmax rule."""
     key_of = {variant_id(doc, k): k for k in case["variants"]}
-    return {**case, "decision": decision, "jev_pick": key_of.get(decision.pick) if decision.pick else None,
-            "top": key_of.get(decision.top) if decision.top else None, "p": decision.p,
-            "propensity": {key_of.get(k, k): v for k, v in decision.propensity.items()},
-            "fallback_pick": fallback_variant(doc, case), "source": decision.source}
+    propensity = {key_of.get(k, k): v for k, v in decision.propensity.items()}
+    return {**case, "decision": decision, "pick0": key_of.get(decision.top), "score": decision.mass,
+            "jev_pick": key_of.get(decision.argmax) if decision.argmax else None,
+            "p": max(propensity.values()), "mass": decision.mass, "propensity": propensity,
+            "top": key_of.get(decision.top), "fallback_pick": fallback_variant(doc, case),
+            "source": decision.source}
 
 
 def baseline_row(doc, case, decision) -> Dict[str, Any]:
-    return {**case, "decision": decision, "jev_pick": decision.pick, "top": decision.top, "p": decision.p,
+    """A baseline case with Jev's answer: its own choice (None for `none`), gated on its probability."""
+    return {**case, "decision": decision, "pick0": decision.pick, "score": decision.p,
+            "jev_pick": decision.pick, "top": decision.top, "p": decision.p,
             "propensity": dict(decision.propensity), "fallback_pick": fallback_baseline(doc, case),
             "source": decision.source}
 
@@ -170,8 +180,15 @@ def run_baselines(doc, on_row=None, limit: int = 0) -> List[Dict[str, Any]]:
 # ── outcomes (pure) ──────────────────────────────────────────────────────────
 
 def picked(row, tau: float) -> Optional[str]:
-    """Jev's pick at threshold `tau`: its own argmax when that is a real option and its probability is at
-    least `tau`, else none."""
+    """The shipped rule's pick at threshold `tau`: the row's candidate pick when its gating score reaches
+    `tau`, else none. For a variant case that is the likeliest variant when the mass Jev puts on any variant
+    does; for a baseline case Jev's own track when its probability does."""
+    return row["pick0"] if row["pick0"] and (row["score"] or 0.0) >= tau - 1e-9 else None
+
+
+def argmax_picked(row, tau: float) -> Optional[str]:
+    """The first design's variant rule, not shipped: Jev's own choice when it is a variant and its own
+    probability reaches `tau`."""
     return row["jev_pick"] if row["jev_pick"] and (row["p"] or 0.0) >= tau - 1e-9 else None
 
 
@@ -203,12 +220,12 @@ def _mid_pick(candidates: Sequence[float], floor_p: float, kept_p: Sequence[floa
 def _fit(rows, outcome, bad: str) -> Dict[str, Any]:
     """The rule for both thresholds: over the grid at or above the floor, no pick whose outcome is `bad`
     first, then the most correct picks, then the middle of the gap, ties to the higher value. Fitted on
-    Jev's raw argmax and probability alone, as if no code rule existed."""
+    Jev's raw answer alone (each row's `pick0` and `score`), as if no code rule existed."""
     def stats(t):
         outs = [(r, outcome(r, picked(r, t))) for r in rows]
         picks = [(r, o) for r, o in outs if picked(r, t)]
         return {"bad": sum(o == bad for _, o in picks),
-                "right": sum(r["jev_pick"] in r["best"] for r, o in picks if o == "correct"),
+                "right": sum(r["pick0"] in r["best"] for r, o in picks if o == "correct"),
                 "wrong": sum(o == "wrong" for _, o in picks),
                 "picks": len(picks), "lost": sum(o == "lost" for _, o in outs),
                 "correct": sum(o == "correct" for _, o in outs)}
@@ -216,11 +233,11 @@ def _fit(rows, outcome, bad: str) -> Dict[str, Any]:
     best = min((s["bad"], -s["right"]) for s in table.values())
     cands = [t for t, s in table.items() if (s["bad"], -s["right"]) == best]
     lo = min(cands)
-    danger = sorted(((r["p"], r["id"]) for r in rows
-                     if r["jev_pick"] and outcome(r, r["jev_pick"]) == bad), reverse=True)
+    danger = sorted(((r["score"], r["id"]) for r in rows
+                     if r["pick0"] and outcome(r, r["pick0"]) == bad), reverse=True)
     below = [p for p, _ in danger if p < lo - 1e-9]
-    kept = [r["p"] for r in rows if r["jev_pick"] and outcome(r, r["jev_pick"]) == "correct"
-            and r["jev_pick"] in r["best"] and r["p"] >= lo - 1e-9]
+    kept = [r["score"] for r in rows if r["pick0"] and outcome(r, r["pick0"]) == "correct"
+            and r["pick0"] in r["best"] and r["score"] >= lo - 1e-9]
     tau = _mid_pick(cands, max(below, default=0.0), kept)
     return {"tau": tau, "table": table, "candidates": cands, "bad": table[tau]["bad"],
             "right": table[tau]["right"], "danger": danger, "danger_max": danger[0][0] if danger else None,
@@ -253,17 +270,12 @@ def tally(rows, outcome, pick_of) -> Dict[str, int]:
             "right_picks": sum(pick_of(r) is not None and outcome(r, pick_of(r)) == "correct" for r in rows)}
 
 
-def disagreements(rows, outcome) -> List[Dict[str, Any]]:
-    """Cases where Jev's own answer (its argmax, no threshold) is not an acceptable one."""
-    return [r for r in rows if outcome(r, r["jev_pick"]) != "correct"]
-
-
-def alt_variant_pick(row, tau: float) -> Optional[str]:
-    """The alternative rule, not shipped: Jev's best variant when the probability it puts on *any* variant
-    (one minus its `no_match`) is at least `tau`. A close call splits Jev's mass between two good phrasings, so
-    neither reaches the floor alone while `no_match` stays low."""
-    mass = 1.0 - row["propensity"].get("no_match", 0.0)
-    return row["top"] if row["top"] and mass >= tau - 1e-9 else None
+def disagreements(rows, outcome, floor: Optional[float] = None) -> List[Dict[str, Any]]:
+    """Cases where Jev's answer is not an acceptable one: its pick at the floor `floor` (a variant case: the
+    likeliest variant when the mass off `no_match` reaches it), or, with no floor, its own choice (a baseline
+    case: its track, or none)."""
+    return [r for r in rows
+            if outcome(r, r["pick0"] if floor is None else picked(r, floor)) != "correct"]
 
 
 # ── the report ───────────────────────────────────────────────────────────────
@@ -303,19 +315,21 @@ def _meta(doc: Dict[str, Any], hit_rate: Optional[float]) -> Dict[str, Any]:
 
 
 def _section(title: str, rows, order, outcome, bad: str, fit, tau: float, fallback_name: str,
-             label, none: str) -> List[str]:
+             label, none: str, mass: bool = False) -> List[str]:
     o = [f"## {title}\n"]
     n = len(rows)
     raw = tally(rows, outcome, lambda r: r["jev_pick"])
     at = tally(rows, outcome, lambda r: picked(r, tau))
     fb = tally(rows, outcome, lambda r: r["fallback_pick"])
-    o.append(f"{n} cases. Fitted threshold **{tau:.2f}** (floor {GRID[0]:.2f}). "
+    gate = ("the probability Jev puts on any variant (one minus its `no_match`)" if mass
+            else "the probability of Jev's own choice")
+    o.append(f"{n} cases. Fitted threshold **{tau:.2f}** (floor {GRID[0]:.2f}), gating {gate}. "
              f"`correct` counts a right `{none}` as well as a right pick.\n")
     head = ["", "correct", "picks made", "right picks", "poor-fit picks" if bad == "poor" else "wrong picks",
             "lost (said none though one fits)"]
     badn = lambda t: t["poor"] if bad == "poor" else t["wrong"]          # noqa: E731
     o.append(_table(head, [
-        ["Jev, its own argmax (no threshold)", f"{raw['correct']}/{n} ({_pct(raw['correct'] / n)})", raw["picks"],
+        ["Jev's own choice (argmax, no threshold)", f"{raw['correct']}/{n} ({_pct(raw['correct'] / n)})", raw["picks"],
          raw["right_picks"], badn(raw), raw["lost"]],
         [f"**Jev at the threshold {tau:.2f}**", f"**{at['correct']}/{n} ({_pct(at['correct'] / n)})**", at["picks"],
          at["right_picks"], badn(at), at["lost"]],
@@ -332,12 +346,14 @@ def _section(title: str, rows, order, outcome, bad: str, fit, tau: float, fallba
         body.append([cat, len(rs), f"{j['correct']}/{len(rs)}", f"{a['correct']}/{len(rs)}", a["picks"],
                      a["poor"] if bad == "poor" else a["wrong"], f"{f_['correct']}/{len(rs)}", f_["picks"],
                      f_["poor"] if bad == "poor" else f_["wrong"]])
-    o.append(_table(["category", "cases", "Jev argmax correct", "Jev@τ correct", "Jev@τ picks",
+    o.append(_table(["category", "cases", "Jev's own choice correct", "Jev@τ correct", "Jev@τ picks",
                      "Jev@τ " + ("poor" if bad == "poor" else "wrong"), "fallback correct", "fallback picks",
                      "fallback " + ("poor" if bad == "poor" else "wrong")], body))
     o.append("")
     o.append(f"### The threshold grid\n")
-    o.append("At each grid value (Jev's own argmax kept only when its probability is at least the value): the "
+    kept = ("the likeliest variant, kept only when the mass off `no_match` is at least the value" if mass
+            else "Jev's own choice, kept only when its probability is at least the value")
+    o.append(f"At each grid value ({kept}): the "
              f"picks made, the right ones, the {'poor-fit' if bad == 'poor' else 'wrong'} ones (the rule's first key), "
              "and the cases left as none.\n")
     if bad == "poor":
@@ -355,18 +371,22 @@ def _section(title: str, rows, order, outcome, bad: str, fit, tau: float, fallba
              + f"; lowest right pick the fit keeps: {fit['kept_min']:.2f}; candidates with the same counts: "
              f"{', '.join(f'{c:.2f}' for c in fit['candidates'])}; the fit takes the one nearest the middle of the "
              "gap, ties to the higher.\n")
-    dis = disagreements(rows, outcome)
+    dis = disagreements(rows, outcome, GRID[0] if mass else None)
     o.append(f"### Disagreements between the label and Jev ({len(dis)})\n")
+    o.append(("Jev's answer here is its pick at the floor: the likeliest variant when the mass off `no_match` is at "
+              f"least {GRID[0]:.2f}.\n") if mass else "Jev's answer here is its own choice, whatever its probability.\n")
     if dis:
-        o.append(_table(["id", "category", "label", "Jev (argmax, p)", "Jev distribution", "fallback"],
+        o.append(_table(["id", "category", "label", "Jev (own choice, p)", "Jev pick" + (" (mass)" if mass else ""),
+                         "Jev distribution", "fallback"],
                         [[_c(r), r["category"], label(r), f"{_pick(r['jev_pick'], none)} {r['p']:.2f}",
+                          (f"{_pick(r['pick0'], none)} ({r['score']:.2f})" if mass else _pick(r['pick0'], none)),
                           _dist(r), _pick(r["fallback_pick"], none)] for r in dis]))
     o.append("")
     o.append("### Every case\n")
-    o.append(_table(["id", "category", "label", "Jev (argmax, p)", "Jev@τ", "fallback", "Jev@τ outcome",
-                     "fallback outcome"],
+    o.append(_table(["id", "category", "label", "Jev (own choice, p)", "mass off no_match" if mass else "-", "Jev@τ",
+                     "fallback", "Jev@τ outcome", "fallback outcome"],
                     [[_c(r), r["category"], label(r), f"{_pick(r['jev_pick'], none)} {r['p']:.2f}",
-                      _pick(picked(r, tau), none), _pick(r["fallback_pick"], none),
+                      f"{r['score']:.2f}" if mass else "-", _pick(picked(r, tau), none), _pick(r["fallback_pick"], none),
                       outcome(r, picked(r, tau)), outcome(r, r["fallback_pick"])] for r in rows]))
     o.append("")
     return o
@@ -386,19 +406,20 @@ def render_report(vrows, brows, meta: Dict[str, Any]) -> str:
          f"Floor {GRID[0]:.2f} for both. Shipped: `TAU_VARIANT` {tv:.2f}, `TAU_BASELINE` {tb:.2f}; the fit recommends "
          f"{rec['tau_variant']:.2f} and {rec['tau_baseline']:.2f}.\n"]
     o += _section("Variant choice", vrows, VARIANT_CATEGORIES, variant_outcome, "poor", rec["variant"], tv,
-                  "word overlap", _label_variant, "no_match")
-    o.append("### An alternative rule, not shipped\n")
-    o.append("The shipped rule picks Jev's argmax when it is a variant and its own probability is at least the "
+                  "word overlap", _label_variant, "no_match", mass=True)
+    o.append("### The first design (gating Jev's own choice), not shipped\n")
+    o.append("The first design picked Jev's own choice when it was a variant and its own probability reached the "
              "threshold. When two good phrasings of one bullet are on offer Jev splits its mass between them, so "
-             "neither reaches the threshold alone while `no_match` stays low. Gating on the mass Jev puts on "
-             "*any* variant (one minus its `no_match`) instead, and picking its best variant, on the same answers:\n")
+             "neither reached the threshold alone while `no_match` stayed low, and the close calls were lost. The "
+             "shipped rule gates the mass off `no_match` instead. Both on the same answers and labels:\n")
     body = []
     for t in (GRID[0], 0.6, 0.7, 0.8):
-        a = tally(vrows, variant_outcome, lambda r, t=t: alt_variant_pick(r, t))
-        body.append([f"{t:.2f}", f"{a['correct']}/{len(vrows)}", a["picks"], a["right_picks"], a["poor"],
-                     a["wrong"], a["lost"]])
-    o.append(_table(["mass off no_match at least", "correct", "picks", "right picks", "poor-fit picks",
-                     "other wrong picks", "lost"], body))
+        a1 = tally(vrows, variant_outcome, lambda r, t=t: argmax_picked(r, t))
+        a2 = tally(vrows, variant_outcome, lambda r, t=t: picked(r, t))
+        body.append([f"{t:.2f}", f"{a1['correct']}/{len(vrows)}", a1["picks"], a1["right_picks"], a1["poor"],
+                     f"{a2['correct']}/{len(vrows)}", a2["picks"], a2["right_picks"], a2["poor"]])
+    o.append(_table(["τ", "first design: correct", "picks", "right picks", "poor-fit picks",
+                     "shipped: correct", "picks", "right picks", "poor-fit picks"], body))
     o.append("")
     o += _section("Track baseline", brows, BASELINE_CATEGORIES, baseline_outcome, "wrong", rec["baseline"], tb,
                   "role-family lookup", _label_baseline, "none")
@@ -415,7 +436,7 @@ def render_report(vrows, brows, meta: Dict[str, Any]) -> str:
 def render_review(vrows, brows) -> str:
     vdoc, bdoc = load_variants(), load_baselines()
     rec = recommend(vrows, brows)
-    vdis = {r["id"] for r in disagreements(vrows, variant_outcome)}
+    vdis = {r["id"] for r in disagreements(vrows, variant_outcome, GRID[0])}
     bdis = {r["id"] for r in disagreements(brows, baseline_outcome)}
 
     def vblock(i: int, r) -> str:
@@ -430,7 +451,8 @@ def render_review(vrows, brows) -> str:
             lines.append(f"  - `{k}` ({mark}, Jev {r['propensity'].get(k, 0):.2f}"
                          f"{', fallback pick' if r['fallback_pick'] == k else ''}): {item['variants'][k]['text']}")
         lines += [f"- Label: {_label_variant(r)}. {r['rationale']}",
-                  f"- Jev: {_pick(r['jev_pick'], 'no_match')} at {r['p']:.2f}; no_match {r['propensity'].get('no_match', 0):.2f}",
+                  f"- Jev: picks {_pick(picked(r, GRID[0]), 'no_match')} (mass off no_match {r['score']:.2f}; no_match "
+                  f"{r['propensity'].get('no_match', 0):.2f}); its own choice {_pick(r['jev_pick'], 'no_match')} at {r['p']:.2f}",
                   f"- Fallback: {_pick(r['fallback_pick'], 'no_match')}", ""]
         return "\n".join(lines)
 

@@ -77,10 +77,12 @@ version it names the approved variant that best fits this posting (`match: varia
 with `variant.variant_id`, `text`, `cites` and `score`) or `no_match`, and the actions
 that are valid for the item. Jev makes the choice (`source: jev`, or `cache` when it is an
 earlier answer replayed): `variant.score` is its probability for that variant and
-`propensity` is its whole distribution over the item's variants and `no_match`. A pick
-needs Jev's probability of at least 0.5, so a close call between two good phrasings can
-come back `no_match` with two variants near 0.4 in `propensity`: you may offer the user
-the leading one. With `source: fallback` Jev did not answer (no key, switched off, an
+`propensity` is its whole distribution over the item's variants and `no_match`. Jev picks
+its likeliest variant when it puts at least 0.5 of its probability on the variants
+together (1 − `no_match`), so a close call between two good phrasings is picked even with
+each near 0.4 in `propensity`: read the runner-up there and, if it reads better against
+the posting, you may use it instead. `no_match` means Jev put more than half its
+probability on none fitting. With `source: fallback` Jev did not answer (no key, switched off, an
 error, or the item has no approved variant) and a word-overlap rule picked, whose `score`
 is an overlap share, not a probability, and which can miss a variant worded differently
 from the posting. **Start from the approved text, not from the raw facts:**

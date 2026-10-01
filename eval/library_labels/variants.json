@@ -1289,10 +1289,11 @@
     "t_kafka"
    ],
    "best": [
-    "t_drift_syn"
+    "t_drift_syn",
+    "t_ray"
    ],
    "poor_fit": [],
-   "rationale": "Alerts that flag a shift in incoming feature values is watching a model for drift in other words."
+   "rationale": "Alerts that flag a shift in incoming feature values is watching a model for drift in other words. The GPU training pipeline also fits the role's first and third requirements (train models, pipelines that scale), so either is accepted (relabelled after review: it was first labelled drift only)."
   },
   {
    "id": "d_tebra_backfill",

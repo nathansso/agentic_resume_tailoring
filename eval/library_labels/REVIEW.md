@@ -2,30 +2,9 @@
 
 **Label status: planner-reviewed, pending user spot-check.** Each case is synthetic. A **variant** case is one job and one item's approved variants (alternative phrasings of that item's own bullets, each angled toward a role): the label is the variants that fit the job (any one of them is right), `no_match` when none does, and the ones that clearly do not fit (`poor fit`: picking one is the worst error). A **baseline** case is one job against four saved tracks (`data_science`, `machine_learning`, `data_engineering`, `software_engineering`, each started from a job of the same name): the label is the acceptable track or tracks, or none. To change a label, correct it in `variants.json` or `baselines.json` and re-run `python eval/fit_library_thresholds.py analyze` to refit. Disagreements with Jev come first.
 
-## Variant disagreements with Jev (4)
+## Variant disagreements with Jev (1)
 
-**1. `a_mg_dashboard`** (clear_best)
-- Job: Junior Data Scientist - Fraud & AML Monitoring
-- Requirements: Use data to monitor for and detect fraud and financial crime; Build reports and dashboards that stakeholders rely on to make decisions; Solid foundation in statistics and data analysis; Proficiency in SQL and Python or R; Present analytical findings to non-technical colleagues; Care for data accuracy and quality
-- Item: Churn Explorer
-  - `ce_dash` (best, Jev 0.41): Built an interactive retention dashboard over a public telecom dataset, segmenting 7,000 customers by tenure and contract type.
-  - `ce_surv` (-, Jev 0.10, fallback pick): Implemented survival analysis and surfaced per-segment hazard curves with matplotlib.
-- Label: ce_dash. The fraud-monitoring role asks for dashboards stakeholders use; only the dashboard bullet shows one.
-- Jev: no_match at 0.49; no_match 0.49
-- Fallback: ce_surv
-
-**2. `d_next_alerts`** (synonym)
-- Job: Machine Learning Engineer New Grad
-- Requirements: Train, evaluate and deploy machine learning models for ranking and recommendation; Strong Python; experience with PyTorch or TensorFlow; Build data and training pipelines that scale to large datasets; Monitor deployed models for quality, drift and latency; Run online experiments to measure model impact; Solid grounding in machine learning and statistics fundamentals
-- Item: Associate Machine Learning Engineer @ Tessellate Robotics
-  - `t_drift_syn` (best, Jev 0.13): Set up Grafana monitoring that flagged a 7% change in incoming feature values within a day.
-  - `t_ray` (-, Jev 0.56): Built a Ray-backed training pipeline that cut a 9-hour training job to 2 hours across 4 GPUs.
-  - `t_kafka` (-, Jev 0.11, fallback pick): Shipped a Kafka feature stream that feeds 3 production models with sub-minute freshness.
-- Label: t_drift_syn. Alerts that flag a shift in incoming feature values is watching a model for drift in other words.
-- Jev: t_ray at 0.56; no_match 0.20
-- Fallback: t_kafka
-
-**3. `d_tebra_backfill`** (synonym)
+**1. `d_tebra_backfill`** (synonym)
 - Job: Data Engineer
 - Requirements: Build and maintain scalable data pipelines for batch and real-time processing; Turn raw healthcare data into high-quality datasets and real-time features for machine learning models; Strong SQL and Python; Experience with a cloud data warehouse such as Snowflake or BigQuery; Improve data quality with tests, monitoring and governance; Experience with workflow orchestration tools such as Airflow; Work with ML engineers, data scientists and software engineers
 - Item: Data Engineering Intern @ Northgate Media
@@ -33,25 +12,14 @@
   - `n_spark` (best, Jev 0.33): Built a nightly Spark job that deduplicates 90M ad impression rows, cutting runtime from 50 minutes to 18.
   - `n_dbt` (-, Jev 0.44, fallback pick): Modeled 8 core marketing tables in dbt, with documented tests and freshness checks.
 - Label: n_kafka_syn, n_spark. Reading messages from Kafka and refilling a gap is a streaming pipeline in other words; the nightly Spark job is a batch pipeline.
-- Jev: n_dbt at 0.44; no_match 0.17
+- Jev: picks n_dbt (mass off no_match 0.83; no_match 0.17); its own choice n_dbt at 0.44
 - Fallback: n_dbt
-
-**4. `d_rbi_scripted_env`** (synonym)
-- Job: Data Engineer 1
-- Requirements: Design, build and maintain data pipelines and ETL processes; Strong programming skills in Python; Hands-on experience with AWS services such as S3, Glue, EMR, SQS and Athena; Infrastructure as code, for example Terraform or CloudFormation; Work with data scientists and analysts to keep data accurate and consistent; Experience with SQL and relational databases
-- Item: Machine Learning Intern @ Brightwater University Applied AI Center
-  - `b_terraform_syn` (best, Jev 0.21): Scripted the provisioning of the team's SageMaker training environment.
-  - `b_demand` (poor fit, Jev 0.06): Trained demand models in scikit-learn and PyTorch on 300k transactions for 2 campus partners.
-  - `b_airflow` (best, Jev 0.33): Built an Airflow retraining schedule with automated evaluation gates.
-- Label: b_terraform_syn, b_airflow (poor: b_demand). Scripting the provisioning of a cloud environment so it can be rebuilt is infrastructure as code in other words.
-- Jev: no_match at 0.40; no_match 0.40
-- Fallback: no_match
 
 ## Baseline disagreements with Jev (0)
 
-## Variant agreements (44)
+## Variant agreements (47)
 
-**5. `a_esri_churn`** (clear_best)
+**2. `a_esri_churn`** (clear_best)
 - Job: Data Scientist I
 - Requirements: Map business problems to machine learning or other advanced analytics approaches; Build predictive models using statistics and machine learning, including feature engineering and model selection; Write clean, version-controlled Python to process large datasets; Deploy models to production in a cloud environment; Explain results and recommendations clearly to customers; Degree in statistics, data science, computer science or a related field
 - Item: Data Science Intern @ Fairhaven Retail Group
@@ -59,50 +27,60 @@
   - `f_report` (poor fit, Jev 0.00): Automated the weekly cohort report in pandas and matplotlib, replacing a 6-hour manual Excel process with a 15-minute run.
   - `f_ab` (-, Jev 0.00): Ran A/B test readouts for 12 store promotions, using bootstrap confidence intervals to show that 3 were statistically flat.
 - Label: f_churn (poor: f_report). Esri wants predictive models; the churn classifier is exactly that. The report automation shows no modelling.
-- Jev: f_churn at 0.97; no_match 0.03
+- Jev: picks f_churn (mass off no_match 0.97; no_match 0.03); its own choice f_churn at 0.97
 - Fallback: no_match
 
-**6. `a_tebra_connector`** (clear_best)
+**3. `a_mg_dashboard`** (clear_best)
+- Job: Junior Data Scientist - Fraud & AML Monitoring
+- Requirements: Use data to monitor for and detect fraud and financial crime; Build reports and dashboards that stakeholders rely on to make decisions; Solid foundation in statistics and data analysis; Proficiency in SQL and Python or R; Present analytical findings to non-technical colleagues; Care for data accuracy and quality
+- Item: Churn Explorer
+  - `ce_dash` (best, Jev 0.41): Built an interactive retention dashboard over a public telecom dataset, segmenting 7,000 customers by tenure and contract type.
+  - `ce_surv` (-, Jev 0.10, fallback pick): Implemented survival analysis and surfaced per-segment hazard curves with matplotlib.
+- Label: ce_dash. The fraud-monitoring role asks for dashboards stakeholders use; only the dashboard bullet shows one.
+- Jev: picks ce_dash (mass off no_match 0.51; no_match 0.49); its own choice no_match at 0.49
+- Fallback: ce_surv
+
+**4. `a_tebra_connector`** (clear_best)
 - Job: Data Engineer
 - Requirements: Build and maintain scalable data pipelines for batch and real-time processing; Turn raw healthcare data into high-quality datasets and real-time features for machine learning models; Strong SQL and Python; Experience with a cloud data warehouse such as Snowflake or BigQuery; Improve data quality with tests, monitoring and governance; Experience with workflow orchestration tools such as Airflow; Work with ML engineers, data scientists and software engineers
 - Item: Feed Forge
   - `fe_connector` (best, Jev 0.81): Wrote a Kafka-to-Postgres connector with schema evolution and a replay mode that handles 5k messages a second on a laptop.
   - `fe_terraform` (-, Jev 0.01): Added Terraform and Docker Compose so the whole stack starts from one command.
 - Label: fe_connector. Tebra asks for real-time pipelines; the Kafka-to-Postgres connector is one. The Terraform bullet is infrastructure.
-- Jev: fe_connector at 0.81; no_match 0.18
+- Jev: picks fe_connector (mass off no_match 0.82; no_match 0.18); its own choice fe_connector at 0.81
 - Fallback: no_match
 
-**7. `a_milw_autoencoder`** (clear_best)
+**5. `a_milw_autoencoder`** (clear_best)
 - Job: Machine Learning Engineer I
 - Requirements: Deploy machine learning models on embedded and edge devices; Applied experience with supervised and unsupervised learning, such as classification and anomaly detection; Experience with deep learning methods such as CNNs, autoencoders or transformers; Time series or signal processing experience; Proficiency in Python and C or C++; Version control and modern software development tools
 - Item: Signal Sift
   - `s_auto` (best, Jev 0.95): Detects anomalies in 12-channel accelerometer streams with a lightweight autoencoder.
   - `s_serve` (-, Jev 0.00): Serves predictions from a FastAPI container backed by Redis for recent-window state.
 - Label: s_auto. Edge ML on signals: the autoencoder anomaly detector on accelerometer streams is the match.
-- Jev: s_auto at 0.95; no_match 0.05
+- Jev: picks s_auto (mass off no_match 0.95; no_match 0.05); its own choice s_auto at 0.95
 - Fallback: no_match
 
-**8. `a_fs_app`** (clear_best)
+**6. `a_fs_app`** (clear_best)
 - Job: Full Stack Developer
 - Requirements: Build server-side application logic with Python frameworks such as Flask, Django or FastAPI; Build responsive user interfaces with JavaScript and a modern framework such as React; Design and consume REST APIs; Work with relational and NoSQL databases; Write automated tests and use Git and CI/CD; Work in an agile team
 - Item: Split Sum
   - `sp_app` (best, Jev 0.84): Built a Next.js and Postgres app that settles group expenses in the fewest transfers.
   - `sp_deploy` (-, Jev 0.01): Deployed with Docker and Terraform on AWS, holding 99% uptime over 6 months.
 - Label: sp_app. A full stack role wants an application with a UI and a database; the Next.js and Postgres bullet shows both.
-- Jev: sp_app at 0.84; no_match 0.15
+- Jev: picks sp_app (mass off no_match 0.85; no_match 0.15); its own choice sp_app at 0.84
 - Fallback: no_match
 
-**9. `a_fe_app`** (clear_best)
+**7. `a_fe_app`** (clear_best)
 - Job: Front End Engineer - AWS APO Engineering
 - Requirements: Build responsive web applications with React and TypeScript; Expert HTML, CSS and JavaScript; Design accessible, reusable user interface components; Optimize front end performance and write front end tests; Partner with designers and product managers; Consume REST and GraphQL APIs
 - Item: Split Sum
   - `sp_app` (best, Jev 0.56): Built a Next.js and Postgres app that settles group expenses in the fewest transfers.
   - `sp_deploy` (poor fit, Jev 0.01, fallback pick): Deployed with Docker and Terraform on AWS, holding 99% uptime over 6 months.
 - Label: sp_app (poor: sp_deploy). A front end role wants web application work; the Next.js app is it. Deployment and uptime show no front end work.
-- Jev: sp_app at 0.56; no_match 0.43
+- Jev: picks sp_app (mass off no_match 0.57; no_match 0.43); its own choice sp_app at 0.56
 - Fallback: sp_deploy
 
-**10. `a_asc_autograder`** (clear_best)
+**8. `a_asc_autograder`** (clear_best)
 - Job: Software Engineer
 - Requirements: Design and build the APIs and backend services a financial platform runs on; Write clean, well-tested, maintainable code; Experience with relational databases and SQL; Ship features end to end, from design through production; Familiarity with cloud infrastructure and containers; Strong computer science fundamentals, including data structures and algorithms
 - Item: Teaching Assistant @ Halden State University Computer Science Department
@@ -110,10 +88,10 @@
   - `h_autograder` (best, Jev 0.56): Built a Python autograder that cut assignment turnaround from 4 days to 1.
   - `h_lab` (poor fit, Jev 0.02): Led weekly lab sections for 30 students on Git, Linux and testing practice.
 - Label: h_autograder (poor: h_grade, h_lab). The backend role asks for built software; the autograder is a built tool. Grading and running labs are teaching.
-- Jev: h_autograder at 0.56; no_match 0.39
+- Jev: picks h_autograder (mass off no_match 0.61; no_match 0.39); its own choice h_autograder at 0.56
 - Fallback: no_match
 
-**11. `a_swbc_clean`** (clear_best)
+**9. `a_swbc_clean`** (clear_best)
 - Job: Junior Data Engineer
 - Requirements: Build and maintain data pipelines with guidance from senior engineers; Write SQL and Python scripts to move and transform data; Help improve data quality, performance and reliability; Familiarity with cloud platforms and automation practices; Work closely with cross-functional teams; Detail-oriented and eager to learn
 - Item: Undergraduate Data Assistant @ Cascade State University Statistics Department
@@ -121,10 +99,10 @@
   - `c_mixed` (poor fit, Jev 0.00): Fit mixed-effects models in R to estimate how grades vary across 38 course sections.
   - `c_toolkit` (-, Jev 0.00): Wrote a reusable seaborn plotting toolkit that 5 graduate researchers adopted for their thesis figures.
 - Label: c_clean (poor: c_mixed). A junior data engineer moves and cleans data in SQL and Python; the cleaning bullet does. A statistical model is not that.
-- Jev: c_clean at 0.98; no_match 0.02
+- Jev: picks c_clean (mass off no_match 0.98; no_match 0.02); its own choice c_clean at 0.98
 - Fallback: c_clean
 
-**12. `b_esri_forecast`** (close_call)
+**10. `b_esri_forecast`** (close_call)
 - Job: Data Scientist I
 - Requirements: Map business problems to machine learning or other advanced analytics approaches; Build predictive models using statistics and machine learning, including feature engineering and model selection; Write clean, version-controlled Python to process large datasets; Deploy models to production in a cloud environment; Explain results and recommendations clearly to customers; Degree in statistics, data science, computer science or a related field
 - Item: Associate Data Scientist @ Halcyon Health Analytics
@@ -133,10 +111,10 @@
   - `hc_ab` (-, Jev 0.00): Partnered with 3 product teams on an A/B testing framework now used for every release readout.
   - `hc_forecast_ml` (best, Jev 0.25, fallback pick): Trained forecasting models in Python and statsmodels for 34 clinic sites, cutting weekly schedule error by 19%.
 - Label: hc_forecast, hc_forecast_ml (poor: hc_dbt). Both phrasings of the forecasting bullet show predictive modelling; the dbt consolidation does not.
-- Jev: hc_forecast at 0.72; no_match 0.03
+- Jev: picks hc_forecast (mass off no_match 0.97; no_match 0.03); its own choice hc_forecast at 0.72
 - Fallback: hc_forecast_ml
 
-**13. `b_next_forecast`** (close_call)
+**11. `b_next_forecast`** (close_call)
 - Job: Machine Learning Engineer New Grad
 - Requirements: Train, evaluate and deploy machine learning models for ranking and recommendation; Strong Python; experience with PyTorch or TensorFlow; Build data and training pipelines that scale to large datasets; Monitor deployed models for quality, drift and latency; Run online experiments to measure model impact; Solid grounding in machine learning and statistics fundamentals
 - Item: Associate Data Scientist @ Halcyon Health Analytics
@@ -145,10 +123,10 @@
   - `hc_ab` (-, Jev 0.23): Partnered with 3 product teams on an A/B testing framework now used for every release readout.
   - `hc_forecast_ml` (best, Jev 0.35): Trained forecasting models in Python and statsmodels for 34 clinic sites, cutting weekly schedule error by 19%.
 - Label: hc_forecast, hc_forecast_ml (poor: hc_dbt). Training and tuning forecasting models fits an ML role in either phrasing; the dbt layer is data modelling.
-- Jev: hc_forecast_ml at 0.35; no_match 0.21
+- Jev: picks hc_forecast_ml (mass off no_match 0.79; no_match 0.21); its own choice hc_forecast_ml at 0.35
 - Fallback: hc_dbt
 
-**14. `b_mg_data`** (close_call)
+**12. `b_mg_data`** (close_call)
 - Job: Junior Data Scientist - Fraud & AML Monitoring
 - Requirements: Use data to monitor for and detect fraud and financial crime; Build reports and dashboards that stakeholders rely on to make decisions; Solid foundation in statistics and data analysis; Proficiency in SQL and Python or R; Present analytical findings to non-technical colleagues; Care for data accuracy and quality
 - Item: Undergraduate Data Assistant @ Cascade State University Statistics Department
@@ -157,10 +135,10 @@
   - `c_mixed` (best, Jev 0.06): Fit mixed-effects models in R to estimate how grades vary across 38 course sections.
   - `c_toolkit` (poor fit, Jev 0.02): Wrote a reusable seaborn plotting toolkit that 5 graduate researchers adopted for their thesis figures.
 - Label: c_clean, c_dedupe, c_mixed (poor: c_toolkit). The role asks for data quality and a statistical foundation: cleaning (either phrasing) and the mixed-effects models both serve it. A plotting toolkit is neither.
-- Jev: c_dedupe at 0.38; no_match 0.26
+- Jev: picks c_dedupe (mass off no_match 0.74; no_match 0.26); its own choice c_dedupe at 0.38
 - Fallback: c_clean
 
-**15. `b_rbi_infra`** (close_call)
+**13. `b_rbi_infra`** (close_call)
 - Job: Data Engineer 1
 - Requirements: Design, build and maintain data pipelines and ETL processes; Strong programming skills in Python; Hands-on experience with AWS services such as S3, Glue, EMR, SQS and Athena; Infrastructure as code, for example Terraform or CloudFormation; Work with data scientists and analysts to keep data accurate and consistent; Experience with SQL and relational databases
 - Item: Machine Learning Intern @ Brightwater University Applied AI Center
@@ -168,10 +146,10 @@
   - `b_airflow` (best, Jev 0.11): Built an Airflow retraining schedule with automated evaluation gates.
   - `b_terraform` (best, Jev 0.71, fallback pick): Wrote a Terraform stack that provisions the team's SageMaker training environment.
 - Label: b_airflow, b_terraform (poor: b_demand). Pipelines and infrastructure as code on AWS: the Airflow retraining schedule and the Terraform SageMaker stack both fit. Demand modelling does not.
-- Jev: b_terraform at 0.71; no_match 0.17
+- Jev: picks b_terraform (mass off no_match 0.83; no_match 0.17); its own choice b_terraform at 0.71
 - Fallback: b_terraform
 
-**16. `b_asc_services`** (close_call)
+**14. `b_asc_services`** (close_call)
 - Job: Software Engineer
 - Requirements: Design and build the APIs and backend services a financial platform runs on; Write clean, well-tested, maintainable code; Experience with relational databases and SQL; Ship features end to end, from design through production; Familiarity with cloud infrastructure and containers; Strong computer science fundamentals, including data structures and algorithms
 - Item: Software Engineering Intern @ Northwind Systems
@@ -180,10 +158,10 @@
   - `w_cypress` (-, Jev 0.00): Wrote Cypress end-to-end tests covering the 5 highest-traffic user flows.
   - `w_go_de` (best, Jev 0.07): Replaced 3 cron jobs with a Go service that processes 200k records an hour.
 - Label: w_go, w_graphql, w_go_de. Backend services and APIs: the Go service (either phrasing) and the GraphQL resolvers both fit; the end-to-end tests fit less.
-- Jev: w_go at 0.58; no_match 0.12
+- Jev: picks w_go (mass off no_match 0.88; no_match 0.12); its own choice w_go at 0.58
 - Fallback: no_match
 
-**17. `b_fs_api_tests`** (close_call)
+**15. `b_fs_api_tests`** (close_call)
 - Job: Full Stack Developer
 - Requirements: Build server-side application logic with Python frameworks such as Flask, Django or FastAPI; Build responsive user interfaces with JavaScript and a modern framework such as React; Design and consume REST APIs; Work with relational and NoSQL databases; Write automated tests and use Git and CI/CD; Work in an agile team
 - Item: Software Engineering Intern @ Northwind Systems
@@ -191,10 +169,10 @@
   - `w_graphql` (best, Jev 0.29): Added GraphQL resolvers for 9 entity types on top of the existing REST gateway.
   - `w_cypress` (best, Jev 0.39, fallback pick): Wrote Cypress end-to-end tests covering the 5 highest-traffic user flows.
 - Label: w_graphql, w_cypress. A full stack role asks for REST APIs and automated tests: the GraphQL resolvers and the Cypress tests both fit.
-- Jev: w_cypress at 0.39; no_match 0.27
+- Jev: picks w_cypress (mass off no_match 0.73; no_match 0.27); its own choice w_cypress at 0.39
 - Fallback: w_cypress
 
-**18. `b_swbc_pipelines`** (close_call)
+**16. `b_swbc_pipelines`** (close_call)
 - Job: Junior Data Engineer
 - Requirements: Build and maintain data pipelines with guidance from senior engineers; Write SQL and Python scripts to move and transform data; Help improve data quality, performance and reliability; Familiarity with cloud platforms and automation practices; Work closely with cross-functional teams; Detail-oriented and eager to learn
 - Item: Data Engineering Intern @ Northgate Media
@@ -202,10 +180,10 @@
   - `n_dbt` (best, Jev 0.33): Modeled 8 core marketing tables in dbt, with documented tests and freshness checks.
   - `n_kafka` (-, Jev 0.01): Shipped a Scala Kafka consumer that backfilled three weeks of missing click events.
 - Label: n_spark, n_dbt. A junior pipeline role: the nightly Spark job and the tested dbt models both show pipelines and quality; the Kafka backfill is a closer second.
-- Jev: n_spark at 0.54; no_match 0.11
+- Jev: picks n_spark (mass off no_match 0.89; no_match 0.11); its own choice n_spark at 0.54
 - Fallback: no_match
 
-**19. `b_mg_reports`** (close_call)
+**17. `b_mg_reports`** (close_call)
 - Job: Junior Data Scientist - Fraud & AML Monitoring
 - Requirements: Use data to monitor for and detect fraud and financial crime; Build reports and dashboards that stakeholders rely on to make decisions; Solid foundation in statistics and data analysis; Proficiency in SQL and Python or R; Present analytical findings to non-technical colleagues; Care for data accuracy and quality
 - Item: Data Science Intern @ Fairhaven Retail Group
@@ -213,10 +191,10 @@
   - `f_ab` (best, Jev 0.09): Ran A/B test readouts for 12 store promotions, using bootstrap confidence intervals to show that 3 were statistically flat.
   - `f_report` (best, Jev 0.42): Automated the weekly cohort report in pandas and matplotlib, replacing a 6-hour manual Excel process with a 15-minute run.
 - Label: f_report, f_ab. Reports stakeholders use, and findings shared with non-technical colleagues: the cohort report and the A/B readouts both fit.
-- Jev: f_report at 0.42; no_match 0.29
+- Jev: picks f_report (mass off no_match 0.71; no_match 0.29); its own choice f_report at 0.42
 - Fallback: no_match
 
-**20. `c_fe_fairhaven`** (no_match)
+**18. `c_fe_fairhaven`** (no_match)
 - Job: Front End Engineer - AWS APO Engineering
 - Requirements: Build responsive web applications with React and TypeScript; Expert HTML, CSS and JavaScript; Design accessible, reusable user interface components; Optimize front end performance and write front end tests; Partner with designers and product managers; Consume REST and GraphQL APIs
 - Item: Data Science Intern @ Fairhaven Retail Group
@@ -224,10 +202,10 @@
   - `f_ab` (poor fit, Jev 0.00): Ran A/B test readouts for 12 store promotions, using bootstrap confidence intervals to show that 3 were statistically flat.
   - `f_report` (poor fit, Jev 0.00): Automated the weekly cohort report in pandas and matplotlib, replacing a 6-hour manual Excel process with a 15-minute run.
 - Label: no_match (poor: f_churn, f_ab, f_report). A front end role; none of the data science bullets show front end work.
-- Jev: no_match at 1.00; no_match 1.00
+- Jev: picks no_match (mass off no_match 0.00; no_match 1.00); its own choice no_match at 1.00
 - Fallback: no_match
 
-**21. `c_hw_tess`** (no_match)
+**19. `c_hw_tess`** (no_match)
 - Job: Physical Design Engineer - Static Timing Analysis - Annapurna Labs - Cloud Scale Machine Learning
 - Requirements: Hands-on static timing analysis and timing closure for ASIC designs; Knowledge of physical design flows: floorplanning, place and route and clock tree synthesis; Scripting in Tcl and Python to automate design flows; Experience with Synopsys PrimeTime or similar sign-off tools; Understanding of deep sub-micron process technology; BS or MS in electrical engineering
 - Item: Associate Machine Learning Engineer @ Tessellate Robotics
@@ -235,10 +213,10 @@
   - `t_kafka` (poor fit, Jev 0.00): Shipped a Kafka feature stream that feeds 3 production models with sub-minute freshness.
   - `t_drift` (poor fit, Jev 0.00): Added Grafana drift monitoring that caught a 7% input distribution shift within a day.
 - Label: no_match (poor: t_ray, t_kafka, t_drift). Chip timing analysis; none of the ML infrastructure bullets touch hardware design.
-- Jev: no_match at 1.00; no_match 1.00
+- Jev: picks no_match (mass off no_match 0.00; no_match 1.00); its own choice no_match at 1.00
 - Fallback: no_match
 
-**22. `c_hw_north`** (no_match)
+**20. `c_hw_north`** (no_match)
 - Job: Physical Design Engineer - Static Timing Analysis - Annapurna Labs - Cloud Scale Machine Learning
 - Requirements: Hands-on static timing analysis and timing closure for ASIC designs; Knowledge of physical design flows: floorplanning, place and route and clock tree synthesis; Scripting in Tcl and Python to automate design flows; Experience with Synopsys PrimeTime or similar sign-off tools; Understanding of deep sub-micron process technology; BS or MS in electrical engineering
 - Item: Data Engineering Intern @ Northgate Media
@@ -246,10 +224,10 @@
   - `n_dbt` (poor fit, Jev 0.00): Modeled 8 core marketing tables in dbt, with documented tests and freshness checks.
   - `n_kafka` (poor fit, Jev 0.00): Shipped a Scala Kafka consumer that backfilled three weeks of missing click events.
 - Label: no_match (poor: n_spark, n_dbt, n_kafka). Chip timing analysis; none of the data engineering bullets touch hardware design.
-- Jev: no_match at 1.00; no_match 1.00
+- Jev: picks no_match (mass off no_match 0.00; no_match 1.00); its own choice no_match at 1.00
 - Fallback: no_match
 
-**23. `c_fe_north`** (no_match)
+**21. `c_fe_north`** (no_match)
 - Job: Front End Engineer - AWS APO Engineering
 - Requirements: Build responsive web applications with React and TypeScript; Expert HTML, CSS and JavaScript; Design accessible, reusable user interface components; Optimize front end performance and write front end tests; Partner with designers and product managers; Consume REST and GraphQL APIs
 - Item: Data Engineering Intern @ Northgate Media
@@ -257,10 +235,10 @@
   - `n_dbt` (poor fit, Jev 0.00, fallback pick): Modeled 8 core marketing tables in dbt, with documented tests and freshness checks.
   - `n_kafka` (poor fit, Jev 0.00): Shipped a Scala Kafka consumer that backfilled three weeks of missing click events.
 - Label: no_match (poor: n_spark, n_dbt, n_kafka). A front end role; none of the data engineering bullets show front end work.
-- Jev: no_match at 1.00; no_match 1.00
+- Jev: picks no_match (mass off no_match 0.00; no_match 1.00); its own choice no_match at 1.00
 - Fallback: n_dbt
 
-**24. `c_reactor_casc`** (no_match)
+**22. `c_reactor_casc`** (no_match)
 - Job: Reactor Software Engineer 1/2
 - Requirements: Build software that operates and tests hardware systems and hardware-in-the-loop environments; Process and stream live telemetry and instrument signals; Strong C++ or Python; Build operator tools and simulations; Design systems that respond predictably in off-nominal conditions; Test automation practices
 - Item: Undergraduate Data Assistant @ Cascade State University Statistics Department
@@ -268,10 +246,10 @@
   - `c_mixed` (poor fit, Jev 0.00): Fit mixed-effects models in R to estimate how grades vary across 38 course sections.
   - `c_toolkit` (poor fit, Jev 0.03): Wrote a reusable seaborn plotting toolkit that 5 graduate researchers adopted for their thesis figures.
 - Label: no_match (poor: c_clean, c_mixed, c_toolkit). Reactor control software; none of the statistics assistant's bullets show systems or hardware software.
-- Jev: no_match at 0.96; no_match 0.96
+- Jev: picks no_match (mass off no_match 0.04; no_match 0.96); its own choice no_match at 0.96
 - Fallback: no_match
 
-**25. `c_reactor_halc`** (no_match)
+**23. `c_reactor_halc`** (no_match)
 - Job: Reactor Software Engineer 1/2
 - Requirements: Build software that operates and tests hardware systems and hardware-in-the-loop environments; Process and stream live telemetry and instrument signals; Strong C++ or Python; Build operator tools and simulations; Design systems that respond predictably in off-nominal conditions; Test automation practices
 - Item: Associate Data Scientist @ Halcyon Health Analytics
@@ -279,10 +257,10 @@
   - `hc_dbt` (poor fit, Jev 0.00): Shipped a dbt model layer over Snowflake that consolidated 6 reporting pipelines into 1 tested source.
   - `hc_ab` (poor fit, Jev 0.01): Partnered with 3 product teams on an A/B testing framework now used for every release readout.
 - Label: no_match (poor: hc_forecast, hc_dbt, hc_ab). Reactor control software; none of the analytics bullets show systems or hardware software.
-- Jev: no_match at 0.95; no_match 0.95
+- Jev: picks no_match (mass off no_match 0.05; no_match 0.95); its own choice no_match at 0.95
 - Fallback: no_match
 
-**26. `c_hw_halc`** (no_match)
+**24. `c_hw_halc`** (no_match)
 - Job: Physical Design Engineer - Static Timing Analysis - Annapurna Labs - Cloud Scale Machine Learning
 - Requirements: Hands-on static timing analysis and timing closure for ASIC designs; Knowledge of physical design flows: floorplanning, place and route and clock tree synthesis; Scripting in Tcl and Python to automate design flows; Experience with Synopsys PrimeTime or similar sign-off tools; Understanding of deep sub-micron process technology; BS or MS in electrical engineering
 - Item: Associate Data Scientist @ Halcyon Health Analytics
@@ -290,10 +268,10 @@
   - `hc_dbt` (poor fit, Jev 0.00): Shipped a dbt model layer over Snowflake that consolidated 6 reporting pipelines into 1 tested source.
   - `hc_ab` (poor fit, Jev 0.00): Partnered with 3 product teams on an A/B testing framework now used for every release readout.
 - Label: no_match (poor: hc_forecast, hc_dbt, hc_ab). Chip timing analysis; none of the analytics bullets touch hardware design.
-- Jev: no_match at 0.99; no_match 0.99
+- Jev: picks no_match (mass off no_match 0.01; no_match 0.99); its own choice no_match at 0.99
 - Fallback: no_match
 
-**27. `c_esri_halden`** (no_match)
+**25. `c_esri_halden`** (no_match)
 - Job: Data Scientist I
 - Requirements: Map business problems to machine learning or other advanced analytics approaches; Build predictive models using statistics and machine learning, including feature engineering and model selection; Write clean, version-controlled Python to process large datasets; Deploy models to production in a cloud environment; Explain results and recommendations clearly to customers; Degree in statistics, data science, computer science or a related field
 - Item: Teaching Assistant @ Halden State University Computer Science Department
@@ -301,10 +279,10 @@
   - `h_autograder` (poor fit, Jev 0.43, fallback pick): Built a Python autograder that cut assignment turnaround from 4 days to 1.
   - `h_lab` (poor fit, Jev 0.01): Led weekly lab sections for 30 students on Git, Linux and testing practice.
 - Label: no_match (poor: h_grade, h_autograder, h_lab). A data science role; none of the teaching assistant bullets show analytics or modelling.
-- Jev: no_match at 0.54; no_match 0.54
+- Jev: picks no_match (mass off no_match 0.46; no_match 0.54); its own choice no_match at 0.54
 - Fallback: h_autograder
 
-**28. `d_esri_classifier`** (synonym)
+**26. `d_esri_classifier`** (synonym)
 - Job: Data Scientist I
 - Requirements: Map business problems to machine learning or other advanced analytics approaches; Build predictive models using statistics and machine learning, including feature engineering and model selection; Write clean, version-controlled Python to process large datasets; Deploy models to production in a cloud environment; Explain results and recommendations clearly to customers; Degree in statistics, data science, computer science or a related field
 - Item: Data Science Intern @ Fairhaven Retail Group
@@ -312,7 +290,29 @@
   - `f_report` (poor fit, Jev 0.00): Automated the weekly cohort report in pandas and matplotlib, replacing a 6-hour manual Excel process with a 15-minute run.
   - `f_ab` (-, Jev 0.00): Ran A/B test readouts for 12 store promotions, using bootstrap confidence intervals to show that 3 were statistically flat.
 - Label: f_churn_syn (poor: f_report). 'Classifier that predicts which subscribers will cancel' is predictive modelling in other words; the report automation shares the posting's Python and says nothing of modelling.
-- Jev: f_churn_syn at 0.97; no_match 0.03
+- Jev: picks f_churn_syn (mass off no_match 0.97; no_match 0.03); its own choice f_churn_syn at 0.97
+- Fallback: no_match
+
+**27. `d_next_alerts`** (synonym)
+- Job: Machine Learning Engineer New Grad
+- Requirements: Train, evaluate and deploy machine learning models for ranking and recommendation; Strong Python; experience with PyTorch or TensorFlow; Build data and training pipelines that scale to large datasets; Monitor deployed models for quality, drift and latency; Run online experiments to measure model impact; Solid grounding in machine learning and statistics fundamentals
+- Item: Associate Machine Learning Engineer @ Tessellate Robotics
+  - `t_drift_syn` (best, Jev 0.13): Set up Grafana monitoring that flagged a 7% change in incoming feature values within a day.
+  - `t_ray` (best, Jev 0.56): Built a Ray-backed training pipeline that cut a 9-hour training job to 2 hours across 4 GPUs.
+  - `t_kafka` (-, Jev 0.11, fallback pick): Shipped a Kafka feature stream that feeds 3 production models with sub-minute freshness.
+- Label: t_drift_syn, t_ray. Alerts that flag a shift in incoming feature values is watching a model for drift in other words. The GPU training pipeline also fits the role's first and third requirements (train models, pipelines that scale), so either is accepted (relabelled after review: it was first labelled drift only).
+- Jev: picks t_ray (mass off no_match 0.80; no_match 0.20); its own choice t_ray at 0.56
+- Fallback: t_kafka
+
+**28. `d_rbi_scripted_env`** (synonym)
+- Job: Data Engineer 1
+- Requirements: Design, build and maintain data pipelines and ETL processes; Strong programming skills in Python; Hands-on experience with AWS services such as S3, Glue, EMR, SQS and Athena; Infrastructure as code, for example Terraform or CloudFormation; Work with data scientists and analysts to keep data accurate and consistent; Experience with SQL and relational databases
+- Item: Machine Learning Intern @ Brightwater University Applied AI Center
+  - `b_terraform_syn` (best, Jev 0.21): Scripted the provisioning of the team's SageMaker training environment.
+  - `b_demand` (poor fit, Jev 0.06): Trained demand models in scikit-learn and PyTorch on 300k transactions for 2 campus partners.
+  - `b_airflow` (best, Jev 0.33): Built an Airflow retraining schedule with automated evaluation gates.
+- Label: b_terraform_syn, b_airflow (poor: b_demand). Scripting the provisioning of a cloud environment so it can be rebuilt is infrastructure as code in other words.
+- Jev: picks b_airflow (mass off no_match 0.60; no_match 0.40); its own choice no_match at 0.40
 - Fallback: no_match
 
 **29. `d_asc_query_layer`** (synonym)
@@ -323,7 +323,7 @@
   - `w_cypress` (-, Jev 0.00): Wrote Cypress end-to-end tests covering the 5 highest-traffic user flows.
   - `w_go` (best, Jev 0.86): Built a Go service that replaced 3 cron jobs and processes 200k records an hour.
 - Label: w_graphql_syn, w_go. A query layer over a gateway is an API in other words; the Go service is a backend service.
-- Jev: w_go at 0.86; no_match 0.07
+- Jev: picks w_go (mass off no_match 0.93; no_match 0.07); its own choice w_go at 0.86
 - Fallback: no_match
 
 **30. `d_mg_reconcile`** (synonym)
@@ -334,7 +334,7 @@
   - `c_toolkit` (poor fit, Jev 0.12): Wrote a reusable seaborn plotting toolkit that 5 graduate researchers adopted for their thesis figures.
   - `c_mixed` (best, Jev 0.37): Fit mixed-effects models in R to estimate how grades vary across 38 course sections.
 - Label: c_clean_syn, c_mixed (poor: c_toolkit). Reconciling records and eliminating duplicates is data accuracy in other words; a plotting toolkit does not show it.
-- Jev: c_mixed at 0.37; no_match 0.26
+- Jev: picks c_mixed (mass off no_match 0.74; no_match 0.26); its own choice c_mixed at 0.37
 - Fallback: no_match
 
 **31. `d_fs_webapp`** (synonym)
@@ -344,7 +344,7 @@
   - `sp_app_syn` (best, Jev 0.91): Created a Next.js web app, backed by Postgres, that works out the fewest payments needed to settle a group's costs.
   - `sp_deploy` (-, Jev 0.00): Deployed with Docker and Terraform on AWS, holding 99% uptime over 6 months.
 - Label: sp_app_syn. A Next.js web app on Postgres is a UI over a relational database, in framework and product names the posting does not use.
-- Jev: sp_app_syn at 0.91; no_match 0.09
+- Jev: picks sp_app_syn (mass off no_match 0.91; no_match 0.09); its own choice sp_app_syn at 0.91
 - Fallback: no_match
 
 **32. `d_milw_unusual`** (synonym)
@@ -354,7 +354,7 @@
   - `s_auto_syn` (best, Jev 0.94): Spots unusual patterns in 12-channel accelerometer streams using a small neural network.
   - `s_serve` (-, Jev 0.00): Serves predictions from a FastAPI container backed by Redis for recent-window state.
 - Label: s_auto_syn. Spotting unusual patterns in sensor streams with a small neural network is anomaly detection in other words.
-- Jev: s_auto_syn at 0.94; no_match 0.06
+- Jev: picks s_auto_syn (mass off no_match 0.94; no_match 0.06); its own choice s_auto_syn at 0.94
 - Fallback: no_match
 
 **33. `e_asc_grading`** (keyword_trap)
@@ -364,7 +364,7 @@
   - `h_grade` (poor fit, Jev 0.04): Graded and wrote feedback on 120 data-structures assignments each term.
   - `h_autograder` (best, Jev 0.58): Built a Python autograder that cut assignment turnaround from 4 days to 1.
 - Label: h_autograder (poor: h_grade). 'Data-structures assignments' matches the posting's data structures, but grading them is teaching; the autograder is built software.
-- Jev: h_autograder at 0.58; no_match 0.38
+- Jev: picks h_autograder (mass off no_match 0.62; no_match 0.38); its own choice h_autograder at 0.58
 - Fallback: no_match
 
 **34. `e_fs_labs`** (keyword_trap)
@@ -374,7 +374,7 @@
   - `h_lab` (poor fit, Jev 0.04): Led weekly lab sections for 30 students on Git, Linux and testing practice.
   - `h_autograder` (best, Jev 0.76, fallback pick): Built a Python autograder that cut assignment turnaround from 4 days to 1.
 - Label: h_autograder (poor: h_lab). Labs on Git and testing repeat the posting's Git and testing, but running a lab is teaching; the autograder is built in Python.
-- Jev: h_autograder at 0.76; no_match 0.20
+- Jev: picks h_autograder (mass off no_match 0.80; no_match 0.20); its own choice h_autograder at 0.76
 - Fallback: h_autograder
 
 **35. `e_esri_terraform`** (keyword_trap)
@@ -384,7 +384,7 @@
   - `b_terraform` (poor fit, Jev 0.01, fallback pick): Wrote a Terraform stack that provisions the team's SageMaker training environment.
   - `b_demand` (best, Jev 0.89): Trained demand models in scikit-learn and PyTorch on 300k transactions for 2 campus partners.
 - Label: b_demand (poor: b_terraform). The SageMaker training environment repeats cloud and machine learning terms, but Terraform provisioning shows no modelling; the demand models do.
-- Jev: b_demand at 0.89; no_match 0.10
+- Jev: picks b_demand (mass off no_match 0.90; no_match 0.10); its own choice b_demand at 0.89
 - Fallback: b_terraform
 
 **36. `e_tebra_training`** (keyword_trap)
@@ -395,7 +395,7 @@
   - `t_kafka` (best, Jev 0.89): Shipped a Kafka feature stream that feeds 3 production models with sub-minute freshness.
   - `t_drift` (-, Jev 0.01, fallback pick): Added Grafana drift monitoring that caught a 7% input distribution shift within a day.
 - Label: t_kafka. The Kafka feature stream is the real-time ML data pipeline; the GPU training pipeline repeats 'pipeline' and 'machine learning' in a different job.
-- Jev: t_kafka at 0.89; no_match 0.10
+- Jev: picks t_kafka (mass off no_match 0.90; no_match 0.10); its own choice t_kafka at 0.89
 - Fallback: t_drift
 
 **37. `e_hw_autograder`** (keyword_trap)
@@ -405,7 +405,7 @@
   - `h_autograder` (poor fit, Jev 0.13, fallback pick): Built a Python autograder that cut assignment turnaround from 4 days to 1.
   - `h_grade` (poor fit, Jev 0.03): Graded and wrote feedback on 120 data-structures assignments each term.
 - Label: no_match (poor: h_autograder, h_grade). A Python autograder repeats the posting's Python scripting and automation, but nothing in the item shows chip design.
-- Jev: no_match at 0.84; no_match 0.84
+- Jev: picks no_match (mass off no_match 0.16; no_match 0.84); its own choice no_match at 0.84
 - Fallback: h_autograder
 
 **38. `e_rbi_forecast`** (keyword_trap)
@@ -416,7 +416,7 @@
   - `hc_forecast` (-, Jev 0.10): Built demand forecasts for 34 clinic sites in Python and statsmodels, reducing weekly schedule error by 19%.
   - `hc_ab` (-, Jev 0.00): Partnered with 3 product teams on an A/B testing framework now used for every release readout.
 - Label: hc_dbt. The dbt consolidation of reporting pipelines is pipeline work; the forecasting bullet repeats the posting's Python.
-- Jev: hc_dbt at 0.72; no_match 0.18
+- Jev: picks hc_dbt (mass off no_match 0.82; no_match 0.18); its own choice hc_dbt at 0.72
 - Fallback: hc_dbt
 
 **39. `e_next_teaching`** (keyword_trap)
@@ -427,7 +427,7 @@
   - `h_lab` (poor fit, Jev 0.01): Led weekly lab sections for 30 students on Git, Linux and testing practice.
   - `h_autograder` (poor fit, Jev 0.41, fallback pick): Built a Python autograder that cut assignment turnaround from 4 days to 1.
 - Label: no_match (poor: h_grade, h_lab, h_autograder). Python, Linux and testing words appear, but none of the teaching assistant bullets shows training or deploying models.
-- Jev: no_match at 0.57; no_match 0.57
+- Jev: picks no_match (mass off no_match 0.43; no_match 0.57); its own choice no_match at 0.57
 - Fallback: h_autograder
 
 **40. `e_esri_go`** (keyword_trap)
@@ -438,7 +438,7 @@
   - `w_graphql` (poor fit, Jev 0.01): Added GraphQL resolvers for 9 entity types on top of the existing REST gateway.
   - `w_cypress` (poor fit, Jev 0.00): Wrote Cypress end-to-end tests covering the 5 highest-traffic user flows.
 - Label: no_match (poor: w_go, w_graphql, w_cypress). 'Processes 200k records an hour' echoes processing large datasets, but it is a service, not data science; none shows modelling.
-- Jev: no_match at 0.87; no_match 0.87
+- Jev: picks no_match (mass off no_match 0.13; no_match 0.87); its own choice no_match at 0.87
 - Fallback: no_match
 
 **41. `f_esri_churn`** (single)
@@ -447,7 +447,7 @@
 - Item: Data Science Intern @ Fairhaven Retail Group
   - `f_churn` (best, Jev 0.78): Trained a scikit-learn churn classifier on 480k subscription records, raising AUC from 0.71 to 0.83 against the rule-based baseline.
 - Label: f_churn. The only variant is the churn classifier, which is the job.
-- Jev: f_churn at 0.78; no_match 0.22
+- Jev: picks f_churn (mass off no_match 0.78; no_match 0.22); its own choice f_churn at 0.78
 - Fallback: no_match
 
 **42. `f_tebra_connector`** (single)
@@ -456,7 +456,7 @@
 - Item: Feed Forge
   - `fe_connector` (best, Jev 0.54): Wrote a Kafka-to-Postgres connector with schema evolution and a replay mode that handles 5k messages a second on a laptop.
 - Label: fe_connector. The only variant is a streaming connector, which fits the pipeline role.
-- Jev: fe_connector at 0.54; no_match 0.46
+- Jev: picks fe_connector (mass off no_match 0.54; no_match 0.46); its own choice fe_connector at 0.54
 - Fallback: no_match
 
 **43. `f_fs_app`** (single)
@@ -465,7 +465,7 @@
 - Item: Split Sum
   - `sp_app` (best, Jev 0.71): Built a Next.js and Postgres app that settles group expenses in the fewest transfers.
 - Label: sp_app. The only variant is the web app on Postgres, which fits.
-- Jev: sp_app at 0.71; no_match 0.29
+- Jev: picks sp_app (mass off no_match 0.71; no_match 0.29); its own choice sp_app at 0.71
 - Fallback: no_match
 
 **44. `f_milw_auto`** (single)
@@ -474,7 +474,7 @@
 - Item: Signal Sift
   - `s_auto` (best, Jev 0.92): Detects anomalies in 12-channel accelerometer streams with a lightweight autoencoder.
 - Label: s_auto. The only variant is the autoencoder, which fits the edge ML role.
-- Jev: s_auto at 0.92; no_match 0.08
+- Jev: picks s_auto (mass off no_match 0.92; no_match 0.08); its own choice s_auto at 0.92
 - Fallback: no_match
 
 **45. `f_fe_churn`** (single)
@@ -483,7 +483,7 @@
 - Item: Data Science Intern @ Fairhaven Retail Group
   - `f_churn` (poor fit, Jev 0.00): Trained a scikit-learn churn classifier on 480k subscription records, raising AUC from 0.71 to 0.83 against the rule-based baseline.
 - Label: no_match (poor: f_churn). A churn classifier is not front end work.
-- Jev: no_match at 1.00; no_match 1.00
+- Jev: picks no_match (mass off no_match 0.00; no_match 1.00); its own choice no_match at 1.00
 - Fallback: no_match
 
 **46. `f_hw_connector`** (single)
@@ -492,7 +492,7 @@
 - Item: Feed Forge
   - `fe_connector` (poor fit, Jev 0.00): Wrote a Kafka-to-Postgres connector with schema evolution and a replay mode that handles 5k messages a second on a laptop.
 - Label: no_match (poor: fe_connector). A Kafka connector is not chip design.
-- Jev: no_match at 1.00; no_match 1.00
+- Jev: picks no_match (mass off no_match 0.00; no_match 1.00); its own choice no_match at 1.00
 - Fallback: no_match
 
 **47. `f_reactor_chess`** (single)
@@ -501,7 +501,7 @@
 - Item: Chess Ledger
   - `ch_parse` (poor fit, Jev 0.02): Parses 50k PGN games into MongoDB and reports opening win rates by rating band.
 - Label: no_match (poor: ch_parse). Parsing chess games into MongoDB is not reactor control software.
-- Jev: no_match at 0.98; no_match 0.98
+- Jev: picks no_match (mass off no_match 0.02; no_match 0.98); its own choice no_match at 0.98
 - Fallback: no_match
 
 **48. `f_hw_autoencoder`** (single)
@@ -510,7 +510,7 @@
 - Item: Signal Sift
   - `s_auto` (poor fit, Jev 0.00): Detects anomalies in 12-channel accelerometer streams with a lightweight autoencoder.
 - Label: no_match (poor: s_auto). An anomaly detector on accelerometer streams is not chip timing analysis.
-- Jev: no_match at 1.00; no_match 1.00
+- Jev: picks no_match (mass off no_match 0.00; no_match 1.00); its own choice no_match at 1.00
 - Fallback: no_match
 
 ## Baseline agreements (36)

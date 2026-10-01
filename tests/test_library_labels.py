@@ -301,25 +301,27 @@ def test_both_thresholds_have_a_hard_floor_of_one_half(replayed):
     assert min(fit.fit_variant(vrows)["table"]) >= jl.TAU_FLOOR
     assert min(fit.fit_baseline(brows)["table"]) >= jl.TAU_FLOOR
     # a set in which Jev is never wrong cannot pull a threshold under the floor
-    safe_v = [r for r in vrows if fit.variant_outcome(r, r["jev_pick"]) != "poor"]
-    safe_b = [r for r in brows if fit.baseline_outcome(r, r["jev_pick"]) != "wrong"]
+    safe_v = [r for r in vrows if fit.variant_outcome(r, r["pick0"]) != "poor"]
+    safe_b = [r for r in brows if fit.baseline_outcome(r, r["pick0"]) != "wrong"]
     assert fit.fit_variant(safe_v)["tau"] >= jl.TAU_FLOOR and fit.fit_baseline(safe_b)["tau"] >= jl.TAU_FLOOR
 
 
 def test_the_fit_sees_jevs_raw_answer_alone_as_if_no_code_rule_existed(replayed):
     """The host's explicit role family, the fallbacks and the drift guard are code rules: the fit must not
-    depend on them, so changing what they would have said changes nothing."""
+    depend on them, so changing what they would have said changes nothing. Nor does it read Jev's own
+    choice or its probability: a variant is gated on the mass off `no_match`."""
     vrows, brows, _ = replayed
     base = fit.recommend(vrows, brows)
-    stripped_v = [{**r, "fallback_pick": None} for r in vrows]
+    stripped_v = [{**r, "fallback_pick": None, "jev_pick": None, "p": 0.0} for r in vrows]
     stripped_b = [{**r, "fallback_pick": None, "title": "Anything"} for r in brows]
     again = fit.recommend(stripped_v, stripped_b)
     assert (again["tau_variant"], again["tau_baseline"]) == (base["tau_variant"], base["tau_baseline"])
+    assert again["variant"]["table"] == base["variant"]["table"]
 
 
 def test_the_rules_are_no_bad_pick_first_then_the_most_right_picks_then_the_middle_of_the_gap():
-    def row(i, pick, p, best=("a",), poor=("b",)):
-        return {"id": i, "jev_pick": pick, "p": p, "best": list(best), "poor_fit": list(poor)}
+    def row(i, pick, score, best=("a",), poor=("b",)):
+        return {"id": i, "pick0": pick, "score": score, "best": list(best), "poor_fit": list(poor)}
 
     # a poor-fit pick at 0.80 forces the threshold above it, at the cost of right picks under it
     rows = [row("r1", "a", 0.95), row("r2", "a", 0.70), row("bad", "b", 0.80), row("r3", "a", 0.55)]
@@ -332,8 +334,8 @@ def test_the_rules_are_no_bad_pick_first_then_the_most_right_picks_then_the_midd
     # with no bad pick anywhere the floor binds, whatever the right picks score
     clean = [row("r1", "a", 0.95), row("r2", "a", 0.90)]
     assert fit.fit_variant(clean)["tau"] == 0.5
-    # a baseline pick for a job no track fits is wrong at any p
-    brow = {"id": "none_job", "jev_pick": "t", "p": 0.60, "best": [], "poor_fit": []}
+    # a baseline pick for a job no track fits is wrong at any score
+    brow = {"id": "none_job", "pick0": "t", "score": 0.60, "best": [], "poor_fit": []}
     assert fit.baseline_outcome(brow, "t") == "wrong"
     assert fit.fit_baseline([brow, row("ok", "a", 0.9)])["tau"] == 0.75
     # the middle of the gap, when it falls on a grid value
@@ -346,11 +348,22 @@ def test_jev_picks_no_poor_fit_variant_and_no_wrong_track_at_the_shipped_thresho
     v = fit.tally(vrows, fit.variant_outcome, lambda r: fit.picked(r, jl.TAU_VARIANT))
     b = fit.tally(brows, fit.baseline_outcome, lambda r: fit.picked(r, jl.TAU_BASELINE))
     assert v["poor"] == 0 and b["wrong"] == 0
-    assert v["picks"] == 25 and v["right_picks"] == 24 and v["correct"] == 39
+    assert v["picks"] == 33 and v["right_picks"] == 32 and v["correct"] == 47 and v["lost"] == 0
+    assert v["wrong"] == 1                                              # d_tebra_backfill: n_dbt, not poor-fit
     assert b["picks"] == 21 and b["right_picks"] == 21 and b["correct"] == 35
-    # Jev's own answer, with no threshold
+    # Jev's own choice, with no threshold
     assert fit.tally(vrows, fit.variant_outcome, lambda r: r["jev_pick"])["poor"] == 0
     assert fit.tally(brows, fit.baseline_outcome, lambda r: r["jev_pick"])["wrong"] == 0
+
+
+def test_the_variant_threshold_sits_in_a_thin_gap_around_the_floor(replayed):
+    """The worst poor-fit case is 0.04 under the threshold and the lowest right pick 0.01 over it: it holds
+    on this set and is the first thing a refit should look at."""
+    vrows, _, _ = replayed
+    v = fit.fit_variant(vrows)
+    assert v["danger_id"] == "c_esri_halden" and v["danger_max"] == 0.46
+    assert v["kept_min"] == 0.51 and v["candidates"] == [0.5]
+    assert jl.TAU_VARIANT - v["danger_max"] == pytest.approx(0.04) and v["kept_min"] - jl.TAU_VARIANT == pytest.approx(0.01)
 
 
 def test_jev_beats_the_fallbacks_on_the_same_cases(replayed):
@@ -359,33 +372,48 @@ def test_jev_beats_the_fallbacks_on_the_same_cases(replayed):
     v_fb = fit.tally(vrows, fit.variant_outcome, lambda r: r["fallback_pick"])
     b_jev = fit.tally(brows, fit.baseline_outcome, lambda r: fit.picked(r, jl.TAU_BASELINE))
     b_fb = fit.tally(brows, fit.baseline_outcome, lambda r: r["fallback_pick"])
-    assert (v_jev["correct"], v_fb["correct"]) == (39, 18) and v_fb["poor"] == 7
+    assert (v_jev["correct"], v_fb["correct"]) == (47, 18) and v_fb["poor"] == 7
     assert (b_jev["correct"], b_fb["correct"]) == (35, 27) and b_fb["wrong"] == 8
     # the synonym and title-mismatch categories are where word overlap and the title lookup fail
     syn = [r for r in vrows if r["category"] == "synonym"]
     assert fit.tally(syn, fit.variant_outcome, lambda r: r["fallback_pick"])["correct"] == 0
+    assert fit.tally(syn, fit.variant_outcome, lambda r: fit.picked(r, jl.TAU_VARIANT))["correct"] == 7
     mis = [r for r in brows if r["category"] == "title_mismatch"]
     assert fit.tally(mis, fit.baseline_outcome, lambda r: r["fallback_pick"])["correct"] == 0
-    assert fit.tally(mis, fit.baseline_outcome, lambda r: r["jev_pick"])["correct"] == len(mis)
+    assert fit.tally(mis, fit.baseline_outcome, lambda r: r["pick0"])["correct"] == len(mis)
 
 
-def test_the_disagreements_are_the_four_variant_cases_and_none_moves_a_threshold(replayed):
+def test_the_one_disagreement_left_does_not_move_a_threshold(replayed):
+    """Jev's pick at the floor against the labels: only d_tebra_backfill (`d_next_alerts` now accepts
+    `t_ray`, the planner's call after review). `a_mg_dashboard` and `d_rbi_scripted_env` kept their labels
+    and now agree: Jev's own choice was `no_match` by a hair, but it puts more than half its mass on the
+    variants, and its likeliest one is the label's."""
     vrows, brows, _ = replayed
-    dis = fit.disagreements(vrows, fit.variant_outcome)
-    assert {r["id"] for r in dis} == {"a_mg_dashboard", "d_next_alerts", "d_tebra_backfill", "d_rbi_scripted_env"}
+    dis = fit.disagreements(vrows, fit.variant_outcome, fit.GRID[0])
+    assert {r["id"] for r in dis} == {"d_tebra_backfill"}
     assert fit.disagreements(brows, fit.baseline_outcome) == []
-    # none is a poor-fit pick (which is what sets TAU_VARIANT), so no relabel in Jev's favour moves it
-    assert all(fit.variant_outcome(r, r["jev_pick"]) in ("lost", "wrong") for r in dis)
+    # it is not a poor-fit pick (which is what sets TAU_VARIANT), so no relabel in Jev's favour moves it
+    assert all(fit.variant_outcome(r, fit.picked(r, fit.GRID[0])) == "wrong" for r in dis)
     without = [r for r in vrows if r["id"] not in {d["id"] for d in dis}]
     assert fit.fit_variant(without)["tau"] == jl.TAU_VARIANT
+    # the case relabelled by the planner: t_ray is acceptable beside the drift synonym
+    case = next(c for c in VCASES if c["id"] == "d_next_alerts")
+    assert case["best"] == ["t_drift_syn", "t_ray"]
+    # the other three the first design disagreed on keep their labels
+    ids = {c["id"]: c for c in VCASES}
+    assert ids["d_tebra_backfill"]["best"] == ["n_kafka_syn", "n_spark"]
+    assert ids["a_mg_dashboard"]["best"] == ["ce_dash"] and ids["d_rbi_scripted_env"]["poor_fit"] == ["b_demand"]
 
 
-def test_the_alternative_rule_is_reported_and_gets_the_close_calls_the_shipped_rule_loses(replayed):
+def test_gating_the_mass_off_no_match_gets_the_close_calls_the_first_design_lost(replayed):
     vrows, _, _ = replayed
     close = [r for r in vrows if r["category"] == "close_call"]
-    shipped = fit.tally(close, fit.variant_outcome, lambda r: fit.picked(r, jl.TAU_VARIANT))["correct"]
-    alt = fit.tally(close, fit.variant_outcome, lambda r: fit.alt_variant_pick(r, 0.5))
-    assert alt["correct"] > shipped and alt["poor"] == 0
+    shipped = fit.tally(close, fit.variant_outcome, lambda r: fit.picked(r, jl.TAU_VARIANT))
+    first = fit.tally(close, fit.variant_outcome, lambda r: fit.argmax_picked(r, jl.TAU_VARIANT))
+    assert (shipped["correct"], first["correct"]) == (8, 4) and shipped["poor"] == first["poor"] == 0
+    # across the whole set, with no poor-fit pick under either rule
+    every = fit.tally(vrows, fit.variant_outcome, lambda r: fit.argmax_picked(r, jl.TAU_VARIANT))
+    assert every["correct"] == 40 and every["poor"] == 0
 
 
 # ── the reports ──────────────────────────────────────────────────────────────

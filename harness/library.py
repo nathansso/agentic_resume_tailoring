@@ -521,7 +521,8 @@ def suggest_actions(user_id: UUID, job_id: str, node_id: Optional[str] = None) -
     **Variant choice (#199).** For an item with approved variants, one Jev `choice` over them
     plus `no_match` (`harness/decisions/library.py`): `source` is `jev` or `cache`,
     `variant.score` and `best_score` are Jev's probabilities, and `propensity` is the whole
-    distribution (every variant id, and `no_match`). A pick below `TAU_VARIANT` is `no_match`.
+    distribution (every variant id, and `no_match`). The pick is Jev's likeliest variant when the
+    probability it puts on any variant (1 - p(`no_match`)) is at least `TAU_VARIANT`, else `no_match`.
 
     **The fallback path** (`source: "fallback"`: no key, mode `off`, an API error): retrieval
     overlap picks the variant, exactly as #229 shipped it. An item with no approved variant

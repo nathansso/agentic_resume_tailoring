@@ -794,8 +794,8 @@ class ItemSuggestion(_Model):
         None, description="The approved variant that best fits the job. Start the revision "
                           "from it (bullets[].from_variant). None on no_match: write from "
                           "the raw facts.")
-    best_score: float = Field(description="Jev: the best variant's probability, even when "
-                                          "no_match won. Fallback: the best overlap among the "
+    best_score: float = Field(description="Jev: the best variant's own probability, even "
+                                          "when no_match won. Fallback: the best overlap among the "
                                           "item's approved variants, even when below the floor.")
     approved_variants: int = 0
     actions: List[ActionChoice] = Field(default_factory=list,
@@ -809,8 +809,10 @@ class ItemSuggestion(_Model):
     propensity: Optional[Dict[str, float]] = Field(
         None, description="Jev's whole distribution over this item's choices: each approved "
                           "variant id, and no_match. Present only when source is jev or cache. "
-                          "A pick needs its probability at or above the fitted threshold, so "
-                          "no_match can win with a variant ahead. Not a calibrated confidence.")
+                          "The likeliest variant is picked when the probability on all the "
+                          "variants together (1 - no_match) reaches the fitted threshold, so two "
+                          "close phrasings can each sit under 0.5 and still be picked. Not a "
+                          "calibrated confidence.")
 
 
 class SuggestActionsOutput(_Output):

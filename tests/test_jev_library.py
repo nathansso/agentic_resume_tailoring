@@ -31,10 +31,11 @@ OLD_ITEM_KEYS = {"item_key", "title", "match", "variant", "best_score", "approve
 
 # ── scripting Jev ────────────────────────────────────────────────────────────
 
-def jev(variant=None, track=None, variant_p=0.8, track_p=0.9):
+def jev(variant=None, track=None, variant_p=0.8, track_p=0.9, catch_p=None):
     """An `answer_for` for the fake transport. `variant(state, ids)` and `track(state, names)` return
     the option to choose (`no_match` / `none` allowed); the default is the first option. The rest of
-    the probability is spread evenly over the other options."""
+    the probability is spread evenly over the other options, except that `catch_p` (when given) is what
+    a variant question's `no_match` gets when it is not the choice."""
     def answer_for(state, wire):
         if wire["type"] == "noul":                       # a coverage or pin question in the same run
             return {"type": "noul", "noul": 0.9}
@@ -45,8 +46,13 @@ def jev(variant=None, track=None, variant_p=0.8, track_p=0.9):
         else:
             names = [o for o in options if o != "none"]
             pick, p = (track or (lambda s, n: n[0]))(state, names), track_p
-        rest = (1.0 - p) / (len(options) - 1)
-        probs = {o: (p if o == pick else rest) for o in options}
+        probs = {pick: p}
+        if catch_p is not None and "no_match" in options and pick != "no_match":
+            probs["no_match"] = catch_p
+        others = [o for o in options if o not in probs]
+        left = max(1.0 - sum(probs.values()), 0.0)
+        for o in others:                                 # spread what is left evenly
+            probs[o] = left / len(others)
         return choice_answer(pick, probs, confidence=p)
     return answer_for
 
@@ -113,15 +119,15 @@ def test_the_question_is_one_choice_over_the_variants_with_a_narrow_state(env, a
     assert "best fits this job" in wire["instructions"]
 
 
-def test_a_pick_below_the_threshold_is_no_match_and_still_reports_the_distribution(env, auto):
+def test_the_gate_is_the_mass_on_any_variant_so_a_low_mass_is_no_match_and_reports_the_distribution(env, auto):
     uid, job_id, _ = env
     ids = _variants(uid, EXP, THREE)
-    below = jl.TAU_VARIANT - 0.05
-    auto.use(FakeTransport(jev(variant=lambda s, i: ids[0], variant_p=below)))
+    auto.use(FakeTransport(jev(variant=lambda s, i: ids[0], variant_p=0.3, catch_p=0.6)))   # mass 0.4
     item = _items(invoke("suggest_actions", uid, {"job_id": job_id}))[EXP]
     assert item["source"] == "jev" and item["match"] == "no_match" and item["variant"] is None
-    assert item["best_score"] == pytest.approx(below, abs=1e-3)       # the variant Jev liked best
-    assert item["propensity"][ids[0]] == pytest.approx(below, abs=1e-3)
+    assert item["best_score"] == pytest.approx(0.3, abs=1e-3)         # the variant Jev liked best
+    assert item["propensity"][ids[0]] == pytest.approx(0.3, abs=1e-3)
+    assert item["propensity"]["no_match"] == pytest.approx(0.6, abs=1e-3)
     assert set(item["propensity"]) == {*ids, "no_match"}
 
 
@@ -135,12 +141,50 @@ def test_jev_saying_no_match_is_no_match(env, auto):
     assert item["best_score"] < 0.1 and set(item["propensity"]) == {*ids, "no_match"}
 
 
-def test_a_pick_exactly_at_the_threshold_is_taken(env, auto):
+def test_two_close_phrasings_each_under_a_half_are_picked_when_together_they_clear_it(env, auto):
+    """The reason for the gate: Jev splits its mass between two good phrasings of one bullet, so neither
+    reaches 0.5 alone while `no_match` stays low."""
     uid, job_id, _ = env
     ids = _variants(uid, EXP, THREE)
-    auto.use(FakeTransport(jev(variant=lambda s, i: ids[2], variant_p=jl.TAU_VARIANT)))
+
+    def split(state, wire):
+        probs = {ids[0]: 0.38, ids[1]: 0.36, ids[2]: 0.01, "no_match": 0.25}
+        return choice_answer(ids[0], probs, confidence=0.38)
+    auto.use(FakeTransport(split))
+    item = _items(invoke("suggest_actions", uid, {"job_id": job_id}))[EXP]
+    assert item["match"] == "variant" and item["variant"]["variant_id"] == ids[0]
+    assert item["variant"]["score"] == 0.38 and item["best_score"] == 0.38     # its own probability
+    assert item["propensity"][ids[1]] == 0.36
+
+
+def test_a_no_match_that_wins_the_argmax_narrowly_still_picks_the_likeliest_variant(env, auto):
+    uid, job_id, _ = env
+    ids = _variants(uid, EXP, THREE)
+    probs = {ids[0]: 0.1, ids[1]: 0.41, ids[2]: 0.0, "no_match": 0.49}                # mass 0.51
+    auto.use(FakeTransport(lambda s, w: choice_answer("no_match", probs, confidence=0.49)))
+    item = _items(invoke("suggest_actions", uid, {"job_id": job_id}))[EXP]
+    assert item["match"] == "variant" and item["variant"]["variant_id"] == ids[1]
+    assert item["variant"]["score"] == 0.41
+
+
+def test_a_mass_exactly_at_the_threshold_is_taken(env, auto):
+    uid, job_id, _ = env
+    ids = _variants(uid, EXP, THREE)
+    auto.use(FakeTransport(jev(variant=lambda s, i: ids[2], variant_p=jl.TAU_VARIANT,
+                               catch_p=1.0 - jl.TAU_VARIANT)))
     item = _items(invoke("suggest_actions", uid, {"job_id": job_id}))[EXP]
     assert item["match"] == "variant" and item["variant"]["variant_id"] == ids[2]
+
+
+def test_a_track_is_still_gated_on_its_own_probability(env, auto):
+    """No close call to pool for a track: Jev's own choice must reach the threshold."""
+    uid, job_id, _ = env
+    _two_tracks(uid, job_id)
+    probs = {"machine_learning": 0.4, "data_science": 0.4, "none": 0.2}              # mass 0.8, none above 0.5
+    auto.use(FakeTransport(lambda s, w: choice_answer("machine_learning", probs, confidence=0.4)))
+    out = invoke("open_job", uid, {"jd_text": "Machine learning engineer: build ranking models.",
+                                   "metadata": {"title": "ML Engineer", "company": "Second Co"}})
+    assert out["baseline"] is None
 
 
 def test_one_request_per_item_that_has_approved_variants_and_none_for_the_rest(env, auto):
