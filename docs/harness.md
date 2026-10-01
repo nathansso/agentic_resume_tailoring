@@ -111,8 +111,8 @@ every deterministic computation in code.
 | Negative-pin mention (#232) | noul per (changed bullet or item field, pin) | Whether a changed text mentions or refers to a pinned topic in other words (a paraphrase, or a product, employer or project of the topic). Asked positively, never "does it avoid", and with the pin's statement stripped of its directive, or the bare term when a negation or comparison would remain. Blocks at p ≥ 0.85 as a `preferences` violation in the term match's format, surfaces 0.15–0.85 as `review` (fitted on 74 labelled pairs, #232; `eval/negative_pin_labels/REPORT.md`). Jev only adds hits; the term match always runs | Unchecked; the term match alone gates |
 | Requirement coverage (#126) | noul per (bullet or education entry, requirement) | Whether one bullet, or one education entry as text, shows the candidate meets one required or preferred requirement of the posting (`incidental` ones are left out), by that text alone, never the page. Asked positively ("Does this bullet show that the candidate meets this requirement: …?"), with stated interest, plans and "eager to learn" named as not meeting it, and (v2) a working-style requirement (deadlines, process, communication, collaboration, ownership, attention to detail) asked for a stated instance. An education entry gets its own question (`education_covered@v1`): it asks what the entry states, treats a degree marked expected as enrollment and not as an earned degree, and never compares dates or levels; a finished degree is shown without its date, because Jev reads a past date as a future one. A requirement is covered when some bullet or entry scores p ≥ 0.65 (fitted on 131 pairs, #126; `eval/coverage_labels/REPORT.md`); `semantic_coverage` is the criticality-weighted share covered, a **target** beside the literal `coverage`, never combined with it. Answers are cached per (bullet or entry, requirement), so a node pays for the bullets it changed only | Unchecked; the target is absent and only the literal targets decide |
 | Memory gate (#202) | noul, choice, score, choice, one request per candidate message | Behind a heuristic prefilter (cue words; non-candidates are dropped with no call). The state is the message text alone. Four questions, all positive: is it a lasting preference about the resume (noul; one-off edits, questions, facts and small talk named as not); emphasize, suppress, format rule or none (choice); strength 1–5 on #129's scale, in its own wording (score); which catalog item it is about, or `no_match` (choice over the user's skills, roles, projects and sections). Routes on p: below 0.25 drop, 0.25–0.65 to the host, at or above 0.65 write when the target is an item (never a whole section) picked at p ≥ 0.75 and named in the message, the direction agrees with the prefilter's negation flag, and the strength is 4 or less. **A strength-5 preference, a negative pin or a preference about a whole section is never written by the gate**; it goes to the host for the user to confirm through `record_preference`. Fitted on 111 user-confirmed synthetic messages, #202 (`eval/memory_gate_labels/REPORT.md`) | Prefilter alone: every candidate goes to the host, nothing is written |
-| Variant choice (#199) | choice per item, with no-match | Which approved bullet variant fits the job; no-match means the host writes a new one | Term overlap (shipped in #229): the approved variant whose content tokens best overlap the job's weighted terms (`relevance_density`'s tokenization, each term at its weight over the heaviest's, so uniform weights give exactly `relevance_density`), at or above `VARIANT_MATCH_FLOOR` (0.10); below it, no-match |
-| Track baseline (#199) | choice | Which baseline a new job branches from | Role-family lookup (shipped in #229): the track whose name equals the job's role family, else none. The family is the host's (`open_job` `metadata.role_family`), else a deterministic title keyword map (`agents/job_card.TITLE_ROLE_FAMILIES`), else `other`; never the LLM classifier |
+| Variant choice (#199) | choice per (job, item with approved variants), with no-match | Which approved bullet variant of an item fits the job; no-match means the host writes a new one. One request per item, state `{job: {title, top 8 required and preferred requirements by criticality}, item: {title}}`. Options are the item's approved variants keyed by variant id with the bullet text as the description, plus `no_match`; the question names a bullet that only repeats the posting's keywords as not fitting. The pick is Jev's argmax when it is a variant and its probability is at least 0.50; `suggest_actions` reports that probability as the variant's score, the whole distribution (every variant id and `no_match`) as `propensity`, and `source` `jev` or `cache`. Fitted on 48 synthetic cases, #199 (`eval/library_labels/REPORT.md`): Jev picked no poor-fit variant, 39 of 48 cases right against the fallback's 18 | Term overlap (shipped in #229, byte for byte unchanged): the approved variant whose content tokens best overlap the job's weighted terms (`relevance_density`'s tokenization, each term at its weight over the heaviest's, so uniform weights give exactly `relevance_density`), at or above `VARIANT_MATCH_FLOOR` (0.10); below it, no-match. `source: "fallback"` |
+| Track baseline (#199) | choice per job, only when a baseline is saved | Which saved track a new job branches from. State `{title, top 8 requirements}`; options are the saved tracks, each described in code as the track's name in words plus the title of the job its baseline came from, plus `none`. The pick is Jev's argmax when it is a track and its probability is at least 0.50, else no baseline. A host `metadata.role_family` that names a saved track exactly wins without asking (source `host`). `open_job` reports `baseline.source` (`host`, `jev`, `cache` or `fallback`) and `p`. Fitted on 36 synthetic jobs, #199: no wrong track, 35 of 36 right against the role-family lookup's 27; the lookup is wrong on all 7 jobs whose title and duties disagree | Role-family lookup (shipped in #229, unchanged): the track whose name equals the job's role family, else none. The family is the host's (`open_job` `metadata.role_family`), else a deterministic title keyword map (`agents/job_card.TITLE_ROLE_FAMILIES`), else `other`; never the LLM classifier. `source: "fallback"` |
 | Eligibility rules (#192) | noul per rule | Job-scoped variables (e.g. graduation date when the posting requires post-internship enrollment) | Host asks the user |
 | Semantic duplicates (#113) | noul per pair | Whether two bullets say the same thing, for the duplication guard, without torch | Embedding cosine with `[embed]`, else term overlap |
 | Action ranking (#193) | choice per item | Priors for `suggest_actions`; probabilities become logged propensities, reweighted by the ranker | Uniform over valid actions |
@@ -266,8 +266,8 @@ metric vector and the rule, and `harness/executor.py` runs it. The details:
 
 - **IDs.** Evidence IDs are `<item key>#b<n>`, the n-th source bullet (0-based). A cite may
   also be any item key. `because` is `pref:<preference id>` or `user:<what they asked>`.
-- **No parent yet.** A job with no history starts from the whole KG with skills ranked
-  (`kg_default_content`) until track baselines land (#199).
+- **No parent yet.** A job with no history starts from its track baseline when one applies
+  (§ 8), else from the whole KG with skills ranked (`kg_default_content`).
 - **Gates compare sets.** A node fails only if it *adds* a violation. Finalize is where
   what remains stops a commit.
 - **Hard-preference deletes.** A delete that a hard preference requires is accepted even
@@ -329,6 +329,16 @@ construction.
     `item_key` must be an existing experience or project, a record is de-duplicated on
     (item key, whitespace- and case-normalized text), and cites default to the item itself
     so the citations gate resolves it. `get_item` lists an item's approved variants only.
+  - *Choosing one (#199).* `suggest_actions` asks Jev, once per experience or project that has
+    an approved variant, which variant best fits the job: one `choice` over the variants plus
+    `no_match` (§ 4). The result is the argmax when it is a variant and its probability is at
+    least `TAU_VARIANT` (0.50), else `no_match`. The variant's `score` is Jev's probability,
+    `propensity` is the whole distribution, and `source` says `jev` or `cache`. With no key,
+    mode `off` or an API error, and for an item with no approved variant, #229's word-overlap
+    pick runs unchanged and says `source: "fallback"`. A pick at 0.50 is deliberately cautious:
+    Jev splits its probability between two good phrasings of one bullet, so a close call can
+    read as `no_match` (the report measures the alternative of gating on the probability Jev
+    puts on any variant, which was not shipped).
   - *Starting from one.* `suggest_actions` names the best approved variant per item, and a
     plan bullet starts from it with `bullets[].from_variant` (`ProgramNode.from_variant` is
     shorthand for a one-bullet revise). Only an approved variant of that very item is
@@ -355,9 +365,13 @@ construction.
   (#202).
 - **Track baselines (#229).** `save_baseline(node, track)` pins a tree node for a track
   (`TrackBaseline`, one per user and track; saving again replaces it; the track is lowercased,
-  with spaces and hyphens as `_`). `open_job` picks the baseline whose track equals the job's
-  role family (see § 4 for how the family is found) and reports it as
-  `{track, node_id, applies}`. While the job has no history its first version is a copy of
+  with spaces and hyphens as `_`). `open_job` picks the job's baseline (#199) and reports it as
+  `{track, node_id, applies, source, p}`: a host `metadata.role_family` that names a saved
+  track exactly wins without a question (`source: "host"`); otherwise, when any track is
+  saved, one Jev `choice` over the saved tracks plus `none` decides (`jev` or `cache`, `p` its
+  probability; a pick under `TAU_BASELINE` or `none` is no baseline); without Jev the track
+  whose name equals the job's role family is used as in #229 (`fallback`, see § 4 for how the
+  family is found). While the job has no history its first version is a copy of
   that node's content, not the whole KG: item content stays as the baseline has it; skills are
   re-ranked against this posting with the KG default's ranking, over the baseline's own skill
   set; job-scoped rule fields go back to the stored value so another job's answer never leaks,
@@ -392,9 +406,9 @@ construction.
 | | `promote_bullet` | node, bullet, optional item key and track → a **draft** variant, or the existing one (#229) |
 | | `approve_variant` | variant id → the variant, approved; only after the user said yes (#229) |
 | | `save_baseline` | node, track → pinned baseline, and the node the track pointed at before (#229) |
-| Jobs | `open_job` | JD text, requirements, optional `role_family` → job id, role family and how it was found, baseline `{track, node_id, applies}`, rules, schema errors |
+| Jobs | `open_job` | JD text, requirements, optional `role_family` → job id, role family and how it was found, baseline `{track, node_id, applies, source, p}`, rules, schema errors |
 | | `list_jobs` | filter → jobs with status, HEAD, last score |
-| | `suggest_actions` | job, optional node (HEAD by default) → per item: the best approved variant with its score or `no_match`, the valid actions with uniform propensities, `source: "fallback"` (#229; Jev ranking and choice are #199 and #193) |
+| | `suggest_actions` | job, optional node (HEAD by default) → per item: the best approved variant with its score (Jev's probability, or the overlap on the fallback) or `no_match`, `source` (`jev`, `cache` or `fallback`), `propensity` (Jev's distribution over the variants and `no_match`; only with Jev) and the valid actions with uniform propensities (#229, #199; Jev ranking of actions is #193) |
 | Execute & history | `execute_plan` | program → node results, metric vectors, refusals, violations |
 | | `patch_plan` | saved program id, pointer edits → same |
 | | `checkout` | node → moves HEAD |
