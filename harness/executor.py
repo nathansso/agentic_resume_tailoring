@@ -4,13 +4,15 @@
 (docs/harness.md § 7):
 
 1. **Base.** The parent node's content, which must be HEAD (`stale_parent`
-   otherwise). A job with no history starts from `kg_default_content`: every
+   otherwise). A job with no history starts from a copy of its track baseline
+   when one applies (#229: the track named after its role family, skills
+   re-ranked for this posting), else from `kg_default_content`: every
    experience and project with its source bullets, skills ranked against the
-   posting, achievements and education verbatim — what a baseline will be once
-   #199 ships track baselines.
+   posting, achievements and education verbatim.
 2. **Arbitration.** A node that names a key the knowledge graph does not hold,
-   cites something that does not resolve, or crosses a hard (strength-5)
-   preference is *refused*: it never executes, and its reason is reported.
+   cites something that does not resolve, names a variant that is not an
+   approved one of the item (#229), or crosses a hard (strength-5) preference
+   is *refused*: it never executes, and its reason is reported.
 3. **Nodes in section order** (experiences, then projects, in page order), each
    under the per-metric acceptance rule (`harness/acceptance.py`). A node that
    fails is reverted and the rest continue.
@@ -48,7 +50,7 @@ from agents.jd_payload import iter_requirements
 from agents.skill_matching import match_requirement_terms, priority_skills
 from agents.skill_scorer import MAX_SKILLS, rank_and_select_skills, score_skills
 from database.models import JDProfile, JobDescription, PlanProgram, UserJobResult
-from harness import ART_VERSION, tree
+from harness import ART_VERSION, library, tree
 from harness.acceptance import (
     Context, accept, metric_vector, preference_violations, term_pattern,
 )
@@ -59,9 +61,9 @@ from harness.decisions.negative_pins import (
     make_pin_checker, reviews as pin_reviews, violations as pin_violations,
 )
 from harness.decisions.support import make_support_checker, reviews as support_reviews
-from harness.ingest import apply_job_rules, resolve_rules
+from harness.ingest import apply_job_rules, list_rules, resolve_rules
 from harness.program import Program, apply_patch, program_id
-from harness.tools import _records, skill_key
+from harness.tools import _records, edu_key, skill_key
 
 log = logging.getLogger(__name__)
 
@@ -98,6 +100,13 @@ class _KG:
                 blurbs = [b["content"] for b in r["record"].get("blurbs") or [] if b.get("content")]
                 desc = (r["record"].get("description") or "").strip()
                 self.source_bullets[r["key"]] = blurbs or ([desc] if desc else [])
+        # The bullet library (#229): every variant of this user by id (any status, so a
+        # draft is refused for what it is), and the normalized text of the approved ones.
+        self.variants = library.variants_by_id(user_id)
+        self.approved_texts: Dict[str, set] = {}
+        for v in self.variants.values():
+            if v["status"] == library.APPROVED:
+                self.approved_texts.setdefault(v["item_key"], set()).add(library.norm_text(v["text"]))
 
     def of(self, kind: str) -> List[Dict]:
         return [r for r in self.records if r["kind"] == kind]
@@ -213,6 +222,24 @@ def _prioritize_skills(ranked: List[Dict], skills: List[Dict], jd_text: str,
     return (head + [s for s in ranked if s["name"] not in chosen])[:MAX_SKILLS]
 
 
+def _kg_skill_rows(kg: _KG) -> List[Dict]:
+    return [{"name": s["record"]["name"], "category": s["record"].get("category"),
+             "proficiency": _int(s["record"].get("proficiency"))} for s in kg.of("skill")]
+
+
+def _rank_skills(pool: List[Dict], all_skills: List[Dict], jd_text: str,
+                 requirements: Optional[Sequence[Dict]]) -> List[Dict]:
+    """`pool` ranked against the posting (TF-IDF, capped), then, with the posting's
+    `requirements`, skills they name brought to the front from `all_skills` (#233)."""
+    ranked = rank_and_select_skills(pool, jd_text or "") if pool else None
+    if not ranked:
+        ranked = [{"name": s["name"], "category": s["category"], "score": 0.0}
+                  for s in sorted(pool, key=lambda s: s["name"].lower())]
+    if requirements and pool:
+        ranked = _prioritize_skills(ranked, all_skills, jd_text, requirements)
+    return ranked
+
+
 def kg_default_content(user_id: UUID, jd_text: str, kg: Optional[_KG] = None,
                        requirements: Optional[Sequence[Dict]] = None) -> Dict:
     """The version a job with no history starts from: the whole KG, untailored
@@ -220,14 +247,8 @@ def kg_default_content(user_id: UUID, jd_text: str, kg: Optional[_KG] = None,
     `requirements`, skills they name rank first (#233); without them the
     ranking is exactly the TF-IDF one."""
     kg = kg or _KG(user_id)
-    skills = [{"name": s["record"]["name"], "category": s["record"].get("category"),
-               "proficiency": _int(s["record"].get("proficiency"))} for s in kg.of("skill")]
-    ranked = rank_and_select_skills(skills, jd_text or "") if skills else None
-    if not ranked:
-        ranked = [{"name": s["name"], "category": s["category"], "score": 0.0}
-                  for s in sorted(skills, key=lambda s: s["name"].lower())]
-    if requirements and skills:
-        ranked = _prioritize_skills(ranked, skills, jd_text, requirements)
+    skills = _kg_skill_rows(kg)
+    ranked = _rank_skills(skills, skills, jd_text, requirements)
     content = {
         "experiences": [kg.item(r["key"]) for r in kg.of("experience")],
         "projects": [kg.item(r["key"]) for r in kg.of("project")],
@@ -244,6 +265,59 @@ def kg_default_content(user_id: UUID, jd_text: str, kg: Optional[_KG] = None,
     if education:
         content["education"] = education
     return content
+
+
+_RULE_SECTIONS = {"edu": ("education", edu_key), "exp": ("experiences", exp_key)}
+
+
+def baseline_content(user_id: UUID, jd_text: str, kg: _KG, requirements: Optional[Sequence[Dict]],
+                     node_content: Dict) -> Dict:
+    """A job's first version when a track baseline applies (#229): a copy of the baseline
+    node's content, adjusted to this posting in the two places a baseline from another job
+    would be wrong.
+
+    - **Skills** are re-ranked against this posting with the same ranking the KG default
+      uses, over the skills the baseline lists that the KG still holds, so the track's
+      skill set carries over and another job's skill order does not. Skills the posting's
+      requirements name come to the front (#233), as they do for the default. A baseline
+      with no skills the KG still has takes the default list.
+    - **Job-scoped rule fields** (#192) go back to the stored KG value, so a value another
+      job's answer wrote (a graduation date) does not leak; the answers for *this* posting
+      are applied right after, as for any base.
+
+    Item content (bullets, cites, titles) stays exactly as the baseline has it.
+    """
+    default = kg_default_content(user_id, jd_text, kg, requirements)
+    content = copy.deepcopy(node_content)
+    held = {str(s.get("name", "")).strip().lower() for s in content.get("skills_ranked") or []}
+    all_skills = _kg_skill_rows(kg)
+    pool = [s for s in all_skills if s["name"].strip().lower() in held]
+    content["skills_ranked"] = (_rank_skills(pool, all_skills, jd_text, requirements)
+                                if pool else default["skills_ranked"])
+    for rule in list_rules(user_id):
+        section, key_fn = _RULE_SECTIONS[rule["item_key"].split(":", 1)[0]]
+        stored = {key_fn(i): i for i in default.get(section) or []}.get(rule["item_key"])
+        for item in content.get(section) or []:
+            if key_fn(item) == rule["item_key"] and stored is not None and rule["field"] in stored:
+                item[rule["field"]] = stored[rule["field"]]
+    return content
+
+
+def start_content(user_id: UUID, job: JobDescription, kg: _KG,
+                  requirements: Optional[Sequence[Dict]]) -> Tuple[Dict, Optional[Dict]]:
+    """`(content, baseline)` for a job with no history: a copy of its track baseline when
+    one applies (`baseline` is `{track, node_id, role_family, source}`), else the whole KG
+    (`kg_default_content`, exactly as before #229) and `None`."""
+    choice = library.choose_baseline(user_id, job.job_id)
+    if choice is not None:
+        try:
+            node = tree.get_node(user_id, choice["node_id"])
+        except tree.NotFound:
+            node = None
+        if node and node["content"]:
+            return baseline_content(user_id, job.description or "", kg, requirements,
+                                    node["content"]), choice
+    return kg_default_content(user_id, job.description or "", kg, requirements), None
 
 
 # ── context ──────────────────────────────────────────────────────────────────
@@ -334,6 +408,7 @@ def _context(user_id: UUID, job: JobDescription, kg: _KG, max_bullet_lines: int)
         matched_skills=matched,
         line_counter=_line_counter(),
         max_bullet_lines=max_bullet_lines,
+        approved_variants=kg.approved_texts,
     )
     return ctx, {"suppress": suppress, "emphasize": emphasize,
                  "negative_terms": _negative_terms(skills)}
@@ -382,7 +457,20 @@ def _refusal(node: Dict, content: Dict, kg: _KG, prefs: Dict, pref_ids: set) -> 
         section, _ = loc
         if len(content.get(section) or []) <= 1:
             return f"would_empty_section: {section}"
+    target = (node["replacement_key"] if op == "replace" else node["item_key"]).strip().lower()
     for i, bullet in enumerate(node.get("bullets") or []):
+        named = (bullet.get("from_variant") or "").strip().lower()
+        if named:
+            # Only an approved variant of this very item can be started from (#229).
+            variant = kg.variants.get(named)
+            if variant is None:
+                return f"unknown_variant: bullet {i} names {bullet['from_variant']}, which is not one of your variants"
+            if variant["status"] != library.APPROVED:
+                return (f"variant_not_approved: bullet {i} names a {variant['status']} variant; "
+                        "only approved variants can be started from (approve_variant)")
+            if variant["item_key"] != target:
+                return (f"variant_wrong_item: bullet {i} names a variant of {variant['item_key']}, "
+                        f"not {target}")
         if not bullet["cites"]:
             return f"uncited_bullet: bullet {i} cites nothing"
         gone = [c for c in bullet["cites"] if kg.cite_status(c) == "tombstoned"]
@@ -426,6 +514,43 @@ def _cites_of(bullets: List[Dict]) -> Dict[str, List[str]]:
     for b in bullets:
         out.setdefault(b["text"], [])
         out[b["text"]] += [c for c in b["cites"] if c not in out[b["text"]]]
+    return out
+
+
+def _target_key(node: Dict) -> str:
+    """The item a node's bullets will sit under: the replacement for a replace."""
+    return (node["replacement_key"] if node["op"] == "replace" else node["item_key"]).strip().lower()
+
+
+def _with_variant_cites(node: Dict, kg: _KG) -> Dict:
+    """The node with each uncited bullet that names an approved variant, or is verbatim
+    one of its item's approved variants, citing what that variant cites (#229). The saved
+    program is left as the host wrote it; only what arbitration and `_apply` see changes."""
+    if not node.get("bullets"):
+        return node
+    key = _target_key(node)
+    by_text = {library.norm_text(v["text"]): v for v in kg.variants.values()
+               if v["item_key"] == key and v["status"] == library.APPROVED}
+    out = copy.deepcopy(node)
+    for b in out["bullets"]:
+        if b["cites"]:
+            continue
+        v = kg.variants.get((b.get("from_variant") or "").strip().lower()) \
+            or by_text.get(library.norm_text(b["text"]))
+        if v is not None and v["status"] == library.APPROVED:
+            b["cites"] = list(v["cites"])
+    return out
+
+
+def _variant_origin(node: Dict, kg: _KG) -> Dict[Tuple[str, str], str]:
+    """`(item key, normalized bullet) -> variant text` for the node's bullets that name an
+    approved variant: what the `variant_drift` guard measures."""
+    key = _target_key(node)
+    out = {}
+    for b in node.get("bullets") or []:
+        v = kg.variants.get((b.get("from_variant") or "").strip().lower())
+        if v is not None and v["status"] == library.APPROVED:
+            out[(key, library.norm_text(b["text"]))] = v["text"]
     return out
 
 
@@ -537,15 +662,24 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     pref_ids = {str(p.get("preference_id")).lower()
                 for p in services.load_preferences(user_id)}
     requirements = job_requirements(user_id, job_id)
-    base = head["content"] if head else kg_default_content(
-        user_id, job.description or "", kg, requirements)
+    # No history: the job's track baseline when one applies (#229), else the whole KG.
+    baseline = None
+    if head:
+        base = head["content"]
+    else:
+        base, baseline = start_content(user_id, job, kg, requirements)
     # Job-scoped rules answered for this posting (#192), e.g. the graduation
     # date a post-internship enrollment requirement calls for.
     rules_applied = apply_job_rules(base, resolve_rules(user_id, job_id))
     working = copy.deepcopy(base)
     # The cited-bullet support check (#193): Jev, through the cached engine.
     # Built here, not in `_context`, because it reads the base for "original".
-    ctx.support_checker = make_support_checker(kg.source_bullets, base)
+    # A bullet that names an approved variant gets that variant's text as extra evidence (#229),
+    # in this dict, shared with the checker and `ctx`: the accepted nodes' variant bullets plus,
+    # while a node is evaluated, its own.
+    evidence: Dict[Tuple[str, str], str] = {}
+    ctx.variant_evidence = evidence
+    ctx.support_checker = make_support_checker(kg.source_bullets, base, kg.approved_texts, evidence)
     # The negative-pin check (#232): Jev on whether a changed bullet or item field mentions a
     # pinned topic in other words. The pin's own statement describes the topic.
     pins = [{"term": t, "statement": p.get("text")} for t, p in sorted(prefs["negative_terms"].items())]
@@ -559,10 +693,12 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     current = base_vector
 
     results = []
+    accepted_origin: Dict[Tuple[str, str], str] = {}
     order = sorted(prog["nodes"], key=lambda n: (_section_rank(base, n["item_key"].strip().lower()),
                                                  prog["nodes"].index(n)))
     for node in order:
         row = {"id": node["id"], "op": node["op"], "item_key": node["item_key"]}
+        node = _with_variant_cites(node, kg)
         reason = _refusal(node, working, kg, prefs, pref_ids)
         if reason:
             results.append({**row, "status": "refused", "reason": reason})
@@ -571,7 +707,12 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
             results.append({**row, "status": "kept", "reason": None})
             continue
         candidate = _apply(node, working, kg)
+        # variant_drift is a property of this node's bullets alone (#229).
+        origin = _variant_origin(node, kg)
+        ctx.variant_origin = origin
+        evidence.update(origin)
         vector = metric_vector(candidate, ctx)
+        ctx.variant_origin = {}
         verdict = accept(current, vector, improves=node["accept"]["improves"],
                          tolerances=node["accept"]["tolerances"],
                          requested=node["op"] == "delete" and bool(node.get("because")))
@@ -602,11 +743,16 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
         results.append(row)
         if verdict["accepted"]:
             working, current = candidate, vector
+            accepted_origin.update(origin)
+        evidence.clear()
+        evidence.update(accepted_origin)
 
     skill_notes = _apply_skills(working, prog.get("skills"), kg, ctx)
     if prog.get("section_order") is not None:
         working["_section_order"] = list(prog["section_order"])
+    ctx.variant_origin = accepted_origin
     final_vector = metric_vector(working, ctx)
+    ctx.variant_origin = {}
     lines = ctx.line_counter(working) if ctx.line_counter else None
     violations, cut_hints, budget = _finalize(working, prog, ctx, kg, lines)
 
@@ -618,6 +764,8 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
         "line_budget": budget or {"status": "unmeasured"},
         "violations": violations, "cut_hints": cut_hints, "rules_applied": rules_applied,
     }
+    if baseline:
+        out["baseline"] = baseline
     # Only when Jev (or its cache) answered for at least one bullet: with no key
     # the result is what it was before #193.
     findings = [f for f in ctx.support_checker(working) if f["status"] == "checked"]
@@ -644,7 +792,9 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
                                    "line_budget": budget, "nodes": results},
             provenance={"host": host.get("name"), "host_version": host.get("version"),
                         "model": host.get("model"), "art_version": ART_VERSION,
-                        "program_id": pid},
+                        "program_id": pid,
+                        # The track baseline this job's first version was copied from (#229).
+                        **({"baseline": baseline} if baseline else {})},
             layout_overrides=(head or {}).get("layout_overrides"),
             note=f"plan {pid}", expected_parent=parent, materialize=True)
     except tree.StaleParent as exc:

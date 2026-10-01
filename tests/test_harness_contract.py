@@ -36,7 +36,7 @@ CALLS = {
     "list_jobs": [{}, {"status": "applied"}],
     # Host-filled ingestion (#192). Writes that change nothing on a second call, so
     # all three adapters see the same store.
-    "ingest_schema": [{"kind": "education"}, {"kind": "rule"}],
+    "ingest_schema": [{"kind": "education"}, {"kind": "rule"}, {"kind": "variant"}],
     "upsert_items": [{"records": [
         {"kind": "experience", "data": {"title": "Data Science Intern", "company": "IDX Exchange"}},
         {"kind": "education", "data": {"institution": "UC San Diego", "degree": "M.S. Data Science"}},
@@ -59,6 +59,15 @@ CALLS = {
         {"program": {"job_id": "$JOB", "parent": None}, "dry_run": True}],   # stale parent
     "patch_plan": [{"program_id": "prog_missing", "edits": [
         {"op": "replace", "path": "/parent", "value": "$N1"}]}],
+    # Bullet library and track baselines (#229). The writes are errors or idempotent, so all
+    # three adapters agree; the happy paths are in tests/test_bullet_library.py.
+    "suggest_actions": [{"job_id": "$JOB"}, {"job_id": "$JOB", "node_id": "$N0"},
+                        {"job_id": "$JOB", "node_id": "00000000-0000-0000-0000-000000000000"}],
+    "promote_bullet": [{"node_id": "$N0", "bullet": "A bullet that is not on the page"},
+                       {"node_id": "00000000-0000-0000-0000-000000000000", "bullet": "x"}],
+    "approve_variant": [{"variant_id": "00000000-0000-0000-0000-000000000000"}],
+    "save_baseline": [{"node_id": "$N0", "track": "Data Science"},
+                      {"node_id": "00000000-0000-0000-0000-000000000000", "track": "x"}],
     # Render and the header (#201): same file, same fields, on every adapter.
     "render": [{"job_id": "$JOB", "format": "tex"},
                {"job_id": "00000000-0000-0000-0000-000000000000"}],

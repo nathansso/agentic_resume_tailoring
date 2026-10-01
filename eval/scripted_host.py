@@ -17,6 +17,13 @@ The policy, per task:
   evidence id; experiences with three or fewer bullets are kept.
 - **Projects:** keep the two with the most posting overlap and delete the rest,
   as a user request.
+- **The bullet library (#229):** when an item has approved variants, `suggest_actions`'s
+  fallback pick (`match: variant`) leads its bullets, named by `from_variant` and
+  citing what the variant cites, followed by the highest-overlap source bullets that do
+  not repeat it. An item with no approved variant is planned exactly as above, so a
+  store with no library gives the same program as before. The run reports
+  `library_reuse`, the share of page bullets that are an approved variant or within the
+  drift tolerance of one: report-only, never a target.
 - **Skills:** the knowledge graph's skills, posting terms first, capped.
 
 Every choice is a pure function of the store and the posting, so two runs over
@@ -43,6 +50,7 @@ if str(ROOT) not in sys.path:
 from agents.ats_scorer import ATSScoringEngine  # noqa: E402
 from agents.skill_scorer import MAX_SKILLS  # noqa: E402
 from harness.contract import invoke  # noqa: E402
+from harness.library import library_reuse  # noqa: E402
 
 KEEP_EXP_BULLETS = 3
 KEEP_PROJECTS = 2
@@ -161,15 +169,50 @@ def _call(name: str, user_id: UUID, args: Dict) -> Dict:
     return out
 
 
+VARIANT_REPEAT = 0.5      # a source bullet this similar to the chosen variant is left out
+
+
+def _jaccard(a: str, b: str) -> float:
+    x, y = ATSScoringEngine._extract_keywords(a or ""), ATSScoringEngine._extract_keywords(b or "")
+    return len(x & y) / len(x | y) if (x | y) else 0.0
+
+
+def _variant_node(key: str, variant: Dict, sources: List[str], jd_terms: set) -> Dict:
+    """Revise `key` to its chosen variant and the best source bullets that do not repeat it."""
+    rest = [i for i, b in enumerate(sources) if _jaccard(b, variant["text"]) < VARIANT_REPEAT]
+    rest.sort(key=lambda i: (-_overlap(sources[i], jd_terms), i))
+    keep = sorted(rest[:KEEP_EXP_BULLETS - 1])
+    # No cites: the variant's own are used, and the bullet is verbatim, so drift is 0.
+    bullets = [{"text": variant["text"], "cites": [], "from_variant": variant["variant_id"]}]
+    bullets += [{"text": sources[i], "cites": [f"{key}#b{i}"]} for i in keep]
+    return {"id": f"variant:{key}", "op": "revise", "item_key": key, "bullets": bullets,
+            "accept": {"improves": ["relevance_density"]}}
+
+
 def build_program(user_id: UUID, job_id: str, jd_text: str) -> Dict:
     jd_terms = ATSScoringEngine._extract_keywords(jd_text)
     head = _call("get_head", user_id, {"job_id": job_id})["head"]
     items = _call("list_items", user_id, {})["items"]
     nodes: List[Dict] = []
+    picks: Optional[Dict[str, Optional[Dict]]] = None     # suggest_actions, once, if a library exists
+
+    def chosen_variant(key: str, found: Dict) -> Optional[Dict]:
+        nonlocal picks
+        if not found.get("variants"):
+            return None
+        if picks is None:
+            picks = {s["item_key"]: s["variant"] for s in
+                     _call("suggest_actions", user_id, {"job_id": job_id})["items"]}
+        return picks.get(key)
 
     for it in (i for i in items if i["kind"] == "experience"):
-        rec = _call("get_item", user_id, {"key": it["key"]})["record"]
+        found = _call("get_item", user_id, {"key": it["key"]})
+        rec = found["record"]
         bullets = rec.get("bullets") or []
+        variant = chosen_variant(it["key"], found)
+        if variant:
+            nodes.append(_variant_node(it["key"], variant, bullets, jd_terms))
+            continue
         if len(bullets) <= KEEP_EXP_BULLETS:
             nodes.append({"id": f"keep:{it['key']}", "op": "keep", "item_key": it["key"]})
             continue
@@ -182,15 +225,23 @@ def build_program(user_id: UUID, job_id: str, jd_text: str) -> Dict:
             "accept": {"improves": ["relevance_density"]}})
 
     projects = []
+    sources: Dict[str, List[str]] = {}
+    variants: Dict[str, Optional[Dict]] = {}
     for it in (i for i in items if i["kind"] == "project"):
-        rec = _call("get_item", user_id, {"key": it["key"]})["record"]
+        found = _call("get_item", user_id, {"key": it["key"]})
+        rec = found["record"]
         text = " ".join([rec.get("name") or "", rec.get("description") or "",
                          *(b["content"] for b in rec.get("blurbs") or [])])
         projects.append((-_overlap(text, jd_terms), it["key"]))
+        sources[it["key"]] = ([b["content"] for b in rec.get("blurbs") or []]
+                              or ([rec["description"]] if rec.get("description") else []))
+        variants[it["key"]] = chosen_variant(it["key"], found)
     for rank, (_, key) in enumerate(sorted(projects)):
         if rank >= KEEP_PROJECTS:
             nodes.append({"id": f"drop:{key}", "op": "delete", "item_key": key,
                           "because": f"user:keep the {KEEP_PROJECTS} most relevant projects"})
+        elif variants.get(key):
+            nodes.append(_variant_node(key, variants[key], sources[key], jd_terms))
 
     skills = [i["title"] for i in items if i["kind"] == "skill"]
     skills.sort(key=lambda s: (-_overlap(s, jd_terms), s.lower()))
@@ -199,12 +250,33 @@ def build_program(user_id: UUID, job_id: str, jd_text: str) -> Dict:
             "nodes": nodes, "skills": skills[:MAX_SKILLS], "host": HOST}
 
 
+def _page_keys(content: Dict, section: str) -> List[str]:
+    from agents.checks import exp_key, proj_key
+    return [(exp_key if section == "experiences" else proj_key)(i)
+            for i in content.get(section) or []]
+
+
+def page_library_reuse(user_id: UUID, job_id: str) -> Optional[Dict]:
+    """The committed page's `library_reuse` (see `harness.library.library_reuse`), or None
+    when the job has no version. Report-only: never a target, a guard or a gate."""
+    head = _call("get_head", user_id, {"job_id": job_id})["head"]
+    if not head:
+        return None
+    content = head["content"]
+    keys = [k for section in ("experiences", "projects") for k in _page_keys(content, section)]
+    approved = {k: _call("get_item", user_id, {"key": k}).get("variants") or [] for k in keys}
+    return library_reuse(content, approved)
+
+
 def run_task(user_id: UUID, task: Dict) -> Dict:
-    """Create the job, plan it, execute it. Returns `{job_id, program, result}`."""
+    """Create the job, plan it, execute it. Returns `{job_id, program, result,
+    library_reuse}`."""
     job_id = open_task_job(user_id, task)
     program = build_program(user_id, job_id, task["description"])
     result = invoke("execute_plan", user_id, {"program": program})
-    return {"task": task["id"], "job_id": job_id, "program": program, "result": result}
+    reuse = page_library_reuse(user_id, job_id) if result.get("committed") else None
+    return {"task": task["id"], "job_id": job_id, "program": program, "result": result,
+            "library_reuse": reuse}
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -232,7 +304,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         r = out["result"]
         print(json.dumps({"task": out["task"], "committed": r.get("committed"),
                           "nodes": [(n["id"], n["status"]) for n in r.get("nodes", [])],
-                          "violations": r.get("violations"), "error": r.get("error")}))
+                          "violations": r.get("violations"), "error": r.get("error"),
+                          "library_reuse": out["library_reuse"]}))
     return 0
 
 

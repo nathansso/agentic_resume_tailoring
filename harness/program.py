@@ -39,7 +39,14 @@ class PlanBullet(_M):
     cites: List[str] = Field(
         default_factory=list,
         description="Stable ids this bullet rests on: item keys (exp:/proj:/skill:/edu:/ach:) "
-                    "or source bullets as '<item key>#b<n>'. At least one is required.")
+                    "or source bullets as '<item key>#b<n>'. At least one is required, "
+                    "unless the bullet names an approved variant (from_variant), whose own "
+                    "cites are then used.")
+    from_variant: Optional[str] = Field(
+        None, description="The approved bullet variant (a variant_id from get_item or "
+                          "suggest_actions) this bullet starts from (#229). Only approved "
+                          "variants of the item are accepted, and the bullet may not drift "
+                          "from it past the variant_drift tolerance.")
 
 
 class Accept(_M):
@@ -58,7 +65,9 @@ class ProgramNode(_M):
     strategy: Optional[Strategy] = None
     keywords: List[str] = Field(default_factory=list)
     from_variant: Optional[str] = Field(
-        None, description="The approved bullet variant this revision starts from (#199).")
+        None, description="Shorthand for a one-bullet revise: the approved variant that "
+                          "bullet starts from. With any other number of bullets, name "
+                          "variants per bullet (bullets[].from_variant) instead (#229).")
     bullets: Optional[List[PlanBullet]] = Field(
         None, description="The item's full bullet list after this node (revise; optional "
                           "for replace, which otherwise uses the replacement's source bullets).")
@@ -83,6 +92,18 @@ class ProgramNode(_M):
             raise ValueError(f"node {self.id}: replacement_key/use_variant are for replace")
         if op in ("keep", "delete") and self.bullets is not None:
             raise ValueError(f"node {self.id}: {op} takes no bullets")
+        if self.from_variant:
+            # A variant is one bullet, so a node-level name is only unambiguous for one bullet.
+            if op != "revise" or not self.bullets or len(self.bullets) != 1:
+                raise ValueError(
+                    f"node {self.id}: from_variant names one variant, so it needs a revise "
+                    "with exactly one bullet; with several bullets name a variant on each "
+                    "(bullets[].from_variant)")
+            bullet = self.bullets[0]
+            if bullet.from_variant and bullet.from_variant != self.from_variant:
+                raise ValueError(f"node {self.id}: from_variant and bullets[0].from_variant "
+                                 "name different variants")
+            bullet.from_variant = self.from_variant
         if self.strategy and op != "revise":
             raise ValueError(f"node {self.id}: strategy is for revise")
         if self.because and not self.because.startswith(("pref:", "user:")):

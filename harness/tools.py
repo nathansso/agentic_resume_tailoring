@@ -275,7 +275,13 @@ def get_item(user_id: UUID, key: str) -> Dict[str, Any]:
     if kind:
         for it in _records(user_id, [kind]):
             if it["key"] == norm:
-                return {"key": it["key"], "kind": kind, "record": it["record"]}
+                out = {"key": it["key"], "kind": kind, "record": it["record"]}
+                if kind in ("experience", "project"):
+                    # The item's approved bullet variants (#229): wording the user confirmed,
+                    # to start from instead of the raw bullets. Drafts are never listed.
+                    from harness import library  # library imports this module
+                    out["variants"] = library.list_variants(user_id, norm)
+                return out
     query = norm.split(":", 1)[-1].replace("|", " ")
     return {"key": key, "error": {
         "code": "not_found", "message": f"No item with key {key!r}.",

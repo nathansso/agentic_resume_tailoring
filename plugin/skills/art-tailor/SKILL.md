@@ -16,8 +16,10 @@ The tools named below are the ART MCP server's tools.
 
 ## 1. Read the brief
 
-- Call `art_briefing` with the posting's role family if it is obvious (for example
-  `data_science`, `ml_engineering`, `software_engineering`).
+- Call `art_briefing` with the posting's role family if it is obvious. The families are
+  `software_engineering`, `machine_learning`, `data_science`, `data_engineering`,
+  `research`, `product_management`, `design`, `devops_infrastructure`, `security`,
+  `hardware` and `other`.
 - **Pins are hard rules.** Quote them to yourself and honour them verbatim.
 - Note `job_rules`: yes/no questions about the posting, such as whether it requires
   enrollment after the internship. Answer each from the posting's own words, keeping
@@ -32,7 +34,11 @@ The tools named below are the ART MCP server's tools.
   the shape. Fill `type` (required, preferred or incidental), `criticality` (1–5),
   `terms`, and `source_section` with the posting's own heading.
 - Call `open_job` with `jd_text`, `requirements`,
-  `metadata: {title, company, url}` and `rule_answers`.
+  `metadata: {title, company, url, role_family}` and `rule_answers`. Give `role_family`
+  from your own reading of the posting; without it ART guesses from the title.
+- If `baseline` comes back with `applies: true`, the user saved a baseline for this role
+  family, and the job's first version starts as a copy of it instead of the whole graph.
+  Say so to the user, and read it with `get_head` before planning.
 - Keep the `job_id`. Look at `top_terms`: these are the weighted terms the candidate
   can support.
 - `skill_matches` lists the requirement terms that name skills the candidate has, exactly
@@ -52,18 +58,33 @@ The tools named below are the ART MCP server's tools.
   `context_status` is `personal` for the user's own project. Work is stronger evidence
   than coursework; never present a course or personal project as a job. A role's
   record lists its `projects`; an achievement's `project` is what it was won for.
+- `get_item` also lists the item's `variants`: wording the user approved for that
+  experience or project. Approved wording beats regenerated wording (see step 4).
 - Call `get_head(job_id)`. If the job already has a version, build on it; the plan's
   `parent` must be its `node_id`. Respect anything under `editor_edits`: the user made
   those changes by hand.
 
 ## 4. Draft the plan and get approval
 
+Call `suggest_actions(job_id)` first. For each experience and project on the current
+version it names the approved variant that best fits this posting (`match: variant`,
+with `variant.variant_id`, `text`, `cites` and `score`) or `no_match`, and the actions
+that are valid for the item. **Start from the approved text, not from the raw facts:**
+
+- `match: variant`: revise the item from that variant. Put its `text` in the bullet
+  (verbatim, or edited lightly to weave in a term the cited evidence supports) and set
+  that bullet's `from_variant` to its `variant_id`. Leave `cites` empty to use the
+  variant's own. A bullet that strays too far from its variant is reverted (the
+  `variant_drift` guard), so edit a few words, not the whole bullet.
+- `no_match`: write the bullets from the raw facts as below. Only these items are
+  generated from scratch.
+
 Draft a plan program for `execute_plan`. Its input schema is published with the tool.
 
 - **nodes**, one per experience or project you touch:
   - `keep`: include the item unchanged.
   - `revise`: rewrite its bullets. Give the full new `bullets` list; each bullet
-    `cites` the evidence ids it rests on. Set `strategy` to one of `keyword_weave`,
+    `cites` the evidence ids it rests on (or names a `from_variant`). Set `strategy` to one of `keyword_weave`,
     `quantify`, `tighten` or `reframe`, and `keywords` to the posting terms you are
     weaving in. Only weave terms the cited evidence supports.
   - `replace`: swap one project for another (`replacement_key`).
@@ -91,11 +112,14 @@ Call `execute_plan({program})`. Read the result:
 - `nodes[].status`:
   - `accepted` and `kept` went in.
   - `reverted` failed ART's acceptance rule; `reason` says which gate, guard or target.
+    A `guard: variant_drift` reason means the bullet moved too far from the variant it
+    starts from: use the variant's words, or write it from the raw facts without `from_variant`.
     A `consistency` gate reason lists the numbers, dates or names in your bullet that its
     cited source bullets don't contain. Use only figures and names the evidence states
     (`1,000,000` for `1M` is fine); don't derive new ones ("4x") from other figures.
-  - `refused` never ran: an unknown key, an unresolvable cite, or a crossed hard
-    preference. It also covers `tombstoned`, which names or cites an item the user
+  - `refused` never ran: an unknown key, an unresolvable cite, a `from_variant` that is
+    not an approved variant of that item (`unknown_variant`, `variant_not_approved`,
+    `variant_wrong_item`), or a crossed hard preference. It also covers `tombstoned`, which names or cites an item the user
     deleted (don't bring it back), and `negative_pin`, a bullet that mentions a fact the
     user said must never appear, even when cited.
   - Tell the user about anything reverted or refused. Don't silently resubmit the
@@ -167,6 +191,12 @@ Call `execute_plan({program})`. Read the result:
   the job again.
 
 ## Afterwards
+
+- A bullet the user is happy with can join their library: `promote_bullet(node_id,
+  bullet)` makes a **draft**, and only after the user says yes call
+  `approve_variant(variant_id)`. Never approve one on your own. If they want a version to
+  be the starting point for a kind of role, `save_baseline(node_id, track)` pins it, with
+  `track` named after the role family (for example `data_science`).
 
 - To see versions, use `history` and `diff_nodes`. To go back, use `checkout`: show
   the diff and confirm with the user first.

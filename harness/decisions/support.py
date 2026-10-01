@@ -143,14 +143,21 @@ def _page_items(content: Dict):
 
 
 def make_support_checker(source_bullets: Dict[str, List[str]],
-                         base_content: Optional[Dict] = None) -> Callable[[Dict], List[Dict]]:
+                         base_content: Optional[Dict] = None,
+                         approved: Optional[Dict[str, Any]] = None,
+                         variant_evidence: Optional[Dict[Tuple[str, str], str]] = None,
+                         ) -> Callable[[Dict], List[Dict]]:
     """`content -> findings`, one per bullet that needs checking.
 
     A finding is `{item, bullet, status, label, p, probabilities, source,
     reason}`: `status` is `checked` (Jev or the cache answered), or `unchecked`
     (the fallback did, `reason` says why). Results are memoized for the life of
     the checker, so the many metric vectors one plan computes ask each bullet
-    once (and the engine's cache makes a rerun ask nothing).
+    once (and the engine's cache makes a rerun ask nothing). `approved` maps an item key to
+    the normalized text of its approved library variants (#229), skipped like source bullets.
+    `variant_evidence` maps `(item key, normalized bullet)` to the approved variant the bullet
+    names: that text is added to the bullet's `evidence` (user-confirmed wording), and a bullet
+    naming none gets nothing extra. It is read at each call, so the executor can update it.
     """
     base = {key: [b for b in item.get("bullets") or [] if b]
             for key, item in _page_items(base_content or {})}
@@ -161,8 +168,11 @@ def make_support_checker(source_bullets: Dict[str, List[str]],
 
         findings: List[Dict] = []
         for key, item in _page_items(content):
-            sources = {_norm(b) for b in source_bullets.get(key, [])}
-            cites = item.get("cites") if isinstance(item.get("cites"), dict) else {}
+            # A bullet verbatim an approved library variant (#229) is the user's own
+            # confirmed wording, skipped like a verbatim source bullet.
+            sources = ({_norm(b) for b in source_bullets.get(key, [])}
+                       | set((approved or {}).get(key, ())))
+            cites =item.get("cites") if isinstance(item.get("cites"), dict) else {}
             for bullet in item.get("bullets") or []:
                 if not (bullet or "").strip() or _norm(bullet) in sources:
                     continue                                   # verbatim: nothing to check
@@ -170,6 +180,9 @@ def make_support_checker(source_bullets: Dict[str, List[str]],
                 if not named:
                     continue                                   # uncited: the citations gate's
                 evidence = resolve_evidence(named, source_bullets)
+                variant = _norm((variant_evidence or {}).get((key, _norm(bullet)), ""))
+                if variant and variant not in evidence:
+                    evidence.append(variant)
                 if not evidence:
                     findings.append(_unchecked(key, bullet, "no_evidence_text"))
                     continue
