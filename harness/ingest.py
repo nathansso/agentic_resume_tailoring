@@ -547,15 +547,17 @@ def open_job(user_id: UUID, jd_text: str, requirements: Sequence[Dict], metadata
     terms = services.resolve_keyword_weights(jid, user_id, text, persist=True) or {}
     top = sorted(terms.items(), key=lambda kv: (-kv[1], kv[0]))[:TOP_TERMS]
 
-    # The job's role family (the host's, else the title map) and the track baseline it
-    # names (#229). The first plan starts from that baseline while the job has no history.
+    # The job's role family (the host's, else the title map) and its track baseline (#229): a
+    # Jev choice over the saved tracks, else the track named after the family (#199). The first
+    # plan starts from that baseline while the job has no history.
     family, family_source = library.record_role_family(user_id, jid, summary["title"],
                                                        supplied_family)
     choice = library.choose_baseline(user_id, jid)
     with Session(_db.engine) as session:
         has_history = session.get(JobHead, jid) is not None
     baseline = ({"track": choice["track"], "node_id": choice["node_id"],
-                 "applies": not has_history} if choice else None)
+                 "applies": not has_history, "source": choice["source"], "p": choice["p"]}
+                if choice else None)
     return {**summary, "requirements": n_reqs,
             "top_terms": [{"term": t, "weight": w} for t, w in top],
             "skill_matches": terms_to_skills["matches"],

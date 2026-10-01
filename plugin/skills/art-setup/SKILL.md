@@ -100,8 +100,12 @@ tailoring starts from it instead of regenerating.
   tailoring run becomes a variant only through `promote_bullet` and the user's approval.
 - A resume the user wants as the starting point for a kind of role: find its version with
   `history`, then call `save_baseline(node_id, track)`. Name the track after the role family
-  (`data_science`, `machine_learning`, `software_engineering`, ...). A new job in that role
-  family then starts as a copy of it. Saving a track again replaces its baseline.
+  (`data_science`, `machine_learning`, `software_engineering`, ...). A new job then starts
+  as a copy of the saved track that fits it: Jev chooses among the saved tracks by reading
+  the posting, and the job's title is one of the things it sees about each track (the title
+  of the job the baseline came from), so save a baseline from a job with a representative
+  title. A `role_family` you give `open_job` that names a saved track exactly wins without
+  asking Jev. Saving a track again replaces its baseline.
 
 ## 8. Import their standing preferences
 

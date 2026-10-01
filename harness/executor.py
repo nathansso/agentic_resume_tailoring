@@ -5,8 +5,9 @@
 
 1. **Base.** The parent node's content, which must be HEAD (`stale_parent`
    otherwise). A job with no history starts from a copy of its track baseline
-   when one applies (#229: the track named after its role family, skills
-   re-ranked for this posting), else from `kg_default_content`: every
+   when one applies (#229, #199: the track Jev chooses among the saved ones,
+   else the one named after its role family; skills re-ranked for this
+   posting), else from `kg_default_content`: every
    experience and project with its source bullets, skills ranked against the
    posting, achievements and education verbatim.
 2. **Arbitration.** A node that names a key the knowledge graph does not hold,
@@ -306,7 +307,7 @@ def baseline_content(user_id: UUID, jd_text: str, kg: _KG, requirements: Optiona
 def start_content(user_id: UUID, job: JobDescription, kg: _KG,
                   requirements: Optional[Sequence[Dict]]) -> Tuple[Dict, Optional[Dict]]:
     """`(content, baseline)` for a job with no history: a copy of its track baseline when
-    one applies (`baseline` is `{track, node_id, role_family, source}`), else the whole KG
+    one applies (`baseline` is `{track, node_id, role_family, family_source, source, p}`), else the whole KG
     (`kg_default_content`, exactly as before #229) and `None`."""
     choice = library.choose_baseline(user_id, job.job_id)
     if choice is not None:

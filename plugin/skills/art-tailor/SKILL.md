@@ -36,9 +36,15 @@ The tools named below are the ART MCP server's tools.
 - Call `open_job` with `jd_text`, `requirements`,
   `metadata: {title, company, url, role_family}` and `rule_answers`. Give `role_family`
   from your own reading of the posting; without it ART guesses from the title.
-- If `baseline` comes back with `applies: true`, the user saved a baseline for this role
-  family, and the job's first version starts as a copy of it instead of the whole graph.
-  Say so to the user, and read it with `get_head` before planning.
+- If `baseline` comes back with `applies: true`, the job's first version starts as a copy
+  of the user's saved baseline for that track instead of the whole graph. Say so to the
+  user, and read it with `get_head` before planning. `baseline.source` says who chose the
+  track: `host` (the `role_family` you gave names a saved track exactly, so ART did not ask
+  Jev), `jev` or `cache` (Jev chose among the user's saved tracks by reading the posting;
+  `p` is its probability, not a calibrated confidence), or `fallback` (no Jev answer, so
+  the track named after the role family). If `baseline` is null, no saved track fit (Jev's
+  answer included) and the job starts from the whole graph. Give `role_family` only when you
+  are sure of the family: a value that names a saved track overrides Jev.
 - Keep the `job_id`. Look at `top_terms`: these are the weighted terms the candidate
   can support.
 - `skill_matches` lists the requirement terms that name skills the candidate has, exactly
@@ -69,7 +75,17 @@ The tools named below are the ART MCP server's tools.
 Call `suggest_actions(job_id)` first. For each experience and project on the current
 version it names the approved variant that best fits this posting (`match: variant`,
 with `variant.variant_id`, `text`, `cites` and `score`) or `no_match`, and the actions
-that are valid for the item. **Start from the approved text, not from the raw facts:**
+that are valid for the item. Jev makes the choice (`source: jev`, or `cache` when it is an
+earlier answer replayed): `variant.score` is its probability for that variant and
+`propensity` is its whole distribution over the item's variants and `no_match`. Jev picks
+its likeliest variant when it puts at least 0.5 of its probability on the variants
+together (1 − `no_match`), so a close call between two good phrasings is picked even with
+each near 0.4 in `propensity`: read the runner-up there and, if it reads better against
+the posting, you may use it instead. `no_match` means Jev put more than half its
+probability on none fitting. With `source: fallback` Jev did not answer (no key, switched off, an
+error, or the item has no approved variant) and a word-overlap rule picked, whose `score`
+is an overlap share, not a probability, and which can miss a variant worded differently
+from the posting. **Start from the approved text, not from the raw facts:**
 
 - `match: variant`: revise the item from that variant. Put its `text` in the bullet
   (verbatim, or edited lightly to weave in a term the cited evidence supports) and set
