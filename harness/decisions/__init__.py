@@ -17,6 +17,9 @@ boundary test (`tests/test_harness_boundary.py`) keeps it that way.
   `semantic_coverage` target.
 - `memory_gate`: is a user message a standing preference, and what is it (#202); routed
   by `harness/memory.py`, which never lets the gate write a strength-5 preference.
+- `library`: which approved bullet variant fits a job and which saved track a job starts
+  from (#199), one `choice` each with a no-match catch-all, behind `harness/library.py`'s
+  fallbacks.
 
 Nothing is imported here eagerly, so `harness.acceptance` can read the support
 thresholds without loading the client or the database.

@@ -867,7 +867,8 @@ def test_a_job_with_a_matching_track_starts_as_a_copy_of_the_baseline(env):
     other = invoke("open_job", uid, {"jd_text": "Machine learning engineer: build ranking models in python.",
                                      "metadata": {"title": "ML Engineer", "company": "Second Co",
                                                   "role_family": "machine_learning"}})
-    assert other["baseline"] == {"track": "machine_learning", "node_id": baseline, "applies": True}
+    assert other["baseline"] == {"track": "machine_learning", "node_id": baseline, "applies": True,
+                                 "source": "host", "p": None}
 
     out = _run(uid, {"job_id": other["job_id"], "nodes": []})
     assert out["committed"] and out["baseline"]["node_id"] == baseline
@@ -977,7 +978,8 @@ def test_a_job_that_already_has_history_reports_the_baseline_without_applying_it
     n0 = _committed(uid, job_id)
     invoke("save_baseline", uid, {"node_id": n0, "track": "machine_learning"})
     out = invoke("open_job", uid, {"job_id": job_id})
-    assert out["baseline"] == {"track": "machine_learning", "node_id": n0, "applies": False}
+    assert out["baseline"] == {"track": "machine_learning", "node_id": n0, "applies": False,
+                               "source": "fallback", "p": None}
 
 
 def test_deleting_a_job_removes_the_baselines_that_pinned_its_nodes(env):

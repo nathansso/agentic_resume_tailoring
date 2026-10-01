@@ -235,8 +235,9 @@ class VariantRef(_Model):
     line_count: Optional[int] = Field(None, description="Rendered lines, when a LaTeX engine "
                                                         "was available.")
     source_node_id: Optional[str] = None
-    score: Optional[float] = Field(None, description="Overlap with the job's weighted terms "
-                                                     "(suggest_actions only).")
+    score: Optional[float] = Field(None, description="suggest_actions only: Jev's probability for "
+                                                     "this variant, or, from the fallback, its "
+                                                     "overlap with the job's weighted terms.")
 
 
 class ItemOutput(_Output):
@@ -488,9 +489,11 @@ class JobMetadata(_Model):
         None, description="The posting's role family, from your own reading: one of "
                           "software_engineering, machine_learning, data_science, "
                           "data_engineering, research, product_management, design, "
-                          "devops_infrastructure, security, hardware, other. A track "
-                          "baseline named after it (save_baseline) is the job's starting "
-                          "point. Omitted: ART guesses from the title, else other (#229).")
+                          "devops_infrastructure, security, hardware, other. A saved track "
+                          "named exactly like it (save_baseline) is the job's starting point, "
+                          "without asking Jev (#199). Otherwise Jev chooses among your saved "
+                          "tracks from the posting, and with no Jev the track named after the "
+                          "family. Omitted: ART guesses from the title, else other (#229).")
 
 
 class RuleAnswer(_Model):
@@ -544,6 +547,15 @@ class BaselineRef(_Model):
     node_id: str
     applies: bool = Field(description="True when the job has no history yet, so its first "
                                       "plan starts as a copy of this node (#229).")
+    source: Optional[Literal["host", "jev", "cache", "fallback"]] = Field(
+        None, description="Who chose this track (#199). host: you gave a role_family named "
+                          "exactly like a saved track. jev or cache: Jev chose it from the "
+                          "saved tracks by reading the posting (cache: an earlier answer, "
+                          "replayed). fallback: Jev did not answer (no key, switched off, an "
+                          "error), so the track named after the role family was used.")
+    p: Optional[float] = Field(
+        None, description="Jev's probability for the chosen track (source jev or cache), else "
+                          "None. Not a calibrated confidence.")
 
 
 class OpenJobOutput(_Output):
@@ -573,8 +585,10 @@ class OpenJobOutput(_Output):
         None, description="host: you supplied it. title: guessed from the job title. "
                           "default: nothing matched, so other.")
     baseline: Optional[BaselineRef] = Field(
-        None, description="The track baseline for this job's role family, if one was saved "
-                          "(#229). The job's first version starts as a copy of it.")
+        None, description="The track baseline this job starts from, if one was saved (#229): "
+                          "chosen by Jev among the saved tracks, or named after the role "
+                          "family when Jev did not answer (see source). The job's first "
+                          "version starts as a copy of it.")
 
 
 def _ingest():
@@ -676,7 +690,8 @@ class ExecuteOutput(_Output):
         default_factory=list, description="Job-scoped rule values written into the base.")
     baseline: Optional[Dict[str, Any]] = Field(
         None, description="The track baseline this job's first version was copied from "
-                          "(track, node_id, role_family, source). Absent when the job started "
+                          "(track, node_id, role_family, family_source, source, p; source is host, "
+                          "jev, cache or fallback, #199). Absent when the job started "
                           "from the whole knowledge graph (#229).")
     support: Optional[Dict[str, Any]] = Field(
         None, description="The cited-bullet support check (#193): how many bullets Jev "
@@ -779,19 +794,31 @@ class ItemSuggestion(_Model):
         None, description="The approved variant that best fits the job. Start the revision "
                           "from it (bullets[].from_variant). None on no_match: write from "
                           "the raw facts.")
-    best_score: float = Field(description="The best overlap among the item's approved "
-                                          "variants, even when below the floor.")
+    best_score: float = Field(description="Jev: the best variant's probability, even when "
+                                          "no_match won. Fallback: the best overlap among the "
+                                          "item's approved variants, even when below the floor.")
     approved_variants: int = 0
     actions: List[ActionChoice] = Field(default_factory=list,
                                         description="Valid ops, uniform propensities.")
-    source: Literal["fallback", "jev"] = "fallback"
+    source: Literal["fallback", "jev", "cache"] = Field(
+        "fallback", description="Who chose the variant (#199). jev: a Jev choice over the "
+                                "item's approved variants. cache: the same, replayed from an "
+                                "earlier answer. fallback: Jev did not answer (no key, switched "
+                                "off, an error) or the item has no variant; the word-overlap "
+                                "pick.")
+    propensity: Optional[Dict[str, float]] = Field(
+        None, description="Jev's whole distribution over this item's choices: each approved "
+                          "variant id, and no_match. Present only when source is jev or cache. "
+                          "A pick needs its probability at or above the fitted threshold, so "
+                          "no_match can win with a variant ahead. Not a calibrated confidence.")
 
 
 class SuggestActionsOutput(_Output):
     job_id: Optional[str] = None
     node_id: Optional[str] = Field(None, description="The version judged; None for a job with "
                                                      "no history (its starting version).")
-    floor: Optional[float] = None
+    floor: Optional[float] = Field(None, description="The word-overlap fallback's floor; Jev's "
+                                                     "choice has its own threshold.")
     items: List[ItemSuggestion] = Field(default_factory=list)
 
 
@@ -939,8 +966,10 @@ TOOLS: List[ToolSpec] = [
         "Open a job from a posting: its text, the requirements you extracted, and answers "
         "to the user's job-scoped rules (from art_briefing), and its role_family if you can "
         "tell. Returns the job id, weighted terms, any rule still needing an answer, and the "
-        "track baseline the job starts from, if one was saved. Re-opening updates the job. "
-        "Writes.",
+        "track baseline the job starts from, if one was saved: a role_family that names a "
+        "saved track exactly wins, otherwise Jev chooses among the saved tracks, and without "
+        "Jev the track named after the role family is used (baseline.source says which). "
+        "Re-opening updates the job. Writes.",
         OpenJobInput, OpenJobOutput,
         lambda uid, jd_text="", requirements=(), metadata=None, rule_answers=(), job_id=None:
             _ingest().open_job(uid, jd_text, requirements, metadata or {}, rule_answers, job_id),
@@ -980,8 +1009,10 @@ TOOLS: List[ToolSpec] = [
         "suggest_actions",
         "For each experience and project on a version (HEAD by default): the approved "
         "bullet variant that best fits the job, or no_match, and the valid actions with "
-        "uniform propensities. Start a revision from the variant (bullets[].from_variant); "
-        "write from raw facts only on no_match.",
+        "uniform propensities. Jev picks among the item's approved variants (source jev, "
+        "or cache when replayed) and propensity holds its whole distribution; with no key "
+        "or on an error a word-overlap rule picks (source fallback). Start a revision from "
+        "the variant (bullets[].from_variant); write from raw facts only on no_match.",
         SuggestActionsInput, SuggestActionsOutput,
         lambda uid, job_id, node_id=None: _library().suggest_actions(uid, job_id, node_id)),
     ToolSpec(

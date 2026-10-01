@@ -4,8 +4,9 @@ Tailoring works in three layers: raw facts (the KG), approved phrasings (this
 library) and rules (preferences). Starting from approved text makes a run
 cheaper, more consistent and faithful by construction. Everything here is
 deterministic; the two judgment calls (which variant fits a job, which baseline
-a job starts from) ship on the fallbacks `docs/harness.md` § 4 names, and #199
-swaps Jev in behind them.
+a job starts from) are Jev's (#199, `harness/decisions/library.py`), and the
+rules below are their fallbacks: they run unchanged with no key, mode `off` or an
+API error.
 
 - **Variants** (`BulletVariant`). One phrasing of one experience or project
   bullet. An *approved* one is the user's confirmed wording: it arrives that way
@@ -17,11 +18,15 @@ swaps Jev in behind them.
   baseline for a track, one per (user, track). A job's role family comes from
   the host (`open_job` metadata), else a deterministic title keyword map, else
   `other`; the track named after it is the job's baseline, else none, and a job
-  with no history starts as a copy of that node (`harness/executor.py`).
+  with no history starts as a copy of that node (`harness/executor.py`). With Jev
+  (`choose_baseline`) a choice over the saved tracks decides instead, unless the
+  host named a family and a track with exactly that name exists.
 - **`suggest_actions`.** Per experience or project on a node: the approved
-  variant with the best overlap with the job's weighted terms (above a floor) or
-  `no_match`, and the valid actions with uniform propensities, marked
-  `source: "fallback"` so #199 can report `jev`.
+  variant Jev picks (`source: "jev"` or `"cache"`, its probability as the score and
+  the whole distribution as `propensity`) or `no_match`; with no Jev answer, the
+  approved variant with the best overlap with the job's weighted terms (above a
+  floor) or `no_match` (`source: "fallback"`). The valid actions carry uniform
+  propensities.
 
 Every function takes `user_id` and scopes every query by it, returns data and
 never raises for bad input. Model-free by rule (`tests/test_harness_boundary.py`).
@@ -49,6 +54,7 @@ from database.models import (
 )
 from harness import tree
 from harness.acceptance import VARIANT_DRIFT_TOLERANCE, token_distance
+from harness.decisions import library as jev
 from harness.tools import _records
 
 log = logging.getLogger(__name__)
@@ -62,7 +68,8 @@ ROLE_FAMILIES = tuple(f.value for f in RoleFamily)
 # `relevance_density`. 0.10 is a bullet whose tokens barely touch the posting (one or two
 # stray terms in a typical 12-20 token bullet); a real match is usually well above it.
 # PROVISIONAL, like the guard tolerances: picked by reasoning, not fitted on real library use
-# (there is none yet), and #199's Jev choice replaces the rule. Real scores run low because the
+# (there is none yet). This is now only the fallback's floor: Jev's choice (#199) decides
+# whenever it answers, with its own fitted threshold. Real scores run low because the
 # weights are relative to the heaviest term: a bullet made of the posting's top six terms
 # scored about 0.30.
 VARIANT_MATCH_FLOOR = 0.10
@@ -367,19 +374,77 @@ def save_baseline(user_id: UUID, node_id: str, track: str) -> Dict[str, Any]:
                 "replaced": replaced}
 
 
-def choose_baseline(user_id: UUID, job_id: UUID) -> Optional[Dict[str, str]]:
-    """The baseline a job branches from: the track named after its role family, else
-    None. `{track, node_id, role_family, source}`; `source` is how the family was found."""
-    family, source = role_family_of(user_id, job_id)
+def _job_inputs(user_id: UUID, job_id: UUID) -> Tuple[str, List[Dict]]:
+    """`(title, requirements)` of the user's job, for a Jev question: the title and the
+    requirements stored on its JD profile, in source order."""
+    from harness import executor
+
     with Session(_db.engine) as session:
-        row = session.get(TrackBaseline, (user_id, normalize_track(family)))
-        if row is None:
-            return None
-        node = session.get(TailorNode, row.node_id)
-        if node is None or node.user_id != user_id:
-            return None
+        job = session.get(JobDescription, job_id)
+        title = job.title if job is not None and job.user_id == user_id else ""
+    return title, executor.job_requirements(user_id, job_id)
+
+
+def saved_tracks(user_id: UUID) -> List[Dict[str, Any]]:
+    """The user's usable track baselines, by track name: `{track, node_id, job_id, title}`, where
+    `title` is the title of the job the baseline node came from. A baseline whose node is gone is
+    left out, as `choose_baseline` never offers it."""
+    out: List[Dict[str, Any]] = []
+    with Session(_db.engine) as session:
+        for row in session.exec(select(TrackBaseline).where(TrackBaseline.user_id == user_id)).all():
+            node = session.get(TailorNode, row.node_id)
+            if node is None or node.user_id != user_id:
+                continue
+            job = session.get(JobDescription, row.job_id)
+            out.append({"track": row.track, "node_id": str(row.node_id), "job_id": str(row.job_id),
+                        "title": (job.title if job is not None else "") or ""})
+    return sorted(out, key=lambda t: t["track"])
+
+
+def choose_baseline(user_id: UUID, job_id: UUID) -> Optional[Dict[str, Any]]:
+    """The baseline a job branches from, or None: `{track, node_id, role_family, family_source,
+    source, p}`. `source` is who decided:
+
+    - `host`: the host stated `metadata.role_family` and a track with exactly that name exists.
+      The host's explicit statement wins; Jev is not asked.
+    - `jev` or `cache`: a Jev choice over the saved tracks (`harness/decisions/library.py`),
+      asked only when the user has a saved baseline. `p` is the chosen track's probability. A pick
+      below `TAU_BASELINE`, or Jev's own `none`, is no baseline.
+    - `fallback`: Jev did not answer (no key, mode `off`, an API error), so #229's lookup runs
+      unchanged: the track named after the job's role family, else none.
+
+    `family_source` is how the role family was found (`host`, `title` or `default`).
+    """
+    family, family_source = role_family_of(user_id, job_id)
+
+    def result(row: TrackBaseline, source: str, p: Optional[float] = None) -> Optional[Dict[str, Any]]:
+        with Session(_db.engine) as session:
+            node = session.get(TailorNode, row.node_id)
+            if node is None or node.user_id != user_id:
+                return None
         return {"track": row.track, "node_id": str(row.node_id), "role_family": family,
-                "source": source}
+                "family_source": family_source, "source": source, "p": p}
+
+    with Session(_db.engine) as session:
+        named = session.get(TrackBaseline, (user_id, normalize_track(family)))
+        if named is not None:
+            session.expunge(named)
+    if family_source == "host" and named is not None:
+        return result(named, "host")
+
+    tracks = saved_tracks(user_id)
+    if tracks:
+        title, requirements = _job_inputs(user_id, job_id)
+        decision = jev.ask_track(title, requirements, tracks)
+        if decision is not None:
+            if decision.pick is None:
+                return None
+            with Session(_db.engine) as session:
+                row = session.get(TrackBaseline, (user_id, decision.pick))
+                if row is not None:
+                    session.expunge(row)
+            return result(row, decision.source, decision.p) if row is not None else None
+    return result(named, "fallback") if named is not None else None
 
 
 # ── matching a variant to a job ──────────────────────────────────────────────
@@ -442,14 +507,28 @@ def valid_ops(key: str, content: Dict, kg_keys_by_kind: Dict[str, Sequence[str]]
     return ops
 
 
+def _jev_variant(job: JobDescription, requirements: Sequence[Dict], item_title: str,
+                 variants: Sequence[Dict]) -> Optional[Any]:
+    """Jev's decision over an item's approved variants, or None when it did not answer (or the item
+    has none): the caller then runs the overlap fallback."""
+    return jev.ask_variant(job.title or "", requirements, item_title, variants)
+
+
 def suggest_actions(user_id: UUID, job_id: str, node_id: Optional[str] = None) -> Dict[str, Any]:
     """Per experience and project on a node (HEAD by default): the chosen approved
     variant or `no_match`, and the valid actions with uniform propensities.
 
-    The fallback path (`source: "fallback"`): retrieval overlap picks the variant, and
-    every valid action is equally likely. Deterministic ordering throughout: items in
-    page order, actions in `OPS` order. A job with no history is judged on the version
-    its first plan would start from (a baseline copy, else the whole KG).
+    **Variant choice (#199).** For an item with approved variants, one Jev `choice` over them
+    plus `no_match` (`harness/decisions/library.py`): `source` is `jev` or `cache`,
+    `variant.score` and `best_score` are Jev's probabilities, and `propensity` is the whole
+    distribution (every variant id, and `no_match`). A pick below `TAU_VARIANT` is `no_match`.
+
+    **The fallback path** (`source: "fallback"`: no key, mode `off`, an API error): retrieval
+    overlap picks the variant, exactly as #229 shipped it. An item with no approved variant
+    asks nothing and reads the same way. Every valid action is equally likely either way.
+    Deterministic ordering throughout: items in page order, actions in `OPS` order. A job with
+    no history is judged on the version its first plan would start from (a baseline copy,
+    else the whole KG).
     """
     from harness import executor
 
@@ -459,6 +538,7 @@ def suggest_actions(user_id: UUID, job_id: str, node_id: Optional[str] = None) -
         if job is None or job.user_id != user_id:
             return _error("not_found", f"No job {job_id!r}.")
         session.expunge(job)
+    requirements = executor.job_requirements(user_id, jid)
     if node_id:
         try:
             node = tree.get_node(user_id, node_id)
@@ -473,8 +553,7 @@ def suggest_actions(user_id: UUID, job_id: str, node_id: Optional[str] = None) -
             content, at = head["content"], head["node_id"]
         else:
             kg = executor._KG(user_id)
-            content, _ = executor.start_content(user_id, job, kg,
-                                                executor.job_requirements(user_id, jid))
+            content, _ = executor.start_content(user_id, job, kg, requirements)
             at = None
     kg_by_kind: Dict[str, List[str]] = {}
     for r in _records(user_id, ["project"]):
@@ -487,17 +566,29 @@ def suggest_actions(user_id: UUID, job_id: str, node_id: Optional[str] = None) -
     for section, key_fn in (("experiences", exp_key), ("projects", proj_key)):
         for item in content.get(section) or []:
             key = key_fn(item)
-            chosen, best = best_variant(library.get(key, []), terms)
+            title = (f"{item.get('title', '')} @ {item.get('company', '')}"
+                     if section == "experiences" else item.get("name", ""))
+            approved = library.get(key, [])
+            decision = _jev_variant(job, requirements, title, approved)
+            extra: Dict[str, Any] = {}
+            if decision is not None:
+                by_id = {v["variant_id"]: v for v in approved}
+                chosen = ({**by_id[decision.pick], "score": decision.p}
+                          if decision.pick in by_id else None)
+                best = decision.top_p or 0.0
+                source = decision.source
+                extra = {"propensity": decision.propensity}
+            else:
+                chosen, best = best_variant(approved, terms)
+                source = "fallback"
             ops = valid_ops(key, content, kg_by_kind, suppress, emphasize)
             items.append({
-                "item_key": key,
-                "title": (f"{item.get('title', '')} @ {item.get('company', '')}"
-                          if section == "experiences" else item.get("name", "")),
+                "item_key": key, "title": title,
                 "match": "variant" if chosen else "no_match",
                 "variant": chosen, "best_score": best,
-                "approved_variants": len(library.get(key, [])),
+                "approved_variants": len(approved),
                 "actions": [{"op": op, "propensity": 1.0 / len(ops)} for op in ops],
-                "source": "fallback"})
+                "source": source, **extra})
     return {"job_id": str(jid), "node_id": at, "floor": VARIANT_MATCH_FLOOR, "items": items}
 
 
