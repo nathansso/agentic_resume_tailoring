@@ -19,8 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PLUGIN = ROOT / "plugin"
 TEXTS = sorted([*PLUGIN.glob("skills/*/SKILL.md"), *PLUGIN.glob("commands/*.md")])
 # Tools docs/harness.md § 9 plans but the code does not expose yet.
-NOT_YET = {"observe", "record_preference", "record_feedback", "suggest_actions",
-           "promote_bullet", "save_baseline", "art_pins", "check_draft"}
+NOT_YET = {"observe", "record_preference", "record_feedback", "art_pins", "check_draft"}
 
 
 def _json(path):
@@ -73,7 +72,8 @@ def test_the_plugin_teaches_only_tools_that_exist():
     tools = {t for t in called if t in BY_NAME or t in NOT_YET}
     assert not tools & NOT_YET, tools & NOT_YET
     assert {"art_briefing", "open_job", "execute_plan", "patch_plan", "render",
-            "upsert_items", "update_profile", "checkout", "history"} <= tools
+            "upsert_items", "update_profile", "checkout", "history", "suggest_actions",
+            "promote_bullet", "approve_variant", "save_baseline"} <= tools
 
 
 def test_the_commands_are_the_issues_set_less_the_deferred_library():
