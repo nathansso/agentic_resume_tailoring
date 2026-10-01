@@ -211,6 +211,20 @@ def test_the_gate_never_writes_a_strength_five_preference_or_a_negative_pin(dire
     assert mg.HOST_LINE in line and "strength-5" in line
 
 
+@pytest.mark.parametrize("direction", ["emphasize", "suppress"])
+def test_the_gate_never_writes_a_preference_about_a_whole_section_at_any_threshold(direction):
+    text = "Never mention the education section." if direction == "suppress" else "Always lead with the education section."
+    section = _guess(direction=direction, target_key="section:education", target_label="section: education",
+                     target_p=1.0, p=1.0)
+    for tau in (0.0, 0.05, 0.5, 0.95):
+        d = _route(text, section, tau_lo=0.0, tau_hi=tau, tau_target=0.0)
+        assert (d["action"], d["reason"]) == ("host", "section_target")
+    line = mg.explain(d)
+    assert mg.HOST_LINE in line and "section:education" in line and "whole section" in line
+    # an item-level target with the same answers is written
+    assert _route(text, _guess(direction=direction, p=1.0))["action"] == "write"
+
+
 def test_a_confident_strength_five_never_reaches_the_write_path_at_any_threshold():
     text = "Never mention Excel."
     for tau in (0.0, 0.05, 0.5, 0.65, 0.95):
@@ -278,7 +292,7 @@ def test_with_no_jev_answer_the_prefilter_alone_routes_the_host_and_nothing_is_w
 
 
 def test_the_hosts_line_carries_the_guess_and_a_write_says_what_was_saved():
-    host = mg.explain(_route(CLEAR, _guess(p=0.5)))
+    host = mg.explain(_route(CLEAR, _guess(p=mg.TAU_LO)))
     assert host.startswith(mg.HOST_LINE) and "emphasize skill:python" in host and "strength 3" in host
     wrote = mg.explain({**_route(CLEAR, _guess()), "text": CLEAR})
     assert wrote.startswith("ART saved a standing preference") and CLEAR in wrote
@@ -331,7 +345,7 @@ def test_observe_sends_a_strength_five_to_the_host_and_writes_nothing(kg, jev, i
 
 
 def test_observe_sends_an_unsure_message_or_an_unresolved_target_to_the_host(kg, jev, isolated_engine):
-    maybe = jev.say("Maybe lead with Python, I think.", p=0.4, target=PYTHON)
+    maybe = jev.say("Maybe lead with Python, I think.", p=mg.TAU_LO, target=PYTHON)
     lost = jev.say("Always keep the resume to one theme.", p=0.97, target="no_match")
     assert memory.observe(kg, maybe)["reason"] == "uncertain"
     d = memory.observe(kg, lost)
@@ -494,7 +508,7 @@ def test_art_pins_is_the_briefings_pins_word_for_word(kg):
     memory.record_preference(kg, "Lead with SQL", "emphasize", "SQL", 3)               # strength 3: not a pin
     pins = tools.art_pins(kg)
     assert pins["count"] == 2 and pins["pins"] == tools.art_briefing(kg)["pins"]
-    assert [p["text"] for p in pins["pins"]] == ["Never mention coursework projects", "Never mention Java."]
+    assert sorted(p["text"] for p in pins["pins"]) == ["Never mention Java.", "Never mention coursework projects"]
     assert all(p["text"] != "Lead with SQL" for p in pins["pins"])
 
 

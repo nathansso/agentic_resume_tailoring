@@ -1,6 +1,6 @@
 # Memory-gate labels for review (issue #202)
 
-Each message is a synthetic user message and the label proposed for it: whether it states a **lasting preference** about the resume (global, or for one named job), its **direction** (`emphasize`: feature or keep something; `suppress`: leave something out; `format_rule`: how the resume is written or laid out; none), its **strength** on #129's 1-5 scale (5 only for an absolute rule such as "never"), its **target** (a catalog item, or no item for a topic or a general rule) and whether it is **job-scoped**. A one-off edit, a question, a fact about the user's experience and small talk are not preferences. **The labels are proposals; the user confirms or corrects them.** To change one, correct it in `pairs.json` and re-run `python eval/fit_memory_gate_threshold.py analyze` to refit. Disagreements with Jev come first.
+Each message is a synthetic user message and its user-confirmed label: whether it states a **lasting preference** about the resume (global, or for one named job), its **direction** (`emphasize`: feature or keep something; `suppress`: leave something out; `format_rule`: how the resume is written or laid out; none), its **strength** on #129's 1-5 scale (5 only for an absolute rule such as "never"), its **target** (a catalog item, or no item for a topic or a general rule) and whether it is **job-scoped**. A one-off edit, a question, a fact about the user's experience and small talk are not preferences. **These are the labels the user confirmed (every proposal kept as is), kept for audit.** To change one, correct it in `pairs.json` and re-run `python eval/fit_memory_gate_threshold.py analyze` to refit. Disagreements with Jev come first.
 
 ## Disagreements with Jev (18)
 
@@ -9,7 +9,7 @@ Each message is a synthetic user message and the label proposed for it: whether 
 - Label: emphasize proj:ballot tally, strength 3. A plain preference ("I'd prefer"), no insistence.
 - Jev: p 0.48; emphasize proj:ballot tally (p 1.00); strength 3; differs on standing
 - Prefilter: candidate, cues ['prefer']
-- The gate: host (uncertain)
+- The gate: write
 
 **2. `en_coursework`** (explicit_negative)
 - Message: "Never include coursework projects."
@@ -79,7 +79,7 @@ Each message is a synthetic user message and the label proposed for it: whether 
 - Label: format_rule section:skills, strength 2. About the section's length, not one item.
 - Jev: p 0.37; suppress section:skills (p 1.00); strength 3; differs on standing, direction
 - Prefilter: candidate, negated, cues ['i like']
-- The gate: host (uncertain)
+- The gate: host (section_target)
 
 **12. `fr_no_first_person`** (format_rule)
 - Message: "Don't use first-person pronouns anywhere on the resume."
@@ -100,35 +100,35 @@ Each message is a synthetic user message and the label proposed for it: whether 
 - Label: emphasize skill:aws, strength 4, job-scoped. Job-scoped emphasis.
 - Jev: p 0.49; emphasize skill:aws (p 1.00); strength 4; differs on standing
 - Prefilter: candidate, cues ['i want', 'for this job']
-- The gate: host (uncertain)
+- The gate: write
 
 **15. `js_edu_first`** (job_scoped)
 - Message: "On this resume, keep the education section first."
 - Label: format_rule section:education, strength 3, job-scoped. Job-scoped layout.
 - Jev: p 0.63; emphasize section:education (p 1.00); strength 3; differs on direction
 - Prefilter: candidate, cues ['keep', 'for this job']
-- The gate: host (uncertain)
+- The gate: host (section_target)
 
 **16. `js_halcyon`** (job_scoped)
 - Message: "For this specific application, highlight the forecasting work at Halcyon."
 - Label: emphasize exp:associate data scientist|halcyon health analytics, strength 3, job-scoped. Job-scoped emphasis.
 - Jev: p 0.45; emphasize exp:associate data scientist|halcyon health analytics (p 0.97); strength 3; differs on standing
 - Prefilter: candidate, cues ['lead with', 'for this job']
-- The gate: host (uncertain)
+- The gate: write
 
 **17. `js_rivermount`** (job_scoped)
 - Message: "Skip the Rivermount internship for this one."
 - Label: suppress exp:data science intern|rivermount college office of institutional research, strength 4, job-scoped. Job-scoped suppression.
 - Jev: p 0.31; suppress exp:data science intern|rivermount college office of institutional research (p 1.00); strength 3; differs on standing
 - Prefilter: candidate, negated, cues ['omit', 'for this job']
-- The gate: host (uncertain)
+- The gate: write
 
 **18. `js_skills_above`** (job_scoped)
 - Message: "Only for this job: put my skills section above my projects."
 - Label: format_rule section:skills, strength 3, job-scoped. Job-scoped layout.
 - Jev: p 0.47; format_rule section:skills (p 0.96); strength 4; differs on standing
 - Prefilter: candidate, cues ['for this job']
-- The gate: host (uncertain)
+- The gate: host (section_target)
 
 ## Agreements (93)
 
@@ -186,7 +186,7 @@ Each message is a synthetic user message and the label proposed for it: whether 
 - Label: emphasize section:education, strength 3. A plain preference to lead with a section.
 - Jev: p 0.63; emphasize section:education (p 1.00); strength 3
 - Prefilter: candidate, cues ["i'd rather"]
-- The gate: host (uncertain)
+- The gate: host (section_target)
 
 **27. `ep_snowflake`** (explicit_positive)
 - Message: "Always include the Snowflake work, it's central to how I describe myself."
@@ -235,7 +235,7 @@ Each message is a synthetic user message and the label proposed for it: whether 
 - Label: suppress exp:data science intern|rivermount college office of institutional research, strength 3. A plain preference to omit a role.
 - Jev: p 0.50; suppress exp:data science intern|rivermount college office of institutional research (p 1.00); strength 3
 - Prefilter: candidate, negated, cues ["i'd rather"]
-- The gate: host (uncertain)
+- The gate: write
 
 **34. `en_scipy`** (explicit_negative)
 - Message: "Stop including SciPy in the skills section."
@@ -256,7 +256,7 @@ Each message is a synthetic user message and the label proposed for it: whether 
 - Label: suppress section:achievements, strength 4. Leave out a section everywhere.
 - Jev: p 0.97; suppress section:achievements (p 1.00); strength 4
 - Prefilter: candidate, negated, cues ['omit']
-- The gate: write
+- The gate: host (section_target)
 
 **37. `en_r`** (explicit_negative)
 - Message: "I don't want R on my resume; I haven't used it in years."
@@ -277,7 +277,7 @@ Each message is a synthetic user message and the label proposed for it: whether 
 - Label: emphasize skill:postgres, strength 4. Embedded negation: do not leave out means include.
 - Jev: p 0.61; emphasize skill:postgres (p 1.00); strength 4
 - Prefilter: candidate, negated, cues ["don't", 'leave out']
-- The gate: host (uncertain)
+- The gate: host (negation_disagrees)
 
 **40. `dn_transit_never_drop`** (double_negation)
 - Message: "Please never drop the Transit Pulse project from my resumes."
@@ -305,7 +305,7 @@ Each message is a synthetic user message and the label proposed for it: whether 
 - Label: emphasize skill:bigquery, strength 3. Negated 'avoid' with 'keep it in': include it.
 - Jev: p 0.50; emphasize skill:bigquery (p 1.00); strength 4
 - Prefilter: candidate, negated, cues ['avoid', 'keep']
-- The gate: host (uncertain)
+- The gate: host (negation_disagrees)
 
 **44. `dn_dbt_never_leave`** (double_negation)
 - Message: "Never leave out dbt."
@@ -354,14 +354,14 @@ Each message is a synthetic user message and the label proposed for it: whether 
 - Label: emphasize proj:transit pulse, strength 3. Implies featuring the project.
 - Jev: p 0.63; emphasize proj:transit pulse (p 1.00); strength 3
 - Prefilter: candidate, cues ['i want']
-- The gate: host (uncertain)
+- The gate: write
 
 **51. `im_streamlit_known`** (implicit)
 - Message: "Streamlit isn't something I want to be known for."
 - Label: suppress skill:streamlit, strength 3. Implies leaving it out.
 - Jev: p 0.56; suppress skill:streamlit (p 1.00); strength 3
 - Prefilter: candidate, negated, cues ['i want']
-- The gate: host (uncertain)
+- The gate: write
 
 **52. `im_forecast_first`** (implicit)
 - Message: "I'd love for people to see my forecasting work first."
@@ -389,7 +389,7 @@ Each message is a synthetic user message and the label proposed for it: whether 
 - Label: format_rule section:skills, strength 4. A layout rule about one section.
 - Jev: p 0.95; format_rule section:skills (p 1.00); strength 4
 - Prefilter: candidate, cues ['every resume']
-- The gate: host (format_rule)
+- The gate: host (section_target)
 
 **56. `fr_concise`** (format_rule)
 - Message: "I prefer concise bullet points over long paragraphs."
@@ -403,14 +403,14 @@ Each message is a synthetic user message and the label proposed for it: whether 
 - Label: format_rule section:education, strength 3. Section order.
 - Jev: p 0.55; format_rule section:education (p 0.98); strength 3
 - Prefilter: candidate, cues ['keep']
-- The gate: host (uncertain)
+- The gate: host (section_target)
 
 **58. `fr_four_bullets`** (format_rule)
 - Message: "No more than four bullets per role from now on."
 - Label: format_rule section:experience, strength 4. A count rule on roles.
 - Jev: p 0.96; format_rule section:experience (p 0.82); strength 4
 - Prefilter: candidate, negated, cues ['from now on', 'omit']
-- The gate: host (format_rule)
+- The gate: host (section_target)
 
 **59. `fr_dates`** (format_rule)
 - Message: "Make sure dates are written like Jan 2025, not 01/2025."
@@ -487,7 +487,7 @@ Each message is a synthetic user message and the label proposed for it: whether 
 - Label: not a preference. Negated, but about one bullet now.
 - Jev: p 0.13; suppress no_match (p 0.83); strength 3
 - Prefilter: candidate, negated, cues ["don't"]
-- The gate: drop
+- The gate: host (uncertain)
 
 **70. `oo_remove_second`** (one_off_edit)
 - Message: "Remove the second bullet under Ballot Tally, it's too long."
@@ -508,7 +508,7 @@ Each message is a synthetic user message and the label proposed for it: whether 
 - Label: not a preference. An instruction for this edit only.
 - Jev: p 0.14; emphasize no_match (p 0.89); strength 3
 - Prefilter: candidate, cues ['keep']
-- The gate: drop
+- The gate: host (uncertain)
 
 **73. `q_looker`** (question)
 - Message: "What do you think of my Looker experience?"
@@ -529,7 +529,7 @@ Each message is a synthetic user message and the label proposed for it: whether 
 - Label: not a preference. A question about the assistant.
 - Jev: p 0.14; emphasize section:education (p 1.00); strength 3
 - Prefilter: candidate, cues ['always']
-- The gate: drop
+- The gate: host (uncertain)
 
 **76. `q_why_dropped`** (question)
 - Message: "Why did you drop the Ballot Tally project?"
@@ -578,7 +578,7 @@ Each message is a synthetic user message and the label proposed for it: whether 
 - Label: not a preference. A question about advice, not the user's own rule.
 - Jev: p 0.17; suppress skill:excel (p 1.00); strength 3
 - Prefilter: candidate, negated, cues ['never']
-- The gate: drop
+- The gate: host (hard_preference)
 
 **83. `q_gpa_keep`** (question)
 - Message: "Do I need to keep my GPA on there?"
@@ -746,28 +746,28 @@ Each message is a synthetic user message and the label proposed for it: whether 
 - Label: emphasize proj:transit pulse, strength 3, job-scoped. Job-scoped emphasis.
 - Jev: p 0.63; emphasize proj:transit pulse (p 1.00); strength 3
 - Prefilter: candidate, cues ['lead with', 'for this job']
-- The gate: host (uncertain)
+- The gate: write
 
 **107. `js_excel`** (job_scoped)
 - Message: "For this application, leave out Excel."
 - Label: suppress skill:excel, strength 4, job-scoped. Job-scoped suppression.
 - Jev: p 0.60; suppress skill:excel (p 1.00); strength 3
 - Prefilter: candidate, negated, cues ['leave out', 'for this job']
-- The gate: host (uncertain)
+- The gate: write
 
 **108. `js_ballot`** (job_scoped)
 - Message: "Just for this role, drop the Ballot Tally project."
 - Label: suppress proj:ballot tally, strength 4, job-scoped. Job-scoped suppression.
 - Jev: p 0.61; suppress proj:ballot tally (p 1.00); strength 4
 - Prefilter: candidate, negated, cues ['for this job']
-- The gate: host (uncertain)
+- The gate: write
 
 **109. `js_streamlit`** (job_scoped)
 - Message: "This time, don't mention Streamlit."
 - Label: suppress skill:streamlit, strength 4, job-scoped. Job-scoped suppression.
 - Jev: p 0.50; suppress skill:streamlit (p 0.99); strength 4
 - Prefilter: candidate, negated, cues ["don't", 'for this job']
-- The gate: host (uncertain)
+- The gate: write
 
 **110. `js_dbt`** (job_scoped)
 - Message: "For this job please always include dbt in the skills."

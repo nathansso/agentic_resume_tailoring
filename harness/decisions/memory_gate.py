@@ -36,6 +36,11 @@ returns a routing decision, and `harness/memory.py` acts on it.
   job, and a message of at most `MAX_AUTO_TEXT` characters: **write**. Format rules always go to
   the host (it records them with polarity `reframe`).
 
+**The gate never writes a preference about a whole section** (`section:*` targets). A misread
+one suppresses or reorders a whole section, so it goes to the host, like a strength-5
+preference: a code rule, not a threshold. Only item-level targets (a skill, a role, a
+project) are written.
+
 **The gate never writes a strength-5 preference.** A strength 5 (and every negative pin, which is a
 strength-5 suppression) becomes a gate that refuses plans (#129, #198), so it always goes to
 the host with the guess, for the user to confirm through `record_preference`. This is a safety
@@ -70,24 +75,25 @@ MAX_AUTO_TEXT = 300         # a longer message is not stored verbatim as the pre
 MAX_CATALOG = 254           # a choice takes at most 255 options, one of them no_match
 _ROUND = 4
 
-# Fitted (#202) on the 111 synthetic messages in eval/memory_gate_labels/ (67 labelled standing
+# Fitted (#202) on the 111 user-confirmed synthetic messages in eval/memory_gate_labels/ (67 standing
 # preferences, 44 not), against jev-1.13.0's recorded answers to memory_gate@v1, scoring by Jev's
-# yes-probability. The labels are the proposed ones until the user confirms them. Refit with
-# `python eval/fit_memory_gate_threshold.py analyze` whenever the model or a question changes. The
-# rules (`recommend`) are in priority order, each then taking the grid value closest to the middle
-# of its gap, ties to the higher:
+# yes-probability. Refit with `python eval/fit_memory_gate_threshold.py analyze` whenever the model
+# or a question changes. The rules (`recommend`) are in priority order, each then taking the grid
+# value closest to the middle of its gap, ties to the higher:
 #   TAU_TARGET 0.75: no wrong binding among the true preferences Jev binds to an item the message
 #     names (55 right, 1 wrong: en_coursework, 0.63), then the most right ones. All 55 right named
 #     bindings score >= 0.85. The name check (`names_target`) already removes en_gpa (0.92, bound to
 #     the education section) and fr_past_tense (0.87, a tense rule bound to the experience section).
-#   TAU_HI 0.65: 0 wrong of 16 automatic writes. The highest would-be wrong write is js_edu_first
-#     (0.63, emphasize where the label says format_rule) and the lowest right write is 0.68, so the
-#     gap is 0.05 wide.
-#   TAU_LO 0.25: 0 of the 57 true preferences Jev is asked about are dropped (the lowest is
-#     js_rivermount, 0.31) and 0 non-preferences land between TAU_LO and TAU_HI (the highest
-#     non-preference scores 0.17).
-TAU_LO = 0.25
-TAU_HI = 0.65
+#   TAU_HI 0.15: no grid value gives a wrong automatic write, so the set cannot say where one starts:
+#     the most writes (26) is a plateau from 0.05 to 0.30 and 0.15 is its middle (the lowest right write scores 0.31). Before the section rule the only wrong write
+#     was js_edu_first (0.63), a section target the gate no longer writes, and the fit was 0.65.
+#     This threshold is therefore set by the rules, not by evidence of where wrong writes begin:
+#     what keeps a one-off request from being written is the other conditions (a named target,
+#     agreeing negation, strength under 5, HARD_MASS), not p. Add adversarial messages and refit.
+#   TAU_LO 0.10: 0 of the 57 true preferences Jev is asked about are dropped (the lowest is
+#     js_rivermount, 0.31); it is the highest grid value under TAU_HI.
+TAU_LO = 0.10
+TAU_HI = 0.15
 TAU_TARGET = 0.75
 
 
@@ -388,6 +394,8 @@ _WHY = {
     "multiple_statements": "the message states more than one thing",
     "format_rule": "format rules are recorded by the host with polarity reframe",
     "no_direction": "Jev found no clear emphasize or suppress direction",
+    "section_target": "it is about a whole section, which a wrong reading would suppress or "
+                      "reorder wholesale, so the user confirms it",
     "long_message": "the message is too long to store as the preference text",
     "read_only": "this ART process may not write",
     "would_supersede": "it would replace a preference the user already holds",
@@ -468,6 +476,8 @@ def route(text: str, pre: Prefilter, guess: Optional[Guess], *, job_known: bool 
     # p >= TAU_HI: written only when nothing below objects.
     if guess.strength >= PIN_STRENGTH or guess.hard_p >= HARD_MASS - 1e-9:
         return host("hard_preference")
+    if (guess.target_key or "").startswith("section:"):
+        return host("section_target")
     if guess.direction == "format_rule":
         return host("format_rule")
     if guess.direction not in ("emphasize", "suppress"):

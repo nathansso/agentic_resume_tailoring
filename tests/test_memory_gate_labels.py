@@ -218,7 +218,8 @@ def test_real_answers_write_a_clear_preference_and_hand_the_hard_ones_to_the_hos
 
     assert memory.observe(recorded_gate, _msg("cc_thanks"), "s")["action"] == "drop"
     assert memory.observe(recorded_gate, _msg("xf_never_shipped"), "s")["action"] == "drop"   # a cue, but a fact
-    assert memory.observe(recorded_gate, _msg("q_never_excel"), "s")["action"] == "drop"      # a cue, but a question
+    ask = memory.observe(recorded_gate, _msg("q_never_excel"), "s")                           # a cue, but a question
+    assert ask["action"] != "write" and ask["p"] < 0.2
 
 
 def test_a_job_scoped_message_from_the_recordings_is_written_scoped_only_with_a_known_job(recorded_gate):
@@ -317,22 +318,38 @@ def test_the_gate_writes_no_wrong_preference_on_the_set_and_never_a_hard_one(rep
             assert d["guess"]["strength"] < 5 and d["guess"]["hard_p"] < mg.HARD_MASS, r["id"]
 
 
-def test_every_true_preference_the_gate_is_asked_about_is_kept_and_no_non_preference_reaches_the_host(replayed):
+def test_every_true_preference_the_gate_is_asked_about_is_kept_and_no_non_preference_is_written(replayed):
     rows = replayed[0]
     reach = [r for r in rows if fit.reachable(r)]
     assert all(fit.route_row(r)["action"] != "drop" for r in reach if r["is_preference"])
-    assert all(fit.route_row(r)["action"] == "drop" for r in reach if not r["is_preference"])
+    assert not [r["id"] for r in rows if not r["is_preference"] and fit.route_row(r)["action"] == "write"]
+    handed = [r for r in reach if not r["is_preference"] and fit.route_row(r)["action"] == "host"]
+    assert len(handed) <= 4                                    # the few non-preferences between TAU_LO and TAU_HI
+
+
+def test_a_preference_about_a_whole_section_goes_to_the_host_at_every_threshold(replayed):
+    rows = replayed[0]
+    by_id = {r["id"]: r for r in rows}
+    d = fit.route_row(by_id["js_edu_first"])
+    assert (d["action"], d["reason"]) == ("host", "section_target")
+    for t in fit.GRID:
+        for lo in (0.0, 0.05):
+            for r in rows:
+                d = fit.route_row(r, lo, t, 0.0)
+                if ((d["guess"] or {}).get("target") or "").startswith("section:"):
+                    assert d["action"] != "write", (r["id"], t)
+    sections = [r for r in rows if r["is_preference"] and (r["target"] or "").startswith("section:")]
+    assert len(sections) >= 8 and all(fit.route_row(r)["action"] != "write" for r in sections)
 
 
 def test_the_thresholds_sit_inside_their_gaps(replayed):
     rows = replayed[0]
     writes = [r for r in rows if fit.route_row(r)["action"] == "write"]
-    assert min(r["guess"].p for r in writes) >= mg.TAU_HI and min(r["guess"].p for r in writes) - mg.TAU_HI <= 0.1
-    wrong = [r for r in rows if fit.write_is_wrong(r, fit.route_row(r, mg.TAU_LO, 0.0 + 1e-9, mg.TAU_TARGET))
-             and r["guess"].p < mg.TAU_HI]
-    assert wrong and max(r["guess"].p for r in wrong) <= mg.TAU_HI - 0.02              # the wrong writes the threshold avoids
+    assert min(r["guess"].p for r in writes) >= mg.TAU_HI
     prefs = [r for r in rows if fit.reachable(r) and r["is_preference"]]
     assert min(r["guess"].p for r in prefs) >= mg.TAU_LO + 0.05
+    hi = fit.fit_hi(rows, 0.0, mg.TAU_TARGET)
+    assert mg.TAU_HI in hi["candidates"] and hi["wrong"] == 0     # the writes-maximising plateau holds the chosen value
 
 
 def test_jev_beats_the_heuristics_alone_on_precision_without_losing_recall(replayed):
@@ -341,7 +358,9 @@ def test_jev_beats_the_heuristics_alone_on_precision_without_losing_recall(repla
     heur = fit.prf(rows, truth, lambda r: r["pre"].candidate)
     kept = fit.prf(rows, truth, lambda r: fit.route_row(r)["action"] != "drop")
     jev = fit.prf(rows, truth, lambda r: r["jev_pref"])
-    assert kept["precision"] == 1.0 and heur["precision"] < 0.9
+    assert kept["precision"] >= 0.9 and heur["precision"] < 0.85
+    wrote = fit.prf(rows, truth, lambda r: fit.route_row(r)["action"] == "write")
+    assert wrote["precision"] == 1.0 and wrote["tp"] >= 20
     assert kept["recall"] >= heur["recall"]                          # the prefilter bounds recall; Jev adds none and removes none
     assert jev["precision"] == 1.0 and jev["recall"] > 0.7
 
@@ -378,7 +397,7 @@ def test_the_review_lists_disagreements_first_and_every_message(replayed):
     assert text.index("## Disagreements with Jev") < text.index("## Agreements") < text.index("## Context messages")
     for p in PAIRS + CONTEXT:
         assert f"`{p['id']}`" in text
-    assert "proposals" in text
+    assert "user confirmed" in text
 
 
 def test_analyze_runs_offline_from_the_command_line(tmp_path):
