@@ -787,3 +787,51 @@ class JobRule(SQLModel, table=True):
     value_if_no: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# ── Bullet library and track baselines (issue #229) ──────────────────────────
+# Three small additive tables, so `create_all` picks them up and a database that
+# predates them loads unchanged.
+
+class BulletVariant(SQLModel, table=True):
+    """One phrasing of an experience or project bullet the user approved, or may.
+
+    `approved` rows are user-confirmed wording: imported from a curated library
+    (the user wrote it) or confirmed with `approve_variant`. `draft` rows are
+    promoted candidates and are never offered to a plan. Nothing approves a row
+    but an explicit call. `tags` is `{track, job_id}`; `cites` are evidence ids
+    (an item key, or `<key>#b<n>`); `line_count` comes from the render cache when
+    a LaTeX engine was available.
+    """
+    variant_id: UUID = Field(default_factory=uuid4, primary_key=True)
+    user_id: UUID = Field(foreign_key="user.user_id", index=True)
+    item_key: str = Field(index=True)  # an exp: or proj: key
+    text: str
+    tags: Dict = Field(default={}, sa_column=Column(JSON))
+    status: str = Field(default="draft", index=True)  # draft | approved
+    cites: List = Field(default_factory=list, sa_column=Column(JSON))
+    line_count: Optional[int] = None
+    source_node_id: Optional[UUID] = Field(default=None)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class TrackBaseline(SQLModel, table=True):
+    """The tree node a user pinned as a track's baseline. One per (user, track):
+    saving the track again replaces it."""
+    user_id: UUID = Field(foreign_key="user.user_id", primary_key=True)
+    track: str = Field(primary_key=True)  # lowercase, e.g. data_science
+    node_id: UUID
+    job_id: UUID
+    saved_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class JobRoleFamily(SQLModel, table=True):
+    """A job's role family, kept from `open_job` until its first plan runs, so a
+    host-supplied family survives to the moment the baseline is chosen.
+    `source` is `host`, `title` (the keyword map) or `default` (`other`)."""
+    job_id: UUID = Field(foreign_key="jobdescription.job_id", primary_key=True)
+    user_id: UUID = Field(foreign_key="user.user_id", index=True)
+    role_family: str
+    source: str = Field(default="default")
+    updated_at: datetime = Field(default_factory=datetime.utcnow)

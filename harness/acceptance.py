@@ -7,9 +7,11 @@ has a role:
   `consistency`): an action may not *introduce* a violation. Gates are compared as sets, so a parent that
   already violates one does not block every later node; the finalize step is
   where remaining violations stop a commit.
-- **Guards** (`stuffing`, `verb_entropy`, `mtld`, `duplication`): may not
-  regress by more than a tolerance. A node may tighten a tolerance, never
-  loosen one (`harness/program.py` enforces that).
+- **Guards** (`stuffing`, `verb_entropy`, `mtld`, `duplication`,
+  `variant_drift`): may not regress by more than a tolerance. A node may
+  tighten a tolerance, never loosen one (`harness/program.py` enforces that).
+  `variant_drift` (#229) is absolute, not relative to the parent: how far a
+  bullet that names an approved variant has moved from it.
 - **Targets** (`coverage`, `relevance_density`, `semantic_coverage`): an action
   must improve at least one, unless it is a delete the user or a preference
   asked for. `semantic_coverage` (#126) is Jev's reading of whether the bullets
@@ -26,7 +28,7 @@ Deterministic: every float is rounded, every list sorted. Model-free by rule
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from agents.ats_scorer import ATSScoringEngine
 from agents.checks import (
@@ -42,23 +44,37 @@ from harness.decisions.support import violations as support_finding_violations
 
 TARGETS = ("coverage", "relevance_density", "semantic_coverage")
 OPTIONAL_TARGETS = ("semantic_coverage",)    # present only when Jev answered (#126)
-GUARDS = ("stuffing", "verb_entropy", "mtld", "duplication")
-GATES = ("preferences", "faithfulness", "citations", "bullet_lines", "consistency")
+GUARDS = ("stuffing", "verb_entropy", "mtld", "duplication", "variant_drift")
+GATES =("preferences", "faithfulness", "citations", "bullet_lines", "consistency")
 
 # How far each guard may move in its bad direction before an action is
 # reverted. Provisional: #127 fits these per guard on the human anchor set and
 # ships them in the policy artifact. Units: stuffed-term count, bits, a
 # *fraction* of MTLD (MTLD scales with text length, so a fixed number of points
 # would block every deletion on a short resume), max pairwise token Jaccard.
+#
+# `variant_drift` (#229) is the normalized token edit distance between a bullet and the
+# approved variant it says it starts from: 0 is verbatim, 1 shares nothing. 0.35 lets about
+# one token in three change, which covers a swapped verb, a woven keyword or two and a
+# trimmed clause on a 15-20 token bullet (2-4 edits, 0.1-0.25), and stops a rewrite that
+# only borrows the topic (a half-new bullet is 0.5 and up). Provisional like the rest, to be
+# refit once real library use exists.
+VARIANT_DRIFT_TOLERANCE = 0.35
 DEFAULT_TOLERANCES: Dict[str, float] = {
     "stuffing": 0.0,
     "verb_entropy": 0.35,
     "mtld": 0.10,
     "duplication": 0.15,
+    "variant_drift": VARIANT_DRIFT_TOLERANCE,
 }
 # +1: a larger value is worse. -1: a smaller value is worse.
-_BAD_DIRECTION = {"stuffing": 1, "verb_entropy": -1, "mtld": -1, "duplication": 1}
+_BAD_DIRECTION = {"stuffing": 1, "verb_entropy": -1, "mtld": -1, "duplication": 1,
+                  "variant_drift": 1}
 _RELATIVE = {"mtld"}
+# Guards that measure the node's own bullets against a fixed reference rather than the page
+# against its parent: the tolerance applies to the value itself, so a parent's value is
+# never subtracted (and never lets a stray node borrow its predecessor's headroom).
+_ABSOLUTE = {"variant_drift"}
 
 _ROUND = 4
 _EPS = 1e-9
@@ -107,6 +123,13 @@ class Context:
     # (`harness.decisions.coverage.make_coverage_checker`). Injected like the checkers above.
     # None, or a result that is not `checked`, leaves `semantic_coverage` out of the vector.
     coverage_checker: Optional[Callable[[Dict], Dict]] = None
+    # The bullet library (#229). `approved_variants`: item key -> the normalized text of each
+    # approved variant; a bullet verbatim one is user-confirmed wording and is skipped by the
+    # support and consistency checks like a verbatim source bullet (negative pins still apply).
+    approved_variants: Dict[str, Set[str]] = field(default_factory=dict)
+    # `(item key, normalized bullet) -> variant text` for the bullets the node under test says
+    # start from a variant; what `variant_drift` measures. Set by the executor per node.
+    variant_origin: Dict[Tuple[str, str], str] = field(default_factory=dict)
 
     @property
     def jd_keywords(self) -> Set[str]:
@@ -204,7 +227,8 @@ def consistency_violations(content: Dict, ctx: Context) -> List[str]:
     if ctx.cite_status is None:
         return []
     return sorted({f"consistency:{_short(b, 40)}:{tok}"
-                   for _, b, toks in consistency_check(content, ctx.source_bullets)
+                   for _, b, toks in consistency_check(content, ctx.source_bullets,
+                                                       ctx.approved_variants)
                    for tok in toks})
 
 
@@ -234,6 +258,42 @@ def _max_pair_jaccard(bullets: Sequence[str]) -> float:
     return best
 
 
+_EDGE_PUNCT = ".,;:!?()[]{}\"'`"
+
+
+def _edit_tokens(text: str) -> List[str]:
+    """Whitespace tokens, lowercased, with edge punctuation stripped: a change of
+    case or a trailing period is not an edit."""
+    return [t for t in (w.strip(_EDGE_PUNCT) for w in (text or "").lower().split()) if t]
+
+
+def token_distance(a: str, b: str) -> float:
+    """Normalized token-level Levenshtein distance: edits over the longer token count.
+    0.0 for the same words, 1.0 for nothing in common at the same length (#229)."""
+    x, y = _edit_tokens(a), _edit_tokens(b)
+    if not x and not y:
+        return 0.0
+    prev = list(range(len(y) + 1))
+    for i, tx in enumerate(x, 1):
+        cur = [i]
+        for j, ty in enumerate(y, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (tx != ty)))
+        prev = cur
+    return prev[-1] / max(len(x), len(y))
+
+
+def variant_drift(content: Dict, origin: Dict[Tuple[str, str], str]) -> float:
+    """The most any bullet that names a variant has moved from it (#229): the maximum
+    `token_distance` over `origin`'s bullets found on the page. 0.0 when none names one."""
+    worst = 0.0
+    for key, item in _page_items(content):
+        for b in item.get("bullets") or []:
+            variant = origin.get((key, " ".join((b or "").split())))
+            if variant is not None:
+                worst = max(worst, token_distance(variant, b))
+    return worst
+
+
 def metric_vector(content: Dict, ctx: Context) -> Dict[str, Any]:
     """`{gates, guards, targets, report}` for one version of the resume."""
     text = ATSScoringEngine.flatten_tailored_text(content)
@@ -256,6 +316,7 @@ def metric_vector(content: Dict, ctx: Context) -> Dict[str, Any]:
         "verb_entropy": _r(leading_verb_entropy(bullets)),
         "mtld": _r(mtld(bullet_tokens(bullets))),
         "duplication": _r(_max_pair_jaccard(bullets)),
+        "variant_drift": _r(variant_drift(content, ctx.variant_origin)),
     }
     targets = {
         "coverage": _r(ATSScoringEngine._keyword_coverage(
@@ -276,9 +337,11 @@ def metric_vector(content: Dict, ctx: Context) -> Dict[str, Any]:
 
 def _guard_regression(name: str, before, after) -> float:
     """How far `after` moved in the guard's bad direction (0 if it did not)."""
+    if name in _ABSOLUTE:
+        return 0.0 if after is None else float(after)
     if before is None or after is None:
         return 0.0
-    moved = max(0.0, (after - before) * _BAD_DIRECTION[name])
+    moved =max(0.0, (after - before) * _BAD_DIRECTION[name])
     if name in _RELATIVE:
         return moved / before if before > 0 else 0.0
     return moved
@@ -334,4 +397,5 @@ def accept(before: Dict, after: Dict, *, improves: Iterable[str] = (),
 
 
 __all__ = ["Context", "DEFAULT_TOLERANCES", "GATES", "GUARDS", "OPTIONAL_TARGETS", "TARGETS", "accept",
-           "consistency_violations", "metric_vector", "preference_violations", "term_pattern"]
+           "VARIANT_DRIFT_TOLERANCE", "consistency_violations", "metric_vector",
+           "preference_violations", "term_pattern", "token_distance", "variant_drift"]

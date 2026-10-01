@@ -14,7 +14,7 @@ are unaffected.
 import re
 from decimal import Decimal
 from functools import lru_cache
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from agents.ats_scorer import ATSScoringEngine
 from agents.skill_scorer import _env_float, _env_int
@@ -1047,7 +1047,9 @@ def cite_evidence(cite: str, source_bullets: Dict[str, List[str]]) -> List[str]:
     return [cite.split(":", 1)[-1].replace("|", " ")] if ":" in cite else []
 
 
-def consistency_check(content: Dict, source_bullets: Dict[str, List[str]]) -> List[Tuple[str, str, List[str]]]:
+def consistency_check(content: Dict, source_bullets: Dict[str, List[str]],
+                      approved: Optional[Dict[str, Iterable[str]]] = None,
+                      ) -> List[Tuple[str, str, List[str]]]:
     """`(item key, bullet, unsupported tokens)` for every experience and project
     bullet that asserts something its evidence does not.
 
@@ -1055,14 +1057,16 @@ def consistency_check(content: Dict, source_bullets: Dict[str, List[str]]) -> Li
     source bullets its cites resolve to, plus its own item's source bullets and
     header (title, company, name, dates). Never the whole profile. A bullet that
     is verbatim one of its item's source bullets is skipped, and so is a bullet
-    with no cites (the citations gate's job).
+    with no cites (the citations gate's job). `approved` (#229) maps an item key
+    to the normalized text of its approved library variants: a bullet verbatim
+    one is the user's own confirmed wording and is skipped the same way.
     """
     out: List[Tuple[str, str, List[str]]] = []
     for section, key_fn in (("experiences", exp_key), ("projects", proj_key)):
         for item in content.get(section) or []:
             key = key_fn(item)
             own = source_bullets.get(key, [])
-            own_norm = {" ".join(b.split()) for b in own}
+            own_norm = {" ".join(b.split()) for b in own} | set((approved or {}).get(key, ()))
             cites = item.get("cites") if isinstance(item.get("cites"), dict) else {}
             header = [str(item.get(f) or "") for f in
                       ("title", "company", "name", "start_date", "end_date")]

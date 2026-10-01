@@ -145,6 +145,51 @@ def _dedupe(values: Sequence[str], limit: Optional[int] = None) -> List[str]:
     return out
 
 
+# ── the model-free title fallback for role_family (issue #229) ────────────────
+# The harness never calls the classifier below. A host that read the posting
+# passes `role_family` itself; when it does not, the first family here whose
+# pattern matches the job title wins, and a title that matches none is `other`.
+# Order matters and is the whole disambiguation: a "machine learning research
+# scientist" is machine_learning (a more specific family than research), and a
+# "data engineer" never reaches software_engineering. Patterns are matched on
+# the lowercased title with word boundaries.
+TITLE_ROLE_FAMILIES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
+    ("security", (r"security", r"cyber", r"infosec", r"appsec", r"penetration")),
+    ("hardware", (r"hardware", r"firmware", r"embedded", r"fpga", r"asic", r"rtl",
+                  r"silicon", r"electrical engineer", r"vlsi")),
+    ("design", (r"designer", r"ux", r"ui/ux", r"user experience", r"product design",
+                r"graphic design")),
+    ("product_management", (r"product manager", r"product management", r"product owner",
+                           r"associate product")),
+    ("devops_infrastructure", (r"devops", r"sre", r"site reliability", r"infrastructure",
+                               r"cloud engineer", r"platform engineer", r"systems administrator")),
+    ("machine_learning", (r"machine learning", r"ml", r"mlops", r"deep learning", r"ai",
+                          r"artificial intelligence", r"computer vision", r"nlp",
+                          r"natural language", r"llm", r"applied scientist")),
+    ("data_engineering", (r"data engineer", r"analytics engineer", r"etl", r"data platform",
+                          r"big data")),
+    ("data_science", (r"data scien\w*", r"data analy\w*", r"analytics", r"statistician",
+                      r"business intelligence", r"quantitative")),
+    ("research", (r"research\w*",)),
+    ("software_engineering", (r"software", r"swe", r"developer", r"full[- ]?stack", r"back[- ]?end",
+                              r"front[- ]?end", r"web engineer", r"mobile engineer", r"ios",
+                              r"android", r"programmer")),
+)
+
+
+def role_family_from_title(title: str) -> str:
+    """A `RoleFamily` value from the job title alone, `other` when nothing matches.
+
+    Deterministic and model-free: the fallback for a host that did not say which
+    family a posting is (#229). Never raises.
+    """
+    low = (title or "").lower()
+    for family, patterns in TITLE_ROLE_FAMILIES:
+        if any(re.search(rf"(?<![a-z0-9]){p}(?![a-z0-9])", low) for p in patterns):
+            return family
+    return RoleFamily.OTHER.value
+
+
 # ── the one LLM call: cached, versioned role_family classify ──────────────────
 
 _CLASSIFY_INSTRUCTIONS = (

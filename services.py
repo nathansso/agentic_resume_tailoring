@@ -2440,8 +2440,13 @@ def delete_job(job_uuid: str) -> str:
         from database.models import JDProfile, JobCard
         jid = _UUID(job_uuid)
         with Session(engine) as session:
-            from database.models import JobHead, PlanProgram, TailorNode, TreeEvent
+            from database.models import (
+                JobHead, JobRoleFamily, PlanProgram, TailorNode, TrackBaseline, TreeEvent,
+            )
             # Tailoring tree (#196) and saved plan programs (#197): FK'd to the job.
+            # A track baseline (#229) pins one of this job's nodes, so it goes with them.
+            session.exec(delete(TrackBaseline).where(TrackBaseline.job_id == jid))
+            session.exec(delete(JobRoleFamily).where(JobRoleFamily.job_id == jid))
             session.exec(delete(PlanProgram).where(PlanProgram.job_id == jid))
             session.exec(delete(TreeEvent).where(TreeEvent.job_id == jid))
             session.exec(delete(JobHead).where(JobHead.job_id == jid))

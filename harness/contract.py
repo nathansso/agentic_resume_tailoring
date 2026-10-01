@@ -133,10 +133,29 @@ class ItemInput(_Model):
                                  "e.g. 'exp:<title>|<company>', 'proj:<name>'.")
 
 
+class VariantRef(_Model):
+    variant_id: str
+    item_key: str
+    text: str
+    status: Literal["draft", "approved"]
+    tags: Dict[str, Any] = Field(default_factory=dict, description="track, job_id.")
+    cites: List[str] = Field(default_factory=list)
+    line_count: Optional[int] = Field(None, description="Rendered lines, when a LaTeX engine "
+                                                        "was available.")
+    source_node_id: Optional[str] = None
+    score: Optional[float] = Field(None, description="Overlap with the job's weighted terms "
+                                                     "(suggest_actions only).")
+
+
 class ItemOutput(_Output):
     key: Optional[str] = None
     kind: Optional[Kind] = None
     record: Optional[Dict[str, Any]] = None
+    variants: Optional[List[VariantRef]] = Field(
+        None, description="An experience's or project's approved bullet variants (#229): "
+                          "the user's confirmed wording. Start a revision from one "
+                          "(bullets[].from_variant) instead of writing from the raw bullets. "
+                          "Absent for other kinds.")
 
 
 # ── project context ──────────────────────────────────────────────────────────
@@ -322,8 +341,9 @@ class CheckoutOutput(_Output):
 # ── host-filled ingestion and jobs (#192) ────────────────────────────────────
 
 SchemaKind = Literal["experience", "education", "project", "skill", "achievement",
-                     "requirement", "rule"]
-RecordKind = Literal["experience", "education", "project", "skill", "achievement", "rule"]
+                     "requirement", "rule", "variant"]
+RecordKind = Literal["experience", "education", "project", "skill", "achievement", "rule",
+                     "variant"]
 
 
 class IngestSchemaInput(_Model):
@@ -372,6 +392,13 @@ class JobMetadata(_Model):
     url: Optional[str] = None
     status: Optional[ApplicationStatus] = None
     title_terms: List[str] = []
+    role_family: Optional[str] = Field(
+        None, description="The posting's role family, from your own reading: one of "
+                          "software_engineering, machine_learning, data_science, "
+                          "data_engineering, research, product_management, design, "
+                          "devops_infrastructure, security, hardware, other. A track "
+                          "baseline named after it (save_baseline) is the job's starting "
+                          "point. Omitted: ART guesses from the title, else other (#229).")
 
 
 class RuleAnswer(_Model):
@@ -420,6 +447,13 @@ class SchemaError(_Model):
     message: str
 
 
+class BaselineRef(_Model):
+    track: str
+    node_id: str
+    applies: bool = Field(description="True when the job has no history yet, so its first "
+                                      "plan starts as a copy of this node (#229).")
+
+
 class OpenJobOutput(_Output):
     job_id: Optional[str] = None
     created: bool = False
@@ -442,7 +476,13 @@ class OpenJobOutput(_Output):
         default_factory=list, description="needs_answer: ask the user, then call open_job "
                                           "again with job_id and rule_answers.")
     schema_errors: List[SchemaError] = Field(default_factory=list)
-    baseline: Optional[str] = Field(None, description="Track baseline node (#199).")
+    role_family: Optional[str] = Field(None, description="The family used to pick a baseline.")
+    role_family_source: Optional[Literal["host", "title", "default"]] = Field(
+        None, description="host: you supplied it. title: guessed from the job title. "
+                          "default: nothing matched, so other.")
+    baseline: Optional[BaselineRef] = Field(
+        None, description="The track baseline for this job's role family, if one was saved "
+                          "(#229). The job's first version starts as a copy of it.")
 
 
 def _ingest():
@@ -542,6 +582,10 @@ class ExecuteOutput(_Output):
     cut_hints: List[Dict[str, Any]] = Field(default_factory=list)
     rules_applied: List[Dict[str, Any]] = Field(
         default_factory=list, description="Job-scoped rule values written into the base.")
+    baseline: Optional[Dict[str, Any]] = Field(
+        None, description="The track baseline this job's first version was copied from "
+                          "(track, node_id, role_family, source). Absent when the job started "
+                          "from the whole knowledge graph (#229).")
     support: Optional[Dict[str, Any]] = Field(
         None, description="The cited-bullet support check (#193): how many bullets Jev "
                           "checked and which to review. Absent when nothing was checked "
@@ -582,6 +626,86 @@ def _tree_call(fn):
         except (tree.NotFound, ValueError) as exc:
             return {"error": {"code": "not_found", "message": str(exc)}}
     return call
+
+
+# ── bullet library and track baselines (#229) ────────────────────────────────
+
+class PromoteInput(_Model):
+    node_id: str = Field(description="A committed version of one of your jobs (history).")
+    bullet: str = Field(description="The bullet's text exactly as it reads on that version.")
+    item_key: Optional[str] = Field(None, description="Needed only when the same text sits under "
+                                                      "more than one item.")
+    track: Optional[str] = Field(None, description="Tag it with this track; default: the job's "
+                                                   "role family.")
+
+
+class PromoteOutput(_Output):
+    variant: Optional[VariantRef] = None
+    created: bool = Field(False, description="False when that bullet was already a variant of "
+                                             "the item; the existing one is returned.")
+
+
+class ApproveInput(_Model):
+    variant_id: str = Field(description="A draft from promote_bullet. Ask the user first: "
+                                        "nothing else approves a variant.")
+
+
+class ApproveOutput(_Output):
+    variant: Optional[VariantRef] = None
+    changed: bool = False
+
+
+class SaveBaselineInput(_Model):
+    node_id: str = Field(description="The version to pin (history).")
+    track: str = Field(description="A track name, normalized to lowercase with underscores. "
+                                   "A job starts from the baseline whose track equals its role "
+                                   "family (e.g. data_science).")
+
+
+class SaveBaselineOutput(_Output):
+    track: Optional[str] = None
+    node_id: Optional[str] = None
+    job_id: Optional[str] = None
+    replaced: Optional[str] = Field(None, description="The node this track pointed at before.")
+
+
+class SuggestActionsInput(_Model):
+    job_id: str
+    node_id: Optional[str] = Field(None, description="A version of the job; HEAD if omitted.")
+
+
+class ActionChoice(_Model):
+    op: Literal["keep", "revise", "replace", "delete"]
+    propensity: float
+
+
+class ItemSuggestion(_Model):
+    item_key: str
+    title: str
+    match: Literal["variant", "no_match"]
+    variant: Optional[VariantRef] = Field(
+        None, description="The approved variant that best fits the job. Start the revision "
+                          "from it (bullets[].from_variant). None on no_match: write from "
+                          "the raw facts.")
+    best_score: float = Field(description="The best overlap among the item's approved "
+                                          "variants, even when below the floor.")
+    approved_variants: int = 0
+    actions: List[ActionChoice] = Field(default_factory=list,
+                                        description="Valid ops, uniform propensities.")
+    source: Literal["fallback", "jev"] = "fallback"
+
+
+class SuggestActionsOutput(_Output):
+    job_id: Optional[str] = None
+    node_id: Optional[str] = Field(None, description="The version judged; None for a job with "
+                                                     "no history (its starting version).")
+    floor: Optional[float] = None
+    items: List[ItemSuggestion] = Field(default_factory=list)
+
+
+def _library():
+    from harness import library
+    return library
 
 
 # ── registry ─────────────────────────────────────────────────────────────────
@@ -627,7 +751,8 @@ TOOLS: List[ToolSpec] = [
         lambda uid, kind=None: {"items": _tools().list_items(uid, kind)}),
     ToolSpec(
         "get_item",
-        "Full record for one key. Unknown keys return an error with suggestions.",
+        "Full record for one key; an experience or project also lists its approved bullet "
+        "variants. Unknown keys return an error with suggestions.",
         ItemInput, ItemOutput,
         lambda uid, key: _tools().get_item(uid, key)),
     ToolSpec(
@@ -667,16 +792,19 @@ TOOLS: List[ToolSpec] = [
     ToolSpec(
         "upsert_items",
         "Store knowledge-graph records you extracted from the user's resume, repos or "
-        "LinkedIn export, or job-scoped rules. ART validates, deduplicates and merges; it "
-        "never changes an item the user edited by hand. Writes.",
+        "LinkedIn export, job-scoped rules, or the user's curated bullet library (kind "
+        "variant: approved wording for an experience or project). ART validates, "
+        "deduplicates and merges; it never changes an item the user edited by hand. Writes.",
         UpsertInput, UpsertOutput,
         lambda uid, records, source="host": _ingest().upsert_items(uid, records, source),
         read_only=False),
     ToolSpec(
         "open_job",
         "Open a job from a posting: its text, the requirements you extracted, and answers "
-        "to the user's job-scoped rules (from art_briefing). Returns the job id, weighted "
-        "terms, and any rule still needing an answer. Re-opening updates the job. Writes.",
+        "to the user's job-scoped rules (from art_briefing), and its role_family if you can "
+        "tell. Returns the job id, weighted terms, any rule still needing an answer, and the "
+        "track baseline the job starts from, if one was saved. Re-opening updates the job. "
+        "Writes.",
         OpenJobInput, OpenJobOutput,
         lambda uid, jd_text="", requirements=(), metadata=None, rule_answers=(), job_id=None:
             _ingest().open_job(uid, jd_text, requirements, metadata or {}, rule_answers, job_id),
@@ -711,6 +839,36 @@ TOOLS: List[ToolSpec] = [
         "Make an earlier version current again (revert or branch). Writes.",
         CheckoutInput, CheckoutOutput,
         _tree_call(lambda t, uid, job_id, node_id: {"head": t.checkout(uid, job_id, node_id)}),
+        read_only=False),
+    ToolSpec(
+        "suggest_actions",
+        "For each experience and project on a version (HEAD by default): the approved "
+        "bullet variant that best fits the job, or no_match, and the valid actions with "
+        "uniform propensities. Start a revision from the variant (bullets[].from_variant); "
+        "write from raw facts only on no_match.",
+        SuggestActionsInput, SuggestActionsOutput,
+        lambda uid, job_id, node_id=None: _library().suggest_actions(uid, job_id, node_id)),
+    ToolSpec(
+        "promote_bullet",
+        "Make a draft bullet variant from a bullet on a committed version of one of your "
+        "jobs. A draft is never used until the user confirms it with approve_variant. Writes.",
+        PromoteInput, PromoteOutput,
+        lambda uid, node_id, bullet, item_key=None, track=None:
+            _library().promote_bullet(uid, node_id, bullet, item_key, track),
+        read_only=False),
+    ToolSpec(
+        "approve_variant",
+        "Approve a draft bullet variant, only after the user said yes. Approved variants "
+        "are offered by get_item and suggest_actions. Writes.",
+        ApproveInput, ApproveOutput,
+        lambda uid, variant_id: _library().approve_variant(uid, variant_id),
+        read_only=False),
+    ToolSpec(
+        "save_baseline",
+        "Pin a version as the baseline for a track (replacing that track's earlier one). A "
+        "new job whose role family equals the track starts as a copy of it. Writes.",
+        SaveBaselineInput, SaveBaselineOutput,
+        lambda uid, node_id, track: _library().save_baseline(uid, node_id, track),
         read_only=False),
     ToolSpec(
         "execute_plan",

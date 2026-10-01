@@ -51,9 +51,10 @@ from agents.kg_store import KGStoreMixin, _clean_date
 from agents.skill_matching import match_requirement_terms
 from agents.skill_postprocessor import normalize_skill_name, postprocess_skills
 from database.models import (
-    Achievement, Education, Experience, JDProfile, JobDescription, JobRule, Project, Skill,
-    UserSkill,
+    Achievement, Education, Experience, JDProfile, JobDescription, JobHead, JobRule, Project,
+    Skill, UserSkill,
 )
+from harness import library
 from harness.tools import KINDS, _records, ach_key, edu_key, skill_key
 
 log = logging.getLogger(__name__)
@@ -88,6 +89,26 @@ class RuleItem(BaseModel):
     value_if_no: Optional[str] = Field(None, description="Omit to leave the stored value.")
 
 
+class VariantTags(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    track: Optional[str] = Field(None, description="The track the wording was written for, "
+                                                   "e.g. data_science (see save_baseline).")
+    job_id: Optional[str] = Field(None, description="The job it was written for, if any.")
+
+
+class VariantItem(BaseModel):
+    """One approved phrasing of one experience or project bullet: wording the user
+    wrote, kept in the bullet library and started from instead of regenerated."""
+    model_config = ConfigDict(extra="forbid")
+    item_key: str = Field(description="Key of an experience or project (from list_items), "
+                                      "e.g. 'exp:<title>|<company>' or 'proj:<name>'.")
+    text: str = Field(description="The bullet exactly as the user approved it.")
+    cites: List[str] = Field(default_factory=list, description=(
+        "Evidence ids the bullet rests on: an item key, or '<item key>#b<n>' for a source "
+        "bullet. Omit to cite the item itself."))
+    tags: Optional[VariantTags] = None
+
+
 SCHEMAS: Dict[str, type] = {
     "experience": _strict(ExperienceItem),
     "education": _strict(EducationItem),
@@ -96,6 +117,7 @@ SCHEMAS: Dict[str, type] = {
     "achievement": _strict(AchievementItem),
     "requirement": _strict(JDRequirementItem),
     "rule": RuleItem,
+    "variant": VariantItem,
 }
 SCHEMA_KINDS = tuple(SCHEMAS)
 
@@ -111,7 +133,10 @@ _NOTES = {
     "achievement": "One award or honor. Dedup is by title.",
     "requirement": "One atomic requirement from a posting, for open_job.",
     "rule": "A job-scoped rule. open_job asks for its answer per posting.",
+    "variant": "One approved bullet for an experience or project, from the user's own curated "
+               "library. Arrives approved. Dedup is by item_key plus the bullet's words.",
 }
+_REQUIRED = {"variant": ["item_key", "text"]}
 
 
 def ingest_schema(kind: str) -> Dict[str, Any]:
@@ -122,7 +147,7 @@ def ingest_schema(kind: str) -> Dict[str, Any]:
             "code": "unknown_kind", "message": f"No schema for {kind!r}.",
             "suggestions": list(SCHEMA_KINDS)}}
     return {"kind": kind, "json_schema": model.model_json_schema(),
-            "required": [_IDENTITY[kind]] if kind in _IDENTITY else [],
+            "required": [_IDENTITY[kind]] if kind in _IDENTITY else _REQUIRED.get(kind, []),
             "note": _NOTES[kind]}
 
 
@@ -284,12 +309,13 @@ def upsert_items(user_id: UUID, records: Sequence[Dict], source: str = DEFAULT_S
     """Validate and store host-filled records. One result per record, in order."""
     out: Dict[int, Dict] = {}
     pending: Dict[str, List[Tuple[int, Dict]]] = {k: [] for k in _SAVE_ORDER}
+    variants: List[Tuple[int, Dict]] = []
     for idx, rec in enumerate(records):
         kind, raw = rec.get("kind"), rec.get("data") or {}
         model = SCHEMAS.get(kind)
         if model is None or kind == "requirement":
             out[idx] = {"status": "invalid", "key": None,
-                        "message": f"Unknown kind {kind!r}; one of {', '.join(KINDS)}, rule."}
+                        "message": f"Unknown kind {kind!r}; one of {', '.join(KINDS)}, rule, variant."}
             continue
         try:
             data = model.model_validate(raw).model_dump(exclude_none=True)
@@ -298,6 +324,9 @@ def upsert_items(user_id: UUID, records: Sequence[Dict], source: str = DEFAULT_S
             continue
         if kind == "rule":
             out[idx] = _upsert_rule(user_id, data)
+            continue
+        if kind == "variant":
+            variants.append((idx, data))     # after the KG records, so one call can send both
             continue
         ident = _IDENTITY[kind]
         if not str(data.get(ident) or "").strip():
@@ -340,8 +369,10 @@ def upsert_items(user_id: UUID, records: Sequence[Dict], source: str = DEFAULT_S
             store._heal_education(session, user_id)
             store._heal_achievements(session, user_id)
             session.commit()
+    if variants:
+        out.update(library.import_variants(user_id, variants))
 
-    results = [{"index": i, "kind": records[i].get("kind"), **out[i]} for i in range(len(records))]
+    results =[{"index": i, "kind": records[i].get("kind"), **out[i]} for i in range(len(records))]
     counts: Dict[str, int] = {}
     for r in results:
         counts[r["status"]] = counts.get(r["status"], 0) + 1
@@ -430,6 +461,11 @@ def open_job(user_id: UUID, jd_text: str, requirements: Sequence[Dict], metadata
     `job_id`) updates that job instead of creating another."""
     title = (metadata.get("title") or "").strip()
     company = (metadata.get("company") or "").strip()
+    supplied_family = str(metadata.get("role_family") or "").strip().lower() or None
+    if supplied_family and supplied_family not in library.ROLE_FAMILIES:
+        return {"error": {"code": "invalid_arguments",
+                          "message": f"metadata.role_family {supplied_family!r} is not a role family.",
+                          "suggestions": list(library.ROLE_FAMILIES)}}
     schema_errors: List[Dict] = []
     reqs: List[JDRequirementItem] = []
     for i, raw in enumerate(requirements or []):
@@ -510,9 +546,20 @@ def open_job(user_id: UUID, jd_text: str, requirements: Sequence[Dict], metadata
 
     terms = services.resolve_keyword_weights(jid, user_id, text, persist=True) or {}
     top = sorted(terms.items(), key=lambda kv: (-kv[1], kv[0]))[:TOP_TERMS]
+
+    # The job's role family (the host's, else the title map) and the track baseline it
+    # names (#229). The first plan starts from that baseline while the job has no history.
+    family, family_source = library.record_role_family(user_id, jid, summary["title"],
+                                                       supplied_family)
+    choice = library.choose_baseline(user_id, jid)
+    with Session(_db.engine) as session:
+        has_history = session.get(JobHead, jid) is not None
+    baseline = ({"track": choice["track"], "node_id": choice["node_id"],
+                 "applies": not has_history} if choice else None)
     return {**summary, "requirements": n_reqs,
             "top_terms": [{"term": t, "weight": w} for t, w in top],
             "skill_matches": terms_to_skills["matches"],
             "unmatched_terms": terms_to_skills["unmatched"],
             "rules": resolve_rules(user_id, jid), "schema_errors": schema_errors,
-            "baseline": None}
+            "role_family": family, "role_family_source": family_source,
+            "baseline": baseline}
