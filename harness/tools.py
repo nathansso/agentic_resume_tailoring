@@ -3,11 +3,11 @@
 Three tools, and the whole of what a host agent can see in this spike:
 
 - `art_briefing` **pushes** what must not be missed: strength-5 preferences
-  verbatim (suppressions included — they are the negative pins until #202),
-  the scoped preference set, the compiled persona, and prior JobCards with
-  their user rejections. Push, not search, because the dominant preference
-  signal is negation and similarity search cannot represent "not this"
-  (#109, docs/harness.md § 10).
+  verbatim (a strength-5 suppression is a negative pin), the scoped preference
+  set, the compiled persona, and prior JobCards with their user rejections.
+  Push, not search, because the dominant preference signal is negation and
+  similarity search cannot represent "not this" (#109, docs/harness.md § 10).
+  `art_pins` is the pins alone, scoped the same way, plus a job's own (#202).
 - `kg_search` **pulls** items by full-text search (SQLite FTS5 with stemming,
   #194), falling back to a plain token match. Only `Skill` and
   `JobDescription` carry embeddings, so there is no semantic search over
@@ -180,15 +180,35 @@ def _attach_links(user_id: UUID, items: List[Dict]) -> None:
 
 # ── tools ─────────────────────────────────────────────────────────────────────
 
+def _pins(prefs: Sequence[Dict]) -> List[Dict[str, Any]]:
+    """The strength-5 preferences among `prefs`, verbatim: the hard rules. A strength-5
+    suppression is a negative pin (#198): what it names can never reach the page."""
+    return [
+        {"text": p["text"], "polarity": p.get("polarity"), "target_key": p.get("target_key"),
+         "target_term": p.get("target_term"), "scope": p.get("scope_type"),
+         "scope_value": p.get("scope_value"),
+         "negative_pin": p.get("polarity") == "suppress"}
+        for p in prefs if (p.get("strength") or 0) >= PIN_STRENGTH
+    ]
+
+
+def art_pins(user_id: UUID, role_family: Optional[str] = None,
+             job_id: Optional[str] = None) -> Dict[str, Any]:
+    """The pins alone, word for word: what a host must restore after compaction (#202).
+    The same set `art_briefing` pushes, scoped the same way: global pins always, a role family's
+    when `role_family` names it, a job's when `job_id` names it."""
+    prefs = preferences_in_scope(services.load_preferences(user_id), job_id=job_id,
+                                 role_family=role_family)
+    prefs = sorted(prefs, key=lambda p: str(p.get("preference_id")))
+    pins = _pins(prefs)
+    return {"role_family": role_family, "job_id": job_id, "pins": pins, "count": len(pins)}
+
+
 def art_briefing(user_id: UUID, role_family: Optional[str] = None) -> Dict[str, Any]:
     """What the host must hold before planning, pushed rather than searched."""
     prefs = preferences_in_scope(services.load_preferences(user_id), role_family=role_family)
     prefs = sorted(prefs, key=lambda p: (-(p.get("strength") or 0), str(p.get("preference_id"))))
-    pins = [
-        {"text": p["text"], "polarity": p.get("polarity"),
-         "target_key": p.get("target_key"), "scope": p.get("scope_type")}
-        for p in prefs if (p.get("strength") or 0) >= PIN_STRENGTH
-    ]
+    pins = _pins(prefs)
     persona = services.get_active_persona(user_id, role_family=role_family)
     cards = services.load_job_cards(user_id)
     if role_family:

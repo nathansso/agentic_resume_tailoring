@@ -24,6 +24,14 @@ CALLS = {
     "get_item": [{"key": "exp:data science intern|idx exchange"},
                  {"key": "proj:next item recommender"}],   # not found → suggestions
     "get_profile": [{}],
+    # The memory gate (#202). With Jev off, `observe` is the prefilter alone, which writes nothing; the
+    # preference calls are refusals or already-held, so all three adapters see the same store.
+    "art_pins": [{}, {"role_family": "data_science"}],
+    "observe": [{"text": "Never mention Excel on my resume."}, {"text": "thanks, that looks great!"}],
+    "record_preference": [{"text": "Lead with forecasting work", "polarity": "emphasize", "strength": 3,
+                           "scope": "role_family", "scope_value": "data_science"},
+                          {"text": "", "polarity": "suppress", "target": "Kafka"},
+                          {"text": "Never mention Kafka", "polarity": "suppress"}],
     # Project context. The writes are idempotent, so all three adapters agree.
     "suggest_project_contexts": [{}, {"include_reviewed": True}],
     "set_project_context": [{"project": "proj:next-item recommendation",

@@ -1,12 +1,17 @@
 """Claude Code hooks for the ART plugin (issue #201): `art hook <event>`.
 
-Two things a host loses without them (docs/harness.md § 10, § 13):
+Three things a host loses without them (docs/harness.md § 10, § 13):
 
 - **`user-prompt`** (`UserPromptSubmit`): the user's edits in `art ui`. Every
   `.tex` save and drag commits an `editor` node (#196, #204); before each
   message this hook tells the host which jobs the user changed since the last
   message, and what changed, so the host builds on that HEAD instead of
   overwriting it. The first prompt of a session only sets the cursor.
+- **The memory gate** (#202), also on `user-prompt`: `observe` runs on the
+  message itself. A message that may state a standing preference adds one line
+  asking the host to confirm it with the user and call `record_preference`; a
+  clear low-stakes one ART saves itself, and the line says so. Anything else
+  adds nothing.
 - **`session-start`** (`SessionStart`, matcher `compact`): pinned preferences
   after compaction. A model-written summary is where negated preferences get
   lost (#129), so the pins come back from ART word for word, with the job the
@@ -15,8 +20,7 @@ Two things a host loses without them (docs/harness.md § 10, § 13):
 A hook must never break the user's prompt: any failure prints nothing and exits
 0. Output is Claude Code's JSON (`hookSpecificOutput.additionalContext`), or
 nothing when there is nothing to say. Per-session state (the event cursor and
-the current job) lives in `$ART_DATA_DIR/sessions/<session_id>.json`. The
-#202 memory gate (`observe`) will join `user-prompt`.
+the current job) lives in `$ART_DATA_DIR/sessions/<session_id>.json`.
 
 Model-free by rule (`tests/test_harness_boundary.py`).
 """
@@ -109,10 +113,11 @@ def _describe(user_id: UUID, node: Dict) -> List[str]:
     return lines or ["no content change"]
 
 
-def user_prompt(user_id: UUID, payload: Dict[str, Any]) -> Optional[str]:
+def _editor_edits(user_id: UUID, session_id: str) -> Optional[str]:
+    """The user's editor edits since the last message, or None. The first prompt of a session only
+    sets the cursor."""
     from harness import tree
 
-    session_id = str(payload.get("session_id") or "default")
     state = load_state(session_id)
     if state is None:
         save_state(session_id, {"cursor": _latest_event(user_id), "job_id": None})
@@ -143,15 +148,38 @@ def user_prompt(user_id: UUID, payload: Dict[str, Any]) -> Optional[str]:
     return "\n".join(out)
 
 
+def _memory_note(user_id: UUID, payload: Dict[str, Any], session_id: str,
+                 allow_writes: bool) -> Optional[str]:
+    """The memory gate (#202) on the user's message: one line for the host when it may be a standing
+    preference (confirm, then `record_preference`), or when ART saved one. Never raises."""
+    prompt = payload.get("prompt")
+    if not isinstance(prompt, str) or not prompt.strip():
+        return None
+    try:
+        from harness import memory
+        return memory.observe(user_id, prompt, session_id, write=allow_writes,
+                              bounded=True).get("note") or None
+    except Exception as exc:                          # the gate must never break the prompt
+        log.warning("memory gate failed: %s", exc)
+        return None
+
+
+def user_prompt(user_id: UUID, payload: Dict[str, Any], allow_writes: bool = True) -> Optional[str]:
+    session_id = str(payload.get("session_id") or "default")
+    edits = _editor_edits(user_id, session_id)
+    memory = _memory_note(user_id, payload, session_id, allow_writes)
+    return "\n".join(part for part in (edits, memory) if part) or None
+
+
 # ── session-start (after compaction) ─────────────────────────────────────────
 
-def session_start(user_id: UUID, payload: Dict[str, Any]) -> Optional[str]:
-    from harness.tools import art_briefing
+def session_start(user_id: UUID, payload: Dict[str, Any], allow_writes: bool = True) -> Optional[str]:
+    from harness.tools import art_pins
 
     if payload.get("source") not in (None, "compact"):
         return None
-    pins = art_briefing(user_id)["pins"]
     state = load_state(str(payload.get("session_id") or "default")) or {}
+    pins = art_pins(user_id, job_id=state.get("job_id"))["pins"]
     out = []
     if pins:
         out.append("ART pinned preferences, verbatim (restored after compaction; honour "
@@ -169,12 +197,14 @@ EVENTS = {"user-prompt": ("UserPromptSubmit", user_prompt),
           "session-start": ("SessionStart", session_start)}
 
 
-def run(event: str, payload: Dict[str, Any], user_id: Optional[UUID]) -> Optional[Dict]:
-    """The hook's JSON reply, or None to say nothing."""
+def run(event: str, payload: Dict[str, Any], user_id: Optional[UUID],
+        allow_writes: bool = True) -> Optional[Dict]:
+    """The hook's JSON reply, or None to say nothing. `allow_writes` False (a read-only store)
+    keeps the memory gate from writing."""
     name, fn = EVENTS[event]
     if user_id is None:
         return None
-    text = fn(user_id, payload)
+    text = fn(user_id, payload, allow_writes=allow_writes)
     if not text:
         return None
     return {"hookSpecificOutput": {"hookEventName": name, "additionalContext": text}}
@@ -192,8 +222,8 @@ def main(argv: Sequence[str]) -> int:
         raw = sys.stdin.read()
         payload = json.loads(raw) if raw.strip() else {}
         from harness.runtime import bootstrap
-        user_id, _ = bootstrap(None, None)
-        reply = run(event, payload, user_id)
+        user_id, writes = bootstrap(None, None)
+        reply = run(event, payload, user_id, allow_writes=writes)
         if reply:
             sys.stdout.write(json.dumps(reply) + "\n")
     except Exception as exc:                          # never block the prompt

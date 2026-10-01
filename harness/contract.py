@@ -56,7 +56,11 @@ class Pin(_Model):
     text: str
     polarity: Optional[str] = None
     target_key: Optional[str] = None
+    target_term: Optional[str] = None
     scope: Optional[str] = None
+    scope_value: Optional[str] = None
+    negative_pin: bool = Field(
+        False, description="A strength-5 suppression: what it names must never reach the page.")
 
 
 class Preference(_Model):
@@ -90,6 +94,94 @@ class BriefingOutput(_Output):
         default_factory=list, description="Yes/no questions to answer for each posting in "
                                           "open_job's rule_answers.")
     counts: Dict[str, int] = Field(default_factory=dict)
+
+
+class PinsInput(_Model):
+    role_family: Optional[str] = Field(
+        None, description="Also the pins scoped to this role family (e.g. data_science).")
+    job_id: Optional[str] = Field(None, description="Also the pins scoped to this job.")
+
+
+class PinsOutput(_Output):
+    role_family: Optional[str] = None
+    job_id: Optional[str] = None
+    pins: List[Pin] = Field(default_factory=list,
+                            description="Strength-5 preferences, word for word. Honour every one.")
+    count: int = 0
+
+
+# ── the memory gate (#202) ───────────────────────────────────────────────────
+
+class ObserveInput(_Model):
+    text: str = Field(description="The user's message, as they wrote it.")
+    session_id: Optional[str] = Field(
+        None, description="The host's session id, so a job-scoped preference can use the job "
+                          "this session is working on.")
+
+
+class ObserveOutput(_Output):
+    action: Optional[Literal["drop", "host", "write"]] = Field(
+        None, description="drop: not a preference, nothing to do. host: it may be one; confirm "
+                          "with the user and call record_preference. write: ART saved it.")
+    reason: Optional[str] = Field(None, description="Why: no_cue, uncertain, hard_preference, "
+                                                    "no_target, negation_disagrees, auto, ...")
+    candidate: bool = Field(False, description="Whether the message carried a preference cue.")
+    negated: bool = Field(False, description="Whether the message reads as a wish to leave "
+                                             "something out.")
+    p: Optional[float] = Field(None, description="Jev's probability that it is a lasting "
+                                                 "preference; absent when Jev did not answer.")
+    source: Optional[Literal["jev", "cache", "fallback", "prefilter"]] = Field(
+        None, description="Who decided: jev, its cache, or the prefilter alone (no key, mode "
+                          "off, an API error).")
+    guess: Optional[Dict[str, Any]] = Field(
+        None, description="The gate's reading: direction, target, strength, scope.")
+    preference_id: Optional[str] = Field(None, description="The stored preference, on write.")
+    note: Optional[str] = Field(None, description="What to tell the host, as the hook says it.")
+
+
+class RecordPreferenceInput(_Model):
+    text: str = Field(description="The preference as a standalone instruction, in the user's "
+                                  "own words where you can. Never softened or inferred.")
+    polarity: Literal["emphasize", "suppress", "reframe"] = Field(
+        description="emphasize: feature or keep it. suppress: leave it out. reframe: keep it "
+                    "but present it differently, or a format rule.")
+    target: Optional[str] = Field(
+        None, description="What it is about: a key from list_items ('skill:python', "
+                          "'proj:<name>', 'exp:<title>|<company>'), 'section:<name>' "
+                          "(education, experience, projects, skills, achievements), or a bare "
+                          "topic ('GPA'). Required for emphasize and suppress.")
+    strength: int = Field(
+        3, ge=1, le=5, description="1 a passing remark to 5 an absolute rule the user stated "
+                                   "as non-negotiable ('never'). A 5 becomes a hard gate on "
+                                   "every plan, and a 5 suppression a negative pin: use it only "
+                                   "for what the user insisted on.")
+    scope: Literal["global", "role_family", "job"] = Field(
+        "global", description="global: every resume. role_family or job: only that one.")
+    scope_value: Optional[str] = Field(
+        None, description="The role family (e.g. data_science) or the job id; required unless "
+                          "global.")
+    quote: Optional[str] = Field(None, description="The user's words this rests on.")
+
+
+class RecordPreferenceOutput(_Output):
+    status: Optional[Literal["stored", "superseded", "already_recorded", "refused"]] = None
+    reason: Optional[str] = Field(None, description="Why a preference was refused.")
+    preference_id: Optional[str] = None
+    text: Optional[str] = None
+    polarity: Optional[str] = None
+    target_key: Optional[str] = None
+    target_term: Optional[str] = None
+    target_resolved: bool = Field(False, description="Whether the target is an item in the "
+                                                     "knowledge graph or a section.")
+    scope_type: Optional[str] = None
+    scope_value: Optional[str] = None
+    strength: Optional[int] = None
+    pinned: bool = Field(False, description="Strength 5: a hard gate, restored word for word "
+                                            "after compaction.")
+    negative_pin: bool = Field(False, description="A strength-5 suppression.")
+    supersedes: Optional[str] = Field(None, description="The earlier preference this replaced.")
+    suggestions: List[str] = Field(default_factory=list,
+                                   description="Catalog keys the target may have meant.")
 
 
 # ── kg_search / list_items / get_item ────────────────────────────────────────
@@ -725,6 +817,19 @@ def _tools():
     return tools
 
 
+def _memory():
+    from harness import memory
+    return memory
+
+
+_OBSERVE_FIELDS = ("action", "reason", "candidate", "negated", "p", "source", "guess",
+                   "preference_id", "note")
+
+
+def _observe_out(decision: Dict[str, Any]) -> Dict[str, Any]:
+    return {k: decision.get(k) for k in _OBSERVE_FIELDS}
+
+
 NO_USER = ToolError(code="no_user", message=(
     "No ART user is bound. Pass --user-id (or set ART_MCP_USER_ID) when starting ART."))
 READ_ONLY = ToolError(code="read_only", message=(
@@ -737,6 +842,37 @@ TOOLS: List[ToolSpec] = [
         "cards for this candidate. Call before planning any resume.",
         BriefingInput, BriefingOutput,
         lambda uid, role_family=None: _tools().art_briefing(uid, role_family)),
+    ToolSpec(
+        "art_pins",
+        "The candidate's pins word for word: strength-5 preferences, negative pins included. "
+        "Call it to restore them after compaction or when the briefing is out of reach. Same "
+        "set and scoping as art_briefing's pins; pass job_id to include a job's own.",
+        PinsInput, PinsOutput,
+        lambda uid, role_family=None, job_id=None: _tools().art_pins(uid, role_family, job_id)),
+    ToolSpec(
+        "observe",
+        "Run ART's memory gate on one user message. Returns drop (nothing to remember), host "
+        "(it may be a standing preference: confirm with the user, then call "
+        "record_preference) or write (ART saved a clear, low-stakes preference itself; tell "
+        "the user). ART never saves a strength-5 preference or a negative pin without your "
+        "confirmation. Claude Code's hook already does this on every prompt; call it yourself "
+        "on a host with no hook. Writes.",
+        ObserveInput, ObserveOutput,
+        lambda uid, text, session_id=None: _observe_out(_memory().observe(uid, text, session_id)),
+        read_only=False),
+    ToolSpec(
+        "record_preference",
+        "Store one standing preference the user stated or confirmed, or refuse it with a "
+        "reason. Resolves the target against their knowledge graph (an exact key, label or "
+        "name) and keeps a replaced preference, superseded. Strength 5 makes it a hard gate "
+        "restored word for word after compaction, and a 5 suppression a negative pin: only for "
+        "what the user insisted on. Only what the user said. Writes.",
+        RecordPreferenceInput, RecordPreferenceOutput,
+        lambda uid, text, polarity, target=None, strength=3, scope="global", scope_value=None,
+               quote=None:
+            _memory().record_preference(uid, text, polarity, target, strength, scope,
+                                        scope_value, quote),
+        read_only=False),
     ToolSpec(
         "kg_search",
         "Search the candidate's knowledge graph by words. Returns stable keys for get_item.",
