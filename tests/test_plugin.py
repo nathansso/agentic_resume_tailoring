@@ -2,7 +2,7 @@
 
 The plugin is text a model reads, so the tests hold it to the code: every tool
 a skill or command tells the model to call exists in the contract, and none of
-the tools still to come (#199, #202) is taught early. The hooks are tested as
+the tools still to come (#199) is taught early. The hooks are tested as
 functions and through `art hook` with a real stdin payload.
 """
 
@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PLUGIN = ROOT / "plugin"
 TEXTS = sorted([*PLUGIN.glob("skills/*/SKILL.md"), *PLUGIN.glob("commands/*.md")])
 # Tools docs/harness.md § 9 plans but the code does not expose yet.
-NOT_YET = {"observe", "record_preference", "record_feedback", "art_pins", "check_draft"}
+NOT_YET = {"record_feedback", "check_draft"}
 
 
 def _json(path):

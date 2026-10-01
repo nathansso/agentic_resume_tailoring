@@ -200,5 +200,33 @@ Call `execute_plan({program})`. Read the result:
 
 - To see versions, use `history` and `diff_nodes`. To go back, use `checkout`: show
   the diff and confirm with the user first.
-- If the user states a lasting preference ("never list coursework"), tell them it
-  will be remembered once ART's memory gate ships. For now, follow it in this session.
+- Remember what the user says they want. See the next section.
+
+## Remembering preferences
+
+A lasting preference is a rule about how every resume (or one job's) should read: "never
+list coursework", "always lead with the recommender project". A one-off edit ("shorten
+that bullet") and a fact about their experience are not; facts go to `upsert_items`.
+
+- ART's prompt hook runs its memory gate on every message. When it adds a line starting
+  "ART: this message may be a standing preference", **ask the user** in your reply whether
+  it is a lasting rule, saying how you read it: what it is about, whether to feature it or
+  leave it out, how firm, and whether it is for every resume or only this job. Call
+  `record_preference` only after they say yes.
+  - `strength` is 1 (a passing remark) to 5 (an absolute rule they stated as
+    non-negotiable, such as "never"). A 5 becomes a hard gate on every plan, and a 5
+    suppression is a negative pin: what it names can never reach the page. Use 5 only for
+    what they insisted on. ART never saves a 5 without your confirmation.
+  - `target` is a key from `list_items`, `section:<name>` or a topic ("GPA"). It is
+    matched exactly: if `suggestions` come back, the target did not resolve; ask or retry
+    with a key.
+  - `scope` is `global` unless they said it is for one job (`job`, with the job id) or one
+    kind of role (`role_family`).
+  - A different polarity or strength for the same item and scope replaces the old preference;
+    the old one stays on record, superseded.
+- When a line says "ART saved a standing preference from this message", tell the user in
+  your reply what was saved. If it is wrong, correct it with `record_preference`.
+- The hook may not exist on every host. Without it, call `observe` with the user's message
+  yourself and follow what it returns (`drop`, `host`, `write`).
+- `art_pins` returns the pins word for word, for example after your context was trimmed.
+  Honour every one.

@@ -103,7 +103,21 @@ tailoring starts from it instead of regenerating.
   (`data_science`, `machine_learning`, `software_engineering`, ...). A new job in that role
   family then starts as a copy of it. Saving a track again replaces its baseline.
 
-## 8. Confirm
+## 8. Import their standing preferences
+
+ART remembers new statements on its own, but not the rules the user already follows. On a
+first setup, or when they mention rules they apply to every resume, ask for them: things
+to never write, things to always include, how they want dates or wording handled. Then:
+
+- Call `art_pins` to see what ART already holds, so you don't record it twice.
+- For each rule the user confirms, call `record_preference` with their own words as
+  `text`, a `polarity` (`emphasize`, `suppress`, or `reframe` for a format rule), the
+  `target` (a key from `list_items`, `section:<name>` or a topic), and a `strength`.
+  Strength 5 is for rules they call non-negotiable ("never"); a 5 suppression becomes a
+  negative pin that can never reach the page.
+- Never record a rule the user did not state or confirm.
+
+## 9. Confirm
 
 Call `list_items` again and summarize what is stored by kind. Point out anything that
 looks duplicated or thin, and ask the user whether to fix it.

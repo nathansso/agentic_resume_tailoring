@@ -37,14 +37,18 @@ when you ask Claude to tailor a resume or update your experience.
 - **Before every message:** if you edited a resume in the editor since your last
   message, Claude is told what you changed, so it builds on your edits instead of
   overwriting them.
+- **Also before every message:** ART's memory gate reads your message. If it may state a
+  lasting preference ("never mention Kafka"), Claude is asked to confirm it with you and
+  record it. A clear, low-stakes one ("lead with Python") ART saves itself and Claude
+  tells you. A rule you call absolute ("never", a negative pin) is never saved without
+  your confirmation. The gate asks TypeSafe's Jev when `TYPESAFE_API_KEY` is set (your
+  message leaves your machine in that request); without a key it only flags messages for
+  Claude to confirm and saves nothing on its own.
 - **After compaction:** your pinned preferences are re-injected word for word, along
   with the job you were working on.
 
-Both hooks are local and make no model calls. If either fails, it stays silent rather
-than blocking your message.
+If a hook fails, it stays silent rather than blocking your message.
 
 ## Not yet
 
-Recording preferences from conversation (#202), the approved-bullet library
-(`/art:library`, #199), and scoring a result as feedback are planned and not part of
-this version.
+Scoring a result as feedback (`record_feedback`) is planned and not part of this version.

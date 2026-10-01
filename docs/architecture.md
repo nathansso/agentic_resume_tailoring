@@ -316,6 +316,13 @@ preferences are *inferred*, so a pipeline allowed to write this table would supp
 item, observe the suppression, infer a standing preference from it, and cite that back as
 the user's own instruction. Tests pin it.
 
+**The harness path (#202)** adds one more way in: the memory gate (`harness/memory.py`) reads
+the user's own message, never ART's or the host's output, so nothing launders. It stays bounded
+by the same worry: it writes only at strength 4 or less, never replaces a preference the user
+holds, never writes a strength-5 preference or a negative pin (those go to the host for the
+user to confirm through `record_preference`), and stamps what it wrote
+(`provenance.source == "memory_gate"`).
+
 ### 2.6 Layout overrides (issue #118)
 
 `UserJobResult.layout_overrides` is nullable JSON, `{section_order, skills, bullets}`,

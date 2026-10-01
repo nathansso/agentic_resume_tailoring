@@ -11,6 +11,7 @@ if one is given, and list:
    polarity (emphasize or suppress) and strength.
 3. **Job-scoped rules**: each question, the field it sets, and its values.
 
-Preferences can't be recorded from here yet; ART's memory gate is coming. If I state
-a new standing preference, follow it for this session and say so. For a job-scoped
-rule, record it with `upsert_items` (kind `rule`), as the `art-setup` skill describes.
+If I state a new standing preference, confirm it with me and record it with
+`record_preference`, as the `art-tailor` skill describes. For a posting-dependent fact
+(such as a graduation date), record a job-scoped rule with `upsert_items` (kind `rule`),
+as the `art-setup` skill describes. Call `art_pins` if you need the pins on their own.

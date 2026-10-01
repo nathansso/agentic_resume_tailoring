@@ -82,7 +82,8 @@ def build_server(user_id=None, allow_writes: bool = True):
             "ART's knowledge graph. Call art_briefing first and honour its pins verbatim; "
             "use get_profile for the header, list_items or kg_search to find items, and "
             "get_item for full records. Never state a fact about the candidate that these "
-            "tools do not return."
+            "tools do not return. When the user states a lasting preference, confirm it and "
+            "record it with record_preference."
         ),
     )
     for spec in TOOLS:

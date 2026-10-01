@@ -15,6 +15,8 @@ boundary test (`tests/test_harness_boundary.py`) keeps it that way.
 - `negative_pins`: does a changed text mention a pinned topic in other words (#232).
 - `coverage`: does a bullet show the candidate meets a posting requirement (#126), the
   `semantic_coverage` target.
+- `memory_gate`: is a user message a standing preference, and what is it (#202); routed
+  by `harness/memory.py`, which never lets the gate write a strength-5 preference.
 
 Nothing is imported here eagerly, so `harness.acceptance` can read the support
 thresholds without loading the client or the database.

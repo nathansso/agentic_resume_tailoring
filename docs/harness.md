@@ -110,7 +110,7 @@ every deterministic computation in code.
 | Cited-bullet support (#193) | choice per revised bullet | Whether the cited evidence supports the new bullet: `supported`, `adds_unsupported`, `contradicts`. Scored by p(adds_unsupported) + p(contradicts), which is 1 − p(supported). Blocks at a score ≥ 0.85, surfaces 0.35–0.85 as `review` (fitted on 89 labelled pairs, #237; `eval/support_labels/REPORT.md`) | Unchecked; lexical drift still gates |
 | Negative-pin mention (#232) | noul per (changed bullet or item field, pin) | Whether a changed text mentions or refers to a pinned topic in other words (a paraphrase, or a product, employer or project of the topic). Asked positively, never "does it avoid", and with the pin's statement stripped of its directive, or the bare term when a negation or comparison would remain. Blocks at p ≥ 0.85 as a `preferences` violation in the term match's format, surfaces 0.15–0.85 as `review` (fitted on 74 labelled pairs, #232; `eval/negative_pin_labels/REPORT.md`). Jev only adds hits; the term match always runs | Unchecked; the term match alone gates |
 | Requirement coverage (#126) | noul per (bullet or education entry, requirement) | Whether one bullet, or one education entry as text, shows the candidate meets one required or preferred requirement of the posting (`incidental` ones are left out), by that text alone, never the page. Asked positively ("Does this bullet show that the candidate meets this requirement: …?"), with stated interest, plans and "eager to learn" named as not meeting it, and (v2) a working-style requirement (deadlines, process, communication, collaboration, ownership, attention to detail) asked for a stated instance. An education entry gets its own question (`education_covered@v1`): it asks what the entry states, treats a degree marked expected as enrollment and not as an earned degree, and never compares dates or levels; a finished degree is shown without its date, because Jev reads a past date as a future one. A requirement is covered when some bullet or entry scores p ≥ 0.65 (fitted on 131 pairs, #126; `eval/coverage_labels/REPORT.md`); `semantic_coverage` is the criticality-weighted share covered, a **target** beside the literal `coverage`, never combined with it. Answers are cached per (bullet or entry, requirement), so a node pays for the bullets it changed only | Unchecked; the target is absent and only the literal targets decide |
-| Memory gate (#202) | noul, choice, score | Is the message a standing preference; emphasize or suppress; strength 1–5 (#129's scale) | Heuristics, then host extraction |
+| Memory gate (#202) | noul, choice, score, choice, one request per candidate message | Behind a heuristic prefilter (cue words; non-candidates are dropped with no call). The state is the message text alone. Four questions, all positive: is it a lasting preference about the resume (noul; one-off edits, questions, facts and small talk named as not); emphasize, suppress, format rule or none (choice); strength 1–5 on #129's scale, in its own wording (score); which catalog item it is about, or `no_match` (choice over the user's skills, roles, projects and sections). Routes on p: below 0.25 drop, 0.25–0.65 to the host, at or above 0.65 write when the target is an item (never a whole section) picked at p ≥ 0.75 and named in the message, the direction agrees with the prefilter's negation flag, and the strength is 4 or less. **A strength-5 preference, a negative pin or a preference about a whole section is never written by the gate**; it goes to the host for the user to confirm through `record_preference`. Fitted on 111 user-confirmed synthetic messages, #202 (`eval/memory_gate_labels/REPORT.md`) | Prefilter alone: every candidate goes to the host, nothing is written |
 | Variant choice (#199) | choice per item, with no-match | Which approved bullet variant fits the job; no-match means the host writes a new one | Term overlap (shipped in #229): the approved variant whose content tokens best overlap the job's weighted terms (`relevance_density`'s tokenization, each term at its weight over the heaviest's, so uniform weights give exactly `relevance_density`), at or above `VARIANT_MATCH_FLOOR` (0.10); below it, no-match |
 | Track baseline (#199) | choice | Which baseline a new job branches from | Role-family lookup (shipped in #229): the track whose name equals the job's role family, else none. The family is the host's (`open_job` `metadata.role_family`), else a deterministic title keyword map (`agents/job_card.TITLE_ROLE_FAMILIES`), else `other`; never the LLM classifier |
 | Eligibility rules (#192) | noul per rule | Job-scoped variables (e.g. graduation date when the posting requires post-internship enrollment) | Host asks the user |
@@ -371,7 +371,7 @@ construction.
   needs a matching cut" as trade hints.
 - **Block render cache.** Lines per bullet, keyed by (text hash, template hash), measured
   once.
-- **Negative pins.** Facts that must never render, enforced as hard gates (#202).
+- **Negative pins.** Facts that must never render, enforced as hard gates (#198, #232). A pin is a strength-5 preference the user confirmed through `record_preference` (#202); the memory gate never writes one on its own.
 - **Plan approval.** The skill shows the plan and waits; users can turn this off for quick
   re-tailors.
 - **Repo cross-check.** For project claims, the host verifies against the local checkout,
@@ -382,7 +382,7 @@ construction.
 | Group | Tool | Takes → returns |
 |---|---|---|
 | Context | `art_briefing` | role family → pins, negative pins, persona traits, JobCards with rejections |
-| | `art_pins` | → strength-5 preferences and negative pins, verbatim |
+| | `art_pins` | role family, job → strength-5 preferences and negative pins, verbatim; the set `art_briefing` pushes, plus a job's own (#202) |
 | Retrieval | `kg_search` | query, kinds → items with keys and evidence IDs |
 | | `list_items` | kind → every key and title, no query needed (#191) |
 | | `get_item` | key → record, evidence; an experience or project also lists its approved variants (id, text, tags, cites) (#229) |
@@ -403,8 +403,8 @@ construction.
 | | `history` | job → every version, oldest first |
 | Check & render | `check_draft` | node → metric vector by role |
 | | `render` | node, format → path, page count, lines used |
-| Feedback & memory | `observe` | user text → gate decision |
-| | `record_preference` | typed preference → stored or refused with reason |
+| Feedback & memory | `observe` | user text → gate decision: `drop`, `host` (confirm with the user, then `record_preference`) or `write` (#202) |
+| | `record_preference` | typed preference (text, polarity, target, strength, scope) → stored, superseded, already recorded, or refused with a reason; strength 5 and negative pins allowed here, because this is the confirmation (#202) |
 | | `record_feedback` | node, 1–5 score, edits → logged, JobCard rebuilt, promotion candidates |
 
 ## 10. Memory and compaction (#202)
@@ -421,9 +421,46 @@ flowchart LR
 A host left to itself under-calls memory tools (When2Tool, #105), so the hook runs on
 every message. Claude Code compacts with a model-written summary, which is where negated
 preferences disappear (#129: 14.8% F1 on opposed-case retrieval), so pins come back from
-ART word for word. Jev is documented as weak on exactly this negation workload. #202
-measures it against heuristics alone, reports the negation cases separately, and sets the
-thresholds τ from that result.
+ART word for word. Jev is documented as weak on exactly this negation workload, so #202
+measured it against heuristics alone on 111 user-confirmed synthetic messages and reports the
+negation cases separately (`eval/memory_gate_labels/REPORT.md`).
+
+**The gate** (`harness/decisions/memory_gate.py`, `harness/memory.py`):
+
+- **Prefilter.** Cue words ("always", "never", "don't", "prefer", "make sure", "from now
+  on", "for this job", ...) mark a candidate; anything else is dropped with no call. The
+  prefilter also sets a `negated` flag from negation cues, the backstop for Jev's weakness:
+  a negated message Jev reads as emphasize, or a suppress with no negation cue, goes to the
+  host. A message over 1,200 characters is pasted material and dropped.
+- **Jev.** One request per candidate with the message alone as the state and four positive questions: standing preference,
+  direction, strength, target. Jev picks the target from the user's catalog and cannot name
+  one; the gate also requires the message to say the item's name, because a loosely
+  touched item ("leave my GPA off") binds to the wrong one. The previous assistant turn
+  was measured and is not sent: on twelve short messages that lean on it ("never list
+  that again") it lifted the standing call from 5 of 8 right to 8 of 8, but the thresholds
+  are fitted without it, and the hook has no turn to send.
+- **Routing.** p below τ_lo = 0.25: drop. From τ_lo to τ_hi = 0.65, or whenever a condition
+  below fails: the `user-prompt` hook adds one line asking the host to confirm with the user
+  and call `record_preference`, with the gate's guess. At or above τ_hi, ART writes when the
+  direction is emphasize or suppress, the target is an item (not a whole section), resolved (p ≥ 0.75) and named, the
+  negation agrees, the strength is 4 or less, the message is one statement of at most 300
+  characters, and a job-scoped message has a known job (the session's current job from hook
+  state). The hook then tells the host what it saved.
+- **Never written by the gate:** a strength-5 preference or a negative pin (they become
+  gates that refuse plans; this is a safety rule, not a threshold), a preference about a
+  whole section (a misreading suppresses or reorders all of it: also a code rule), a format rule, a
+  replacement of a preference the user holds, a role-scoped preference, anything when the
+  store is read-only. With no key, mode `off` or an API error the prefilter alone routes:
+  every candidate to the host, nothing written.
+- **`record_preference`** is the confirmation path and writes anything valid, strength 5
+  included; a changed strength or polarity for the same subject and scope supersedes the old
+  row, which stays.
+- **One-time import.** The gate captures only new statements, so `art-setup` tells the host
+  to import the user's existing standing preferences and negative pins through
+  `record_preference`. There is no import path of its own.
+
+Thresholds are constants in `memory_gate.py`, with a drift test, like the other Jev points. τ_hi is fitted as if the code rules above did not exist and is floored at 0.5: a write needs Jev to call the message more likely than not a preference.
+Consolidating every fitted threshold into one policy artifact is a follow-up.
 
 ## 11. Tailoring history as a tree (#196)
 
@@ -594,16 +631,16 @@ art@art` installs it.
 - **Hooks** (`art hook <event>`, `harness/hooks.py`), local and model-free:
   - `UserPromptSubmit` tells the host which jobs the user edited in `art ui` since the
     last message, and what changed. It keeps a per-session event cursor in
-    `$ART_DATA_DIR/sessions/`.
+    `$ART_DATA_DIR/sessions/`. It also runs the memory gate (#202) on the message: one
+    line when it may be a standing preference, or when ART saved one.
   - `SessionStart` with matcher `compact` re-injects the pins verbatim, plus the
-    session's current job.
+    session's current job and that job's own pins.
 - **Two tools added for the plugin:**
   - `render` writes a node's `.tex` and PDF to `$ART_DATA_DIR/applications/<Company>_<Role>/`
     and reports the pages and the line budget. The user's `.tex` edits win, job-rule
     education values are laid over the stored rows, and nothing is trimmed silently.
   - `update_profile` sets the header fields `get_profile` returns.
-- **Not yet taught to the model:** `observe` / `record_preference` (#202), the library
-  (#199) and `record_feedback`. `tests/test_plugin.py` fails if a skill or command names
+- **Not yet taught to the model:** `record_feedback` and `check_draft`. `tests/test_plugin.py` fails if a skill or command names
   a tool the contract lacks.
 
 ### Running the harness (#189, #191)
