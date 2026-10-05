@@ -6,6 +6,9 @@
     art hook user-prompt < hook.json             # Claude Code plugin hooks (#201)
     art hooks codex --write                      # install those hooks for Codex (#203)
     art jev status|export|import                 # the Jev decision cache (#193)
+    art export --out backup.zip                  # back up a profile (#195)
+    art import backup.zip                        # restore it into the local store
+    art import --from-supabase --source-url ... --user-id ...   # one-time web-app migration
 
 `art ui` hands off to `web.local_ui`, imported only when asked for, so the
 tool path never loads the web stack. `art-mcp` is `harness.mcp_server:main`.
@@ -31,6 +34,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if argv[:1] == ["jev"]:
         from harness.decisions.recordings import main as jev_main
         return jev_main(argv[1:])
+    if argv[:1] in (["export"], ["import"]):
+        from harness.export_import import main as port_main
+        return port_main(argv)
     if argv[:1] == ["ui"]:
         try:
             import fastapi  # noqa: F401
