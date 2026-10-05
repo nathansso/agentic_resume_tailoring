@@ -94,17 +94,20 @@ def profile_catalog(name: Optional[str] = None) -> List[Dict[str, str]]:
                         projects=[p["name"] for p in prof.projects])
 
 
-def ask(pair: Dict[str, Any], catalog, previous: Optional[str] = None):
-    """The four answers `memory_gate.py` asks for this message, in the current mode."""
+def ask(pair: Dict[str, Any], catalog, previous: Optional[str] = None, version: Optional[str] = None):
+    """The four answers `memory_gate.py` asks for this message, in the current mode. This script is #202's
+    measurement: always the v1 questions (with `previous`, the legacy v1-plus-turn state it was recorded under).
+    The v2 questions are `fit_memory_gate_context.py`'s."""
     from harness.decisions import memory_gate
-    return memory_gate.ask(pair["message"], catalog, previous)
+    return memory_gate.ask(pair["message"], catalog, previous, version=version or memory_gate.VERSION)
 
 
-def make_row(pair: Dict[str, Any], catalog, answers, previous: Optional[str] = None) -> Dict[str, Any]:
+def make_row(pair: Dict[str, Any], catalog, answers, previous: Optional[str] = None,
+             version: Optional[str] = None) -> Dict[str, Any]:
     from harness.decisions import memory_gate as mg
 
     pre = mg.prefilter(pair["message"])
-    guess = mg.parse_answers(answers, catalog, pair["message"])
+    guess = mg.parse_answers(answers, catalog, pair["message"], version or mg.VERSION)
     return {**pair, "pre": pre, "guess": guess, "previous": previous, "answers": answers,
             "jev_pref": bool(guess and guess.p >= JEV_YES)}
 
@@ -172,9 +175,10 @@ def _mid_pick(candidates: Sequence[float], floor_p: float, kept_p: Sequence[floa
     return min(candidates, key=lambda t: (round(abs(t - mid), 6), -t))
 
 
-def fit_target(rows) -> Dict[str, Any]:
+def fit_target(rows, floor: float = 0.0) -> Dict[str, Any]:
     """TAU_TARGET: among the true preferences Jev binds to an item (target not no_match), no wrong binding,
-    then the most right ones, then the middle of the gap."""
+    then the most right ones, then the middle of the gap, over the grid values at or above `floor` (0 for v1;
+    v2 floors it, since its set has no wrong named binding to bound it from below)."""
     every = [r for r in rows if r["is_preference"] and r["guess"] and r["guess"].target_key]
     unnamed = [r for r in every if not r["guess"].target_named]       # the message does not say the name
     binds = [r for r in every if r["guess"].target_named]
@@ -184,8 +188,9 @@ def fit_target(rows) -> Dict[str, Any]:
     def stats(t):
         return (sum(r["guess"].target_p >= t - 1e-9 for r in wrong),
                 sum(r["guess"].target_p >= t - 1e-9 for r in right))
-    best = min((stats(t)[0], -stats(t)[1]) for t in GRID)
-    cands = [t for t in GRID if (stats(t)[0], -stats(t)[1]) == best]
+    grid = [t for t in GRID if t >= floor - 1e-9]
+    best = min((stats(t)[0], -stats(t)[1]) for t in grid)
+    cands = [t for t in grid if (stats(t)[0], -stats(t)[1]) == best]
     top_wrong = max((r["guess"].target_p for r in wrong), default=0.0)
     kept = [r["guess"].target_p for r in right if r["guess"].target_p >= min(cands) - 1e-9]
     tau = _mid_pick(cands, top_wrong if best[0] == 0 else 0.0, kept)
@@ -265,10 +270,10 @@ def fit_lo(rows, tau_hi: float) -> Dict[str, Any]:
             "lowest_pref": min(prefs, key=lambda r: r["guess"].p) if prefs else None}
 
 
-def recommend(rows) -> Dict[str, Any]:
+def recommend(rows, target_floor: float = 0.0) -> Dict[str, Any]:
     """The three thresholds. TAU_TARGET first (it decides which bindings count), then TAU_HI on the writes
     it allows (it does not depend on TAU_LO), then TAU_LO below it."""
-    tgt = fit_target(rows)
+    tgt = fit_target(rows, target_floor)
     hi = fit_hi(rows, 0.0, tgt["tau_target"])
     lo = fit_lo(rows, hi["tau_hi"])
     return {"tau_target": tgt["tau_target"], "tau_hi": hi["tau_hi"], "tau_lo": lo["tau_lo"],
@@ -591,7 +596,9 @@ def render_report(rows, ctx_rows, meta: Dict[str, Any]) -> str:
     # context
     o.append("## The previous assistant turn\n")
     o.append("Twelve short messages that lean on the turn before (`that`, `it`, `yes, always`), asked with the message "
-             "alone and with the previous assistant turn in the state. The shipped gate asks with the message alone.\n")
+             "alone and with the previous assistant turn in the state (the v1 questions over a legacy state: #202's "
+             "measurement). The `memory_gate@v1` gate asks with the message alone; #244 adds `memory_gate@v2`, which "
+             "reads the turn, and measures it on a larger set in `context/`.\n")
     body = []
     for c in ctx_rows:
         a, w, p = c["alone"], c["with_previous"], c["pair"]
@@ -701,7 +708,7 @@ def cmd_record(args) -> int:
     failures = []
     jobs = [(p, None) for p in pairs] + [(p, None) for p in ctx] + [(p, p["previous"]) for p in ctx]
     for i, (pair, previous) in enumerate(jobs, 1):
-        answers = memory_gate.ask(pair["message"], catalog, previous)
+        answers = memory_gate.ask(pair["message"], catalog, previous, version=memory_gate.VERSION)
         bad = next((a for a in answers if a.fell_back), None)
         if bad is not None:
             failures.append(f"{pair['id']}: {bad.reason}")

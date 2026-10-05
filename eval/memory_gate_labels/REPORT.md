@@ -194,7 +194,7 @@ At each TAU_LO (TAU_HI fixed at 0.65): true preferences dropped (of those Jev is
 
 ## The previous assistant turn
 
-Twelve short messages that lean on the turn before (`that`, `it`, `yes, always`), asked with the message alone and with the previous assistant turn in the state. The shipped gate asks with the message alone.
+Twelve short messages that lean on the turn before (`that`, `it`, `yes, always`), asked with the message alone and with the previous assistant turn in the state (the v1 questions over a legacy state: #202's measurement). The `memory_gate@v1` gate asks with the message alone; #244 adds `memory_gate@v2`, which reads the turn, and measures it on a larger set in `context/`.
 
 | id | label | alone (p / direction / target) | with previous turn |
 |---|---|---|---|

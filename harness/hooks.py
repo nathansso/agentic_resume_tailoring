@@ -11,7 +11,10 @@ Three things a host loses without them (docs/harness.md § 10, § 13):
   message itself. A message that may state a standing preference adds one line
   asking the host to confirm it with the user and call `record_preference`; a
   clear low-stakes one ART saves itself, and the line says so. Anything else
-  adds nothing.
+  adds nothing. A message that depends on the turn before it ("never list that
+  again") is read together with the assistant's last reply, taken from the
+  `transcript_path` the host passes (#244, `harness/transcript.py`); no readable
+  transcript means the gate reads the message alone.
 - **`session-start`** (`SessionStart`, matcher `compact`): pinned preferences
   after compaction. A model-written summary is where negated preferences get
   lost (#129), so the pins come back from ART word for word, with the job the
@@ -155,10 +158,11 @@ def _memory_note(user_id: UUID, payload: Dict[str, Any], session_id: str,
     prompt = payload.get("prompt")
     if not isinstance(prompt, str) or not prompt.strip():
         return None
+    path = payload.get("transcript_path")
     try:
         from harness import memory
-        return memory.observe(user_id, prompt, session_id, write=allow_writes,
-                              bounded=True).get("note") or None
+        return memory.observe(user_id, prompt, session_id, write=allow_writes, bounded=True,
+                              transcript_path=path if isinstance(path, str) else None).get("note") or None
     except Exception as exc:                          # the gate must never break the prompt
         log.warning("memory gate failed: %s", exc)
         return None

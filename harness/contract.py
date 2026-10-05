@@ -117,6 +117,11 @@ class ObserveInput(_Model):
     session_id: Optional[str] = Field(
         None, description="The host's session id, so a job-scoped preference can use the job "
                           "this session is working on.")
+    previous_turn: Optional[str] = Field(
+        None, description="The assistant's last reply, when the message depends on it ('never "
+                          "list that again', 'keep it like that', 'yes, always'). Only used when "
+                          "the message has such a reference; the last 600 characters count. "
+                          "Leave it out for a message that reads on its own.")
 
 
 class ObserveOutput(_Output):
@@ -137,6 +142,14 @@ class ObserveOutput(_Output):
         None, description="The gate's reading: direction, target, strength, scope.")
     preference_id: Optional[str] = Field(None, description="The stored preference, on write.")
     note: Optional[str] = Field(None, description="What to tell the host, as the hook says it.")
+    version: Optional[str] = Field(
+        None, description="The question version whose answers decided: memory_gate@v1 (the "
+                          "message alone) or memory_gate@v2 (read with previous_turn). Absent when "
+                          "no Jev answer decided.")
+    context: Optional[Literal["none", "used", "missing"]] = Field(
+        None, description="none: the message reads on its own. used: its previous turn was read "
+                          "with it (v2). missing: it needs the previous turn and none was given "
+                          "or readable, so it was read alone.")
 
 
 class RecordPreferenceInput(_Model):
@@ -852,7 +865,7 @@ def _memory():
 
 
 _OBSERVE_FIELDS = ("action", "reason", "candidate", "negated", "p", "source", "guess",
-                   "preference_id", "note")
+                   "preference_id", "note", "version", "context")
 
 
 def _observe_out(decision: Dict[str, Any]) -> Dict[str, Any]:
@@ -885,9 +898,11 @@ TOOLS: List[ToolSpec] = [
         "record_preference) or write (ART saved a clear, low-stakes preference itself; tell "
         "the user). ART never saves a strength-5 preference or a negative pin without your "
         "confirmation. Claude Code's hook already does this on every prompt; call it yourself "
-        "on a host with no hook. Writes.",
+        "on a host with no hook. For a message that depends on your last reply ('never list "
+        "that again'), pass it as previous_turn. Writes.",
         ObserveInput, ObserveOutput,
-        lambda uid, text, session_id=None: _observe_out(_memory().observe(uid, text, session_id)),
+        lambda uid, text, session_id=None, previous_turn=None: _observe_out(
+            _memory().observe(uid, text, session_id, previous_turn=previous_turn)),
         read_only=False),
     ToolSpec(
         "record_preference",
