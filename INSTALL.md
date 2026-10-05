@@ -58,6 +58,68 @@ uvx --from "dist/art_mcp-0.1.0-py3-none-any.whl[ui]" art ui
 CI builds that wheel, installs it with no extras into an empty venv, and drives `art-mcp`
 over stdio (`scripts/smoke_art_mcp.py`).
 
+### Jev (optional)
+
+ART can ask [TypeSafe's Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev) a few narrow classification questions: does a
+revised bullet say more than its evidence, does a bullet reword a topic you banned, does a bullet
+show a requirement, is a message a standing preference, which of your saved bullets or tracks fits a
+job. Jev never writes resume text. It needs a TypeSafe API key, and **everything works without
+one**: with no key, every decision point runs its own deterministic fallback (word overlap, the
+literal term match, the host asking you) and no gate is skipped.
+
+**Set the key** in one of these places, checked in this order:
+
+```bash
+# 1. The environment ART is started from (the usual way: Claude Code and Codex start the
+#    MCP server, so it must be in their environment, e.g. your shell profile)
+export TYPESAFE_API_KEY='...'
+
+# 2. A checkout only: .env at the repo root (the file the legacy app already uses)
+TYPESAFE_API_KEY=...
+
+# 3. The OS keychain, through the optional keyring package. ART looks up service "art-mcp",
+#    user "typesafe-api-key". Install keyring next to ART (uvx --with keyring ...) and store it once:
+uvx --from keyring keyring set art-mcp typesafe-api-key
+```
+
+The plugin's `uvx` command does not include `keyring`, so use the environment variable there. The
+key is never logged, stored in the database or put in an error message. `art jev status` shows
+whether ART can see one (`"key": "set"`, never the key itself), the mode, and how many decisions are
+cached per point.
+
+**What leaves your machine.** Only when a key is set and the answer is not already cached, each
+request carries a narrow state and its questions, to `api.typesafe.ai`:
+
+| Decision | Sent |
+|---|---|
+| Support check | a changed bullet, the bullet it revises, the cited source text |
+| Reworded negative pin | a changed bullet or item field, and the topic you banned |
+| Requirement coverage | one bullet or education entry, and the posting's requirement texts |
+| Memory gate | your message; for one that refers back ("never list that again"), the last 600 characters of the previous reply too; the names of your skills, roles and projects |
+| Bullet choice and track baseline | the job title and its top requirements, and the candidate bullets or track names |
+
+Your whole resume and the whole posting are not sent. Check TypeSafe's terms for how it handles
+what it receives.
+
+**The privacy switch.** `ART_JEV_MODE` is `auto` (the default: the local cache, then Jev if a key
+is set, then the fallback), `off` (never the cache or the network; always the fallback) or `replay`
+(the cache only; a miss is an error, for tests). An unrecognized value means `off`. To be sure
+nothing is sent, leave the key unset or set `ART_JEV_MODE=off`.
+
+**Recordings.** Answers are cached in your local database, so a repeated question costs nothing.
+`art jev` moves them between machines or into a test:
+
+```bash
+art jev status                       # mode, key set or not, cached decisions per point
+art jev export decisions.json        # every cached decision (questions and answers, never the state)
+art jev import decisions.json        # merge them in; --overwrite replaces rows already there
+```
+
+A cached question can name text (the bullet choice lists your approved bullets, the memory gate your
+item names, a coverage question the posting's requirements), so treat an export from your own store
+as personal data; `art jev export` prints a notice to that effect on stderr. See
+[`docs/harness.md`](docs/harness.md) § 4 and [`docs/architecture.md`](docs/architecture.md) § 8.3.
+
 ### Backup and migration (#195)
 
 ```bash

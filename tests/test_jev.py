@@ -445,6 +445,27 @@ def test_the_cli_exports_imports_and_reports_status_without_the_key(
     assert run("import", str(path)) == 2
 
 
+def test_export_says_on_stderr_that_the_file_is_personal_data(auto, tmp_path, capsys):
+    auto.use(FakeTransport())
+    engine.decide("fruit", {"s": 1}, [fruit()])
+
+    def run(*argv):
+        return recordings.run(recordings._parser().parse_args(list(argv)))
+
+    path = str(tmp_path / "rec.json")
+    assert run("export", path) == 0
+    out, err = capsys.readouterr()
+    assert recordings.EXPORT_NOTICE in err and "personal data" in err
+    assert json.loads(out) == {"exported": 1, "path": path}      # stdout stays one JSON document
+
+    assert run("export", "-") == 0                  # the recording itself on stdout is still JSON
+    out, err = capsys.readouterr()
+    assert json.loads(out)["format"] == "art-jev-recordings" and "personal data" in err
+
+    assert run("status") == 0                       # no notice for a command that writes no file
+    assert "personal data" not in capsys.readouterr().err
+
+
 def test_art_jev_is_dispatched_by_the_console_script(monkeypatch):
     from harness import entry
 
