@@ -152,6 +152,24 @@ def create_profile(
         return session.get(User, uid)
 
 
+# The profile `get_or_create_cli_user` makes on a first run. It is a placeholder, not
+# an account: seed data and stale pointers have ended up on it (#195), so
+# `art import` refuses to bind it.
+CLI_DEFAULT_NAME = "Default User"
+CLI_DEFAULT_EMAIL = "user@example.com"
+
+
+def is_fallback_profile(email: Optional[str]) -> bool:
+    """Whether a profile is a local fallback rather than a real account (#195).
+
+    That is the CLI's default placeholder, or any address ending in `@local`
+    (what the dev and offline auth fallback and the test suite create). Real
+    accounts, Supabase-authed or local, carry a real address.
+    """
+    e = (email or "").strip().lower()
+    return e.endswith("@local") or e == CLI_DEFAULT_EMAIL
+
+
 class NoActiveUserError(RuntimeError):
     """Raised when code that acts on user data has no acting user bound.
 
@@ -196,4 +214,4 @@ def get_or_create_cli_user() -> User:
             ART_DIR.mkdir(parents=True, exist_ok=True)
             ACTIVE_PROFILE_FILE.write_text(str(existing.user_id))
             return existing
-    return create_profile("Default User", "user@example.com")
+    return create_profile(CLI_DEFAULT_NAME, CLI_DEFAULT_EMAIL)

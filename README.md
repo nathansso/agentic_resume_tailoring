@@ -64,6 +64,32 @@ work over time.
 | [`docs/parallel-agents.md`](docs/parallel-agents.md) | Worktree-isolated agent sessions |
 | [`CHANGELOG.md`](CHANGELOG.md) | Every completed delivery, with its deviations from spec |
 
+### Back up your data, or bring a web-app profile local
+
+Local data has no server copy. `art export` writes one zip (your knowledge graph,
+preferences, jobs, every tailored version, your bullet library and baselines, and the
+`applications/` folder), and `art import` loads it back. Credentials are never in it.
+
+```bash
+art export --out ~/backups/art.zip                     # back up
+art import ~/backups/art.zip --user-id <your-user-id>  # restore into an empty store
+art import ~/backups/art.zip --merge                   # add what is missing to a store with data
+```
+
+To move a profile from the hosted web app into the local store once, read it straight
+from the web app's database. The database URL is yours and is read-only here; pass it in
+the environment rather than on the command line:
+
+```bash
+export ART_IMPORT_SOURCE_URL='postgresql://<user>:<password>@<host>:5432/postgres'
+art import --from-supabase --user-id <your-supabase-profile-id> --dry-run   # look first
+art import --from-supabase --user-id <your-supabase-profile-id> --set-active
+```
+
+Import binds the `--user-id` you give it, refuses a local fallback profile, and refuses a
+profile that already has data unless you pass `--merge` (or `--replace --confirm-replace`).
+Details: [`docs/harness.md`](docs/harness.md) § 12.
+
 ---
 
 ## Architecture

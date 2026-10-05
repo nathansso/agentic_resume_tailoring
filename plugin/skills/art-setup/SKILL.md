@@ -125,3 +125,23 @@ to never write, things to always include, how they want dates or wording handled
 
 Call `list_items` again and summarize what is stored by kind. Point out anything that
 looks duplicated or thin, and ask the user whether to fix it.
+
+## 10. Back up, or bring a web-app profile over
+
+ART's data is local, with no server copy. These are shell commands, not tools, and you run
+them only when the user asks. Neither writes to anything but a zip file (export) or the
+local store (import).
+
+- **Back up:** `art export --out <path>.zip` writes the profile and the `applications/`
+  folder as one zip, with no keys or passwords. Suggest it before a restore, a machine
+  change, or a risky edit. Add `--user-id <uuid>` if the user has more than one profile.
+- **Restore:** `art import <path>.zip`. It refuses a profile that already has data; the
+  user chooses `--merge` (add what is missing) or `--replace --confirm-replace` (delete
+  first). Run it with `--dry-run` first and show the counts.
+- **One-time migration from the hosted web app:** the user gives you their web-app
+  profile id (the `user_id` of their row, not a Supabase Auth uid) and the web app's
+  Postgres URL. Put the URL in `ART_IMPORT_SOURCE_URL` rather than on the command line,
+  run `art import --from-supabase --user-id <uuid> --dry-run`, show the counts and
+  warnings, and only then run it for real (add `--set-active` to make it the profile ART
+  uses). Never guess the id, never use a `@local` or `user@example.com` profile, and never
+  read a database URL from a `.env` file yourself.
