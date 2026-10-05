@@ -243,6 +243,11 @@ that bullet") and a fact about their experience are not; facts go to `upsert_ite
 - When a line says "ART saved a standing preference from this message", tell the user in
   your reply what was saved. If it is wrong, correct it with `record_preference`.
 - The hook may not exist on every host. Without it, call `observe` with the user's message
-  yourself and follow what it returns (`drop`, `host`, `write`).
+  yourself and follow what it returns (`drop`, `host`, `write`). When the message leans on
+  your last reply ("never list that again", "keep it like that", "yes, always"), pass that
+  reply as `previous_turn`; ART reads the pair together. The hook does the same from the
+  transcript.
+- A message like that is easy to misread alone, so when you confirm one, say what you took
+  "that" to be.
 - `art_pins` returns the pins word for word, for example after your context was trimmed.
   Honour every one.

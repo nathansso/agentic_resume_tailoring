@@ -451,10 +451,24 @@ negation cases separately (`eval/memory_gate_labels/REPORT.md`).
 - **Jev.** One request per candidate with the message alone as the state and four positive questions: standing preference,
   direction, strength, target. Jev picks the target from the user's catalog and cannot name
   one; the gate also requires the message to say the item's name, because a loosely
-  touched item ("leave my GPA off") binds to the wrong one. The previous assistant turn
-  was measured and is not sent: on twelve short messages that lean on it ("never list
-  that again") it lifted the standing call from 5 of 8 right to 8 of 8, but the thresholds
-  are fitted without it, and the hook has no turn to send.
+  touched item ("leave my GPA off") binds to the wrong one.
+- **The previous assistant turn (#244, `memory_gate@v2`).** A message such as "never list
+  that again" or "keep it like that" cannot be read without what "that" is. The prefilter
+  flags an unresolved reference (an anaphoric phrase such as "again" or "like that", a bare
+  pronoun when the message names no catalog item, a short yes or no); only then does `observe`
+  look for the turn: the hook reads the last assistant text from the end of the host's
+  `transcript_path` (`harness/transcript.py`: text only, tool calls and results dropped,
+  the last 600 characters, bounded in bytes and time), and a host without a hook passes it as
+  `observe`'s `previous_turn`. With a turn the same four questions run as v2, whose state is
+  `{message, previous_assistant_turn}` and whose instructions say the turn is only there to
+  resolve the reference; the routing and every code rule are unchanged, the thresholds are
+  v2's own (fitted on 40 context messages: `eval/memory_gate_labels/context/`). Without a
+  reference, or with no readable turn (no path, a missing or unreadable file, a format ART
+  does not read, no assistant text), v1 runs exactly as before and its cached answers still
+  hit. A decision records `version` and `context` (`none`, `used`, `missing`). On the set v2
+  lifts the standing call from 31 of 40 right to 39, direction from 25 to 31 and the target
+  from 12 to 28 (of 33 preferences). It does not make the gate write more: a target the
+  message does not name is never written, so these go to the host with a better guess.
 - **Routing.** p below τ_lo = 0.25: drop. From τ_lo to τ_hi = 0.65, or whenever a condition
   below fails: the `user-prompt` hook adds one line asking the host to confirm with the user
   and call `record_preference`, with the gate's guess. At or above τ_hi, ART writes when the
@@ -475,7 +489,7 @@ negation cases separately (`eval/memory_gate_labels/REPORT.md`).
   to import the user's existing standing preferences and negative pins through
   `record_preference`. There is no import path of its own.
 
-Thresholds are constants in `memory_gate.py`, with a drift test, like the other Jev points. τ_hi is fitted as if the code rules above did not exist and is floored at 0.5: a write needs Jev to call the message more likely than not a preference.
+Thresholds are constants in `memory_gate.py`, with a drift test, like the other Jev points. τ_hi is fitted as if the code rules above did not exist and is floored at 0.5: a write needs Jev to call the message more likely than not a preference. v2 has its own three (`TAU_*_V2`), fitted on its own answers by the same rules; its target threshold is floored at 0.5 too, since that set holds no wrong named binding to bound it from below.
 Consolidating every fitted threshold into one policy artifact is a follow-up.
 
 ## 11. Tailoring history as a tree (#196)
@@ -670,6 +684,18 @@ Codex CLI (0.149) was checked against its docs and live runs.
   - Codex has `UserPromptSubmit` and `SessionStart` (source `compact`), with the same stdin
     and `hookSpecificOutput.additionalContext` JSON as Claude Code, so `art hook` serves both.
   - It also has `PreCompact` / `PostCompact`, which ART doesn't use.
+  - **The transcript (#244).** Both hosts put `transcript_path` in the hook's input, and the
+    memory gate reads the previous assistant turn from it. Claude Code's is JSONL, one
+    `{"type": "assistant", "message": {"content": [{"type": "text", ...}, {"type":
+    "tool_use", ...}]}}` per line, written asynchronously: the current prompt is usually not
+    in it yet when `UserPromptSubmit` fires. Codex's `transcript_path` can be null, and
+    points at a rollout file (`{"type": "response_item", "payload": {"type": "message",
+    "role": "assistant", "content": [{"type": "output_text", ...}]}}`) whose format its docs
+    call unstable for hooks. `harness/transcript.py` reads both defensively; a null path, a
+    format it does not recognise or a failed read is v1. Codex's rollout line shape is from
+    its source and was **not checked against a live run**, which the fallback makes safe.
+    Docs: [Claude Code hooks](https://code.claude.com/docs/en/hooks), Codex's hooks page
+    (developers.openai.com/codex/hooks).
   - **Plugins can't carry hooks** (`plugin_hooks` was removed). `art hooks codex --write`
     merges them into `$CODEX_HOME/hooks.json`, and the user trusts them with `/hooks`.
   - A project's `.codex/hooks.json` loads only in a trusted project. In live runs a
@@ -705,7 +731,9 @@ art@art` installs it.
   - `UserPromptSubmit` tells the host which jobs the user edited in `art ui` since the
     last message, and what changed. It keeps a per-session event cursor in
     `$ART_DATA_DIR/sessions/`. It also runs the memory gate (#202) on the message: one
-    line when it may be a standing preference, or when ART saved one.
+    line when it may be a standing preference, or when ART saved one. A message that leans
+    on the previous reply ("never list that again") is read with that reply, taken from
+    `transcript_path` (#244).
   - `SessionStart` with matcher `compact` re-injects the pins verbatim, plus the
     session's current job and that job's own pins.
 - **Two tools added for the plugin:**
