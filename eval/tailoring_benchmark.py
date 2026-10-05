@@ -108,6 +108,28 @@ MODE_CLAIMS = {
 
 # ── environment isolation (must run before any project import) ────────────────
 
+def _blank_supabase_env() -> None:
+    """Force the offline local-cookie auth mode, and keep it that way.
+
+    The variables are set to the empty string, not popped. `config.py` calls
+    `load_dotenv()` (which never overrides a variable that is already *set*) the
+    first time it is imported, so a popped variable is repopulated from the
+    developer's `.env`, and the benchmark then signs users up on the hosted
+    Supabase project (#210, #249). Every `SUPABASE_*` name the environment or
+    `.env` defines is blanked, not just the three the app reads today. An empty
+    value reads as unset everywhere (`database/auth.py`, `web/auth.py`).
+    """
+    names = {"SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_JWT_SECRET"}
+    names |= {k for k in os.environ if k.upper().startswith("SUPABASE_")}
+    try:
+        from dotenv import dotenv_values, find_dotenv
+        names |= {k for k in dotenv_values(find_dotenv()) if k.upper().startswith("SUPABASE_")}
+    except Exception:
+        pass
+    for name in names:
+        os.environ[name] = ""
+
+
 def _prepare_environment(workdir: Path) -> None:
     """
     Point every stateful surface at the temp workdir and force the offline
@@ -123,8 +145,7 @@ def _prepare_environment(workdir: Path) -> None:
     os.environ["DATABASE_URL"] = make_throwaway_db("benchmark", workdir)
     os.environ["ART_DATA_DIR"] = str(workdir)
     os.environ["AI_DAILY_LIMIT"] = "10000"  # the benchmark legitimately batches AI calls
-    for var in ("SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_JWT_SECRET"):
-        os.environ.pop(var, None)
+    _blank_supabase_env()
 
 
 def _patch_profile_pointer(workdir: Path) -> None:

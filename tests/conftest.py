@@ -32,6 +32,17 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+# Hermetic suite (#249). This must run before anything below imports app code:
+# `config.py` calls load_dotenv() at import and `database.db` builds an engine from
+# it, so a developer's `.env` (DATABASE_URL, SUPABASE_*, API keys) would otherwise
+# be live for the whole run. Secrets and `.env` loading are switched off here, and
+# outbound connections other than loopback / ART_TEST_DATABASE_URL are refused
+# (except in @pytest.mark.integration tests). See tests/_hermetic.py.
+import _hermetic  # noqa: E402
+
+_SCRUBBED_ENV = _hermetic.isolate_environment()
+_hermetic.install_network_guard()
+
 import pytest
 from sqlalchemy import text
 from sqlmodel import SQLModel, Session, create_engine
@@ -88,6 +99,65 @@ def _pg_ready():
     with engine.connect() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     return engine
+
+
+@pytest.fixture(autouse=True)
+def _network_guard(request):
+    """Refuse outbound connections for the duration of every non-integration test (#249).
+
+    `@pytest.mark.integration` is the opt-in: those tests (the ones `run_tests.py
+    --integration` adds) may reach the network. A library that swallows the guard's
+    error would hide the attempt, so the attempt is recorded and the test fails at
+    teardown if any was made.
+    """
+    integration = request.node.get_closest_marker("integration") is not None
+    start = len(_hermetic.blocked_attempts())
+    _hermetic.set_armed(not integration)
+    yield
+    _hermetic.set_armed(True)
+    made = _hermetic.blocked_attempts()[start:]
+    if made:
+        targets = ", ".join(f"{a['host']}:{a['port']} ({a['kind']})" for a in made)
+        pytest.fail(
+            f"outbound network attempt blocked during this test, possibly swallowed by the "
+            f"code under test: {targets}. Mock it, or mark the test @pytest.mark.integration.",
+            pytrace=False,
+        )
+
+
+@pytest.fixture()
+def live_secrets(request, monkeypatch):
+    """Hand an `@pytest.mark.integration` test the real credentials it names.
+
+    The suite starts with every key removed from the environment (#249); the values
+    the developer had are held in `_hermetic` and only released here, to tests that
+    opted in with the integration mark. Returns ``get(*names) -> {name: value}`` and
+    also exports each non-empty value into `os.environ` for the test, so a subprocess
+    sees it. Names must be in `_hermetic.OPT_IN_NAMES`; `DATABASE_URL` and
+    `SUPABASE_*` are never available.
+    """
+    if request.node.get_closest_marker("integration") is None:
+        pytest.fail("live_secrets is only for @pytest.mark.integration tests")
+
+    def get(*names):
+        values = {}
+        for name in names:
+            values[name] = _hermetic.opt_in_secret(name)
+            if values[name]:
+                monkeypatch.setenv(name, values[name])
+        return values
+    return get
+
+
+def pytest_terminal_summary(terminalreporter):
+    """One line proving the guard ran, and naming every attempt it blocked."""
+    blocked = _hermetic.blocked_attempts()
+    terminalreporter.write_line(
+        f"hermetic: {len(_SCRUBBED_ENV)} secret env vars removed, .env loading off, "
+        f"network guard blocked {len(blocked)} attempt(s) outside tests that expected it"
+    )
+    for a in blocked:
+        terminalreporter.write_line(f"  blocked {a['kind']} {a['host']}:{a['port']} in {a['test']}")
 
 
 @pytest.fixture(autouse=True)

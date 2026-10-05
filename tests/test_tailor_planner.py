@@ -8,6 +8,7 @@ the persisted decision log on UserJobResult.
 import json
 import random
 
+import pytest
 from sqlmodel import Session
 
 from agents.tailor_planner import (
@@ -36,6 +37,19 @@ POOL = [
     {"key": "proj:diginetica", "section": "project", "label": "Diginetica",
      "source_text": "GNN vs GBM benchmark", "relevance": 0.9},
 ]
+
+
+@pytest.fixture(autouse=True)
+def _no_role_family_llm(monkeypatch):
+    """A tailoring run rebuilds the job card, whose role-family label is an LLM call.
+
+    These tests mock the tailor's own model but not that one, so with a developer's
+    key in the environment they called the real Anthropic API from every run, and
+    without one they failed on the connection (#249 found it by blocking the network).
+    """
+    import agents.job_card as jc
+
+    monkeypatch.setattr(jc, "classify_role_family", lambda *a, **k: "other")
 
 
 class _FakeLLM:
