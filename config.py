@@ -2,8 +2,11 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load environment variables. PYTHON_DOTENV_DISABLED (python-dotenv's own switch,
+# honoured here too so it does not depend on the installed version) skips `.env`
+# entirely; the test suite sets it so a developer's secrets never load (#249).
+if os.getenv("PYTHON_DOTENV_DISABLED", "").strip().lower() not in {"1", "true", "t", "yes", "y", "on"}:
+    load_dotenv()
 
 # Base Paths
 BASE_DIR = Path(__file__).resolve().parent

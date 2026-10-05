@@ -10,7 +10,7 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 @pytest.mark.integration
 @pytest.mark.slow
-def test_full_cli_ingestion_and_tailor_writes_artifacts_to_cwd():
+def test_full_cli_ingestion_and_tailor_writes_artifacts_to_cwd(live_secrets):
     """CLI-specific: `cli.py tailor` writes its artifacts to the process CWD.
 
     This asserts CLI behavior only — the commands below run with ``cwd=ROOT``,
@@ -18,6 +18,11 @@ def test_full_cli_ingestion_and_tailor_writes_artifacts_to_cwd():
     deliberately writes nothing (issue #130); see
     ``test_run_tailor_writes_nothing_to_cwd`` in tests/test_chat.py.
     """
+    # The suite runs without credentials (#249); this test opts in to the ones the
+    # CLI needs, which reach the subprocess through the environment. `.env` stays off
+    # and DATABASE_URL is never released, so the CLI uses the scratch data dir.
+    live_secrets("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GITHUB_TOKEN", "GITHUB_USERNAME", "LLM_PROVIDER")
+
     py = sys.executable
 
     resume = str(FIXTURES / "sample_resume.md")
