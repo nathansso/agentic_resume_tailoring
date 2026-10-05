@@ -58,6 +58,34 @@ uvx --from "dist/art_mcp-0.1.0-py3-none-any.whl[ui]" art ui
 CI builds that wheel, installs it with no extras into an empty venv, and drives `art-mcp`
 over stdio (`scripts/smoke_art_mcp.py`).
 
+### Backup and migration (#195)
+
+```bash
+art export --out ~/backups/art.zip                       # the profile + applications/, no secrets
+art import ~/backups/art.zip                             # into a store with no data for that user
+art import ~/backups/art.zip --merge                     # keep what is there, add the rest
+art import ~/backups/art.zip --replace --confirm-replace # delete that user's data first
+```
+
+A one-time migration from the hosted web app reads its Postgres database directly (needs
+the `[postgres]` extra, e.g. `uvx --from 'art-mcp[postgres]' art ...`):
+
+```bash
+export ART_IMPORT_SOURCE_URL='postgresql://<user>:<password>@<host>:5432/postgres'
+art import --from-supabase --user-id <profile-id> --dry-run
+art import --from-supabase --user-id <profile-id> --set-active
+```
+
+`<profile-id>` is the `user_id` of the account's row in the web app's `user` table (not
+the Supabase Auth uid); `SELECT user_id, email FROM "user"` finds it. The connection
+string is the project's Postgres URL from the Supabase dashboard, for a role that can read
+`public` (the `postgres` role does; a restricted role sees no rows through row-level
+security, and the import says so rather than importing nothing).
+
+The source is never `DATABASE_URL`, is opened read-only, and is never written to. The
+destination is always local SQLite (`$ART_DATA_DIR/art.db`). Use the id of the real
+account's profile, not the local fallback one (`user@example.com`), which import refuses.
+
 ## Option A — Docker (recommended, no Python setup needed)
 
 **Requirements:** Docker Desktop installed and running.

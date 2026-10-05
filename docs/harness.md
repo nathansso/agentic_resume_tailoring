@@ -504,7 +504,64 @@ migrate as a linear chain.
 | Chat transcripts | The host's storage; ART keeps extracted preferences, feedback and the session ID |
 | Keys (TypeSafe; optionally Anthropic for the chat panel) | OS keychain, env-var fallback; never in the DB |
 
-`art export` / `art import --from-supabase` (#195) handle backup and migration.
+### Backup, restore and the one-time migration (#195)
+
+`art export` and `art import` (`harness/export_import.py`) are CLI commands that print one
+JSON document, like the other `art` subcommands. They are **not MCP tools**: a host
+should not be able to restore over a store or read a hosted database on its own.
+
+```bash
+art export --out ~/backups/art.zip [--user-id <uuid>] [--include-cache]
+art import ~/backups/art.zip [--user-id <uuid>] [--merge | --replace --confirm-replace] [--dry-run]
+art import --from-supabase --source-url <postgresql://...> --user-id <uuid> [--set-active]
+```
+
+**The bundle** is one zip: `manifest.json` (format `art-export`, `format_version`,
+`art_version`, `exported_at` in UTC, `user_id`, `include_cache`, row counts, `redacted`),
+`tables/<table>.json` (`{"table", "rows"}`, rows in primary-key order) and a copy of
+`applications/`. Two exports of one store differ only in `exported_at`. It covers every
+user-scoped table in the list above: the profile row, `Skill` (only those the profile
+uses), the KG, `UserSkill` pins, `UserPreference` (the pins and negative pins),
+`PersonaTrait`, `Persona`, `DeletedEntry` tombstones, jobs and their skills, results,
+`JobCard`, `JDProfile`, `JobRule`, chat messages, the tree (`TailorNode`, `JobHead`,
+`TreeEvent`, `PlanProgram`), `BulletVariant`, `TrackBaseline` and `JobRoleFamily`. With
+`--include-cache` it also holds the Jev decision cache and the block render cache. It
+leaves out `AIUsage` (the hosted app's counters) and `InstitutionCanonical` (a cache);
+`tests/test_export_import.py` fails when a new table is neither exported nor named as left
+out.
+
+**Keys and secrets never leave the store.** The profile's `password_hash`,
+`github_access_token` and `supabase_uid` are not columns of a bundle. A string that
+looks like an API key, a token or a database password, anywhere in a row, is replaced by
+`[REDACTED]` and counted in the manifest.
+
+**Import** keeps primary keys, so tree parents, `<key>#b<n>` cites, baseline node ids and
+variant ids stay valid, and binds every row to one user id. That id is `--user-id` or,
+for a bundle, the bundle's own; for `--from-supabase` it is required and never guessed.
+It is the last place a stale profile can cause damage, so:
+
+- a **fallback profile** (the CLI's `user@example.com` placeholder, or any `@local`
+  address) is refused, in the bundle or already in the store, unless
+  `--allow-fallback-profile`;
+- the destination is **local SQLite** only; a remote destination is refused;
+- a user who already has data is refused unless `--merge` (add what is missing, never
+  overwrite; shared skills match by name) or `--replace --confirm-replace` (delete that
+  user's rows first). Both run in one transaction, and `--dry-run` rolls it back;
+- primary keys that belong to a different profile are a conflict, not an overwrite.
+
+`applications/` files come back next to the store. A file that differs from the one on
+disk is kept unless `--replace`. A bundle path that would leave `applications/` is ignored.
+
+**`--from-supabase`** reads one profile from a Postgres database with the same tables
+and loads it through the same code as a bundle. The source URL is explicit
+(`--source-url`, or `ART_IMPORT_SOURCE_URL` to keep the password out of the shell
+history), never `DATABASE_URL`. The source is opened in a read-only transaction that is
+verified before the first read; only SELECTs run. An **older schema** is read as it is:
+a missing table or column is skipped and noted, text ids and JSON columns are read
+through their text, jobs with no owner that the profile's results use are taken as the
+profile's, and rows missing a required column, or whose required parent is gone, are
+dropped with a warning. Bundles from older schemas are read the same way (unknown tables
+and columns are dropped).
 
 ## 13. Editor and chat (#204, #205)
 
@@ -746,6 +803,7 @@ boundary test can pass (#190).
 agents/  database/  services.py      # unchanged homes; pure checks split out
 harness/
   contract.py  executor.py  metrics.py  library.py  tree.py  render_cache.py
+  export_import.py                   # art export / art import (#195)
   decisions/                         # Jev client, cache, fallbacks
   mcp_server.py
 web/                                 # becomes art ui (local mode, SSE, SDK chat)

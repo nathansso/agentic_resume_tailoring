@@ -12,6 +12,56 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 195 — `art export` and `art import`, with a one-time Supabase migration
+**Status:** complete | **Tests:** 2294 pass on SQLite (48 new), 23 skipped. The 5 new Postgres-leg tests ran on a scratch Postgres 18 cluster without pgvector, not on the full leg (see Deviations)
+
+Local data had no server copy, and the web app's profile had no way into the local store. `art export` writes a profile and the `applications/` folder as one zip. `art import` loads it into local SQLite. `art import --from-supabase` runs the same import from a web-app Postgres database, once.
+
+### What shipped
+
+- **`harness/export_import.py` (new)**, wired into `art` in `harness/entry.py`. Each command prints one JSON document and exits 0, or 2 with `{"error": {code, message}}`, like `art jev`.
+- **The bundle** is a zip: `manifest.json` (`format: art-export`, `format_version: 1`, `art_version`, `exported_at` in UTC, `user_id`, `include_cache`, counts per table, `redacted`, the size of `applications/`), `tables/<table>.json` (`{"table", "rows"}`) and `applications/…`. Rows are in primary-key order with every model column, and zip entries carry a fixed timestamp, so two exports of one store differ only in `exported_at`. `art import` reads a zip or the same layout unzipped.
+- **Tables covered** (28): `user`, `skill` (only those the profile uses), `experience`, `education`, `project`, `achievement`, `projectblurb`, `userskill`, `jobdescription`, `jobskill`, `userjobresult`, `chatmessage`, `jobcard`, `jdprofile`, `userpreference`, `personatrait`, `persona`, `deletedentry`, `tailornode`, `jobhead`, `treeevent`, `planprogram`, `jobrule`, `bulletvariant`, `trackbaseline`, `jobrolefamily`, and with `--include-cache` `jevdecision` and `blocklinecache`. A test fails when a table is neither exported nor named in `NOT_EXPORTED` (`aiusage`, `institutioncanonical`).
+- **The round trip** (the acceptance criterion): export, import into an empty store, export again gives the same tables byte for byte and the same `applications/` files, with only `exported_at` differing. The test seeds every table, so an empty one fails it. It runs from Postgres to SQLite on the Postgres leg.
+- **Primary keys are kept**, so tree parents, `<key>#b<n>` cites, `TrackBaseline` node ids, `JobHead` and variant ids stay valid. Tables are inserted in foreign-key order, and the Postgres leg proves that, and the delete order of `--replace`, against enforced foreign keys. On Postgres the two autoincrement sequences are reset after an import.
+- **Import safety:**
+  - **The user is never guessed.** It is `--user-id`, or the bundle's own id; `--from-supabase` requires `--user-id`.
+  - **A fallback profile is refused**, in the bundle or already in the store (`database/user_utils.is_fallback_profile`: `user@example.com`, the CLI's placeholder, or any `@local` address), unless `--allow-fallback-profile`.
+  - **A user who already has data is refused** unless `--merge` (add what is missing, never overwrite) or `--replace --confirm-replace` (delete that user's rows first). All of it is one transaction, and `--dry-run` rolls it back.
+  - **The destination is local SQLite.** A remote one is refused before anything runs, and `DATABASE_URL` is never read.
+  - Rows whose primary key belongs to another profile are a `pk_conflict`, not an overwrite; another profile's email is an `email_conflict`.
+  - `applications/` files that differ from what is on disk are kept unless `--replace`, and a path that would leave `applications/` is ignored.
+  - The active profile pointer is changed only with `--set-active`; otherwise the report says what it points at.
+- **`--from-supabase --source-url URL --user-id UUID`** (or `ART_IMPORT_SOURCE_URL`, which keeps the password off the command line) reads the profile with the same reader the export uses, and hands it to the same import. The source is Postgres only, opened in a read-only transaction that is verified (`SHOW transaction_read_only`) before the first read, with SELECTs only, and the URL is never echoed with its password. A test reads a source and checks every table is byte-identical afterwards.
+- **Older schemas.** Reading selects only the columns that exist. A missing table or column is skipped and noted. Ids are matched by their hex digits, so a TEXT id column works. JSON and boolean columns are read through their text. A job with no owner that the profile's results use is taken as the profile's. On import, unknown tables and columns are dropped with a warning, missing columns take the model's defaults, a row missing a required column is dropped, and a row whose required parent is gone is dropped (an optional parent link is cleared). A test builds a Postgres source with the tables, columns and TEXT types production lags in.
+- **No keys or secrets.** `password_hash`, `github_access_token` and `supabase_uid` are not columns of a bundle (an import drops them from a forged one). A string that looks like an API key, a GitHub, Slack or AWS token, a JWT, a private key or a database URL with a password is replaced by `[REDACTED]` and counted. A test checks the bytes of a bundle for the seeded secrets.
+- **Docs and skill:** `docs/harness.md` § 12, README and INSTALL.md give the backup and migration commands, and the `art-setup` skill tells a host when to suggest them (and never to guess an id or read a `.env`).
+- **Tests:** `tests/test_export_import.py` (48 new on SQLite, 5 more on the Postgres leg):
+  - the round trip and identical re-export, keys, links and values, `--include-cache`;
+  - refuse, merge, replace and dry-run, a second `--user-id`, skill matching by name;
+  - the fallback refusal, an email conflict, no secrets, a forged bundle;
+  - an older-schema bundle, a bundle with no user row, and unreadable bundles;
+  - `applications/`, including a path that climbs out;
+  - an older source on any engine, and a source with no data;
+  - the `art` entry point end to end, with `DATABASE_URL` set to an unreachable database;
+  - on the Postgres leg: a Postgres source (read-only, nothing changed), one that lags the models, the command against one, and foreign-key order into Postgres.
+
+### Deviations from spec
+
+- **One zip, and the commands are CLI only.** The spec left directory or zip open; a zip is one file to put in a backup folder and keeps `applications/` with the data (a directory works for reading). `art export` and `art import` are not in the tool contract or on MCP: a host should not restore over a store or read a hosted database by itself, and the `art-setup` skill says to run them only when the user asks.
+- **A bundle's default user is its own.** The spec says import binds an explicit user; a bundle names one in its manifest, so `--user-id` is optional for a bundle (and remaps every row to it when given) and required for `--from-supabase`. Neither ever falls back to the pointer file or creates a default profile.
+- **"Fallback" is recognised, not flagged.** The `User` model has no fallback flag, so a profile is a fallback when its email is `user@example.com` (the CLI's placeholder, now a constant in `user_utils`) or ends in `@local`. A real account with such an address would need `--allow-fallback-profile`.
+- **`supabase_uid` is also left out of a bundle**, beyond the two spec'd secrets. It ties a profile to the hosted app's auth and nothing local reads it.
+- **Merge never overwrites, and it is for adding disjoint data.** A row with the same primary key is kept as it is. Rows that sit in a per-user order (`seq` on the résumé tables and chat) are not renumbered, so merging two stores that both have entries can tie on `seq`. Tree events and tombstones are matched on their content and take new ids. Shared skills match by name, and the incoming `UserSkill` and `JobSkill` rows follow.
+- **`--replace` deletes the user's rows and nothing else.** Skills, caches and the user's `applications/` files stay (a differing file is overwritten by the bundle's).
+- **Chat messages are exported** although § 12 says transcripts live in the host. The web app's `ChatMessage` rows are the user's data in the hosted database, and `art ui` will want them.
+- **The Postgres source is Postgres only.** `--source-url` must be `postgresql://…`; a SQLite store is imported from its own bundle. The reader itself takes any SQLAlchemy engine, which is how the older-schema tests run on both legs.
+- **Nothing is backfilled after an import.** A source older than #196 has no tree, so its results get their linear chain from `init_db` the next time any `art` command starts, as for any older store.
+- **The Postgres leg was run only for the new file, on a scratch cluster.** Docker was not running, so `docker compose up -d postgres` failed, and the machine's own Postgres service was left alone. The five Postgres-only tests and the whole of `tests/test_export_import.py` passed on a throwaway Postgres 18 cluster (no pgvector, so the rest of the suite could not run there). CI's Postgres leg is required anyway.
+- **No real migration was run.** The commands for it are in INSTALL.md and the README; the user runs them (or asks the planner to).
+
+---
+
 ## Issue 199 — Bullet library: Jev chooses the variant and the track baseline
 **Status:** complete (labels planner-reviewed, pending the user's spot-check) | **Tests:** 2246 pass on SQLite (57 new), 18 skipped
 
