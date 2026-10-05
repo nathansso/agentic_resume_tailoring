@@ -1050,7 +1050,7 @@ console script (`harness/entry.py`) adds what is not a tool: `art hook` (the plu
 `art hooks codex` (installs them for Codex), `art jev` (§8.3), `art export` and `art import`
 (§8.9), and `art ui`. A write tool returns `read_only` on a remote or Postgres store unless the
 process was started with `--allow-writes`; local SQLite is writable. `record_feedback` and
-`check_draft` are named in `harness.md` and are **not built**.
+`check_draft` are named in `harness.md` and are **not built** (#252).
 
 ### 8.2 The tree, the executor and the acceptance rule
 
@@ -1133,7 +1133,7 @@ flowchart LR
   any API error. An unrecognized value means `off`, so a typo cannot send text anywhere.
 - **Recordings** (`recordings.py`) are the cache's rows as versioned JSON: questions and answers,
   never the state. The committed ones come from synthetic profiles, so they are test fixtures; a
-  recording exported from a real store can name the user's items and bullets (above) and is personal.
+  recording exported from a real store can name the user's items and bullets (above) and is personal, so `art jev export` prints a notice on stderr.
   `art jev status` reports the mode,
   whether a key is set (never the key) and the cached decisions per point; `export` and `import`
   move them.
@@ -1195,7 +1195,7 @@ arithmetic.
 
 **The memory gate** is §8.6. **Variant choice and the track baseline** are §8.7.
 
-Not shipped, though `harness.md` § 4 lists them as planned: eligibility rules (a job-scoped rule is
+Not shipped (#252), though `harness.md` § 4 lists them as planned: eligibility rules (a job-scoped rule is
 still answered by the host), semantic duplicates for the duplication guard (that guard is token
 Jaccard), action ranking (`suggest_actions`' valid actions carry uniform propensities) and the role
 family for JobCards.
@@ -1441,9 +1441,9 @@ described in §8. What follows is what is left.
   `MAX_SKILLS + CORE_FLOOR_K` (22) skills against a cap of 18. The harness path trims to the cap only
   when requirement keywords matched a skill (§4.4); a first plan that sets no `skills` of its own can
   therefore fail finalize with `skills_cap`.
-- **Jev points not built** (§8.4): eligibility rules, an embedding or Jev reading of semantic duplicates,
-  action ranking for `suggest_actions`, and a role family for JobCards. Their fallbacks are what runs.
-- **Tools not built:** `record_feedback` and `check_draft` (§8.1).
+- **#252** tracks what is planned and not built. Jev points (§8.4): eligibility rules, an embedding or Jev
+  reading of semantic duplicates, action ranking for `suggest_actions`, and a role family for JobCards;
+  their fallbacks are what runs. Tools (§8.1): `record_feedback` and `check_draft`.
 
 **Policy and learning**
 - **#114** is the epic sequencing the policy arc onto H2–H5.

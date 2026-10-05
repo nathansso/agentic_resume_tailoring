@@ -115,7 +115,7 @@ every deterministic computation in code.
 | Track baseline (#199) | choice per job, only when a baseline is saved | Which saved track a new job branches from. State `{title, top 8 requirements}`; options are the saved tracks, each described in code as the track's name in words plus the title of the job its baseline came from, plus `none`. The pick is Jev's argmax when it is a track and its probability is at least 0.50, else no baseline. A host `metadata.role_family` that names a saved track exactly wins without asking (source `host`). `open_job` reports `baseline.source` (`host`, `jev`, `cache` or `fallback`) and `p`. Fitted on 36 synthetic jobs, #199: no wrong track, 35 of 36 right against the role-family lookup's 27; the lookup is wrong on all 7 jobs whose title and duties disagree | Role-family lookup (shipped in #229, unchanged): the track whose name equals the job's role family, else none. The family is the host's (`open_job` `metadata.role_family`), else a deterministic title keyword map (`agents/job_card.TITLE_ROLE_FAMILIES`), else `other`; never the LLM classifier. `source: "fallback"` |
 
 Six decision points are shipped (the table above; `docs/architecture.md` § 8.4 traces what each feeds).
-Four more are **planned and not built**, and no open issue tracks them yet. Each already has its
+Four more are **planned and not built** (#252). Each already has its
 fallback running, which is what ships today:
 
 | Planned point | Question type | Would decide | Fallback (what runs today) |
@@ -383,7 +383,7 @@ construction.
   citing what the bullet cited on that node. A draft is never offered to a plan.
   `approve_variant` is the only way to approve one, owner only, and nothing approves itself.
   Score-based promotion (a committed bullet with a user score ≥ 4) waits for
-  `record_feedback`, which is not built.
+  `record_feedback`, which is not built (#252).
 - **Track baselines (#229).** `save_baseline(node, track)` pins a tree node for a track
   (`TrackBaseline`, one per user and track; saving again replaces it; the track is lowercased,
   with spaces and hyphens as `_`). `open_job` picks the job's baseline (#199) and reports it as
@@ -440,11 +440,11 @@ construction.
 | | `diff_nodes` | two nodes → bullet-level diff with rationale |
 | | `get_head` | job, cursor → HEAD, events and editor edits since the cursor |
 | | `history` | job → every version, oldest first |
-| Check & render | `check_draft` | **Planned, not built.** node → metric vector by role (`execute_plan` already returns each node's vector) |
+| Check & render | `check_draft` | **Planned, not built (#252).** node → metric vector by role (`execute_plan` already returns each node's vector) |
 | | `render` | job, optional node (HEAD by default), `pdf` or `tex` → `.tex` and PDF paths, whether the user's own edited `.tex` was rendered, page count, line budget (#201) |
 | Feedback & memory | `observe` | user text → gate decision: `drop`, `host` (confirm with the user, then `record_preference`) or `write` (#202) |
 | | `record_preference` | typed preference (text, polarity, target, strength, scope) → stored, superseded, already recorded, or refused with a reason; strength 5 and negative pins allowed here, because this is the confirmation (#202) |
-| | `record_feedback` | **Planned, not built.** node, 1–5 score, edits → logged, JobCard rebuilt, promotion candidates |
+| | `record_feedback` | **Planned, not built (#252).** node, 1–5 score, edits → logged, JobCard rebuilt, promotion candidates |
 
 ## 10. Memory and compaction (#202)
 
@@ -764,7 +764,7 @@ art@art` installs it.
     and reports the pages and the line budget. The user's `.tex` edits win, job-rule
     education values are laid over the stored rows, and nothing is trimmed silently.
   - `update_profile` sets the header fields `get_profile` returns.
-- **Planned, not built:** `record_feedback` and `check_draft` are in no contract. `tests/test_plugin.py` fails if a skill or command names
+- **Planned, not built (#252):** `record_feedback` and `check_draft` are in no contract. `tests/test_plugin.py` fails if a skill or command names
   a tool the contract lacks.
 
 ### Running the harness (#189, #191)
@@ -880,7 +880,7 @@ The windows are the plan and have not moved. Status is as of 2026-10-05, from th
 |---|---|---|---|---|---|
 | H0 · Decide & Spike | Sep 28 – Oct 4 | #188, #189, #209 | | One real tailoring in Claude Code with read-only tools; gap list recorded | Done |
 | H1 · Core & Jev | Oct 5 – Oct 18 | #190, #191, #192, #193, #194, #195, #210, #237 | #249 (in progress) | Contract tests on both legs; `uvx art-mcp` without torch; every Jev point replays from cache | Shipped, but for #249 |
-| H2 · Executor & Library | Oct 19 – Nov 8 | #123, #126, #196, #197, #198, #199, #200, #229, #230, #232, #233 | #113 (the rule itself shipped in #197), #117, #127, #151, #163, #185, #241 | Scripted-host benchmark replays byte-identically; stuffing rejected, preference delete kept | Mostly shipped; what is open is tuning and the policy artifact |
+| H2 · Executor & Library | Oct 19 – Nov 8 | #113, #123, #126, #196, #197, #198, #199, #200, #229, #230, #232, #233 | #117, #127, #151, #163, #185, #241, #252 | Scripted-host benchmark replays byte-identically; stuffing rejected, preference delete kept | Mostly shipped; what is open is tuning and the policy artifact |
 | H3 · Plugin & Memory | Nov 9 – Nov 22 | #201, #202, #203, #244 | | Gate recall measured on a labelled set (negation separate); pins survive compaction | Done |
 | H3b · Editor | Nov 23 – Dec 6 | #204 | #205, #87, #82, #84, #136, #147 | Editor drag reaches the host's next turn; host commit reaches the editor without reload | The local editor and change feed shipped; the chat panel and the UI issues are open |
 | H4 · Host Evaluation | Dec 7 – Dec 27 | | #206, #172 (chunks 1–6 of 7 shipped), #173, #178, #181 | Written result, B vs A first; go/no-go on H5 | Not started |
@@ -894,13 +894,13 @@ compaction) while their windows still run to Nov 22. Nothing was re-dated.
 
 What is left in H2, and why:
 
-- **#113** is the acceptance rule (`harness/acceptance.py`), built inside #197.
 - **#127** fits the guard tolerances on the anchor set, which waits on #172's last chunk, and
   **#241** gives them and every fitted Jev threshold one versioned home.
 - **#117** (keep-biased suggestions, an edit-distance guard against the parent) and **#163**
   (keyword insertion by importance × supportability) are not started.
 - **#151** splits required from preferred coverage into separate targets.
 - **#185** bounds the fallback skills floor by the cap.
+- **#252** tracks what is planned and not built: four Jev points (§ 4) and the tools `check_draft` and `record_feedback` (§ 9).
 
 ## 19. Evaluation (#206)
 

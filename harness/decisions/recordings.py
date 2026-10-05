@@ -6,8 +6,13 @@
 
 A recording is the cache's rows and nothing else: the question, the answer,
 the model version that answered, the usage share, the point and the time,
-under the hash that keys them. The state (resume text) is never stored, so a
-recording carries no resume content and can be committed as a test fixture.
+under the hash that keys them. The state (the bullet or message text) is never
+stored. A question can still carry text, though: the variant choice lists the
+user's approved bullets as its options, the memory gate lists the names of the
+user's skills, roles and projects, and a coverage question holds the posting's
+requirement text. So a recording made from a real store is personal data, and
+`art jev export` says so on stderr; only recordings made from synthetic
+profiles (`eval/*_labels/`) are fit to commit as test fixtures.
 
 Import keeps rows already in the store unless `--overwrite`. A recording whose
 `format` or `version` is not understood is refused, not guessed at.
@@ -121,6 +126,11 @@ def _emit(doc) -> None:
     sys.stdout.write(json.dumps(doc, sort_keys=True, ensure_ascii=False) + "\n")
 
 
+EXPORT_NOTICE = ("art jev export: this file holds the questions ART asked, which can name your "
+                 "approved bullets, skills, roles and projects and the posting's requirements. "
+                 "Treat it as personal data.")
+
+
 def run(args: argparse.Namespace) -> int:
     """Execute against an already-configured database. Tests call this directly."""
     try:
@@ -128,6 +138,7 @@ def run(args: argparse.Namespace) -> int:
             _emit(status())
         elif args.cmd == "export":
             doc = export_recordings()
+            print(EXPORT_NOTICE, file=sys.stderr)       # stderr: stdout may be the document itself
             if args.path == "-":
                 _emit(doc)
             else:

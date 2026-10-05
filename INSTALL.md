@@ -116,7 +116,8 @@ art jev import decisions.json        # merge them in; --overwrite replaces rows 
 ```
 
 A cached question can name text (the bullet choice lists your approved bullets, the memory gate your
-item names), so treat an export from your own store as personal data. See
+item names, a coverage question the posting's requirements), so treat an export from your own store
+as personal data; `art jev export` prints a notice to that effect on stderr. See
 [`docs/harness.md`](docs/harness.md) § 4 and [`docs/architecture.md`](docs/architecture.md) § 8.3.
 
 ### Backup and migration (#195)
