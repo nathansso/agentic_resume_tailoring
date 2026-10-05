@@ -227,13 +227,20 @@ def test_pytest_applies_the_guard_exemption_secrets_and_swallow_check(tmp_path):
 
 # ── `.env` cannot reach the process ──────────────────────────────────────────
 
-def _project_with_fake_dotenv(tmp_path):
-    """A directory shaped like a checkout root: the real `config.py` plus a `.env`
-    full of real-looking values. `config.py` finds `.env` next to itself, so a copy
-    here is the realistic stand-in for the developer's file."""
-    shutil.copy(ROOT / "config.py", tmp_path / "config.py")
+def _project_with_fake_dotenv(tmp_path, depth=0):
+    """The real `config.py` plus a `.env` full of real-looking values.
+
+    `config.py` finds `.env` by walking up from its own directory, so a copy is the
+    realistic stand-in for the developer's file. With `depth` > 0 the `.env` sits in
+    a PARENT of the directory holding `config.py` and of the cwd, which is how a
+    checkout nested under another one (an agent worktree under `.claude/worktrees/`)
+    finds the main checkout's `.env`: the case that reached Supabase's signup
+    endpoint from the benchmark tests."""
+    project = tmp_path.joinpath(*[f"nest{i}" for i in range(depth)])
+    project.mkdir(parents=True, exist_ok=True)
+    shutil.copy(ROOT / "config.py", project / "config.py")
     (tmp_path / ".env").write_text(FAKE_ENV_FILE, encoding="utf-8")
-    return tmp_path
+    return project
 
 
 def _clean_env():
@@ -245,8 +252,9 @@ def _clean_env():
     return env
 
 
-def test_a_dotenv_with_real_looking_values_does_not_reach_the_process(tmp_path):
-    project = _project_with_fake_dotenv(tmp_path)
+@pytest.mark.parametrize("depth", [0, 3], ids=["dotenv-beside-config", "dotenv-in-a-parent-directory"])
+def test_a_dotenv_with_real_looking_values_does_not_reach_the_process(tmp_path, depth):
+    project = _project_with_fake_dotenv(tmp_path, depth)
     script = textwrap.dedent(f"""
         import os, sys
         import _hermetic
@@ -269,9 +277,10 @@ def test_a_dotenv_with_real_looking_values_does_not_reach_the_process(tmp_path):
     assert out.returncode == 0 and "hermetic-ok" in out.stdout, out.stdout + out.stderr
 
 
-def test_the_fake_dotenv_would_leak_without_the_isolation(tmp_path):
+@pytest.mark.parametrize("depth", [0, 3], ids=["dotenv-beside-config", "dotenv-in-a-parent-directory"])
+def test_the_fake_dotenv_would_leak_without_the_isolation(tmp_path, depth):
     """Control: the same project, no isolation. Proves the test above is not vacuous."""
-    project = _project_with_fake_dotenv(tmp_path)
+    project = _project_with_fake_dotenv(tmp_path, depth)
     script = ("import os, config; "
               "assert config.__file__.startswith(%r); "
               "assert os.environ['DATABASE_URL'].startswith('postgresql://prod_user'); "

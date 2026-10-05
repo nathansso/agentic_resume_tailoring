@@ -224,6 +224,10 @@ ART_TEST_DATABASE_URL=postgresql://art:art@localhost:5433/art python run_tests.p
 `ART_TEST_DATABASE_URL` is deliberately separate from `DATABASE_URL` — the latter may point at
 production Supabase, and the suite creates and drops schemas. Never set them to the same value.
 
+Tests run hermetically (#249): `tests/_hermetic.py` strips secrets and `.env` loading from the
+environment, and refuses any connection but localhost and `ART_TEST_DATABASE_URL`. A test that needs
+the network or a real key must be `@pytest.mark.integration` and take the key from `live_secrets`.
+
 Or directly:
 
 ```bash
