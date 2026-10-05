@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 from uuid import UUID
 
@@ -49,6 +48,7 @@ from agents.checks import exp_key, proj_key
 from agents.extraction_schemas import RoleFamily
 from agents.job_card import role_family_from_title
 from agents.tailor_planner import OPS
+from database.clock import utc_now
 from database.models import (
     BulletVariant, JobDescription, JobRoleFamily, TailorNode, TrackBaseline,
 )
@@ -218,7 +218,7 @@ def import_variants(user_id: UUID, items: Sequence[Tuple[int, Dict]]) -> Dict[in
                     dup.cites = merged_cites
                     changed.append("cites")
                 if changed:
-                    dup.updated_at = datetime.utcnow()
+                    dup.updated_at = utc_now()
                     session.add(dup)
                 out[idx] = {"status": "merged" if changed else "unchanged",
                             "key": f"variant:{dup.variant_id}",
@@ -304,7 +304,7 @@ def approve_variant(user_id: UUID, variant_id: str) -> Dict[str, Any]:
         was = row.status
         if was != APPROVED:
             row.status = APPROVED
-            row.updated_at = datetime.utcnow()
+            row.updated_at = utc_now()
             session.add(row)
             session.commit()
             session.refresh(row)
@@ -345,7 +345,7 @@ def record_role_family(user_id: UUID, job_id: UUID, title: str,
         if row is None:
             row = JobRoleFamily(job_id=job_id, user_id=user_id, role_family=family, source=source)
         elif (row.role_family, row.source) != (family, source):
-            row.role_family, row.source, row.updated_at = family, source, datetime.utcnow()
+            row.role_family, row.source, row.updated_at = family, source, utc_now()
         session.add(row)
         session.commit()
         return family, source
@@ -367,7 +367,7 @@ def save_baseline(user_id: UUID, node_id: str, track: str) -> Dict[str, Any]:
         if row is None:
             row = TrackBaseline(user_id=user_id, track=name, node_id=node.node_id, job_id=node.job_id)
         else:
-            row.node_id, row.job_id, row.saved_at = node.node_id, node.job_id, datetime.utcnow()
+            row.node_id, row.job_id, row.saved_at = node.node_id, node.job_id, utc_now()
         session.add(row)
         session.commit()
         return {"track": name, "node_id": str(node.node_id), "job_id": str(node.job_id),

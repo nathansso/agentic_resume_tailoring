@@ -18,6 +18,7 @@ from sqlalchemy import func
 from sqlmodel import Session, delete, select
 
 from agents.skill_selection import skill_names
+from database.clock import as_utc, utc_now
 from database.db import engine, latest_result, next_seq
 from database.models import (
     Achievement, ChatMessage, DeletedEntry, Education, Experience,
@@ -222,7 +223,6 @@ def update_profile(
     portfolio_url: str = "",
 ) -> str:
     """Update the active profile's personal info fields."""
-    from datetime import datetime
     try:
         with Session(engine) as session:
             user = session.get(User, user_id)
@@ -236,7 +236,7 @@ def update_profile(
             user.portfolio_url = portfolio_url.strip() or None
             if email.strip() and email.strip() != "user@example.com":
                 user.email = email.strip()
-            user.updated_at = datetime.utcnow()
+            user.updated_at = utc_now()
             session.add(user)
             session.commit()
     except Exception as e:
@@ -532,8 +532,7 @@ def update_experience(user_id: Optional[UUID], experience_id: str, fields: dict)
         if "bullets" in fields:
             row.bullets = [str(b).strip() for b in (fields["bullets"] or []) if str(b or "").strip()]
         row.manually_edited = True
-        from datetime import datetime
-        row.updated_at = datetime.utcnow()
+        row.updated_at = utc_now()
         session.add(row)
         session.commit()
         session.refresh(row)
@@ -560,8 +559,7 @@ def update_education(user_id: Optional[UUID], education_id: str, fields: dict) -
             if key in fields:
                 setattr(row, key, _clean_str(fields[key]))
         row.manually_edited = True
-        from datetime import datetime
-        row.updated_at = datetime.utcnow()
+        row.updated_at = utc_now()
         session.add(row)
         session.commit()
         session.refresh(row)
@@ -586,8 +584,7 @@ def update_project(user_id: Optional[UUID], project_id: str, fields: dict) -> Op
             if key in fields:
                 setattr(row, key, _clean_str(fields[key]))
         row.manually_edited = True
-        from datetime import datetime
-        row.updated_at = datetime.utcnow()
+        row.updated_at = utc_now()
         session.add(row)
         session.commit()
         session.refresh(row)
@@ -1044,7 +1041,6 @@ def create_artifact_from_chat(
 def _supersede_skill(session, user_id: UUID, data: dict, evidence: str,
                      source_context: Optional[str]) -> Optional[str]:
     """Update an existing UserSkill in place. None when there's no row to update."""
-    from datetime import datetime
 
     name = (data.get("name") or "").strip()
     all_skills = session.exec(select(Skill)).all()
@@ -1073,7 +1069,7 @@ def _supersede_skill(session, user_id: UUID, data: dict, evidence: str,
     link.evidence_detail = evidence
     link.evidence_source = "chat"
     link.source_context = source_context
-    link.updated_at = datetime.utcnow()
+    link.updated_at = utc_now()
     session.add(link)
     session.commit()
     detail = f" ({', '.join(changes)})" if changes else ""
@@ -1101,7 +1097,6 @@ def _target_name(target: Optional[str], kind: str) -> Optional[str]:
 def _supersede_project(session, user_id: UUID, data: dict, evidence: str,
                        source_context: Optional[str]) -> Optional[str]:
     """Update an existing Project in place. None when there's no row to update."""
-    from datetime import datetime
 
     from agents.parser import ResumeParserAgent
 
@@ -1147,7 +1142,7 @@ def _supersede_project(session, user_id: UUID, data: dict, evidence: str,
             changes.append(field.replace("_", " "))
             setattr(row, field, value)
     row.source_context = source_context
-    row.updated_at = datetime.utcnow()
+    row.updated_at = utc_now()
     session.add(row)
     session.commit()
     detail = f" ({', '.join(changes)})" if changes else ""
@@ -1162,7 +1157,6 @@ def _supersede_experience(session, user_id: UUID, data: dict, evidence: str,
     Staff Engineer"): the title on the existing row moves rather than a second
     row appearing for the same job.
     """
-    from datetime import datetime
 
     from agents.parser import ResumeParserAgent
 
@@ -1209,7 +1203,7 @@ def _supersede_experience(session, user_id: UUID, data: dict, evidence: str,
             changes.append(field.replace("_", " "))
             setattr(row, field, value)
     row.source_context = source_context
-    row.updated_at = datetime.utcnow()
+    row.updated_at = utc_now()
     session.add(row)
     session.commit()
     detail = f" ({', '.join(changes)})" if changes else ""
@@ -1366,7 +1360,6 @@ def rebuild_job_card(
     silent-with-a-log: a card is an optimization, and losing one must never take
     down the tailoring run that triggered it.
     """
-    from datetime import datetime
 
     from agents.job_card import (
         ROLE_FAMILY_VERSION, build_index_keys, classify_role_family,
@@ -1415,7 +1408,7 @@ def rebuild_job_card(
 
             payload = compile_card_payload(job, result, role_family=family)
             digest = payload_digest(payload)
-            now = datetime.utcnow()
+            now = utc_now()
 
             if card is None:
                 card = JobCard(user_id=user_id, job_id=job_id)
@@ -1522,7 +1515,6 @@ def rebuild_jd_profile(
     description) or the extraction failed — in which case no row is written and
     the absent profile reproduces today's behavior exactly.
     """
-    from datetime import datetime
 
     from agents.jd_profile import (
         PROFILE_VERSION, compile_profile_payload, extract_profile,
@@ -1556,7 +1548,7 @@ def rebuild_jd_profile(
                 job.title or "", job.description, extraction)
             payload = merge_edits(profile.payload if profile else None, payload)
             digest = payload_digest(payload)
-            now = datetime.utcnow()
+            now = utc_now()
 
             if profile is None:
                 profile = JDProfile(job_id=job_id, user_id=user_id or job.user_id)
@@ -1656,7 +1648,6 @@ def update_jd_profile_requirements(job_id: UUID, edits: list[dict]) -> Optional[
     Unknown fields and unknown ordinals are ignored rather than erroring: a
     partial correction is better than a rejected one.
     """
-    from datetime import datetime
 
     from agents.jd_profile import (
         _clamp_confidence, _clamp_criticality, _clean_terms, payload_digest,
@@ -1714,7 +1705,7 @@ def update_jd_profile_requirements(job_id: UUID, edits: list[dict]) -> Optional[
             payload["requirements"] = requirements
             profile.payload = payload
             profile.payload_hash = payload_digest(payload)
-            profile.updated_at = datetime.utcnow()
+            profile.updated_at = utc_now()
             session.add(profile)
             session.commit()
             session.refresh(profile)
@@ -1770,7 +1761,7 @@ def load_preferences(user_id: UUID, include_inactive: bool = False) -> list[dict
     Returns [] on any failure rather than raising: an unreadable preference
     table must degrade to pre-#129 tailoring, never break a run.
     """
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     from agents.preferences import STATUS_ACTIVE
     from database.models import UserPreference
@@ -1786,7 +1777,8 @@ def load_preferences(user_id: UUID, include_inactive: bool = False) -> list[dict
         return []
     if not include_inactive:
         out = [p for p in out if p["status"] == STATUS_ACTIVE]
-    out.sort(key=lambda p: (p["created_at"] or datetime.min, p["preference_id"]))
+    out.sort(key=lambda p: (as_utc(p["created_at"]) or datetime.min.replace(tzinfo=timezone.utc),
+                            p["preference_id"]))
     return out
 
 
@@ -1830,7 +1822,6 @@ def apply_preference_decision(user_id: UUID, proposal: dict) -> str:
 
     Returns a plain-English result string. Never raises.
     """
-    from datetime import datetime
 
     from agents.preferences import (
         POLARITIES, SCOPE_TYPES, STATUS_ACTIVE, STATUS_SUPERSEDED,
@@ -1867,7 +1858,7 @@ def apply_preference_decision(user_id: UUID, proposal: dict) -> str:
                 # the id in it is untrusted (issue #73).
                 if prior is not None and prior.user_id == user_id:
                     prior.status = STATUS_SUPERSEDED
-                    prior.updated_at = datetime.utcnow()
+                    prior.updated_at = utc_now()
                     session.add(prior)
                     superseded = prior.preference_id
 
@@ -1927,7 +1918,6 @@ def update_preference(
     Returns the updated preference, or None when it does not exist or is not
     this user's.
     """
-    from datetime import datetime
 
     from agents.preferences import (
         POLARITIES, SCOPE_TYPES, _clamp_strength,
@@ -1959,7 +1949,7 @@ def update_preference(
                 touched = True
             if touched:
                 row.edited = True
-                row.updated_at = datetime.utcnow()
+                row.updated_at = utc_now()
                 session.add(row)
                 session.commit()
                 session.refresh(row)
@@ -1982,7 +1972,6 @@ def retract_preference(user_id: UUID, preference_id: UUID) -> Optional[dict]:
     back. Both stay on the table, so the profile remains a complete record of
     what the user asked for and when.
     """
-    from datetime import datetime
 
     from agents.preferences import STATUS_RETRACTED
     from database.models import UserPreference
@@ -1993,7 +1982,7 @@ def retract_preference(user_id: UUID, preference_id: UUID) -> Optional[dict]:
             if row is None or row.user_id != user_id:
                 return None
             row.status = STATUS_RETRACTED
-            row.updated_at = datetime.utcnow()
+            row.updated_at = utc_now()
             session.add(row)
             session.commit()
             session.refresh(row)
@@ -2056,7 +2045,6 @@ def rebuild_persona(user_id: UUID, leaves: Optional[list[dict]] = None) -> Optio
     the reason a card rebuild is: the persona is derived state, and losing a
     recompile must never take down the user action that triggered it.
     """
-    from datetime import datetime
 
     from agents.persona import (
         PERSONA_VERSION, TRAIT_ACTIVE, TRAIT_INACTIVE, compile_persona,
@@ -2073,7 +2061,7 @@ def rebuild_persona(user_id: UUID, leaves: Optional[list[dict]] = None) -> Optio
         compiled_hash = persona_digest(compiled)
         digest = leaf_digest(leaves)
         superseded = superseded_links(leaves)
-        now = datetime.utcnow()
+        now = utc_now()
 
         with Session(engine) as session:
             row = session.exec(
@@ -2251,7 +2239,6 @@ def update_persona_trait(
     grouping is actually fixed, by editing its polarity or scope. This keeps the
     derived tier from becoming independently authored state.
     """
-    from datetime import datetime
 
     from database.models import PersonaTrait
 
@@ -2265,7 +2252,7 @@ def update_persona_trait(
                 return None
             row.label = label
             row.edited = True
-            row.updated_at = datetime.utcnow()
+            row.updated_at = utc_now()
             session.add(row)
             session.commit()
             session.refresh(row)
@@ -2371,7 +2358,6 @@ def resolve_keyword_weights(
     *persist* False returns the same map without writing, for read-only callers
     — `plan_preview` (issue #91) guarantees a preview performs no DB writes.
     """
-    from datetime import datetime
 
     from agents.keyword_weights import compute_weights, weights_digest
     from database.models import JDProfile
@@ -2406,7 +2392,7 @@ def resolve_keyword_weights(
                     stored = None
             if persist and weights_digest(stored) != weights_digest(blob):
                 profile.weights = blob
-                profile.updated_at = datetime.utcnow()
+                profile.updated_at = utc_now()
                 session.add(profile)
                 session.commit()
 
@@ -2885,7 +2871,6 @@ def _set_linkedin_status(
     """Record the LinkedIn ingestion lifecycle on the user row."""
     if user_id is None:
         return
-    from datetime import datetime
     try:
         with Session(engine) as session:
             db_user = session.get(User, user_id)
@@ -2894,7 +2879,7 @@ def _set_linkedin_status(
             db_user.linkedin_ingest_status = status
             db_user.linkedin_ingest_error = error
             if status == "done":
-                db_user.linkedin_ingested_at = datetime.utcnow()
+                db_user.linkedin_ingested_at = utc_now()
                 if ingested_url:
                     db_user.linkedin_ingested_url = ingested_url
             session.add(db_user)

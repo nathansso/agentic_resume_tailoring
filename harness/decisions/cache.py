@@ -14,12 +14,12 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from sqlmodel import Session, select
 
 import database.db as db
+from database.clock import utc_now
 from database.models import JevDecision
 from harness.decisions.questions import Question, canonical
 
@@ -75,7 +75,7 @@ def make_row(key: str, question: Question, answer: Dict[str, Any], *, requested_
         cache_key=key, point=question.point, question_version=question.version,
         requested_model=requested_model, resolved_model=resolved_model,
         question=question.wire(), answer=dict(answer), input_tokens=input_tokens,
-        output_tokens=output_tokens, created_at=datetime.utcnow())
+        output_tokens=output_tokens, created_at=utc_now())
 
 
 def all_rows() -> List[JevDecision]:

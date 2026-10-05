@@ -195,12 +195,12 @@ def test_chat_seq_is_added_and_backfilled_by_init_db(isolated_engine):
     arrives by `ALTER TABLE` and the ordinals arrive by backfill.
 
     Timestamps are set an hour apart because that is the shape of the production
-    data being migrated: Railway runs Linux, where `utcnow()` resolves to
+    data being migrated: Railway runs Linux, where `utc_now()` resolves to
     microseconds, so deployed rows carry distinct values and their order is
     recoverable. The fully-tied case has its own test in
     `test_ordering_determinism.py`, which pins what the backfill can*not* do.
     """
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
     import database.db as db
     from database.models import ChatMessage, JobDescription
@@ -208,7 +208,7 @@ def test_chat_seq_is_added_and_backfilled_by_init_db(isolated_engine):
     _assert_on_a_test_schema(isolated_engine)
 
     job_id = None
-    base = datetime(2026, 8, 12, 9, 0, 0)
+    base = datetime(2026, 8, 12, 9, 0, 0, tzinfo=timezone.utc)
     with Session(isolated_engine) as session:
         job = JobDescription(title="Legacy Thread", company="Co", description="")
         session.add(job)

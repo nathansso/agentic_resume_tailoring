@@ -27,7 +27,7 @@ def _make_job(engine, title="Eng", company="Acme", status="created", description
 
 def test_job_lifecycle_status_transitions(isolated_engine):
     """Job status advances created→analyzed→tailored→exported via DB writes."""
-    from datetime import datetime
+    from database.clock import utc_now
 
     job = _make_job(isolated_engine, status="created")
     job_id = job.job_id
@@ -37,7 +37,7 @@ def test_job_lifecycle_status_transitions(isolated_engine):
         assert j.status == "created"
 
         j.status = "analyzed"
-        j.updated_at = datetime.utcnow()
+        j.updated_at = utc_now()
         session.add(j)
         session.commit()
 
@@ -46,7 +46,7 @@ def test_job_lifecycle_status_transitions(isolated_engine):
         assert j.status == "analyzed"
 
         j.status = "tailored"
-        j.updated_at = datetime.utcnow()
+        j.updated_at = utc_now()
         session.add(j)
         session.commit()
 
@@ -55,7 +55,7 @@ def test_job_lifecycle_status_transitions(isolated_engine):
         assert j.status == "tailored"
 
         j.status = "exported"
-        j.updated_at = datetime.utcnow()
+        j.updated_at = utc_now()
         session.add(j)
         session.commit()
 

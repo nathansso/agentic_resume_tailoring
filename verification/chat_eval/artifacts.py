@@ -4,13 +4,13 @@ Also provides make_live_session_sink() for opt-in TUI session logging.
 """
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, List
 
 
 def _new_run_dir(base: Path | None = None) -> Path:
-    run_id = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     base = base or (Path.home() / ".art" / "evals")
     run_dir = base / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -52,7 +52,7 @@ def write_handoff(run_dir: Path, results: List[dict]) -> None:
     """Write claude_handoff.md — failing scenarios first with transcript and fix hints."""
     lines: List[str] = [
         "# ART Chat Eval — Claude Handoff Report",
-        f"\nRun: `{run_dir.name}`  |  Generated: {datetime.utcnow().isoformat()}Z",
+        f"\nRun: `{run_dir.name}`  |  Generated: {datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')}",
         "",
     ]
 

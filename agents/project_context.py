@@ -21,13 +21,13 @@ Model-free, so the harness can import it (tests/test_harness_boundary.py).
 from __future__ import annotations
 
 import re
-from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from uuid import UUID
 
 from sqlmodel import Session, select
 
 from agents.checks import exp_key, proj_key
+from database.clock import utc_now
 from database.models import Achievement, Education, Experience, Project
 
 UNREVIEWED, LINKED, PERSONAL = "unreviewed", "linked", "personal"
@@ -263,7 +263,7 @@ def set_project_context(engine, user_id: UUID, project: str, context: str) -> Di
             return _error("invalid_context",
                           "context must be an exp: or edu: key, 'personal' or 'unreviewed'.")
         row.experience_id, row.education_id, row.context_status = exp_id, edu_id, status
-        row.updated_at = datetime.utcnow()
+        row.updated_at = utc_now()
         session.add(row)
         session.commit()
         entry = context_index(session, user_id)[row.project_id]
@@ -292,7 +292,7 @@ def link_achievement(engine, user_id: UUID, achievement: str, project: Optional[
                 return _error("not_found", f"No project {project!r}.",
                               [proj_key({"name": p.name}) for p in projs][:10])
         ach.project_id = target.project_id if target else None
-        ach.updated_at = datetime.utcnow()
+        ach.updated_at = utc_now()
         session.add(ach)
         session.commit()
         return {"achievement_key": key,

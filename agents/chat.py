@@ -16,6 +16,7 @@ from sqlmodel import Session, select
 
 from llm import get_llm
 from agents.skill_selection import skill_names
+from database.clock import utc_now
 from database.db import engine, latest_result
 import services
 from database.models import (
@@ -740,7 +741,6 @@ class ChatAgent:
 
     def _analyze_active_job(self, args: str) -> str:
         """Extract skills from the active job description and save JobSkill records."""
-        from datetime import datetime
         from agents.job_analyzer import JobAnalyzerAgent
 
         job = self._get_active_job()
@@ -787,7 +787,7 @@ class ChatAgent:
                 job_db.embedding = None
                 job_db.embedding_model = None
                 job_db.status = "analyzed"
-                job_db.updated_at = datetime.utcnow()
+                job_db.updated_at = utc_now()
                 session.add(job_db)
                 session.commit()
                 # Read before the session closes: a committed instance is
@@ -830,7 +830,6 @@ class ChatAgent:
         (issue #91): the pipeline executes those actions instead of re-planning.
         """
         try:
-            from datetime import datetime
             from database.user_utils import get_active_profile
             from services import job_tailor_limit, tailor_runs_remaining
             import graph.pipeline as _pipeline
@@ -903,7 +902,7 @@ class ChatAgent:
                     job_db.status = "tailored"
                     job_db.retailor_count = (job_db.retailor_count or 0) + 1
                     runs_used = job_db.retailor_count
-                    job_db.updated_at = datetime.utcnow()
+                    job_db.updated_at = utc_now()
                     session.add(job_db)
                     session.commit()
 
@@ -1033,7 +1032,7 @@ class ChatAgent:
                 job_db = session.get(JobDescription, job.job_id)
                 if job_db:
                     job_db.status = "exported"
-                    job_db.updated_at = datetime.utcnow()
+                    job_db.updated_at = utc_now()
                     session.add(job_db)
                 session.commit()
 
@@ -1678,12 +1677,11 @@ class ChatAgent:
         if len(user_message) > 100 and self.active_job_id:
             job = self._get_active_job()
             if job and getattr(job, "status", "created") == "created" and not job.description:
-                from datetime import datetime
                 with Session(engine) as session:
                     job_db = session.get(JobDescription, job.job_id)
                     if job_db:
                         job_db.description = user_message
-                        job_db.updated_at = datetime.utcnow()
+                        job_db.updated_at = utc_now()
                         session.add(job_db)
                         session.commit()
                 return (

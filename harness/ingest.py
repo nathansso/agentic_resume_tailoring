@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple
 from types import SimpleNamespace
 from uuid import UUID
@@ -50,6 +49,7 @@ from agents.jd_payload import (
 from agents.kg_store import KGStoreMixin, _clean_date
 from agents.skill_matching import match_requirement_terms
 from agents.skill_postprocessor import normalize_skill_name, postprocess_skills
+from database.clock import utc_now
 from database.models import (
     Achievement, Education, Experience, JDProfile, JobDescription, JobHead, JobRule, Project,
     Skill, UserSkill,
@@ -225,7 +225,7 @@ def _correct(user_id: UUID, kind: str, data: Dict) -> Optional[Tuple[str, Dict, 
                 setattr(row, field, value)
                 changed.append(field)
         if changed:
-            row.updated_at = datetime.utcnow()
+            row.updated_at = utc_now()
             session.add(row)
             session.commit()
             session.refresh(row)
@@ -296,7 +296,7 @@ def _upsert_rule(user_id: UUID, data: Dict) -> Dict:
             status = "created"
         elif (rule.value_if_yes, rule.value_if_no) != (data["value_if_yes"], data.get("value_if_no")):
             rule.value_if_yes, rule.value_if_no = data["value_if_yes"], data.get("value_if_no")
-            rule.updated_at = datetime.utcnow()
+            rule.updated_at = utc_now()
             status = "merged"
         else:
             return {"status": "unchanged", "key": f"rule:{rule.rule_id}", "message": None}
@@ -499,7 +499,7 @@ def open_job(user_id: UUID, jd_text: str, requirements: Sequence[Dict], metadata
                                 ("application_status", metadata.get("status"))):
                 if value:
                     setattr(job, attr, value)
-            job.updated_at = datetime.utcnow()
+            job.updated_at = utc_now()
         session.add(job)
         session.commit()
         session.refresh(job)
@@ -533,7 +533,7 @@ def open_job(user_id: UUID, jd_text: str, requirements: Sequence[Dict], metadata
             answers[rid] = {"answer": bool(ans["answer"]), "quote": ans.get("quote"),
                             "source": "host"}
         profile.eligibility = answers or None
-        profile.updated_at = datetime.utcnow()
+        profile.updated_at = utc_now()
         session.add(profile)
         session.commit()
         n_reqs = len((profile.payload or {}).get("requirements") or [])

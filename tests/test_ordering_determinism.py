@@ -7,7 +7,7 @@ with the assistant's reply above the user's question, and the prune deleted an
 arbitrary set of messages rather than the oldest.
 
 **Why these tests force the tie rather than relying on timing.** The bug
-reproduces every run on Windows, where `datetime.utcnow()` is coarse enough that
+reproduces every run on Windows, where `datetime.now()` is coarse enough that
 200 consecutive calls return one value, and almost never on Linux, where it
 resolves to microseconds — so CI stayed green through the whole life of the
 defect. A test that writes quickly and hopes for a collision is a test that only
@@ -15,7 +15,7 @@ runs on one developer's machine. These write normally and then collapse
 `created_at` to a single value, which is the same state the bug produced and is
 reached identically on every platform and both engines.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from sqlmodel import Session, select
@@ -23,7 +23,7 @@ from sqlmodel import Session, select
 import services as services_module
 from database.models import ChatMessage, JobDescription
 
-FIXED = datetime(2026, 8, 12, 12, 0, 0)
+FIXED = datetime(2026, 8, 12, 12, 0, 0, tzinfo=timezone.utc)
 
 
 def _make_job(engine, title="Ordering Test"):
@@ -165,7 +165,7 @@ def test_backfill_recovers_order_from_distinct_timestamps(isolated_engine):
     """Legacy rows with usable timestamps are restored to their true order.
 
     The realistic production shape: the deployed database runs on Linux, where
-    `datetime.utcnow()` resolves to microseconds, so the great majority of
+    `utc_now()` resolves to microseconds, so the great majority of
     existing rows carry distinct `created_at` values and their order *is*
     recoverable. This is the case the backfill exists to serve.
     """

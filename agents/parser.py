@@ -1,7 +1,6 @@
 import logging
 import json
 import re
-from datetime import datetime
 from typing import Dict, Any, List
 from sqlmodel import Session, select
 from langchain_core.prompts import ChatPromptTemplate
@@ -10,6 +9,7 @@ from llm import get_llm, get_extractor
 from agents.extraction_schemas import (
     ExperienceList, EducationList, AchievementList, ProjectList, SkillList,
 )
+from database.clock import utc_now
 from database.db import engine, next_seq
 from database.models import User, Skill, UserSkill, Education, Experience, Project, Achievement, DeletedEntry
 from database.user_utils import require_active_user
@@ -358,7 +358,7 @@ class ResumeParserAgent(KGStoreMixin):
                         match.bullets = bullets
                         touched = True
                     if touched:
-                        match.updated_at = datetime.utcnow()
+                        match.updated_at = utc_now()
                         session.add(match)
                     logger.debug(f"Merged LinkedIn experience into: {match.title} @ {match.company}")
                     continue

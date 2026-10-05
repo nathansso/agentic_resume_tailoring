@@ -28,7 +28,6 @@ import os
 import re
 import subprocess
 import tempfile
-from datetime import datetime
 from typing import Callable, Dict, List, Optional, Sequence
 
 from sqlmodel import Session, select
@@ -42,6 +41,7 @@ from agents.formatter import (
     _find_latex_engine,
 )
 from agents.skill_postprocessor import should_reject_skill
+from database.clock import utc_now
 from database.models import BlockLineCache
 
 logger = logging.getLogger(__name__)
@@ -184,7 +184,7 @@ def bullet_lines(texts: Sequence[str], *,
                 for h, n in fresh.items():
                     session.merge(BlockLineCache(
                         text_hash=h, template_hash=tpl, lines=int(n), engine=eng,
-                        measured_at=datetime.utcnow()))
+                        measured_at=utc_now()))
                 session.commit()
         except Exception as exc:  # a cache write must never fail the caller
             logger.warning("render cache: could not store %d rows: %s", len(fresh), exc)

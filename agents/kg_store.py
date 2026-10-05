@@ -15,12 +15,12 @@ model client; `tests/test_harness_boundary.py` holds that line.
 """
 import logging
 import re
-from datetime import datetime
 from typing import Any, Dict, List
 
 from sqlmodel import Session, select
 
 import database.db as _db
+from database.clock import utc_now
 from database.db import next_seq
 from database.models import Achievement, DeletedEntry, Education, Experience, Project, Skill, UserSkill
 from agents.skill_postprocessor import normalize_skill_name
@@ -85,7 +85,7 @@ class KGStoreMixin:
                     changed = False
                     if self._is_placeholder_name(match.title) and not self._is_placeholder_name(title):
                         match.title = title
-                        match.updated_at = datetime.utcnow()
+                        match.updated_at = utc_now()
                         session.add(match)
                         changed = True
                     if self._merge_experience(match, start, end, desc, bullets):
@@ -138,7 +138,7 @@ class KGStoreMixin:
         if bullets and not (row.bullets or []):
             row.bullets = bullets; changed = True
         if changed:
-            row.updated_at = datetime.utcnow()
+            row.updated_at = utc_now()
         return changed
 
     # ── Self-heal for existing rows (issue #72) ──────────────────────────────
@@ -174,7 +174,7 @@ class KGStoreMixin:
                 cs, ce = _clean_date(e.start_date), _clean_date(e.end_date)
                 if cs != e.start_date or ce != e.end_date:
                     e.start_date, e.end_date = cs, ce
-                    e.updated_at = datetime.utcnow()
+                    e.updated_at = utc_now()
                     session.add(e)
             match = next(
                 (k for k in kept
@@ -226,7 +226,7 @@ class KGStoreMixin:
                 cs, ce = _clean_date(p.start_date), _clean_date(p.end_date)
                 if cs != p.start_date or ce != p.end_date:
                     p.start_date, p.end_date = cs, ce
-                    p.updated_at = datetime.utcnow()
+                    p.updated_at = utc_now()
                     session.add(p)
             match = next(
                 (k for k in kept
@@ -250,7 +250,7 @@ class KGStoreMixin:
                 richer.experience_id, richer.education_id = poorer.experience_id, poorer.education_id
                 richer.context_status = poorer.context_status
             _ctx.repoint(session, Achievement, "project_id", poorer.project_id, richer.project_id)
-            richer.updated_at = datetime.utcnow()
+            richer.updated_at = utc_now()
             session.add(richer)
             session.flush()
             session.delete(poorer)
@@ -295,7 +295,7 @@ class KGStoreMixin:
                     if not getattr(richer, field, None) and getattr(poorer, field, None):
                         setattr(richer, field, getattr(poorer, field))
             _ctx.repoint(session, Project, "education_id", poorer.education_id, richer.education_id)
-            richer.updated_at = datetime.utcnow()
+            richer.updated_at = utc_now()
             session.add(richer)
             session.flush()
             session.delete(poorer)
@@ -343,7 +343,7 @@ class KGStoreMixin:
                         if v and not getattr(match, field, None):
                             setattr(match, field, v); changed = True
                     if changed:
-                        match.updated_at = datetime.utcnow()
+                        match.updated_at = utc_now()
                         session.add(match)
                     outcomes.append(("merged" if changed else "unchanged", match))
                     continue
@@ -426,7 +426,7 @@ class KGStoreMixin:
                 setattr(row, field, val)
                 changed = True
         if changed:
-            row.updated_at = datetime.utcnow()
+            row.updated_at = utc_now()
         return changed
 
     @classmethod
@@ -461,7 +461,7 @@ class KGStoreMixin:
                     setattr(richer, field, getattr(poorer, field))
             if richer.project_id is None and poorer.project_id is not None:
                 richer.project_id = poorer.project_id
-            richer.updated_at = datetime.utcnow()
+            richer.updated_at = utc_now()
             session.add(richer)
             session.delete(poorer)
             if richer is a:  # a won: replace match in kept
@@ -705,7 +705,7 @@ class KGStoreMixin:
             row.description = f"{row.description}\n\n[LinkedIn] {desc}"
             changed = True
         if changed:
-            row.updated_at = datetime.utcnow()
+            row.updated_at = utc_now()
         return changed
 
     # ── User-deletion tombstones (issue #92) ─────────────────────────────────

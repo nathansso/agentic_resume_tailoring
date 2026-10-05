@@ -43,7 +43,7 @@ import logging
 import os
 import random
 import re
-from datetime import datetime
+from database.clock import utc_now
 from typing import Dict, List, Optional, Tuple
 
 from agents.skill_scorer import _env_float
@@ -738,7 +738,7 @@ def decision_log_entry(
         if isinstance(comp, dict) and "score" in comp:
             reward[component] = comp["score"]
     entry = {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": utc_now().isoformat(),
         "revision_notes": (revision_notes or "").strip(),
         "planner": plan.get("planner"),
         "exploration_mode": bool(exploration_mode),

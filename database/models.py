@@ -1,5 +1,6 @@
 from typing import Optional, List, Dict
 from datetime import datetime
+from database.clock import utc_now
 from uuid import UUID, uuid4
 from sqlmodel import Field, SQLModel, Relationship, JSON
 from sqlalchemy import Column
@@ -36,8 +37,8 @@ class User(SQLModel, table=True):
     resume_path: Optional[str] = None
     resume_markdown: Optional[str] = None
     resume_style: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     # Relationships
     skills: List["UserSkill"] = Relationship(back_populates="user")
@@ -57,8 +58,8 @@ class Skill(SQLModel, table=True):
     # model produced it so a model change invalidates the cache cleanly.
     embedding: Optional[str] = None
     embedding_model: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     user_links: List["UserSkill"] = Relationship(back_populates="skill")
     job_links: List["JobSkill"] = Relationship(back_populates="skill")
@@ -79,8 +80,8 @@ class UserSkill(SQLModel, table=True):
     # its chat history must never cascade into knowledge-graph rows, which belong
     # to the user profile.
     source_context: Optional[str] = Field(default=None)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     user: User = Relationship(back_populates="skills")
     skill: Skill = Relationship(back_populates="user_links")
@@ -103,8 +104,8 @@ class Experience(SQLModel, table=True):
     # rows are written in one ingestion loop, so they all share a `created_at`
     # and ordering on it alone is undefined. Assigned by database.db::next_seq.
     seq: Optional[int] = Field(default=None, index=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     user: User = Relationship(back_populates="experiences")
 
@@ -128,8 +129,8 @@ class Education(SQLModel, table=True):
     manually_edited: bool = Field(default=False)
     # Per-user résumé-document ordinal (issue #180). See Experience.seq.
     seq: Optional[int] = Field(default=None, index=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     user: User = Relationship(back_populates="education_entries")
 
@@ -156,8 +157,8 @@ class Achievement(SQLModel, table=True):
     # Achievement -AWARDED_FOR-> Project edge. Null for awards not tied to one
     # project (Dean's List). Set only by agents/project_context.link_achievement.
     project_id: Optional[UUID] = Field(default=None, foreign_key="project.project_id")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     user: User = Relationship(back_populates="achievement_entries")
 
@@ -185,8 +186,8 @@ class Project(SQLModel, table=True):
     experience_id: Optional[UUID] = Field(default=None, foreign_key="experience.experience_id")
     education_id: Optional[UUID] = Field(default=None, foreign_key="education.education_id")
     context_status: str = Field(default="unreviewed")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     user: User = Relationship(back_populates="projects")
     blurbs: List["ProjectBlurb"] = Relationship(back_populates="project")
@@ -200,7 +201,7 @@ class ProjectBlurb(SQLModel, table=True):
     project_id: UUID = Field(foreign_key="project.project_id")
     style: str # 'concise', 'detailed', 'metrics', 'technical'
     content: str # The actual generated text
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
     project: Project = Relationship(back_populates="blurbs")
 
@@ -224,8 +225,8 @@ class JobDescription(SQLModel, table=True):
     # the description is re-ingested.
     embedding: Optional[str] = None
     embedding_model: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     skills_required: List["JobSkill"] = Relationship(back_populates="job")
     results: List["UserJobResult"] = Relationship(back_populates="job")
@@ -236,8 +237,8 @@ class JobSkill(SQLModel, table=True):
     skill_id: UUID = Field(foreign_key="skill.skill_id")
     required: bool = True # True = Required, False = Preferred
     weight: float = 1.0
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     job: JobDescription = Relationship(back_populates="skills_required")
     skill: Skill = Relationship(back_populates="job_links")
@@ -287,8 +288,8 @@ class UserJobResult(SQLModel, table=True):
     layout_overrides: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
 
     verification_status: str = "pending" # approved, rejected
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     user: User = Relationship(back_populates="job_results")
     job: JobDescription = Relationship(back_populates="results")
@@ -313,7 +314,7 @@ class ChatMessage(SQLModel, table=True):
     # Nullable only so the migration can add the column; the backfill leaves no
     # NULLs, which keeps reads off SQLite/Postgres NULL-collation differences.
     seq: Optional[int] = Field(default=None, index=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
 
 class InstitutionCanonical(SQLModel, table=True):
@@ -331,7 +332,7 @@ class InstitutionCanonical(SQLModel, table=True):
     raw_norm: str = Field(primary_key=True)   # normalized lookup key
     canonical_key: str                         # ROR id, or the normalized string
     display_name: Optional[str] = None         # ROR display name when resolved
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
 
 class DeletedEntry(SQLModel, table=True):
@@ -351,7 +352,7 @@ class DeletedEntry(SQLModel, table=True):
     entity_type: str  # "experience" | "education" | "project"
     key_a: str        # experience: title | education: institution | project: name
     key_b: Optional[str] = None  # experience: company | education: degree | project: repo_url
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
 
 class AIUsage(SQLModel, table=True):
@@ -411,8 +412,8 @@ class JobCard(SQLModel, table=True):
 
     # When the source result last changed — the recency signal for selection.
     source_updated_at: Optional[datetime] = Field(default=None)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 class JDProfile(SQLModel, table=True):
@@ -470,8 +471,8 @@ class JDProfile(SQLModel, table=True):
     # no rule has been answered. The host answers today; Jev will (#193).
     eligibility: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 class UserPreference(SQLModel, table=True):
@@ -547,8 +548,8 @@ class UserPreference(SQLModel, table=True):
     edited: bool = Field(default=False)
     extraction_version: int = Field(default=1)
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 class PersonaTrait(SQLModel, table=True):
@@ -609,8 +610,8 @@ class PersonaTrait(SQLModel, table=True):
     # `UserPreference.edited` and `JDProfile` requirements carry.
     edited: bool = Field(default=False)
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 class Persona(SQLModel, table=True):
@@ -650,8 +651,8 @@ class Persona(SQLModel, table=True):
     # from. Unequal => the persona is stale and is rebuilt before it is served.
     leaf_digest: Optional[str] = Field(default=None)
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 class BlockLineCache(SQLModel, table=True):
@@ -672,7 +673,7 @@ class BlockLineCache(SQLModel, table=True):
     template_hash: str = Field(primary_key=True)
     lines: int
     engine: str = Field(default="")
-    measured_at: datetime = Field(default_factory=datetime.utcnow)
+    measured_at: datetime = Field(default_factory=utc_now)
 
 
 class JevDecision(SQLModel, table=True):
@@ -698,7 +699,7 @@ class JevDecision(SQLModel, table=True):
     answer: Dict = Field(default={}, sa_column=Column(JSON))
     input_tokens: Optional[float] = None
     output_tokens: Optional[float] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
 
 # ── Tailoring tree (issue #196) ───────────────────────────────────────────────
@@ -729,7 +730,7 @@ class TailorNode(SQLModel, table=True):
     layout_overrides: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
     result_id: Optional[UUID] = Field(default=None)
     note: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
 
 class JobHead(SQLModel, table=True):
@@ -737,7 +738,7 @@ class JobHead(SQLModel, table=True):
     job_id: UUID = Field(foreign_key="jobdescription.job_id", primary_key=True)
     user_id: UUID = Field(foreign_key="user.user_id", index=True)
     node_id: UUID
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 class TreeEvent(SQLModel, table=True):
@@ -751,7 +752,7 @@ class TreeEvent(SQLModel, table=True):
     job_id: UUID = Field(foreign_key="jobdescription.job_id", index=True)
     node_id: UUID
     kind: str  # commit | checkout
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
 
 class PlanProgram(SQLModel, table=True):
@@ -766,7 +767,7 @@ class PlanProgram(SQLModel, table=True):
     user_id: UUID = Field(foreign_key="user.user_id", index=True)
     job_id: UUID = Field(foreign_key="jobdescription.job_id", index=True)
     program: Dict = Field(default={}, sa_column=Column(JSON))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
 
 class JobRule(SQLModel, table=True):
@@ -785,8 +786,8 @@ class JobRule(SQLModel, table=True):
     question: str
     value_if_yes: str
     value_if_no: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 # ── Bullet library and track baselines (issue #229) ──────────────────────────
@@ -812,8 +813,8 @@ class BulletVariant(SQLModel, table=True):
     cites: List = Field(default_factory=list, sa_column=Column(JSON))
     line_count: Optional[int] = None
     source_node_id: Optional[UUID] = Field(default=None)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 class TrackBaseline(SQLModel, table=True):
@@ -823,7 +824,7 @@ class TrackBaseline(SQLModel, table=True):
     track: str = Field(primary_key=True)  # lowercase, e.g. data_science
     node_id: UUID
     job_id: UUID
-    saved_at: datetime = Field(default_factory=datetime.utcnow)
+    saved_at: datetime = Field(default_factory=utc_now)
 
 
 class JobRoleFamily(SQLModel, table=True):
@@ -834,4 +835,4 @@ class JobRoleFamily(SQLModel, table=True):
     user_id: UUID = Field(foreign_key="user.user_id", index=True)
     role_family: str
     source: str = Field(default="default")
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=utc_now)

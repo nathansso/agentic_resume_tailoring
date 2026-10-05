@@ -49,6 +49,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from agents.extraction_schemas import RoleFamily, RoleFamilyClassification
 from agents.skill_scorer import _env_float, _env_int
+from database.clock import as_utc, utc_now
 from database.vector_search import search_similar
 
 logger = logging.getLogger(__name__)
@@ -540,7 +541,9 @@ def _recency_weight(source_updated_at, now: datetime) -> float:
     if not isinstance(source_updated_at, datetime):
         return 0.0
     half_life = max(1.0, _env_float("JOBCARD_RECENCY_HALFLIFE_DAYS", 90.0))
-    age_days = max(0.0, (now - source_updated_at).total_seconds() / 86400.0)
+    # Both sides through as_utc: a card built by hand or read from an old
+    # naive-UTC row must not raise against an aware `now` (#210).
+    age_days = max(0.0, (as_utc(now) - as_utc(source_updated_at)).total_seconds() / 86400.0)
     return float(0.5 ** (age_days / half_life))
 
 
@@ -601,7 +604,7 @@ def select_cards(
     """
     if not cards:
         return []
-    now = now or datetime.utcnow()
+    now = now or utc_now()
     weights = _weights()
     sims = _similarities(cards, jd_vector)
     query_keys = set(query_index_keys(jd_skill_names, role_family))

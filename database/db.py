@@ -37,6 +37,38 @@ if _sqlite:
 _connect_args = {"check_same_thread": False} if _sqlite else {}
 engine = create_engine(DATABASE_URL, connect_args=_connect_args)
 
+
+def pin_utc_session(eng) -> None:
+    """PostgreSQL only: make every new connection of *eng* run with TimeZone UTC.
+
+    Datetimes are aware UTC end to end (`database/clock.py`, #210). Production's
+    columns were created `timestamp WITHOUT time zone`, and an aware value
+    assigned to one of those is converted to the *session's* time zone before the
+    zone is dropped. On Supabase the session is UTC and nothing shifts, but that
+    is a property of the host, not of this code; a role- or database-level
+    `timezone` setting would silently move every timestamp written from then on.
+    Pinning the session removes the dependency, and it is a no-op where the
+    session is already UTC.
+
+    A `SET` after connect rather than a `-c timezone=utc` startup option: a pooler
+    in front of Postgres (Supabase's) may reject or reroute startup parameters.
+    """
+    if eng.dialect.name != "postgresql":
+        return
+    from sqlalchemy import event
+
+    @event.listens_for(eng, "connect")
+    def _set_utc(dbapi_connection, _record):
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("SET TIME ZONE 'UTC'")
+        finally:
+            cursor.close()
+        dbapi_connection.commit()
+
+
+pin_utc_session(engine)
+
 def _migrate_db() -> None:
     """Apply incremental column additions for existing DBs (SQLite and PostgreSQL)."""
     from sqlalchemy import text
