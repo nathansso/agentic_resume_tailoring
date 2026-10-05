@@ -175,10 +175,9 @@ def _mid_pick(candidates: Sequence[float], floor_p: float, kept_p: Sequence[floa
     return min(candidates, key=lambda t: (round(abs(t - mid), 6), -t))
 
 
-def fit_target(rows, floor: float = 0.0) -> Dict[str, Any]:
+def fit_target(rows) -> Dict[str, Any]:
     """TAU_TARGET: among the true preferences Jev binds to an item (target not no_match), no wrong binding,
-    then the most right ones, then the middle of the gap, over the grid values at or above `floor` (0 for v1;
-    v2 floors it, since its set has no wrong named binding to bound it from below)."""
+    then the most right ones, then the middle of the gap."""
     every = [r for r in rows if r["is_preference"] and r["guess"] and r["guess"].target_key]
     unnamed = [r for r in every if not r["guess"].target_named]       # the message does not say the name
     binds = [r for r in every if r["guess"].target_named]
@@ -188,9 +187,8 @@ def fit_target(rows, floor: float = 0.0) -> Dict[str, Any]:
     def stats(t):
         return (sum(r["guess"].target_p >= t - 1e-9 for r in wrong),
                 sum(r["guess"].target_p >= t - 1e-9 for r in right))
-    grid = [t for t in GRID if t >= floor - 1e-9]
-    best = min((stats(t)[0], -stats(t)[1]) for t in grid)
-    cands = [t for t in grid if (stats(t)[0], -stats(t)[1]) == best]
+    best = min((stats(t)[0], -stats(t)[1]) for t in GRID)
+    cands = [t for t in GRID if (stats(t)[0], -stats(t)[1]) == best]
     top_wrong = max((r["guess"].target_p for r in wrong), default=0.0)
     kept = [r["guess"].target_p for r in right if r["guess"].target_p >= min(cands) - 1e-9]
     tau = _mid_pick(cands, top_wrong if best[0] == 0 else 0.0, kept)
@@ -270,10 +268,10 @@ def fit_lo(rows, tau_hi: float) -> Dict[str, Any]:
             "lowest_pref": min(prefs, key=lambda r: r["guess"].p) if prefs else None}
 
 
-def recommend(rows, target_floor: float = 0.0) -> Dict[str, Any]:
+def recommend(rows) -> Dict[str, Any]:
     """The three thresholds. TAU_TARGET first (it decides which bindings count), then TAU_HI on the writes
     it allows (it does not depend on TAU_LO), then TAU_LO below it."""
-    tgt = fit_target(rows, target_floor)
+    tgt = fit_target(rows)
     hi = fit_hi(rows, 0.0, tgt["tau_target"])
     lo = fit_lo(rows, hi["tau_hi"])
     return {"tau_target": tgt["tau_target"], "tau_hi": hi["tau_hi"], "tau_lo": lo["tau_lo"],

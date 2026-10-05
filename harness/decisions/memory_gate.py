@@ -117,21 +117,22 @@ TAU_TARGET = 0.75
 
 # memory_gate@v2 (#244): fitted on eval/memory_gate_labels/context/ (40 messages, 33 standing preferences),
 # v2's own answers, by the same rules as above (`python eval/fit_memory_gate_context.py analyze`), TAU_HI
-# again as if the code rules did not exist and again floored at HI_FLOOR. The evidence is thin, so each of
-# these sits where the rule leaves it, not where a gap is:
-#   TAU_TARGET_V2 0.50: the set has no wrong binding among the named ones (3 right, all >= 0.83), so nothing
-#     bounds it from below. The rule alone would take 0.40; TARGET_FLOOR_V2 (new, like HI_FLOOR) lifts it to
-#     0.50: Jev must put more than half its mass on the item. The five wrong bindings in the set are all
-#     items the message does not name; the name check owns them.
-#   TAU_HI_V2 0.50: 0 wrong of 3 writes without the code rules (the lowest right one scores 0.84), so every
-#     grid value from the floor to 0.80 is equal and the floor is what the rule gives. With the code rules
-#     on, v2 writes nothing on this set.
-#   TAU_LO_V2 0.20: 0 of the 33 true preferences are dropped (the lowest is cx_looker_stop, 0.32), and one
-#     non-preference lands between TAU_LO_V2 and TAU_HI_V2.
-TARGET_FLOOR_V2 = 0.5
+# again as if the code rules did not exist and again floored at HI_FLOOR. **The pin rule:** a write
+# threshold of the context variant is never looser than the evidence-backed v1 one while the variant's own
+# write set is thinner than v1's: TAU_HI_V2 = max(fit, TAU_HI) and TAU_TARGET_V2 = max(fit, TAU_TARGET)
+# unless the set holds at least V1_WOULD_BE_WRITES would-be writes (v1's own, with the code rules off).
+# The reason is that a threshold fitted on three would-be writes sits wherever the rule leaves it (the
+# floor), which is not evidence that a looser cut is safe. TAU_LO is not a write threshold and is fitted.
+#   TAU_HI_V2 0.65: the fit alone gives 0.50 (0 wrong of 3 writes without the code rules, the lowest right
+#     one scores 0.84, so every grid value from the floor to 0.80 is equal); 3 < 29, so v1's 0.65 holds.
+#   TAU_TARGET_V2 0.75: the fit alone gives 0.40 (3 named bindings, all right and >= 0.83, none wrong, so
+#     nothing bounds it from below); pinned to v1's 0.75. The five wrong bindings in the set are all items
+#     the message does not name; the name check owns them.
+#   TAU_LO_V2 0.20: 0 of the 33 true preferences are dropped (the lowest is cx_looker_stop, 0.32).
+V1_WOULD_BE_WRITES = 29     # #202's writes at its thresholds with the code rules off (REPORT.md: 29)
 TAU_LO_V2 = 0.20
-TAU_HI_V2 = 0.50
-TAU_TARGET_V2 = 0.50
+TAU_HI_V2 = 0.65
+TAU_TARGET_V2 = 0.75
 
 
 def thresholds(version: str = VERSION) -> Tuple[float, float, float]:

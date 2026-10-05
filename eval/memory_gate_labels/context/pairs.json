@@ -1,7 +1,7 @@
 {
- "_comment": "The context set for the memory gate's second version, memory_gate@v2 (#244): each message leans on the assistant turn before it ('never list that again'). The 12 pairs with origin 202 are #202's user-confirmed context messages, re-categorised; the rest are new, synthetic, over the same catalog (never personal/), and labelled by the planner, pending the user's review (see REVIEW.md). The label assumes the previous turn is known.",
+ "_comment": "The context set for the memory gate's second version, memory_gate@v2 (#244): each message leans on the assistant turn before it ('never list that again'). The 12 pairs with origin 202 are #202's user-confirmed context messages, re-categorised; the rest are new, synthetic, over the same catalog (never personal/), labelled by the planner and confirmed by the user as proposed (see REVIEW.md). The label assumes the previous turn is known.",
  "version": 1,
- "labels_status": "planner-reviewed, pending the user's spot-check (origin 244); user-confirmed (origin 202)",
+ "labels_status": "user-confirmed",
  "profile": "data_science_generalist_danielle_okafor",
  "directions": [
   "emphasize",

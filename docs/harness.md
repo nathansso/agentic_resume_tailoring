@@ -489,7 +489,7 @@ negation cases separately (`eval/memory_gate_labels/REPORT.md`).
   to import the user's existing standing preferences and negative pins through
   `record_preference`. There is no import path of its own.
 
-Thresholds are constants in `memory_gate.py`, with a drift test, like the other Jev points. τ_hi is fitted as if the code rules above did not exist and is floored at 0.5: a write needs Jev to call the message more likely than not a preference. v2 has its own three (`TAU_*_V2`), fitted on its own answers by the same rules; its target threshold is floored at 0.5 too, since that set holds no wrong named binding to bound it from below.
+Thresholds are constants in `memory_gate.py`, with a drift test, like the other Jev points. τ_hi is fitted as if the code rules above did not exist and is floored at 0.5: a write needs Jev to call the message more likely than not a preference. v2 has its own three (`TAU_*_V2`), fitted on its own answers by the same rules and then **pinned: a context variant's write thresholds are never looser than v1's evidence-backed ones while its own would-be write set is thinner than v1's** (`TAU_HI_V2` = max(fit, `TAU_HI`), `TAU_TARGET_V2` = max(fit, `TAU_TARGET`)). A threshold fitted on three would-be writes sits where the rule leaves it, which is not evidence that a looser cut is safe. The values are 0.20, 0.65 and 0.75 (the fit alone gives 0.20, 0.50 and 0.40).
 Consolidating every fitted threshold into one policy artifact is a follow-up.
 
 ## 11. Tailoring history as a tree (#196)

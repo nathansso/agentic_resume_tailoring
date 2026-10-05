@@ -224,16 +224,48 @@ def test_a_target_only_the_previous_turn_names_is_never_written(replayed):
 
 # ── the numbers v2 ships with ────────────────────────────────────────────────
 
-def test_the_v2_constants_equal_the_fit_and_v1s_are_unchanged(replayed):
+def test_the_v2_constants_are_the_pinned_fit_and_v1s_are_unchanged(replayed):
     rows, _, _ = replayed
     rec = ctx.recommend(rows)
     assert (mg.TAU_LO_V2, mg.TAU_HI_V2, mg.TAU_TARGET_V2) == (rec["tau_lo"], rec["tau_hi"], rec["tau_target"])
-    assert (mg.TAU_LO_V2, mg.TAU_HI_V2, mg.TAU_TARGET_V2) == (0.20, 0.50, 0.50)
+    assert (mg.TAU_LO_V2, mg.TAU_HI_V2, mg.TAU_TARGET_V2) == (0.20, 0.65, 0.75)
     assert (mg.TAU_LO, mg.TAU_HI, mg.TAU_TARGET) == (0.25, 0.65, 0.75)               # #202's, unchanged
     assert mg.TAU_LO_V2 < mg.TAU_HI_V2 and 0 < mg.TAU_TARGET_V2 < 1
+    # the fit alone, before the pin rule, is what #202's rules give on v2's answers
+    assert rec["pinned"] and rec["raw"] == {"tau_hi": 0.50, "tau_target": 0.40, "tau_lo": 0.20}
 
 
-def test_tau_hi_v2_has_the_same_hard_floor_and_a_set_with_no_wrong_write_cannot_pull_it_under(replayed):
+def test_the_pin_rule_a_context_variant_is_never_looser_than_v1_while_its_write_set_is_thinner(replayed, monkeypatch):
+    rows, _, _ = replayed
+    rec = ctx.recommend(rows)
+    assert rec["hi"]["autos"] == 3 < mg.V1_WOULD_BE_WRITES == 29 and rec["pinned"]
+    assert mg.TAU_HI_V2 == max(rec["raw"]["tau_hi"], mg.TAU_HI) and mg.TAU_TARGET_V2 == max(rec["raw"]["tau_target"], mg.TAU_TARGET)
+    assert mg.TAU_HI_V2 >= mg.TAU_HI and mg.TAU_TARGET_V2 >= mg.TAU_TARGET
+    # TAU_LO is not a write threshold: it is fitted again under the pinned TAU_HI_V2, and still drops no preference
+    assert rec["lo"]["dropped_prefs"] == 0 and rec["lo"]["tau_lo"] == mg.TAU_LO_V2
+    # a set whose would-be writes reach v1's is fitted on its own evidence: the pin lets go
+    monkeypatch.setattr(mg, "V1_WOULD_BE_WRITES", 3)
+    free = ctx.recommend(rows)
+    assert not free["pinned"] and (free["tau_hi"], free["tau_target"]) == (0.50, 0.40)
+    # the pin never lowers a threshold the fit put above v1's
+    monkeypatch.setattr(mg, "V1_WOULD_BE_WRITES", 29)
+    monkeypatch.setattr(mg, "TAU_HI", 0.30)
+    monkeypatch.setattr(mg, "TAU_TARGET", 0.20)
+    again = ctx.recommend(rows)
+    assert (again["tau_hi"], again["tau_target"]) == (0.50, 0.40)
+
+
+def test_v1_would_be_writes_is_v1s_own_count_with_the_code_rules_off(isolated_engine, monkeypatch):
+    monkeypatch.setenv("ART_JEV_MODE", "replay")
+    monkeypatch.setattr(engine, "get_client", lambda: pytest.fail("replay reached for a client"))
+    recordings.import_recordings(PARENT)
+    rows = base.replay_rows(MAIN)[0]
+    off = base.fit_hi(rows, 0.0, mg.TAU_TARGET)
+    bare = [r for r in rows if base.route_row(r, mg.TAU_LO, mg.TAU_HI, mg.TAU_TARGET, without=base.FIT_WITHOUT)["action"] == "write"]
+    assert len(bare) == mg.V1_WOULD_BE_WRITES == 29 and off["tau_hi"] == mg.TAU_HI
+
+
+def test_tau_hi_v2_fit_has_the_same_hard_floor_and_a_set_with_no_wrong_write_cannot_pull_it_under(replayed):
     rows, _, _ = replayed
     v2 = ctx.v2_rows(rows)
     assert mg.HI_FLOOR == 0.5 and mg.TAU_HI_V2 >= mg.HI_FLOOR
@@ -242,7 +274,7 @@ def test_tau_hi_v2_has_the_same_hard_floor_and_a_set_with_no_wrong_write_cannot_
     assert hi["wrong"] == 0 and hi["autos"] == 3 and hi["danger_ids"] == [] and hi["kept_min"] == 0.84
     safe = [r for r in v2 if r["id"] not in hi["danger_ids"]]
     assert base.fit_hi(safe, 0.0, mg.TAU_TARGET_V2)["tau_hi"] >= mg.HI_FLOOR
-    assert base.recommend(safe, mg.TARGET_FLOOR_V2)["tau_hi"] >= mg.HI_FLOOR
+    assert base.recommend(safe)["tau_hi"] >= mg.HI_FLOOR
 
 
 def test_tau_hi_v2_is_fitted_as_if_the_code_rules_did_not_exist(replayed):
@@ -250,7 +282,7 @@ def test_tau_hi_v2_is_fitted_as_if_the_code_rules_did_not_exist(replayed):
     v2 = ctx.v2_rows(rows)
     assert set(base.FIT_WITHOUT) == {"hard", "section", "backstop"} and set(base.FIT_WITHOUT) <= set(mg.CODE_RULES)
     off = base.fit_hi(v2, 0.0, mg.TAU_TARGET_V2)
-    assert off["without"] == list(base.FIT_WITHOUT) and off["tau_hi"] == mg.TAU_HI_V2
+    assert off["without"] == list(base.FIT_WITHOUT) and off["tau_hi"] == 0.50       # the fit alone, before the pin
     # the rules remove writes, they never loosen the fit: with them on the gate writes nothing here, and the
     # fit is the same either way because no would-be wrong write exists
     on = base.fit_hi(v2, 0.0, mg.TAU_TARGET_V2, without=())
@@ -261,17 +293,31 @@ def test_tau_hi_v2_is_fitted_as_if_the_code_rules_did_not_exist(replayed):
     assert "synthetic_wrong" in base.fit_hi(v2 + [row], 0.0, mg.TAU_TARGET_V2)["danger_ids"]
 
 
-def test_tau_target_v2_is_floored_because_no_wrong_named_binding_bounds_it(replayed):
+def test_tau_target_v2_fit_alone_has_no_wrong_named_binding_so_the_pin_decides(replayed):
     rows, _, _ = replayed
     v2 = ctx.v2_rows(rows)
-    tg = base.fit_target(v2, mg.TARGET_FLOOR_V2)
-    assert mg.TARGET_FLOOR_V2 == 0.5 and tg["tau_target"] == mg.TAU_TARGET_V2 == 0.50
+    tg = base.fit_target(v2)
+    assert tg["tau_target"] == 0.40 < mg.TAU_TARGET_V2 == 0.75                   # the rule alone is below any evidence
     assert (tg["binds"], tg["right"], tg["wrong"], tg["every"]) == (3, 3, 0, 28)
     assert tg["lowest_kept"] >= 0.8                                    # all three right named bindings score >= 0.83
-    assert base.fit_target(v2)["tau_target"] == 0.40                   # the rule alone, with no floor: why there is one
     assert sorted(tg["unnamed_wrong_ids"]) == ["cx_ans_no_never", "cx_gpa_never", "cx_mis_last", "cx_past_tense",
                                                "cx_three_bullets"]     # wrong bindings only the name check holds back
-    assert base.fit_target(ctx.v1_rows(rows), mg.TARGET_FLOOR_V2)["tau_target"] >= 0.5
+
+
+def test_the_pinned_thresholds_leave_the_host_routing_and_the_writes_unchanged(replayed):
+    rows, _, _ = replayed
+    v2 = ctx.v2_rows(rows)
+    pinned = {r["id"]: base.route_row(r) for r in v2}
+    loose = {r["id"]: base.route_row(r, 0.20, 0.50, 0.50) for r in v2}
+    assert not [i for i in pinned if pinned[i]["action"] == "write"] and not [i for i in loose if loose[i]["action"] == "write"]
+    # the same action for every message (drop, host or write); only the reason a host hand-off carries can differ,
+    # for the messages scored between the fitted 0.50 and the pinned 0.65 ("uncertain" in place of a rule's name)
+    assert {i: d["action"] for i, d in pinned.items()} == {i: d["action"] for i, d in loose.items()}
+    changed = [i for i in pinned if pinned[i]["reason"] != loose[i]["reason"]]
+    assert all(0.5 <= next(r for r in v2 if r["id"] == i)["guess"].p < mg.TAU_HI_V2 for i in changed)
+    assert changed == ["cx_ballot_drop", "cx_one_line_skills", "cx_edu_never_without", "cx_irr_cover", "cx_irr_that"]
+    assert ctx.accuracy(v2)["wrong"] == 0 and ctx.accuracy(ctx.shipped_rows(rows))["wrong"] == 0
+    assert ctx.accuracy(v2)["kept_prefs"] == 33
 
 
 def test_tau_lo_v2_drops_no_true_preference(replayed):
@@ -313,7 +359,7 @@ def test_the_review_lists_disagreements_first_then_every_message_with_its_turn()
     assert text.index("## Disagreements with v2") < text.index("## Agreements")
     for p in PAIRS:
         assert f"`{p['id']}`" in text and p["previous"] in text
-    assert "pending your review" in text and "#202, user-confirmed" in text
+    assert "pending" not in text and "all 40 are user-confirmed" in text and "confirmed in #202" in text
 
 
 def test_the_report_compares_v1_and_v2_on_standing_direction_target_and_writes():
