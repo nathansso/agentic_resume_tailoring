@@ -249,6 +249,10 @@ def _clean_env():
         if _hermetic.is_secret_name(name):
             del env[name]
     env.pop("ART_DATA_DIR", None)
+    # On the Postgres leg this is set, and the benchmark's `make_throwaway_db` then
+    # CREATEs a real database on that server (and the URL it returns is Postgres, not
+    # SQLite). These subprocess scripts are about `.env`, not storage: keep them off it.
+    env.pop("ART_TEST_DATABASE_URL", None)
     return env
 
 
@@ -336,11 +340,13 @@ def test_the_benchmark_keeps_supabase_blank_even_after_config_loads_dotenv(tmp_p
         assert os.environ["OPENAI_API_KEY"] == "sk-fake-openai"     # dotenv did load
         for name in ("SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_JWT_SECRET",
                      "SUPABASE_EXTRA_FROM_SHELL"):
-            assert os.environ[name] == "", (name, os.environ[name])
-        assert not os.getenv("SUPABASE_URL")          # reads as unset
+            assert os.environ[name] == "", name + " was restored to a non-empty value by load_dotenv"
+        assert not os.getenv("SUPABASE_URL"), "SUPABASE_URL reads as set"
         from database.auth import supabase_configured
-        assert supabase_configured() is False
-        assert os.environ["DATABASE_URL"].startswith("sqlite:///")     # its own, not .env's
+        assert supabase_configured() is False, "Supabase auth would be used"
+        db_url = os.environ["DATABASE_URL"]
+        assert db_url.startswith("sqlite:///"), "benchmark did not use its own SQLite store: " + db_url.split("@")[-1]
+        assert "fake-project" not in db_url, "DATABASE_URL came from .env"
         print("benchmark-ok")
     """)
     (tmp_path / "work").mkdir()
