@@ -13,7 +13,7 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 ---
 
 ## Issue 249 — Hermetic test suite: no `.env` secrets, no outbound network outside `--integration`
-**Status:** complete | **Tests:** 2332 pass on SQLite (19 new), 24 skipped, 7 fail (the two runs below counted 2330 passed; the last 2 are parent-directory `.env` cases added after, run on their own). The 7 are not from this change: `tests/test_export_import.py` (3) and `tests/test_timezone_datetimes.py` (4) fail identically on `origin/main` in the shared dev venv, which still has sqlmodel 0.0.38 where the lock pins 0.0.47. The full run was made twice, once with `PYTHON_DOTENV_DISABLED=1` and once without it, with the developer's real `.env` (a production `DATABASE_URL`, `SUPABASE_URL`, Anthropic and TypeSafe keys) reachable. The Postgres leg was not run
+**Status:** complete | **Tests:** 2430 pass on SQLite (19 new), 24 skipped, 0 fail, on main at e280a87 (after #244) with sqlmodel 0.0.47. The full run was made with the developer's real `.env` (a production `DATABASE_URL`, `SUPABASE_URL`, Anthropic and TypeSafe keys) reachable and `PYTHON_DOTENV_DISABLED` unset, and the guard blocked 0 attempts; an earlier run with the variable set gave the same result. The Postgres leg was not run
 
 During #210 a local full run posted a signup to the hosted Supabase project. Nothing was created, but the path was live: the developer's `.env` was reachable, and it can hold a `DATABASE_URL` pointing at production. This closes it. A test run now starts with no credentials in the process, with `.env` loading off, and with every outbound connection but loopback and the test Postgres refused.
 
