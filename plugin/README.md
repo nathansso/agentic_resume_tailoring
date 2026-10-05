@@ -46,7 +46,8 @@ when you ask Claude to tailor a resume or update your experience.
   Claude to confirm and saves nothing on its own. A message that leans on Claude's last
   reply ("never list that again") is sent with the end of that reply (at most 600
   characters of its text, read from the transcript Claude Code passes the hook), so ART can
-  tell what "that" is. No other message carries a reply.
+  tell what "that" is. No other message carries a reply. To set a key, see what Jev is sent, or
+  switch it off (`ART_JEV_MODE=off`), see "Jev (optional)" in [INSTALL.md](../INSTALL.md).
 - **After compaction:** your pinned preferences are re-injected word for word, along
   with the job you were working on.
 

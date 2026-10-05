@@ -110,31 +110,49 @@ every deterministic computation in code.
 | Cited-bullet support (#193) | choice per revised bullet | Whether the cited evidence supports the new bullet: `supported`, `adds_unsupported`, `contradicts`. Scored by p(adds_unsupported) + p(contradicts), which is 1 − p(supported). Blocks at a score ≥ 0.85, surfaces 0.35–0.85 as `review` (fitted on 89 labelled pairs, #237; `eval/support_labels/REPORT.md`) | Unchecked; lexical drift still gates |
 | Negative-pin mention (#232) | noul per (changed bullet or item field, pin) | Whether a changed text mentions or refers to a pinned topic in other words (a paraphrase, or a product, employer or project of the topic). Asked positively, never "does it avoid", and with the pin's statement stripped of its directive, or the bare term when a negation or comparison would remain. Blocks at p ≥ 0.85 as a `preferences` violation in the term match's format, surfaces 0.15–0.85 as `review` (fitted on 74 labelled pairs, #232; `eval/negative_pin_labels/REPORT.md`). Jev only adds hits; the term match always runs | Unchecked; the term match alone gates |
 | Requirement coverage (#126) | noul per (bullet or education entry, requirement) | Whether one bullet, or one education entry as text, shows the candidate meets one required or preferred requirement of the posting (`incidental` ones are left out), by that text alone, never the page. Asked positively ("Does this bullet show that the candidate meets this requirement: …?"), with stated interest, plans and "eager to learn" named as not meeting it, and (v2) a working-style requirement (deadlines, process, communication, collaboration, ownership, attention to detail) asked for a stated instance. An education entry gets its own question (`education_covered@v1`): it asks what the entry states, treats a degree marked expected as enrollment and not as an earned degree, and never compares dates or levels; a finished degree is shown without its date, because Jev reads a past date as a future one. A requirement is covered when some bullet or entry scores p ≥ 0.65 (fitted on 131 pairs, #126; `eval/coverage_labels/REPORT.md`); `semantic_coverage` is the criticality-weighted share covered, a **target** beside the literal `coverage`, never combined with it. Answers are cached per (bullet or entry, requirement), so a node pays for the bullets it changed only | Unchecked; the target is absent and only the literal targets decide |
-| Memory gate (#202) | noul, choice, score, choice, one request per candidate message | Behind a heuristic prefilter (cue words; non-candidates are dropped with no call). The state is the message text alone. Four questions, all positive: is it a lasting preference about the resume (noul; one-off edits, questions, facts and small talk named as not); emphasize, suppress, format rule or none (choice); strength 1–5 on #129's scale, in its own wording (score); which catalog item it is about, or `no_match` (choice over the user's skills, roles, projects and sections). Routes on p: below 0.25 drop, 0.25–0.65 to the host, at or above 0.65 write when the target is an item (never a whole section) picked at p ≥ 0.75 and named in the message, the direction agrees with the prefilter's negation flag, and the strength is 4 or less. **A strength-5 preference, a negative pin or a preference about a whole section is never written by the gate**; it goes to the host for the user to confirm through `record_preference`. Fitted on 111 user-confirmed synthetic messages, #202 (`eval/memory_gate_labels/REPORT.md`) | Prefilter alone: every candidate goes to the host, nothing is written |
+| Memory gate (#202) | noul, choice, score, choice, one request per candidate message | Behind a heuristic prefilter (cue words; non-candidates are dropped with no call). The state is the message text alone; a message that leans on the previous reply ("never list that again") is sent with the end of that reply as `memory_gate@v2` (#244, § 10). Four questions, all positive: is it a lasting preference about the resume (noul; one-off edits, questions, facts and small talk named as not); emphasize, suppress, format rule or none (choice); strength 1–5 on #129's scale, in its own wording (score); which catalog item it is about, or `no_match` (choice over the user's skills, roles, projects and sections). Routes on p: below 0.25 drop, 0.25–0.65 to the host, at or above 0.65 write when the target is an item (never a whole section) picked at p ≥ 0.75 and named in the message, the direction agrees with the prefilter's negation flag, and the strength is 4 or less. **A strength-5 preference, a negative pin or a preference about a whole section is never written by the gate**; it goes to the host for the user to confirm through `record_preference`. Fitted on 111 user-confirmed synthetic messages, #202 (`eval/memory_gate_labels/REPORT.md`) | Prefilter alone: every candidate goes to the host, nothing is written |
 | Variant choice (#199) | choice per (job, item with approved variants), with no-match | Which approved bullet variant of an item fits the job; no-match means the host writes a new one. One request per item, state `{job: {title, top 8 required and preferred requirements by criticality}, item: {title}}`. Options are the item's approved variants keyed by variant id with the bullet text as the description, plus `no_match`; the question names a bullet that only repeats the posting's keywords as not fitting. The gate is the probability Jev puts on any variant (one minus its `no_match`): at 0.50 or more the pick is its likeliest variant, else no-match (Jev splits its mass between two good phrasings of one bullet, so gating its own choice lost the close calls). `suggest_actions` reports the picked variant's own probability as its score, the whole distribution (every variant id and `no_match`) as `propensity`, and `source` `jev` or `cache`. Fitted on 48 synthetic cases, #199 (`eval/library_labels/REPORT.md`): Jev picked no poor-fit variant, 47 of 48 cases right against the fallback's 18 | Term overlap (shipped in #229, byte for byte unchanged): the approved variant whose content tokens best overlap the job's weighted terms (`relevance_density`'s tokenization, each term at its weight over the heaviest's, so uniform weights give exactly `relevance_density`), at or above `VARIANT_MATCH_FLOOR` (0.10); below it, no-match. `source: "fallback"` |
 | Track baseline (#199) | choice per job, only when a baseline is saved | Which saved track a new job branches from. State `{title, top 8 requirements}`; options are the saved tracks, each described in code as the track's name in words plus the title of the job its baseline came from, plus `none`. The pick is Jev's argmax when it is a track and its probability is at least 0.50, else no baseline. A host `metadata.role_family` that names a saved track exactly wins without asking (source `host`). `open_job` reports `baseline.source` (`host`, `jev`, `cache` or `fallback`) and `p`. Fitted on 36 synthetic jobs, #199: no wrong track, 35 of 36 right against the role-family lookup's 27; the lookup is wrong on all 7 jobs whose title and duties disagree | Role-family lookup (shipped in #229, unchanged): the track whose name equals the job's role family, else none. The family is the host's (`open_job` `metadata.role_family`), else a deterministic title keyword map (`agents/job_card.TITLE_ROLE_FAMILIES`), else `other`; never the LLM classifier. `source: "fallback"` |
-| Eligibility rules (#192) | noul per rule | Job-scoped variables (e.g. graduation date when the posting requires post-internship enrollment) | Host asks the user |
-| Semantic duplicates (#113) | noul per pair | Whether two bullets say the same thing, for the duplication guard, without torch | Embedding cosine with `[embed]`, else term overlap |
-| Action ranking (#193) | choice per item | Priors for `suggest_actions`; probabilities become logged propensities, reweighted by the ranker | Uniform over valid actions |
-| Role family (#137 cards) | choice | JobCard grouping | Host supplies it |
+
+Six decision points are shipped (the table above; `docs/architecture.md` § 8.4 traces what each feeds).
+Four more are **planned and not built**, and no open issue tracks them yet. Each already has its
+fallback running, which is what ships today:
+
+| Planned point | Question type | Would decide | Fallback (what runs today) |
+|---|---|---|---|
+| Eligibility rules | noul per rule | Job-scoped variables (e.g. graduation date when the posting requires post-internship enrollment). #192 shipped the host-answered version | The host asks the user (`needs_answer`, then `open_job` again with `rule_answers`) |
+| Semantic duplicates | noul per pair | Whether two bullets say the same thing, for the duplication guard, without torch | Token-set Jaccard, the model-free fallback the guard ships with (`harness/acceptance.py`). The embedding-cosine variant with `[embed]` is not built either |
+| Action ranking | choice per item | Priors for `suggest_actions`; probabilities become logged propensities, reweighted by the ranker | Uniform over valid actions |
+| Role family (JobCards, #137) | choice | JobCard grouping | The host supplies it |
 
 **Rules for every call.** All candidates for one decision go in one question (choice
 probabilities only compare options within a question). Include a no-match option where
 "none" is a real answer. Keep the state narrow and structured. Fit thresholds on ART's own
-data (`tests/memory_evals/`, the #172 anchor set), never on Jev's reported confidence.
+labelled sets (`eval/*_labels/`; the procedure is in `architecture.md` § 8.8), never on Jev's
+reported confidence.
 
 **Cache and replay.** Each question is cached on its own, keyed on a hash of (state,
 question, requested model), with the resolved model version stored on the row; a request
 sends only the questions the cache lacks, batched per state. `ART_JEV_MODE` is `off`
 (always the fallback), `replay` (cache only; a miss raises, never a live call) or `auto`
 (default: cache, then Jev when `TYPESAFE_API_KEY` is set, then the fallback). `art jev
-status|export|import` manages recordings, which hold answers and no resume text. Replays
+status|export|import` manages recordings, which hold questions and answers and never the state. A
+question can still name text (the variant choice lists the approved bullets, the memory gate the user's
+item names), so the committed recordings are built from synthetic profiles and one exported from a real
+store is personal. Replays
 and benchmark reruns never hit the API; tests run on recorded decisions, and live calls
 happen only under `--integration`. The API is `harness/decisions/`, the only network call
 under `harness/`.
 
-**Privacy.** JD text and resume bullets leave the machine in Jev requests. Setup says so,
-and every decision point can run on its fallback for users who decline.
+**Privacy.** JD text and resume bullets leave the machine in Jev requests. Setup says so
+(`INSTALL.md`, "Jev (optional)"), and every decision point can run on its fallback for users who
+decline: `ART_JEV_MODE=off`, or simply no `TYPESAFE_API_KEY`, sends nothing. What each request
+carries is narrow: the support check sends a changed bullet, the bullet it revises and the cited source text; the pin
+check a changed bullet or item field and the pinned topic; the coverage check one bullet or education entry beside the posting's
+requirement texts; the memory gate the user's message (and, for a message that refers back, the
+last 600 characters of the previous reply) beside the names of the user's skills, roles and
+projects; the library choices the job title, its top requirements and the candidate variants or
+tracks.
 
 ## 5. Metrics, kept separate
 
@@ -150,7 +168,7 @@ And pooling hid real results: the per-stratum spread in #172 vanished when poole
 | Numeric and entity consistency | No | **Hard gate** | #123 |
 | Rendered lines per bullet ≤ 2 | No | **Hard gate** | #200 |
 | Term stuffing (bullet-level term DF) | Yes, upward | Guard | `agents/redundancy.py` (#122) |
-| Semantic duplication | Yes, upward | Guard | `agents/redundancy.py`, Jev |
+| Semantic duplication | Yes, upward | Guard | `agents/redundancy.py` (the metric). The shipped guard is token-set Jaccard in `harness/acceptance.py`; the Jev or embedding reading is planned (§ 4) |
 | Leading-verb entropy | No | Guard | `agents/redundancy.py` |
 | MTLD (dilution) | No | Guard | `agents/redundancy.py` |
 | Edit distance from the approved variant (`variant_drift`) | Yes | Guard, default tolerance 0.35, judged on the node's own bullets rather than against the parent | `harness/acceptance.py`, #229 |
@@ -169,8 +187,9 @@ And pooling hid real results: the per-stratum spread in #172 vanished when poole
    preference requested.
 
 A stuffing edit fails the target test (unsupported terms weigh zero) or the stuffing guard.
-A preference-driven delete passes, and relevance density usually rises. Tolerances are
-fitted per guard on the human anchor set (#127) and ship in the policy artifact. Nothing
+A preference-driven delete passes, and relevance density usually rises. Tolerances today are
+hand-set, provisional constants (`DEFAULT_TOLERANCES`, hand-picked and conservative); #127 fits them
+per guard on the human anchor set and #241 ships them in the policy artifact. Nothing
 combines metrics into one number.
 
 **Literal and semantic coverage (#126).** `coverage` is what an ATS filter sees: substring
@@ -363,8 +382,8 @@ construction.
   bullet on a committed node of the user's own job, tagged with the job and its role family,
   citing what the bullet cited on that node. A draft is never offered to a plan.
   `approve_variant` is the only way to approve one, owner only, and nothing approves itself.
-  Score-based promotion (a committed bullet with a user score ≥ 4) waits for a feedback tool
-  (#202).
+  Score-based promotion (a committed bullet with a user score ≥ 4) waits for
+  `record_feedback`, which is not built.
 - **Track baselines (#229).** `save_baseline(node, track)` pins a tree node for a track
   (`TrackBaseline`, one per user and track; saving again replaces it; the track is lowercased,
   with spaces and hyphens as `_`). `open_job` picks the job's baseline (#199) and reports it as
@@ -381,8 +400,8 @@ construction.
   first node's provenance (`baseline`: track, node, role family, how the family was found).
   A job with no matching track starts from the whole KG exactly as before. Deleting a job
   deletes the baselines that pinned its nodes.
-- **Job-scoped rules.** Profile fields with conditional values, evaluated per posting by
-  Jev (#192).
+- **Job-scoped rules.** Profile fields with conditional values, answered per posting by the
+  host (#192). A Jev answer is planned (§ 4).
 - **Line budget.** A per-bullet two-line gate, a page line budget, and "anything restored
   needs a matching cut" as trade hints.
 - **Block render cache.** Lines per bullet, keyed by (text hash, template hash), measured
@@ -408,6 +427,10 @@ construction.
 | | `promote_bullet` | node, bullet, optional item key and track → a **draft** variant, or the existing one (#229) |
 | | `approve_variant` | variant id → the variant, approved; only after the user said yes (#229) |
 | | `save_baseline` | node, track → pinned baseline, and the node the track pointed at before (#229) |
+| | `suggest_project_contexts` | optional include-reviewed flag → where each unreviewed project was probably done (a role or a degree), from employer names in repo names and course codes; proposes, never writes (#230) |
+| | `set_project_context` | project, `exp:` / `edu:` key or `personal` → stored, on the user's confirmation only (#230) |
+| | `link_achievement` | award, optional project → the award tied to the project it was won for, or untied (#230) |
+| | `update_profile` | header fields (name, email, phone, location, links) → the profile row `get_profile` returns (#201) |
 | Jobs | `open_job` | JD text, requirements, optional `role_family` → job id, role family and how it was found, baseline `{track, node_id, applies, source, p}`, rules, schema errors |
 | | `list_jobs` | filter → jobs with status, HEAD, last score |
 | | `suggest_actions` | job, optional node (HEAD by default) → per item: the best approved variant with its score (Jev's probability, or the overlap on the fallback) or `no_match`, `source` (`jev`, `cache` or `fallback`), `propensity` (Jev's distribution over the variants and `no_match`; only with Jev) and the valid actions with uniform propensities (#229, #199; Jev ranking of actions is #193) |
@@ -417,11 +440,11 @@ construction.
 | | `diff_nodes` | two nodes → bullet-level diff with rationale |
 | | `get_head` | job, cursor → HEAD, events and editor edits since the cursor |
 | | `history` | job → every version, oldest first |
-| Check & render | `check_draft` | node → metric vector by role |
-| | `render` | node, format → path, page count, lines used |
+| Check & render | `check_draft` | **Planned, not built.** node → metric vector by role (`execute_plan` already returns each node's vector) |
+| | `render` | job, optional node (HEAD by default), `pdf` or `tex` → `.tex` and PDF paths, whether the user's own edited `.tex` was rendered, page count, line budget (#201) |
 | Feedback & memory | `observe` | user text → gate decision: `drop`, `host` (confirm with the user, then `record_preference`) or `write` (#202) |
 | | `record_preference` | typed preference (text, polarity, target, strength, scope) → stored, superseded, already recorded, or refused with a reason; strength 5 and negative pins allowed here, because this is the confirmation (#202) |
-| | `record_feedback` | node, 1–5 score, edits → logged, JobCard rebuilt, promotion candidates |
+| | `record_feedback` | **Planned, not built.** node, 1–5 score, edits → logged, JobCard rebuilt, promotion candidates |
 
 ## 10. Memory and compaction (#202)
 
@@ -490,7 +513,7 @@ negation cases separately (`eval/memory_gate_labels/REPORT.md`).
   `record_preference`. There is no import path of its own.
 
 Thresholds are constants in `memory_gate.py`, with a drift test, like the other Jev points. τ_hi is fitted as if the code rules above did not exist and is floored at 0.5: a write needs Jev to call the message more likely than not a preference. v2 has its own three (`TAU_*_V2`), fitted on its own answers by the same rules and then **pinned: a context variant's write thresholds are never looser than v1's evidence-backed ones while its own would-be write set is thinner than v1's** (`TAU_HI_V2` = max(fit, `TAU_HI`), `TAU_TARGET_V2` = max(fit, `TAU_TARGET`)). A threshold fitted on three would-be writes sits where the rule leaves it, which is not evidence that a looser cut is safe. The values are 0.20, 0.65 and 0.75 (the fit alone gives 0.20, 0.50 and 0.40).
-Consolidating every fitted threshold into one policy artifact is a follow-up.
+Consolidating every fitted threshold into one policy artifact is open (#241).
 
 ## 11. Tailoring history as a tree (#196)
 
@@ -516,7 +539,7 @@ migrate as a linear chain.
 | Rendered `.tex` and PDF per job | `applications/<Company>_<Role>/` |
 | Jev decision cache, block render cache | SQLite (clearable) |
 | Chat transcripts | The host's storage; ART keeps extracted preferences, feedback and the session ID |
-| Keys (TypeSafe; optionally Anthropic for the chat panel) | OS keychain, env-var fallback; never in the DB |
+| Keys (TypeSafe; optionally Anthropic for the chat panel, planned in #205) | `TYPESAFE_API_KEY` in the environment, else the OS keychain through the optional `keyring` package (service `art-mcp`); never in the DB |
 
 ### Backup, restore and the one-time migration (#195)
 
@@ -741,7 +764,7 @@ art@art` installs it.
     and reports the pages and the line budget. The user's `.tex` edits win, job-rule
     education values are laid over the stored rows, and nothing is trimmed silently.
   - `update_profile` sets the header fields `get_profile` returns.
-- **Not yet taught to the model:** `record_feedback` and `check_draft`. `tests/test_plugin.py` fails if a skill or command names
+- **Planned, not built:** `record_feedback` and `check_draft` are in no contract. `tests/test_plugin.py` fails if a skill or command names
   a tool the contract lacks.
 
 ### Running the harness (#189, #191)
@@ -756,10 +779,14 @@ identical results:
 - **CLI:** `harness/cli.py` prints one JSON document per call. It is a separate entry point
   from `cli.py`, which loads `.env` on import.
 
-The tools are `art_briefing`, `kg_search`, `list_items`, `get_item` and `get_profile`,
-plus the tailoring-tree tools from #196: `list_jobs`, `get_head`, `history`, `diff_nodes`
-and `checkout`; the executor's `execute_plan` and `patch_plan` (#197); and the ingestion
-and job tools from #192: `ingest_schema`, `upsert_items` and `open_job`.
+There are 27 tools, all in § 9. They arrived in layers: the read-only spike's `art_briefing`,
+`kg_search` and `get_item` (#189); `list_items` and `get_profile` (#191); the tailoring-tree
+tools `list_jobs`, `get_head`, `history`, `diff_nodes` and `checkout` (#196); the executor's
+`execute_plan` and `patch_plan` (#197); the ingestion and job tools `ingest_schema`,
+`upsert_items` and `open_job` (#192); `render` and `update_profile` (#201); `observe`,
+`record_preference` and `art_pins` (#202); the library's `suggest_actions`, `promote_bullet`,
+`approve_variant` and `save_baseline` (#229); and project context's `suggest_project_contexts`,
+`set_project_context` and `link_achievement` (#230).
 
 **Ingestion and jobs (#192).** The host fills `ingest_schema(kind)` and calls
 `upsert_items`, which stores records through the resume parser's own dedup, merge, heal
@@ -825,33 +852,55 @@ art kg_search --args '{"query": "python"}'
 The pure checks in `agents/tailor.py` move to a model-free `agents/checks.py` so the
 boundary test can pass (#190).
 
-## 17. Repository layout (target)
+## 17. Repository layout
 
 ```
-agents/  database/  services.py      # unchanged homes; pure checks split out
+agents/  database/  services.py      # unchanged homes; pure checks in agents/checks.py
 harness/
-  contract.py  executor.py  metrics.py  library.py  tree.py  render_cache.py
+  contract.py  mcp_server.py  cli.py  entry.py          # the contract and its adapters
+  executor.py  acceptance.py  program.py                # plan programs and the metric rule
+  tree.py  library.py  memory.py  ingest.py  tools.py   # history, bullets, preferences, ingestion
+  render.py  render_cache.py  hooks.py  transcript.py  runtime.py
   export_import.py                   # art export / art import (#195)
-  decisions/                         # Jev client, cache, fallbacks
-  mcp_server.py
-web/                                 # becomes art ui (local mode, SSE, SDK chat)
+  decisions/                         # Jev client, cache, engine, recordings, one module per point
+web/                                 # art ui (local mode, SSE); the SDK chat panel is planned (#205)
 plugin/                              # Claude Code plugin: skills, commands, hooks
 integrations/codex/
-eval/hosts/                          # taskground-style host runner
-pyproject.toml                       # art, art-mcp · extras [embed] [pdf] [ui]
+eval/hosts/                          # planned (#206): taskground-style host runner
+eval/*_labels/                       # labelled sets, recordings and fits for each Jev point
+pyproject.toml                       # art, art-mcp · extras [embed] [pdf] [ui] [postgres]
 ```
 
 ## 18. Roadmap
 
-| Phase | Window | Issues | Exit test |
-|---|---|---|---|
-| H0 · Decide & Spike | Sep 28 – Oct 4 | #188, #189 | One real tailoring in Claude Code with read-only tools; gap list recorded |
-| H1 · Core & Jev | Oct 5 – Oct 18 | #190–#195 | Contract tests on both legs; `uvx art-mcp` without torch; every Jev point replays from cache |
-| H2 · Executor & Library | Oct 19 – Nov 8 | #196–#200, #113, #127, #123, #117, #151, #163 | Scripted-host benchmark replays byte-identically; stuffing rejected, preference delete kept |
-| H3 · Plugin & Memory | Nov 9 – Nov 22 | #201–#203 | Gate recall measured on `memory_evals` (negation separate); pins survive compaction |
-| H3b · Editor | Nov 23 – Dec 6 | #204, #205, #87, #82, #84, #136, #147 | Editor drag reaches the host's next turn; host commit reaches the editor without reload |
-| H4 · Host Evaluation | Dec 7 – Dec 27 | #206, #172, #173, #178, #181 | Written result, B vs A first; go/no-go on H5 |
-| H5 · Offline Policy | From Dec 28 | #174, #152, #157, #119, #51, #114 | Arm C beats B on anchor-agreed quality on ≥ 2 hosts |
+The windows are the plan and have not moved. Status is as of 2026-10-05, from the board and
+`CHANGELOG.md`.
+
+| Phase | Window | Shipped | Open | Exit test | Status |
+|---|---|---|---|---|---|
+| H0 · Decide & Spike | Sep 28 – Oct 4 | #188, #189, #209 | | One real tailoring in Claude Code with read-only tools; gap list recorded | Done |
+| H1 · Core & Jev | Oct 5 – Oct 18 | #190, #191, #192, #193, #194, #195, #210, #237 | #249 (in progress) | Contract tests on both legs; `uvx art-mcp` without torch; every Jev point replays from cache | Shipped, but for #249 |
+| H2 · Executor & Library | Oct 19 – Nov 8 | #123, #126, #196, #197, #198, #199, #200, #229, #230, #232, #233 | #113 (the rule itself shipped in #197), #117, #127, #151, #163, #185, #241 | Scripted-host benchmark replays byte-identically; stuffing rejected, preference delete kept | Mostly shipped; what is open is tuning and the policy artifact |
+| H3 · Plugin & Memory | Nov 9 – Nov 22 | #201, #202, #203, #244 | | Gate recall measured on a labelled set (negation separate); pins survive compaction | Done |
+| H3b · Editor | Nov 23 – Dec 6 | #204 | #205, #87, #82, #84, #136, #147 | Editor drag reaches the host's next turn; host commit reaches the editor without reload | The local editor and change feed shipped; the chat panel and the UI issues are open |
+| H4 · Host Evaluation | Dec 7 – Dec 27 | | #206, #172 (chunks 1–6 of 7 shipped), #173, #178, #181 | Written result, B vs A first; go/no-go on H5 | Not started |
+| H5 · Offline Policy | From Dec 28 | | #174, #152, #157, #119, #51, #114 | Arm C beats B on anchor-agreed quality on ≥ 2 hosts | Not started; runs only if H4 says go |
+
+**H1 through H3 largely shipped ahead of the calendar.** Their exit tests are met by the
+merged work (contract tests over both adapters, the `art-mcp` wheel without torch, every
+Jev point replaying from committed recordings, the scripted host replaying byte-identically,
+the memory gate measured with negation reported separately, pins re-injected after
+compaction) while their windows still run to Nov 22. Nothing was re-dated.
+
+What is left in H2, and why:
+
+- **#113** is the acceptance rule (`harness/acceptance.py`), built inside #197.
+- **#127** fits the guard tolerances on the anchor set, which waits on #172's last chunk, and
+  **#241** gives them and every fitted Jev threshold one versioned home.
+- **#117** (keep-biased suggestions, an edit-distance guard against the parent) and **#163**
+  (keyword insertion by importance × supportability) are not started.
+- **#151** splits required from preferred coverage into separate targets.
+- **#185** bounds the fallback skills floor by the cap.
 
 ## 19. Evaluation (#206)
 
@@ -887,7 +936,7 @@ reason to exist. That comparison is reported first.
   mode needs no SDK.
 - **Tolerances are only as good as the anchor set.** #172 chunk 7 is on the critical path,
   and conservative hand-set values apply until it exists.
-- **Tool budget.** 21 short descriptions, with schemas fetched on demand.
+- **Tool budget.** 27 short descriptions today, with schemas fetched on demand.
 
 ## Sources
 

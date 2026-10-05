@@ -12,14 +12,17 @@ Companion documents: [`benchmark.md`](benchmark.md) (what the numbers mean),
 [`../eval/README.md`](../eval/README.md) (how to run the harnesses).
 
 > **Target architecture: [`harness.md`](harness.md) (epic #207).** ART is moving to a local,
-> model-free package driven by the user's coding agent. Several things described below are
-> slated to change there:
-> - The generate → evaluate loop (§3.2) becomes host-written plan programs run by an executor.
-> - The ATS composite stops being a reward (§6) and becomes report-only.
-> - Planning prompts give way to `suggest_actions`.
-> - The web app becomes `art ui`.
+> model-free package driven by the user's coding agent, and most of that has merged. There are
+> now two paths over one database:
+> - **The legacy path (§§2–7)** is the web app and `cli.py`: LLM agents plan, generate and
+>   evaluate. It still works as before, and the hosted web app gets no new features.
+> - **The harness path (§8)** is `art-mcp` and `art`: the host's model writes, and ART checks.
+>   The generate → evaluate loop (§3.2) becomes host-written plan programs run by an executor,
+>   the ATS composite is report-only (never a reward, §6), planning prompts give way to
+>   `suggest_actions`, and the editor is `art ui` in local mode.
 >
-> This file keeps describing merged behaviour, and is updated as each harness issue lands.
+> This file keeps describing merged behaviour, and is updated as each harness issue lands. It
+> was last brought level with `CHANGELOG.md` through #244.
 
 ---
 
@@ -60,6 +63,15 @@ Two vocabularies organise everything below:
 | Arbitration | reasoning | `agents/arbitration.py` | — | `agents/tailor_planner.py::apply_constraints` |
 | Exploration policy | policy | `agents/tailor_planner.py::_choose_strategy` | — | decision log |
 | Deterministic ordering | invariant | `database/db.py::next_seq` / `latest_result` | every write site | every `created_at`-ordered read |
+| Tool contract + adapters | harness | `harness/contract.py`, `harness/mcp_server.py`, `harness/cli.py`, `harness/entry.py` | — | the host's coding agent, scripts, tests |
+| Tailoring tree | harness (memory) | `harness/tree.py`, `TailorNode` / `JobHead` / `TreeEvent` / `PlanProgram` | `harness/executor.py`, the editor | `get_head`, `history`, `art ui` |
+| Executor + acceptance rule | harness (reasoning) | `harness/executor.py`, `harness/acceptance.py`, `harness/program.py` | — | `execute_plan`, `patch_plan` |
+| Jev decisions engine | harness (judgment) | `harness/decisions/` (client, cache, engine, recordings) | the points below | every gate or target a Jev answer feeds |
+| Bullet library, baselines | harness (memory) | `harness/library.py`, `BulletVariant` / `TrackBaseline` / `JobRoleFamily` | `upsert_items` (kind `variant`), `promote_bullet`, `approve_variant`, `save_baseline` | `suggest_actions`, `open_job`, the executor |
+| Memory gate | harness (memory write path) | `harness/memory.py`, `harness/decisions/memory_gate.py` | `observe`, `record_preference`, the `user-prompt` hook | `art_briefing`, `art_pins`, the executor's pins |
+| Skill retrieval | retrieval | `agents/skill_matching.py`, `knowledge_graph/builder.py` | — | `kg_default_content`, `open_job` |
+| Export and import | harness (storage) | `harness/export_import.py` | `art export`, `art import` | the user |
+| The clock | invariant | `database/clock.py` | every `created_at` and "now" | every datetime comparison |
 
 **There are three LangGraph graphs, not one.** `graph/pipeline.py` composes the whole flow
 (`ingest_resume → ingest_job → analyze_job → match_skills → tailor_resume → format_resume`)
@@ -626,7 +638,7 @@ That `[]` is a trap worth stating plainly, because the repo has walked into it t
 passed in — rather than the table-scan mode, because table-scan mode would have yielded
 zero cards across local dev and the entire test suite while every test stayed green. Card
 counts are tens per user, so numpy is free and ANN buys nothing. `embedding_vec` has no
-production write path yet (§8, #60).
+production write path yet (In flight, #60).
 
 Vector caching lives in `agents/skill_embeddings.py`: `ensure_skill_embeddings` persists
 per-skill vectors tagged with the model that produced them, and `ensure_job_embedding`
@@ -652,6 +664,41 @@ summary (§2.5).
 re-raises so each call site's existing `try/except → []` graceful degradation still holds.
 All eight extractors were migrated off `JsonOutputParser` onto it. Because extraction stays
 on the LangChain path, one LangSmith trace covers extraction, chat and tailoring uniformly.
+
+### 4.4 Skill retrieval without a model (issue #233)
+
+The harness path has no embedding model by default, and the legacy substring link rule
+was wrong in a way that mattered: `Java` linked to any text containing `JavaScript`. Two
+model-free pieces in `agents/skill_matching.py` replace it, and the legacy builder uses
+the same ones.
+
+- **Word-boundary links.** `SkillGraphBuilder._connect_entities` links a skill to a bullet
+  or project text through `SkillMatcher`. A name matches on boundaries that treat `+`, `#`
+  and `.` as part of it, so `C` is not inside `C++`, `NET` is not inside `.NET`, `Java` is
+  not inside `JavaScript`, and `Node.js` is one token; a hyphen is not a name character, so
+  "Java-based" names Java. The alias map (`SKILL_ALIASES`) applies to both the skill and the
+  text, so a bullet that says "torch" links PyTorch. A name of one or two characters (`R`, `C`,
+  `Go`) matches only in its own capitalization, never beside `&`, and `Go` never opens a
+  sentence; short aliases such as `tf` are not expanded because they are fragments of other
+  words.
+- **Bullet provenance.** Each `USES` / `DEMONSTRATES` edge carries `bullets`, the indices of
+  the bullets that name the skill, numbered as the harness numbers its cites
+  (`<item key>#b<n>`). A link that rests only on a role's title or a project's name has an
+  empty list. `evidence_for_skills` returns them as `bullets` (`{key, index, cite}`) and adds
+  `education_via_projects`, each only when non-empty, and looks a skill up through the alias
+  map. Nothing on the legacy tailoring path reads these yet; they exist for citations (#198)
+  and the bullet library (#199).
+- **Requirement keywords to skills.** `match_requirement_terms` maps each required and
+  preferred requirement's `terms` (the host fills them when it opens a job) onto the user's
+  skills, exactly or through the alias map, required before preferred and most critical first.
+  A term that names no skill is reported, never guessed, and the host resolves it (`kg_search`,
+  or asks the user). `kg_default_content(..., requirements=...)` ranks the matched skills first,
+  restores one the TF-IDF cap dropped, and holds the list to the skills cap; `open_job` returns
+  `skill_matches` and `unmatched_terms`. With no requirements, or none that match, the
+  ranking is the TF-IDF one exactly.
+
+Matching is literal. There is no stemming and no fuzzy match beyond the alias map, so coverage
+of unusual spellings is the host's job, which is the point of reporting the unmatched.
 
 ---
 
@@ -974,50 +1021,458 @@ because equal names carry equal vectors and only the opaque `skill_id` differs.
 
 ---
 
+## 8. The harness path
+
+The harness path is `art-mcp` (the MCP server) and `art` (the JSON CLI), both over one tool
+contract and one SQLite store. It is the target of [`harness.md`](harness.md); this section
+records what has merged. It shares the database, the knowledge graph (§2.1), preferences
+(§2.5) and the ordering invariants (§7) with the legacy path, and shares none of its
+generative code: nothing under `harness/` imports `llm`, `langchain_*`, `anthropic` or
+`openai` (`tests/test_harness_boundary.py`). The host's model reads and writes; ART stores,
+checks and, for a few bounded questions, asks TypeSafe's Jev.
+
+### 8.1 Adapters and the contract
+
+`harness/contract.py` declares every tool once, with pydantic input and output models and
+errors carried as an `error` field. It currently holds **27 tools**, in five groups:
+
+| Group | Tools |
+|---|---|
+| Context and memory | `art_briefing`, `art_pins`, `observe`, `record_preference` |
+| Retrieval | `kg_search`, `list_items`, `get_item`, `get_profile` |
+| Ingest, project context, library | `ingest_schema`, `upsert_items`, `suggest_project_contexts`, `set_project_context`, `link_achievement`, `promote_bullet`, `approve_variant`, `save_baseline`, `update_profile` |
+| Jobs | `open_job`, `list_jobs`, `suggest_actions` |
+| Execute and history | `execute_plan`, `patch_plan`, `get_head`, `history`, `diff_nodes`, `checkout`, `render` |
+
+`harness/mcp_server.py` serves the contract over stdio and `harness/cli.py` prints one JSON
+document per call; `tests/test_harness_contract.py` holds both to identical results. The `art`
+console script (`harness/entry.py`) adds what is not a tool: `art hook` (the plugin hooks),
+`art hooks codex` (installs them for Codex), `art jev` (§8.3), `art export` and `art import`
+(§8.9), and `art ui`. A write tool returns `read_only` on a remote or Postgres store unless the
+process was started with `--allow-writes`; local SQLite is writable. `record_feedback` and
+`check_draft` are named in `harness.md` and are **not built**.
+
+### 8.2 The tree, the executor and the acceptance rule
+
+Every committed version is a `TailorNode` whose parent is the version it revised
+(`harness/tree.py`), with one `JobHead` per job and a persistent `TreeEvent` feed that `art ui`
+reads. A commit is guarded by HEAD (`StaleParent`), so a stale plan or an editor edit cannot
+silently overwrite a newer version. `UserJobResult` stays the materialized current state, so the
+legacy readers keep working.
+
+`harness/executor.py::execute_plan` runs a host-written program (`harness/program.py`):
+
+1. **Arbitration** refuses nodes that break a hard preference, name something the graph does
+   not hold, or cite a tombstoned or unknown item, an unapproved variant or another user's.
+2. **Each node, in section order**, is applied to a copy and judged by
+   `harness/acceptance.py::accept` on the metric vectors before and after. The rule has three
+   parts: no hard gate gains a violation, no guard regresses past its tolerance, and at least
+   one target improves (a delete the user or a preference requested is exempt from the third). A
+   node that fails is reverted and the independent ones continue. There is no scalar and no
+   weight; the vectors are compared metric by metric.
+3. **Finalize** checks the whole page: the preferences (including the whole-page negative-pin
+   check, §8.4), non-empty sections, skills cap and floor, section order, and the per-bullet and
+   page line budget. Any violation means nothing commits, and the host gets the violations with
+   trade hints.
+4. **Commit** writes a node with the metric vector and provenance, or `dry_run` stops short.
+
+The vector's roles (`metric_vector`):
+
+| Role | Metrics |
+|---|---|
+| Hard gates | `preferences` (hard preferences and negative pins), `faithfulness` (lexical drift plus the Jev support check), `citations`, `bullet_lines`, `consistency` |
+| Guards | `stuffing`, `verb_entropy`, `mtld`, `duplication`, `variant_drift` |
+| Targets | `coverage`, `relevance_density`, `semantic_coverage` (present only when Jev answered) |
+| Report only | `ats`, the composite. `accept` never reads it: it is monotone in text, so a rule on it would approve stuffing |
+
+Tolerances are `DEFAULT_TOLERANCES`, provisional constants that a node may tighten and never
+loosen; none is fitted yet (#127). The Jev-backed checks reach `acceptance.py` as injected
+callables on `Context` (`support_checker`, `pin_checker`, `pin_page_checker`,
+`coverage_checker`), which is what keeps that module model-free.
+
+### 8.3 The Jev decisions engine
+
+`harness/decisions/` is the only network call under `harness/`, and not a generative one: Jev
+answers a typed question about a narrow state with probabilities and cannot write text.
+
+```mermaid
+flowchart LR
+    C[caller: a gate or target] --> D["decide(point, state, questions, fallback)"]
+    D --> K{"cache: one row<br/>per question"}
+    K -->|hit| A[Answer: source cache]
+    K -->|miss, mode auto, key set| J[Jev request,<br/>misses only, one per state]
+    J --> W[write rows] --> A2[Answer: source jev]
+    K -->|miss, no key / off / API error| F[Answer: source fallback]
+    K -->|miss, mode replay| X[JevReplayMiss]
+```
+
+- **Questions** (`questions.py`) are `Noul` (a yes-probability), `Choice` (up to 255 options,
+  with a `no_match` where "none" is a real answer) and `Score` (2 to 10 levels). Each carries a
+  version (`support@v1`) that is part of its hash, so rewording one visibly invalidates its
+  recordings. Limits are enforced when a question is built. An `Answer` is normalized: value,
+  probabilities, `source` (`cache`, `jev` or `fallback`) and a reason.
+- **The client** (`client.py`) posts to TypeSafe with an injectable transport, a timeout (30 s;
+  8 s and one retry inside a hook), and bounded backoff on 429 and 529 only; 401, 422 and anything
+  else fail at once. The model is pinned (`jev-1.13.0`; `ART_JEV_MODEL` overrides) because a
+  moving alias would silently change what every cached answer means. The key is
+  `TYPESAFE_API_KEY`, else the OS keyring (service `art-mcp`, user `typesafe-api-key`) when the
+  optional `keyring` package is installed, and is never logged, stored or shown in a repr.
+- **The cache** (`cache.py`, the `JevDecision` table) is one row **per question**, keyed on
+  `sha256(state, question, requested model)`, storing the question, the answer, the resolved
+  model version, the question's share of the request's tokens and the decision point. The state
+  (the bullet or message text) is **not** stored, but the question is, and some questions carry
+  text: the variant choice's options are the approved bullets, the memory gate's target options are
+  the names of the user's skills, roles and projects, and a coverage question holds the posting's
+  requirement. A request sends only the questions the cache lacks, batched
+  per state, so a node pays for the bullets it changed and a rerun asks nothing. A failed cache
+  write is logged and never raised; an unreadable row is a miss.
+- **Modes** (`ART_JEV_MODE`, `engine.mode`): `off` never touches the cache or the API and always
+  returns the fallback (the privacy switch); `replay` reads the cache only, and a miss raises
+  `JevReplayMiss`, never a live call and never a quiet fallback, so a stale recording fails
+  loudly; `auto` (the default) is cache, then Jev if a key is set, then the fallback on no key or
+  any API error. An unrecognized value means `off`, so a typo cannot send text anywhere.
+- **Recordings** (`recordings.py`) are the cache's rows as versioned JSON: questions and answers,
+  never the state. The committed ones come from synthetic profiles, so they are test fixtures; a
+  recording exported from a real store can name the user's items and bullets (above) and is personal.
+  `art jev status` reports the mode,
+  whether a key is set (never the key) and the cached decisions per point; `export` and `import`
+  move them.
+- **Tests never reach the network.** `tests/conftest.py` sets `ART_JEV_MODE=off` and removes the
+  key; the one live test is `@pytest.mark.integration`. Decisions are replayed from the committed
+  recordings under `eval/*_labels/`.
+- **Thresholds belong to the caller.** The engine never treats Jev's reported confidence as
+  calibrated; each decision point fits its own cutoffs (§8.8).
+
+Every point below degrades the same way: with no key, mode `off` or an API error, the Jev part is
+`unchecked` and **adds nothing**, the result is byte-identical to the one before the point existed,
+and the fallback (where there is one) runs.
+
+### 8.4 The decision points
+
+Six decision points ship (`harness/decisions/`), listed here with their question versions. Each feeds a
+gate, a target, a suggestion or the memory gate, and each falls back to a deterministic rule or to
+nothing.
+
+| Point (version) | Asks | State sent | Feeds | Cutoffs | Fallback |
+|---|---|---|---|---|---|
+| `support@v1` (#193, #237) | `choice`: `supported`, `adds_unsupported`, `contradicts` | `{evidence, original?, bullet}` for each changed cited bullet | the `faithfulness` hard gate; `review` | block ≥ 0.85, review ≥ 0.35, on 1 − p(supported) | lexical drift alone |
+| `negative_pin@v1` (#232) | `noul` per (text, pin): does it mention the topic | `{text, kind}`; the pin's topic is in the question | the `preferences` hard gate; `review` | block ≥ 0.85, review ≥ 0.15 | the term match alone |
+| `requirement_covered@v2`, `education_covered@v1` (#126) | `noul` per (bullet or education entry, requirement) | `{bullet}` or `{text, kind: education}` | the `semantic_coverage` target | covered ≥ 0.65 | the target is absent |
+| `memory_gate@v1`, `@v2` (#202, #244) | `noul`, `choice`, `score`, `choice` over the user's catalog | the message; v2 adds the previous assistant turn | `observe` and the `user-prompt` hook | 0.25 / 0.65 / 0.75; v2 0.20 / 0.65 / 0.75 | the prefilter alone |
+| `variant_choice@v1` (#199) | `choice` over an item's approved variants plus `no_match` | job title, top 8 requirements, item title | `suggest_actions` | mass off `no_match` ≥ 0.50 | term overlap (#229) |
+| `track_baseline@v1` (#199) | `choice` over saved tracks plus `none` | job title, top 8 requirements | `open_job`'s baseline | own pick ≥ 0.50 | role-family lookup (#229) |
+
+(`requirement_covered@v1` is kept as `LEGACY_VERSION` for the benchmark recordings. The memory
+gate's three cutoffs are `TAU_LO`, `TAU_HI` and `TAU_TARGET`.)
+
+**Support check.** For each changed bullet that cites evidence, the evidence is the text of the
+cited source bullets and nothing else from the graph, plus the text of the approved variant the
+bullet names. A verbatim source bullet or variant, and an uncited bullet, are never sent. The
+score is the sum of the two blocking labels, which is 1 − p(supported): the larger label alone let
+through a bullet whose mass split between `adds_unsupported` and `contradicts`. The lexical
+`faithfulness` check keeps gating beside it.
+
+**Negative pins.** The term match is literal and always runs; Jev only adds hits. A changed
+bullet or item field gets one `noul` per pin, asked positively ("does this text mention or refer
+to …"), never "does it avoid", because Jev reads negation literally. The pin's own statement
+supplies the topic with its directive stripped, or the bare term when a negation or comparison
+would remain. Per node only changed text is checked; **finalize checks the whole final page**
+through `Context.pin_page_checker`, so a paraphrase already in the base version cannot render. A
+hit at or over the block cutoff reads exactly like a term hit (`negative_pin:<pin>@<key> :: …`)
+and de-duplicates with it; the band between the two cutoffs comes back as `review`.
+
+**Semantic coverage.** `coverage` is substring matching, so a bullet can cover a requirement
+without naming its words and a woven keyword can count without showing anything.
+`semantic_coverage` asks, per bullet and per education entry, whether it shows the candidate meets
+each required or preferred requirement (incidental ones are left out), by that text alone and never
+the page. A requirement is covered when any one bullet or entry reaches the cutoff, and the target
+is `100 × Σ criticality(covered) ÷ Σ criticality(eligible)`. It sits beside the literal `coverage`
+and is never combined with it. Their disagreement per requirement is the host's signal:
+`semantic_only` (covered, but not in the posting's words, so a weave candidate) and `literal_only`
+(the words are there and nothing shows it, the stuffing signature). A finished degree is shown
+without its date, because Jev reads a past date as a future one; ART never asks Jev to do date
+arithmetic.
+
+**The memory gate** is §8.6. **Variant choice and the track baseline** are §8.7.
+
+Not shipped, though `harness.md` § 4 lists them as planned: eligibility rules (a job-scoped rule is
+still answered by the host), semantic duplicates for the duplication guard (that guard is token
+Jaccard), action ranking (`suggest_actions`' valid actions carry uniform propensities) and the role
+family for JobCards.
+
+### 8.5 The consistency gate (issue #123)
+
+A cited bullet may not assert a number, date, duration, money figure or name that its evidence does
+not contain. This is the numeral half of faithfulness: Jev is documented as weak on numbers, so the
+check is regex and word lists with no model (`agents/checks.py::consistency_check`).
+
+- **Claims** are reduced to canonical keys, so `1,000,000`, `1M` and `one million` agree, as do
+  `2 years` and `24 months`, and `40k requests/min` and `40,000 requests per minute`. Names are
+  technologies, non-generic acronyms, CamelCase and digit or symbol names, and mid-sentence
+  capitalised words. Aliases, plurals and derived forms (`Dockerized`) count as present.
+- **Evidence** is the source bullets the cite resolves to, plus the bullet's own item's source
+  bullets and header. A number in an unrelated item does not count. A bullet naming an approved
+  variant also gets that variant's text.
+- **Skipped** are verbatim source bullets, verbatim approved variants and uncited bullets (the
+  citations gate owns the last).
+- **Strict on derivations**: "200 to 800 users" does not license "4x growth". Its known limits are
+  all misses, not false blocks: a lowercase name outside the technology list and number words inside
+  compounds (`three-tier`) are not read.
+
+It is the `consistency` hard gate (`consistency:<short bullet>:<token>`), which like every gate
+blocks only a violation a node newly adds. Finalize does not re-check it. `eval/metrics.py` reports
+a `consistency` family beside the other metrics, never combined with them.
+
+### 8.6 The memory gate (issues #202, #244)
+
+A host left to itself under-calls memory tools, and a model-written compaction summary is where a
+negated preference is lost. ART reads every user message through `harness/memory.py::observe`,
+records standing preferences through `record_preference`, and returns the strength-5 ones word for
+word through `art_pins`. It extends §2.5's write barrier rather than replacing it: the gate's input
+is the user's own message, never ART's or the host's output.
+
+- **Prefilter** (deterministic). Cue words mark a candidate; anything else is dropped with no call.
+  It also sets a `negated` flag from negation cues, the backstop for Jev's weakness on double and
+  embedded negation, and reads the scope the wording claims. A message over 1,200 characters is
+  pasted material.
+- **Jev** answers four positive questions in one request per candidate: is it a lasting preference
+  about the resume; emphasize, suppress, format rule or none; strength on #129's five levels; which
+  catalog item it concerns (every skill, role, project and the five sections, up to 254, plus
+  `no_match`). Jev picks the target from the list and cannot name one.
+- **Routing** (`route`, pure): below `TAU_LO` drop; from there to `TAU_HI`, or whenever a condition
+  below fails, hand to the host with the guess; at or above `TAU_HI` write if the target is an item
+  (never a whole section) picked at `TAU_TARGET` or more and **named in the message**, the direction
+  agrees with the negation flag, the strength is 4 or less, the message is one statement of at most
+  300 characters, and a job-scoped message has a known job.
+- **The code rules** only ever remove writes. A strength-5 preference or a negative pin is never
+  written (it becomes a gate that refuses plans, so the user confirms it through
+  `record_preference`); neither is a section target, a format rule, a replacement of a preference the
+  user holds or a role-scoped one; and nothing is written to a read-only store. `HARD_MASS` holds
+  back a message with a quarter of its mass on level 5. Thresholds are fitted as if these rules did
+  not exist (§8.8).
+- **v2 reads the previous assistant turn.** A message such as "never list that again" cannot be read
+  without what "that" is. `unresolved_reference` flags an anaphoric phrase, a bare pronoun when no
+  catalog item is named, or a short yes or no; only then does `observe` look for the turn: the
+  `previous_turn` a host passes, else the hook's `transcript_path` (`harness/transcript.py`, which
+  reads from the end of the file, keeps the last assistant message's text only, at most 600
+  characters of its end, and bounds itself in bytes, lines and time; every failure is `None`). With a
+  turn the same four questions run as `memory_gate@v2` under their own cutoffs, and with none
+  readable v1 runs and its cached answers still hit. A decision records `version` and `context`
+  (`none`, `used`, `missing`); the turn itself is never logged.
+- **Surfaces.** The `user-prompt` hook (`harness/hooks.py`) runs `observe` on every prompt and adds
+  one line when a message may be a preference or when ART saved one, with an 8-second Jev timeout,
+  and prints nothing on any failure. The `SessionStart` hook for source `compact` re-injects the
+  pins. Decisions are logged without the message to `$ART_DATA_DIR/memory_gate.jsonl`.
+
+### 8.7 The bullet library and track baselines (issues #229, #199)
+
+Tailoring works in three layers: raw facts (the graph), approved phrasings (the library) and rules
+(preferences). Three additive tables, created by `create_all`, hold the middle layer
+(`harness/library.py`):
+
+- **`BulletVariant`**: item key, text, tags (`track`, `job_id`), status `draft` or `approved`,
+  cites, a rendered line count when a LaTeX engine exists, and the source node.
+- **`TrackBaseline`**: one tree node pinned per (user, track).
+- **`JobRoleFamily`**: a job's role family and how it was found, kept from `open_job` to the first
+  plan.
+
+**Getting text in and out.** `upsert_items` kind `variant` imports the user's curated bullets,
+**approved**, because the user wrote them. `promote_bullet` makes a **draft** from a committed
+bullet, and `approve_variant` is the only path to `approved`, owner only. Nothing approves itself
+and there is no score-based promotion. A draft is never offered to a plan. `save_baseline(node,
+track)` pins a node (the track is lowercased with spaces and hyphens as `_`; saving again replaces
+it).
+
+**Starting from approved text.** `suggest_actions` judges each experience and project on a version:
+the best approved variant with its score and `source` (`jev`, `cache` or `fallback`), or `no_match`,
+and the valid actions with uniform propensities. A plan bullet names a variant with `from_variant`
+(an approved variant of that very item, or arbitration refuses it) and inherits its cites. Writing
+from raw facts is for `no_match`.
+
+- **Fallback pick.** The share of the bullet's content tokens that are job terms, each at its keyword
+  weight over the heaviest's, so uniform weights equal `relevance_density`; a score under
+  `VARIANT_MATCH_FLOOR` (0.10) is `no_match`.
+- **Jev pick** (`variant_choice@v1`): one request per (job, item with approved variants). The gate is
+  the probability Jev puts on any variant (one minus its `no_match`), not on its own choice, because
+  two good phrasings of one bullet split its probability and neither would reach the cutoff while
+  `no_match` stayed low. The pick is its likeliest variant; `propensity` is the whole distribution.
+- **Baseline.** `open_job` takes a `metadata.role_family`, else a deterministic title keyword map
+  (`agents/job_card.TITLE_ROLE_FAMILIES`), else `other`, and never the LLM classifier. A host family
+  that names a saved track exactly wins without a question (`source: host`); with any saved track, one
+  Jev `choice` (`track_baseline@v1`) decides (`jev`, `cache`); otherwise the track named after the
+  family is used (`fallback`). A job with no history starts from a copy of that node's content, with
+  skills re-ranked against this posting, job-scoped rule fields reset and this posting's answers
+  applied (`executor.baseline_content`); the first node's provenance records the baseline. With no
+  match the start is the whole graph, as before. `harness/library.py::choose_baseline` is the one
+  place a baseline is chosen, so `open_job` and the first plan agree.
+- **Gates on variant text.** A bullet verbatim an approved variant is the user's own wording, so the
+  support check and the consistency gate skip it as they skip a verbatim source bullet; a lightly
+  edited one is checked with the variant it names as extra evidence. **Negative pins still apply with
+  no exception**, and the coverage check, which asks per bullet text, treats variant text like any.
+- **The `variant_drift` guard.** The largest normalized token-level Levenshtein distance between a
+  bullet and the variant it names (edits over the longer token count, lowercased, edge punctuation
+  ignored), 0 when none names one. The tolerance is 0.35, chosen by arithmetic (a swapped verb or a
+  woven keyword is 0.1 to 0.25, a rewrite that keeps only the topic is 0.5 and up), not fitted. Unlike
+  the relative guards it is judged against the tolerance itself on the node's own bullets
+  (`_ABSOLUTE`), so a node cannot borrow its parent's headroom.
+- **Reporting.** `library_reuse` (bullets, verbatim, edited, share) is report-only, never a target or
+  a gate.
+
+### 8.8 How a threshold is fitted
+
+Every Jev point's cutoffs follow one procedure, so a new point can be added by pattern. The
+constants live beside their decision point (`support.py`, `negative_pins.py`, `coverage.py`,
+`memory_gate.py`, `library.py`); gathering them into one versioned policy artifact is open (#241).
+
+1. **A labelled set** under `eval/<point>_labels/` (`pairs.json`, or `variants.json` and
+   `baselines.json`), built from the synthetic profiles in `eval/profiles/` and never from a real
+   person's data, with a category for each way a decision goes wrong (a paraphrase, a near miss, a
+   keyword trap, a negation). Each category needs at least 6 cases. Labels are proposed, written to
+   `REVIEW.md` with the disagreements with Jev first, and confirmed by the user; #199's two sets are
+   still marked planner-reviewed, pending the user's spot-check.
+2. **One recording.** `eval/fit_<point>_threshold.py record` asks every case once through ART's own
+   engine (`jev-1.13.0`) against a private SQLite store, with no prefilter where one exists so its
+   cost can be measured, and exports the answers to `recordings.json`. It is the only step that needs
+   a key, and the recording carries no resume text.
+3. **An offline fit.** `analyze` imports the recording into a fresh store, replays every case in
+   `replay` mode and **refuses to report unless the hit rate is 100%**, then writes `REPORT.md` (the
+   grid, the recommendation, per-category results) and `REVIEW.md`. Correcting a label and rerunning
+   `analyze` refits with no call.
+4. **The rule**, in priority order: first the cost that must be zero (a false block, a poor-fit pick,
+   a wrong automatic write), then recall, then the grid value nearest the **middle of the gap**
+   between the worst case that must stay on the wrong side and the weakest that must stay on the
+   right one, ties to the higher. The first two fits, support (#237) and negative pins (#232),
+   instead take the lowest value one grid step above the worst false candidate; #126 found that
+   headroom protects one side of a gap only, and the later fits (#126, #202, #199, #244) use mid-gap.
+5. **The 0.5 floor.** A threshold that triggers a write or a pick (`HI_FLOOR`, `TAU_FLOOR`) is only
+   considered from 0.5: acting needs Jev to call the case more likely than not.
+6. **Fit as if the code rules did not exist.** Every deterministic rule that can only remove an
+   action (strength 5, the section rule, the negation backstop, the host override, the drift guard) is
+   switched off during the fit, so a message the rules happen to stop still counts as a wrong write.
+   The rules are defence in depth and never grounds for a looser threshold, and a test shows the fit
+   does not move when they change.
+7. **The pin rule** (#244). A context variant's write thresholds are never looser than the
+   evidence-backed ones of the version it extends while its own would-be write set is thinner:
+   `TAU_HI_V2` is `max(fit, TAU_HI)`. A threshold fitted on three would-be writes sits wherever the
+   rule leaves it, which is not evidence that a looser cut is safe.
+8. **Drift tests.** Each constant has a comment with its fit and a test that the constant equals the
+   fit's output on the committed recordings, that the 0.5 floor holds, that the committed `REPORT.md`
+   and `REVIEW.md` are current and that `analyze` runs offline. Changing the model, a question or a
+   label therefore fails a test until the fit is rerun and the constant updated deliberately.
+
+The fits are thin where the sets are easy, and each report says where: the variant gap is 0.04 wide
+(the worst poor-fit mass is 0.46 and the lowest right pick 0.51), the memory gate's `TAU_HI` gap is
+0.05, and the coverage cutoff sits 0.04 over its worst false cover. Refit when the model or a
+question changes.
+
+### 8.9 Export and import (issue #195)
+
+`art export` writes one zip and `art import` loads it; both print one JSON document. They are
+**not tools**: a host should not be able to restore over a store or read a hosted database by itself.
+
+- **The bundle** holds `manifest.json`, `tables/<table>.json` for 28 tables in primary-key order (26
+  covering the profile, the graph, preferences, jobs, results, the tree and the library, plus
+  `jevdecision` and `blocklinecache` with `--include-cache`) and a copy of `applications/`. Zip
+  entries carry a fixed timestamp, so two exports of one store differ only in `exported_at`. A test
+  fails when a table is neither exported nor named in `NOT_EXPORTED` (`aiusage`,
+  `institutioncanonical`).
+- **Primary keys are kept**, so tree parents, `<key>#b<n>` cites, baseline node ids and variant ids
+  stay valid. Tables insert in foreign-key order.
+- **No secrets.** `password_hash`, `github_access_token` and `supabase_uid` are not columns of a
+  bundle, and a string that looks like a key, token or database password anywhere in a row becomes
+  `[REDACTED]`.
+- **Import is cautious.** The user is `--user-id` or the bundle's own, never guessed; a fallback
+  profile is refused; the destination is local SQLite only and `DATABASE_URL` is never read; a user
+  who has data is refused unless `--merge` (add, never overwrite) or `--replace --confirm-replace`;
+  everything is one transaction and `--dry-run` rolls it back.
+- **`--from-supabase`** reads one profile from a web-app Postgres database through the same reader,
+  in a read-only transaction verified before the first read, with SELECTs only. It tolerates an older
+  schema: a missing table or column is skipped and noted, text ids and JSON columns are read through
+  their text, and a row missing a required column or parent is dropped with a warning.
+- **The round trip** (export, import into an empty store, export again, identical but for
+  `exported_at`) is the acceptance test, and it runs from Postgres to SQLite on the Postgres leg.
+
+### 8.10 Time and installs (issue #210)
+
+Every "now" is timezone-aware UTC through `database/clock.py`: `utc_now()`, `as_utc()` (a naive value
+is read as UTC, which is what every earlier writer meant) and `parse_utc()` for an ISO string. A test
+fails on any `utcnow(` or `default_factory=datetime…`. sqlmodel 0.0.47 maps a `datetime` field to a
+type that refuses a naive value on write and returns an aware one on read **whatever the column
+holds**, so there is no migration: SQLite rows stay naive text and existing Postgres columns stay
+`timestamp without time zone`, while a Postgres database created fresh gets `timestamptz`. Both read
+back the same. `database/db.py::pin_utc_session` runs `SET TIME ZONE 'UTC'` on every Postgres
+connection, so a naive column never depends on the host's zone. JSON timestamps now end in `+00:00`.
+
+CI and the Docker image install `requirements-core.txt -c requirements-lock.txt`, so an upstream
+release cannot turn them red with no change here, and `scripts/check_lock_drift.py` (a CI job, and
+`tests/test_lock_drift.py`) fails when a requirement is absent from the lock or outside its pin. `pip`
+ignores a constraint for a package the lock does not list, which is why the check exists. The lock is
+generated on Windows with Python 3.11 and installed on Linux with 3.12; `uvloop` is the one core
+dependency it does not pin.
+
+---
+
 ## In flight
 
-Open issues — specified but **not shipped**. Nothing below describes a capability the system
-has. The two entries that use the present tense (#181, #175) report *defects* in code that
-does exist, and are here because their fixes have not landed.
+Open issues, specified but **not shipped**. Nothing below describes a capability the system
+has. The entries that use the present tense (#181, #185) report *defects* in code that does
+exist, and are here because their fixes have not landed.
 
-**The harness pivot (epic #207, [`harness.md`](harness.md))** sequences everything below
-into phases H0–H5 and adds the following:
-- The read-only `art-mcp` spike (#189).
-- Model-free checks and the import boundary (#190).
-- Adapters (#191) and host-filled ingestion (#192).
-- The Jev decisions engine (#193).
-- Packaging (#194) and export/import (#195).
-- The tailoring tree (#196) and plan-program executor (#197).
-- The citation gate (#198), bullet library and baselines (#199), and line budget (#200).
-- The host plugins (#201, #203) and the memory gate (#202).
-- `art ui` (#204, #205).
-- The host evaluation (#206).
+**The harness pivot (epic #207, [`harness.md`](harness.md))** sequences all of it into phases
+H0–H5; § 18 there has the phase table with each issue's status. Everything in H0 and H1 but #249,
+the tree, executor, library and gates of H2, all of H3 and the editor of H3b (#204) is merged and
+described in §8. What follows is what is left.
 
 **Objective and scoring**
-- **#113** will add the executor's per-metric acceptance rule. Every node must pass the hard gates, may not worsen any guard beyond its tolerance, and must improve a target. It replaces the earlier `net(a)` keep/revert design.
-- **#127** will fit per-guard tolerances on the #172 anchor set. There is no λ and no scalar objective. The ATS composite is monotone in text and becomes report-only.
-- **#123** will add a deterministic numeric/entity consistency check as a hard gate, alongside the citation gate (#198).
-- **#151** will decompose `skill_coverage` into required/preferred components, each a separate target metric.
-- **#152** will learn guard tolerances and ranker weights against the human anchor set. The composite's weights are no longer optimised.
-- **#163** will rank keyword-insertion candidates by importance × supportability instead of the current TF-IDF. `agents/keyword_planner.py` is untouched by #125, so its behaviour is byte-identical to pre-#125.
-- **#181** reports that `_detect_level`'s substring matching mislabels 128 of the 150 corpus postings and the benchmark profile itself; `role_level` (weight 0.10) has been comparing two independently wrong labels.
-- **#124** and **#126** (NLI, entailment coverage) are deferred to the Icebox behind the citation gate.
+- **#127** will fit per-guard tolerances on the #172 anchor set. Until then
+  `DEFAULT_TOLERANCES` are hand-set and provisional (§8.2). There is no λ and no scalar objective, and the
+  ATS composite is report-only. It waits on the anchor set (#172 chunk 7).
+- **#241** will give every fitted threshold and the guard tolerances one versioned home. Today each Jev
+  point keeps its constants beside its code (§8.8).
+- **#151** will split `skill_coverage` into required and preferred components, each a separate
+  target metric.
+- **#163** will rank keyword-insertion candidates by importance × supportability instead of the
+  current TF-IDF. `agents/keyword_planner.py` is untouched, so its behaviour is the pre-#125 one.
+- **#152** will learn guard tolerances and ranker weights against the human anchor set.
+- **#181** reports that `_detect_level`'s substring matching mislabels 128 of the 150 corpus
+  postings and the benchmark profile itself; `role_level` (weight 0.10) has been comparing two
+  independently wrong labels.
+- **#185** reports that `select_skills` appends its inferred core floor past the cap, so it can return
+  `MAX_SKILLS + CORE_FLOOR_K` (22) skills against a cap of 18. The harness path trims to the cap only
+  when requirement keywords matched a skill (§4.4); a first plan that sets no `skills` of its own can
+  therefore fail finalize with `skills_cap`.
+- **Jev points not built** (§8.4): eligibility rules, an embedding or Jev reading of semantic duplicates,
+  action ranking for `suggest_actions`, and a role family for JobCards. Their fallbacks are what runs.
+- **Tools not built:** `record_feedback` and `check_draft` (§8.1).
 
 **Policy and learning**
 - **#114** is the epic sequencing the policy arc onto H2–H5.
-- **#117** will make revisions minimal-delta through keep-biased suggestions, an edit-distance guard, and plans that branch from HEAD.
+- **#117** will make revisions minimal-delta through keep-biased `suggest_actions`, an edit-distance
+  guard against the parent node, and plans that branch from HEAD. Only the last exists (§8.2).
+  `variant_drift` is a different guard: it measures a bullet against the approved variant it names.
 - **#119** covers the training-phase prerequisites, collected only in the benchmark host runner (#206).
-- **#51** is now offline selection over the action space: no online bandit, per-metric off-policy estimates, and conditional on the H4 result.
+- **#51** is now offline selection over the action space: no online bandit, per-metric off-policy
+  estimates, and conditional on the H4 result.
 - **#174** will build action-ranking pairs labelled by metric dominance, the anchor set and tree siblings.
 - **#116** was closed as not planned: the executor touches only planned items by construction.
 
+**Evaluation**
+- **#206** will add the host runner and its arms (A, B, B′, C); **#172** (chunk 7, the human anchor set),
+  **#173** (the re-tailor and preference tasks) and **#178** (profile-bound conversations) feed it.
+
 **Retrieval and infrastructure**
-- **#60** (the pgvector write path) is in the Icebox. The local default is SQLite with an FTS5/numpy fallback (#194).
-- **#175** reports that `conftest`'s `isolated_engine` patches 5 of the 16 modules that bind `engine` at import, so a test touching an unpatched module silently reads the wrong database.
+- **#60** (the pgvector write path) is in the Icebox. The local default is SQLite with an FTS5/numpy
+  fallback (#194).
+- **#249** will make the test suite hermetic: no `.env` secrets and no outbound network outside
+  `--integration`. Until it lands, run the suite with `PYTHON_DOTENV_DISABLED=1` (#210).
 
 **Surfaces**
-These issues are retargeted to `art ui` (#204):
-- **#147** will add the inline chat-panel UI for knowledge-artifact suggestions, now in the `art ui` chat panel (#205). It carries the deferred UI for #21, #129 and #133, all of which shipped API-only.
+`art ui` (#204) is merged. These issues remain:
+- **#205** will add the editor chat panel (an Agent SDK session with `art-mcp`, and an API-key fallback).
+- **#147** will add the inline chat-panel UI for knowledge-artifact suggestions, in that panel. It carries
+  the deferred UI for #21, #129 and #133, all of which shipped API-only.
 - **#87** will make the rendered resume view editable.
 - **#136** will add an explorable knowledge-graph visualization.
-- **#157** will log project-selection features and outcomes on tree nodes, so the project-scorer weights become learnable against the anchor set.
+- **#82** and **#84** restructure the web UI's flow and tab order.
+- **#157** will log project-selection features and outcomes on tree nodes, so the project-scorer
+  weights become learnable against the anchor set.
