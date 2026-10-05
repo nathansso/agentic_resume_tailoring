@@ -149,6 +149,8 @@ def _postgres_engine():
         ART_TEST_DATABASE_URL,
         connect_args={"options": f"-csearch_path={schema},public"},
     )
+    # The same session pin the app's engine gets (#210).
+    db_module.pin_utc_session(engine)
     SQLModel.metadata.create_all(engine)
     return engine, schema
 

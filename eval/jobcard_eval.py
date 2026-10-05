@@ -50,7 +50,7 @@ the signal.
 import argparse
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Dict, List, Optional
@@ -111,8 +111,8 @@ def _rows(prior: Dict):
         tailored_resume_content=prior.get("tailored_resume_content", {}),
         tailoring_decisions=prior.get("tailoring_decisions", []),
         verification_status=prior.get("verification_status", "pending"),
-        created_at=datetime(2026, 1, 1),
-        updated_at=datetime(2026, 6, 1),
+        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        updated_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
     )
     return job, result
 

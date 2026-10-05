@@ -37,7 +37,7 @@ reached by an explicit user action — see the write-barrier note there.
 """
 import logging
 import re
-from datetime import datetime
+from database.clock import utc_now
 from typing import Any, Dict, List, Optional, Sequence
 
 from agents.extraction_schemas import (
@@ -359,7 +359,7 @@ def compile_preferences(
                 **base_provenance,
                 "quote": (note.get("evidence") or "").strip(),
                 "extracted_at": base_provenance.get(
-                    "extracted_at", datetime.utcnow().isoformat()),
+                    "extracted_at", utc_now().isoformat()),
             },
         })
     return out

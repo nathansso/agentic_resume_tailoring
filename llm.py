@@ -55,7 +55,12 @@ def get_llm(role: str = ModelRole.CHAT, temperature: float = 0.0) -> BaseChatMod
         from langchain_anthropic import ChatAnthropic
         api_key = os.environ.get("ANTHROPIC_API_KEY") or ANTHROPIC_API_KEY
         logger.info(f"Using Anthropic model: {model_name} (role={role})")
-        kwargs: dict = {"model": model_name, "api_key": api_key}
+        kwargs: dict = {"model": model_name}
+        # Only when there is one: `api_key=None` is a validation error on
+        # langchain-anthropic 1.4.1, while omitting it lets the library apply its
+        # own default (the environment, else an empty key that fails on first call).
+        if api_key:
+            kwargs["api_key"] = api_key
         if model_name not in _ANTHROPIC_NO_TEMPERATURE:
             kwargs["temperature"] = temperature
         return ChatAnthropic(**kwargs)

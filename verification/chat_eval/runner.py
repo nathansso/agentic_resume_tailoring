@@ -112,7 +112,7 @@ class EvalRunner:
 
     def write_artifacts(self, results: List[dict], run_id: Optional[str] = None) -> Path:
         """Write transcript.jsonl, summary.json, claude_handoff.md, and report.md."""
-        from datetime import datetime
+        from datetime import datetime, timezone
         from verification.chat_eval.artifacts import (
             append_turn,
             write_summary,
@@ -121,7 +121,7 @@ class EvalRunner:
         )
         from verification.chat_eval.report import write_report
 
-        ts = run_id or datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        ts = run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         run_dir = self.output_dir / ts
         run_dir.mkdir(parents=True, exist_ok=True)
 

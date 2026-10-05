@@ -10,7 +10,7 @@ import os
 import subprocess
 import sys
 import zipfile
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4, uuid5, NAMESPACE_DNS
 
@@ -24,7 +24,7 @@ from harness import export_import as ei
 from harness.export_import import PortError
 
 ROOT = Path(__file__).resolve().parent.parent
-T0 = datetime(2026, 9, 1, 12, 0, 0)
+T0 = datetime(2026, 9, 1, 12, 0, 0, tzinfo=timezone.utc)
 
 
 def _id(name):
@@ -698,7 +698,7 @@ def test_reading_an_older_source_tolerates_missing_tables_and_columns(tmp_path):
     with Session(dest) as s:
         user = s.get(m.User, UID)
         assert user.onboarding_complete is True and user.password_hash is None
-        assert user.created_at == datetime(2025, 1, 2, 3, 4, 5)
+        assert user.created_at == datetime(2025, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
         exp = s.execute(sa.select(m.Experience)).scalars().one()
         assert exp.bullets == ["one", "two"] and exp.seq is None
         res = s.get(m.UserJobResult, _id("r1"))

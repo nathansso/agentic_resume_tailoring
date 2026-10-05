@@ -39,6 +39,26 @@ jobs:
         working-directory: web/frontend
         run: npm ci --dry-run --ignore-scripts
 
+  python-lock:
+    # The Python twin of the job above (#210). CI and the Dockerfile install
+    # requirements-core.txt with `-c requirements-lock.txt`, and pip ignores a
+    # constraint for a package the file does not list, so a core requirement
+    # the lock lacks, or pins outside the lock's version, installs unpinned
+    # without a word. This fails the PR instead. Needs only `packaging`.
+    name: python lockfile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Core requirements are covered by the lock
+        run: |
+          python -m pip install packaging
+          python scripts/check_lock_drift.py
+
   package:
     # The #194 acceptance test: build the wheel the way a release does (editor
     # first, so `art ui` ships), install it with no extras into a venv that
@@ -131,14 +151,17 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        # requirements-core.txt, not the lock: the heavy extras (torch,
+        # requirements-core.txt, not the full lock: the heavy extras (torch,
         # docling, sentence-transformers) are lazily imported behind graceful
         # fallbacks that tests/test_deps_split.py pins, so CI does not need to
-        # pull ~1GB of wheels to exercise them.
+        # pull ~1GB of wheels to exercise them. `-c` holds every package the
+        # install resolves to the lock's version (the Dockerfile does the
+        # same), so an upstream release cannot turn CI red with no change
+        # here, as sqlmodel 0.0.47 did (#209). A constraint never installs
+        # anything: the extras in the lock stay out.
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-core.txt
-          pip install pytest==9.0.3
+          pip install -r requirements-core.txt pytest==9.0.3 -c requirements-lock.txt
 
       - name: Run tests
         env:

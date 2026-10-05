@@ -191,7 +191,7 @@ def test_query_skills_vs_jobs_no_jobs(isolated_engine):
 def test_query_skills_vs_jobs_with_job_result(isolated_engine):
     """query_skills_vs_jobs shows match score and skill breakdown when results exist."""
     import uuid
-    from datetime import datetime
+    from database.clock import utc_now
     from database.user_utils import create_profile
     from database.db import engine as db_engine
     from sqlmodel import Session as S
@@ -201,14 +201,14 @@ def test_query_skills_vs_jobs_with_job_result(isolated_engine):
     with S(db_engine) as sess:
         sess.add(JobDescription(
             job_id=job_id, title="ML Engineer", company="Acme",
-            description="Build models.", created_at=datetime.utcnow(),
+            description="Build models.", created_at=utc_now(),
         ))
         sess.add(UserJobResult(
             result_id=uuid.uuid4(), user_id=user.user_id, job_id=job_id,
             ats_score=78.5,
             matched_skills={"Python": 1, "PyTorch": 1},
             missing_skills=["Go", "Kubernetes"],
-            created_at=datetime.utcnow(),
+            created_at=utc_now(),
         ))
         sess.commit()
 

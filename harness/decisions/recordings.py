@@ -19,7 +19,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime
+from database.clock import parse_utc, utc_now
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -43,7 +43,7 @@ def _row_dict(row) -> Dict[str, Any]:
 def export_recordings() -> Dict[str, Any]:
     from harness.decisions import cache
     return {"format": FORMAT, "version": VERSION,
-            "exported_at": datetime.utcnow().isoformat(timespec="seconds"),
+            "exported_at": utc_now().isoformat(timespec="seconds"),
             "decisions": [_row_dict(r) for r in cache.all_rows()]}
 
 
@@ -67,12 +67,12 @@ def import_recordings(doc: Any, *, overwrite: bool = False) -> Dict[str, int]:
         if not isinstance(e, dict) or any(k not in e for k in required):
             raise RecordingError(f"decision {i} is missing one of {required}")
         try:
-            created = datetime.fromisoformat(e["created_at"]) if e.get("created_at") else None
-        except ValueError:
+            created = parse_utc(e.get("created_at"))
+        except (ValueError, TypeError):
             raise RecordingError(f"decision {i} has a bad created_at") from None
         rows.append(JevDecision(
             **{k: e[k] for k in required}, input_tokens=e.get("input_tokens"),
-            output_tokens=e.get("output_tokens"), created_at=created or datetime.utcnow()))
+            output_tokens=e.get("output_tokens"), created_at=created or utc_now()))
     have = set(cache.get_many(r.cache_key for r in rows))
     todo = rows if overwrite else [r for r in rows if r.cache_key not in have]
     if todo and not cache.put_many(todo):

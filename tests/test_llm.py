@@ -65,3 +65,18 @@ class TestProviderNormalization:
         import llm
         with pytest.raises(ValueError, match="Unknown LLM_PROVIDER"):
             llm.get_llm()
+
+    def test_get_llm_builds_without_an_api_key(self, monkeypatch):
+        """No key means a client that fails when called, not one that fails to build.
+
+        `ChatAnthropic(api_key=None)` is a validation error on langchain-anthropic
+        1.4.1 (the lock's version) and accepted on newer releases. Many tests build a
+        ChatAgent with no key in the environment, so CI installed against the lock
+        (#210) turned ~30 of them red. Passing no `api_key` at all leaves the
+        library's own default in charge, on every version.
+        """
+        monkeypatch.setenv("LLM_PROVIDER", "anthropic")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        import llm
+        monkeypatch.setattr(llm, "ANTHROPIC_API_KEY", None)
+        assert llm.get_llm() is not None

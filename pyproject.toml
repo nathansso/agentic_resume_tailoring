@@ -18,8 +18,8 @@ requires-python = ">=3.11"
 license = { text = "Proprietary" }
 dependencies = [
     "mcp==2.2.0",
-    "sqlmodel==0.0.38",
-    "pydantic>=2.7",
+    "sqlmodel==0.0.47",
+    "pydantic>=2.11",
     "numpy>=1.26",
     "networkx>=3.2",
     "requests>=2.31",

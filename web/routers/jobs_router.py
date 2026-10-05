@@ -1,7 +1,6 @@
 import asyncio
 import json
 import re
-from datetime import datetime
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -10,6 +9,7 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from agents.skill_selection import skill_names
+from database.clock import utc_now
 from database.db import engine, latest_result
 from database.models import JobDescription, UserJobResult, User
 from web.auth import get_current_user
@@ -219,7 +219,7 @@ async def analyze_job(job_id: str, user: User = Depends(get_current_user)):
                 j2 = s2.get(JobDescription, job.job_id)
                 if j2 and j2.status != "analyzed":
                     j2.status = "analyzed"
-                    j2.updated_at = datetime.utcnow()
+                    j2.updated_at = utc_now()
                     s2.add(j2)
                     s2.commit()
             SkillMatcherAgent().match(user.user_id, job.job_id)
@@ -227,7 +227,7 @@ async def analyze_job(job_id: str, user: User = Depends(get_current_user)):
                 j3 = s3.get(JobDescription, job.job_id)
                 if j3:
                     j3.status = "analyzed"
-                    j3.updated_at = datetime.utcnow()
+                    j3.updated_at = utc_now()
                     s3.add(j3)
                     s3.commit()
 
@@ -363,7 +363,7 @@ async def tailor_job(
             if j:
                 j.status = "tailored"
                 j.retailor_count = (j.retailor_count or 0) + 1
-                j.updated_at = datetime.utcnow()
+                j.updated_at = utc_now()
                 s.add(j)
                 s.commit()
 
@@ -428,8 +428,8 @@ async def save_tex(job_id: str, body: TexBody, user: User = Depends(get_current_
         if not latest:
             raise HTTPException(status_code=422, detail="No tailoring result to attach edits to — run Tailor first.")
         latest.edited_tex = tex
-        latest.edited_tex_updated_at = datetime.utcnow()
-        latest.updated_at = datetime.utcnow()
+        latest.edited_tex_updated_at = utc_now()
+        latest.updated_at = utc_now()
         session.add(latest)
         session.commit()
         _record_edit(user, job.job_id, "tex edit")
@@ -445,7 +445,7 @@ async def discard_tex(job_id: str, user: User = Depends(get_current_user)):
         if latest and latest.edited_tex:
             latest.edited_tex = None
             latest.edited_tex_updated_at = None
-            latest.updated_at = datetime.utcnow()
+            latest.updated_at = utc_now()
             session.add(latest)
             session.commit()
             _record_edit(user, job.job_id, "tex discarded")
@@ -547,7 +547,7 @@ def save_layout(job_id: str, body: LayoutBody, user: User = Depends(get_current_
 
         # An empty body is a reset, not an override that pins nothing.
         latest.layout_overrides = overrides or None
-        latest.updated_at = datetime.utcnow()
+        latest.updated_at = utc_now()
         session.add(latest)
         session.commit()
         _record_edit(user, job.job_id, "layout")
@@ -566,7 +566,7 @@ def clear_layout(job_id: str, user: User = Depends(get_current_user)):
         latest = _latest_result(session, job.job_id)
         if latest and latest.layout_overrides is not None:
             latest.layout_overrides = None
-            latest.updated_at = datetime.utcnow()
+            latest.updated_at = utc_now()
             session.add(latest)
             session.commit()
             _record_edit(user, job.job_id, "layout cleared")

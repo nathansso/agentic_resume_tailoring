@@ -50,6 +50,8 @@ import sys
 import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+
+from database.clock import as_utc
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 from uuid import UUID
@@ -94,11 +96,14 @@ def _now() -> datetime:
 
 
 def _iso(dt: datetime) -> str:
-    return dt.isoformat()
+    return as_utc(dt).isoformat()
 
 
 def _parse_dt(text: str) -> datetime:
-    return datetime.fromisoformat(text.strip().replace("Z", "+00:00"))
+    # A naive stamp is UTC: what every writer before #210 meant, and what an old
+    # database, or an export taken from one, holds. sqlmodel refuses a naive
+    # value on write.
+    return as_utc(datetime.fromisoformat(text.strip().replace("Z", "+00:00")))
 
 
 def _to_json(value: Any) -> Any:
@@ -117,8 +122,8 @@ def _coerce(column: sa.Column, value: Any, *, from_db: bool) -> Any:
     t = column.type
     if isinstance(t, sa.Uuid):
         return value if isinstance(value, UUID) else UUID(str(value))
-    if isinstance(t, sa.DateTime):
-        return value if isinstance(value, datetime) else _parse_dt(str(value))
+    if isinstance(getattr(t, "impl", t), sa.DateTime):  # UTCDateTime wraps a DateTime
+        return as_utc(value) if isinstance(value, datetime) else _parse_dt(str(value))
     if isinstance(t, sa.JSON):
         if from_db and isinstance(value, (str, bytes)):
             return json.loads(value)

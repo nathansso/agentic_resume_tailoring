@@ -19,8 +19,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     texlive-latex-base texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements-core.txt .
-RUN pip install --no-cache-dir -r requirements-core.txt
+# Core only, held to the versions the lock (and CI) run: `-c` constrains what
+# the install resolves and never adds the lock's heavy extras. Without it an
+# upstream release reaches production with no change here (#209, #210).
+COPY requirements-core.txt requirements-lock.txt ./
+RUN pip install --no-cache-dir -r requirements-core.txt -c requirements-lock.txt
 
 RUN python -c "import nltk; nltk.download('stopwords', quiet=True); nltk.download('punkt_tab', quiet=True)"
 

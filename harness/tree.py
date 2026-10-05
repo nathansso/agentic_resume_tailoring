@@ -24,7 +24,6 @@ Model-free by rule (`tests/test_harness_boundary.py`).
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
@@ -34,6 +33,7 @@ from sqlmodel import Session, select
 import database.db as _db
 from harness import ART_VERSION
 from agents.checks import exp_key, proj_key
+from database.clock import utc_now
 from database.models import JobDescription, JobHead, TailorNode, TreeEvent, UserJobResult
 
 log = logging.getLogger(__name__)
@@ -105,7 +105,7 @@ def _set_head(session, user_id: UUID, job_id: UUID, node_id: UUID) -> None:
     if row is None:
         row = JobHead(job_id=job_id, user_id=user_id, node_id=node_id)
     else:
-        row.node_id, row.updated_at = node_id, datetime.utcnow()
+        row.node_id, row.updated_at = node_id, utc_now()
     session.add(row)
 
 
@@ -126,7 +126,7 @@ def _materialize(session, user_id: UUID, job_id: UUID, node: TailorNode,
         if not create:
             return None
         result = UserJobResult(user_id=user_id, job_id=job_id, seq=0)
-    now = datetime.utcnow()
+    now = utc_now()
     result.tailored_resume_content = _json(node.content, {})
     result.tailored_score_breakdown = _json(node.score_breakdown, {})
     result.edited_tex = node.edited_tex

@@ -903,7 +903,7 @@ as if it were.**
 
 ### 7.1 Insertion ordinals and `latest_result` (issue #180)
 
-`created_at` has no tiebreaker, and on Windows `utcnow()` is coarse enough that 200
+`created_at` has no tiebreaker, and on Windows `utc_now()` is coarse enough that 200
 consecutive calls can return one value. Reads ordered only on it returned tied rows in
 arbitrary order — a conversation could render with the assistant's reply above the user's
 question.
