@@ -13,8 +13,8 @@ returns a routing decision, and `harness/memory.py` acts on it.
    answer. A message over `MAX_CHARS` is taken to be pasted material (a posting, a draft) and
    dropped; the host can still call `observe` or `record_preference` itself.
 2. **The Jev gate**, `memory_gate@v1`: one request per candidate carrying four questions about
-   the message, all worded positively, over the message text alone (the state is `{message}`;
-   `previous_assistant` is added only when a caller supplies the previous turn):
+   the message, all worded positively, over the message text alone (the state is `{message}`; v2,
+   below, adds the previous assistant turn):
    - *standing*: a `noul`: "Does this message state a lasting preference about how the user's
      resume should be written or what it should include?" A one-off edit request, a question, a
      fact about the user's experience and small talk are named as not one.
@@ -46,6 +46,16 @@ strength-5 suppression) becomes a gate that refuses plans (#129, #198), so it al
 the host with the guess, for the user to confirm through `record_preference`. This is a safety
 rule, not a threshold: `route` checks it before anything is written.
 
+**`memory_gate@v2`: the previous assistant turn (#244).** A message such as "never list that again" or
+"keep it like that" cannot be read without knowing what "that" is. `unresolved_reference` flags those (an
+anaphoric phrase, a bare pronoun when the message names no catalog item, a short yes/no reply), and only
+then does `observe` look for the previous assistant turn (`harness/transcript.py` reads it from the
+host's transcript, or the host passes it). With a turn, the same four questions run as
+`memory_gate@v2`: the state is `{message, previous_assistant_turn}` and each question says the turn is
+there only to resolve what the message refers to. The routing and every code rule are the same; the
+thresholds (`TAU_*_V2`) are fitted separately on `eval/memory_gate_labels/context/`. With no reference,
+or no readable turn, v1 runs exactly as before: the same state, cache keys and thresholds.
+
 **With no key, mode `off` or an API error** the prefilter alone decides: every candidate goes to
 the host, nothing is written, and non-candidates are dropped.
 
@@ -64,6 +74,9 @@ from harness.decisions.questions import Answer, Choice, Noul, Score, canonical
 
 POINT = "memory_gate"
 VERSION = "memory_gate@v1"
+VERSION_V2 = "memory_gate@v2"      # the same questions, with the previous assistant turn in the state (#244)
+VERSIONS = (VERSION, VERSION_V2)
+PREVIOUS_MAX = 600                 # characters of the previous assistant turn that are sent (its end)
 
 DIRECTIONS = ("emphasize", "suppress", "format_rule", "none")
 NO_MATCH = "no_match"
@@ -101,6 +114,30 @@ _ROUND = 4
 TAU_LO = 0.25
 TAU_HI = 0.65
 TAU_TARGET = 0.75
+
+# memory_gate@v2 (#244): fitted on eval/memory_gate_labels/context/ (40 messages, 33 standing preferences),
+# v2's own answers, by the same rules as above (`python eval/fit_memory_gate_context.py analyze`), TAU_HI
+# again as if the code rules did not exist and again floored at HI_FLOOR. **The pin rule:** a write
+# threshold of the context variant is never looser than the evidence-backed v1 one while the variant's own
+# write set is thinner than v1's: TAU_HI_V2 = max(fit, TAU_HI) and TAU_TARGET_V2 = max(fit, TAU_TARGET)
+# unless the set holds at least V1_WOULD_BE_WRITES would-be writes (v1's own, with the code rules off).
+# The reason is that a threshold fitted on three would-be writes sits wherever the rule leaves it (the
+# floor), which is not evidence that a looser cut is safe. TAU_LO is not a write threshold and is fitted.
+#   TAU_HI_V2 0.65: the fit alone gives 0.50 (0 wrong of 3 writes without the code rules, the lowest right
+#     one scores 0.84, so every grid value from the floor to 0.80 is equal); 3 < 29, so v1's 0.65 holds.
+#   TAU_TARGET_V2 0.75: the fit alone gives 0.40 (3 named bindings, all right and >= 0.83, none wrong, so
+#     nothing bounds it from below); pinned to v1's 0.75. The five wrong bindings in the set are all items
+#     the message does not name; the name check owns them.
+#   TAU_LO_V2 0.20: 0 of the 33 true preferences are dropped (the lowest is cx_looker_stop, 0.32).
+V1_WOULD_BE_WRITES = 29     # #202's writes at its thresholds with the code rules off (REPORT.md: 29)
+TAU_LO_V2 = 0.20
+TAU_HI_V2 = 0.65
+TAU_TARGET_V2 = 0.75
+
+
+def thresholds(version: str = VERSION) -> Tuple[float, float, float]:
+    """`(tau_lo, tau_hi, tau_target)` for a question version."""
+    return (TAU_LO_V2, TAU_HI_V2, TAU_TARGET_V2) if version == VERSION_V2 else (TAU_LO, TAU_HI, TAU_TARGET)
 
 
 # ── the prefilter ────────────────────────────────────────────────────────────
@@ -192,6 +229,55 @@ def heuristic_guess(pre: Prefilter) -> Dict[str, Any]:
             "job_scoped": pre.scope == "job"}
 
 
+# ── an unresolved reference (#244) ───────────────────────────────────────────
+
+# A message that depends on the turn before it. Three kinds of cue:
+#  - an anaphoric phrase, which always points back ("again", "the same", "like that", "that way");
+#  - a bare pronoun ("that", "it", "this", "those", "them"), which points back only when the message
+#    does not itself name a catalog item ("Don't ever list Looker, I barely used it" has its antecedent);
+#  - a short reply that answers a question ("Yes, always.", "Don't, ever.").
+# An ordinal referent ("the last one", "the second one") counts as a pronoun. A complementiser "that" ("make
+# sure that my GPA is off") is not one. The cue list was written before the new context messages were recorded
+# and checked against the 111 self-contained messages of the main set (a flag there is a false detection); the
+# ordinal referents were added after the recording showed three misses (`cx_mis_*`), so detection recall on
+# that set is not an out-of-sample figure.
+_ANAPHORA = re.compile(
+    r"\bagain\b|\bthe same\b|\bsame (?:as|way|thing)\b|\bas before\b|\blike before\b|\blast time\b"
+    r"|\bas (?:you|we) (?:did|had)\b|\blike (?:that|this)\b|\b(?:that|this) way\b", re.IGNORECASE)
+_PRONOUN = re.compile(r"\b(?:that|this|those|these|them|it)(?: ones?)?\b"
+                      r"|\b(?:the )?(?:first|second|third|last|middle|other|latter|former) ones?\b", re.IGNORECASE)
+_COMPLEMENTISER = re.compile(
+    r"\b(?:make sure|ensure|so|say|said|think|know|mean|means|note|show|shows|sure|such|given|insist)\s+that\b"
+    r"|\bthat\s+(?:my|the|i|you|your|we|it|every|all|any|each|a|an|no|there|this|those)\b"
+    r"|\b(?:something|anything|everything|bullets?|skills?|things?|projects?|roles?|items?|words|jobs|"
+    r"sections?|lines?|tools)\s+that\b",
+    re.IGNORECASE)
+# A reply: opens with an answer word and is short, or is nothing but answer and adverb words ("Don't, ever.").
+_REPLY_OPENER = re.compile(r"^(?:yes|yeah|yep|yup|nope|sure|ok|okay|right|exactly|correct|fine"
+                           r"|no(?! (?:more|longer|less|fewer|one|other))|good(?! (?:morning|afternoon|evening))"
+                           r"|great)\b", re.IGNORECASE)
+_REPLY_WORDS = frozenset("please do don't dont never always ever definitely absolutely not".split())
+REPLY_WORDS = 10                      # an opener-led reply is at most this many words
+
+
+def unresolved_reference(text: str, catalog: Optional[Sequence[Dict]] = None) -> List[str]:
+    """The cues in `text` that make it depend on the previous assistant turn, or `[]` when it reads on its
+    own. `catalog` lets a bare pronoun resolve inside the message: one that names a catalog item has its
+    antecedent ("Leave Looker off, I barely used it")."""
+    plain = _norm(text)
+    if not plain:
+        return []
+    cues = [m.group(0).lower() for m in _ANAPHORA.finditer(plain)]
+    pronouns = [m.group(0).lower() for m in _PRONOUN.finditer(_COMPLEMENTISER.sub(" ", plain))]
+    if pronouns and not (catalog and any(names_target(plain, e) for e in catalog)):
+        cues += pronouns
+    words = re.findall(r"[\w'/+]+", plain.lower())
+    if not cues and words and ((len(words) <= REPLY_WORDS and _REPLY_OPENER.match(plain))
+                               or all(w in _REPLY_WORDS for w in words)):
+        cues.append("short reply")
+    return cues
+
+
 # ── the questions ────────────────────────────────────────────────────────────
 
 STRENGTH_LEVELS = [
@@ -204,27 +290,40 @@ STRENGTH_LEVELS = [
 ]
 
 
-def question_standing() -> Noul:
+# What v2 adds to each question's instructions (#244). The state then also holds the assistant's previous
+# turn; it is there only so that "that", "it" and "again" can be resolved. It is never the user's own words.
+CONTEXT_NOTE = (" The state also holds the assistant's previous turn. Use it only to work out what the "
+                "message refers to (what 'that', 'it', 'this' or 'again' points at, or what a short "
+                "yes or no answers). Judge only what the user's own message says: the assistant's turn "
+                "is not the user's wish, and an item it mentions that the message does not refer to "
+                "is not part of the answer.")
+
+
+def _note(version: str) -> str:
+    return CONTEXT_NOTE if version == VERSION_V2 else ""
+
+
+def question_standing(version: str = VERSION) -> Noul:
     return Noul(
-        VERSION,
+        version,
         "Does this message state a lasting preference about how the user's resume should be "
         "written or what it should include? Answer yes when the user states a rule they want "
         "applied from now on, to every version of their resume or to the resume for one named "
         "job: something to leave out, to feature, to always do, or a format they want. A "
         "request to change one particular bullet or section right now (shorten it, reword it, "
         "fix it), a question, a fact about the user's own experience, a reaction, and small "
-        "talk are not lasting preferences.",
+        "talk are not lasting preferences." + _note(version),
         true="The message states a lasting preference about the resume.",
         false="The message is a one-off request, a question, a fact, a reaction or small talk.")
 
 
-def question_direction() -> Choice:
+def question_direction(version: str = VERSION) -> Choice:
     return Choice(
-        VERSION,
+        version,
         "What does the user want done with their resume? Read negations carefully: a user who "
         "says not to leave something out, or not to stop including it, wants it included "
         "(emphasize); a user who says not to include something wants it left out (suppress). "
-        "Choose none when the message states no preference about the resume.",
+        "Choose none when the message states no preference about the resume." + _note(version),
         {"emphasize": "The user wants something featured, led with, kept, or always included.",
          "suppress": "The user wants something left out or never mentioned.",
          "format_rule": "The user wants the resume written or laid out a certain way, such as "
@@ -233,12 +332,12 @@ def question_direction() -> Choice:
          "none": "The message states no preference about the resume."})
 
 
-def question_strength() -> Score:
+def question_strength(version: str = VERSION) -> Score:
     return Score(
-        VERSION,
+        version,
         "How firmly does the user hold this preference about their resume? Judge the user's own "
         "wording, not how important the topic is. Level 5 is only for an absolute rule stated "
-        "as non-negotiable, such as 'never' or 'under no circumstances'.",
+        "as non-negotiable, such as 'never' or 'under no circumstances'." + _note(version),
         STRENGTH_LEVELS)
 
 
@@ -261,28 +360,43 @@ def catalog_options(catalog: Sequence[Dict]) -> Tuple[Dict[str, Optional[str]], 
     return options, key_of
 
 
-def question_target(catalog: Sequence[Dict]) -> Choice:
+def question_target(catalog: Sequence[Dict], version: str = VERSION) -> Choice:
     options, _ = catalog_options(catalog)
     return Choice(
-        VERSION,
+        version,
         "Which item on the user's resume does this message ask to feature, leave out or "
         "arrange? Choose the listed item the message is about, even when it names it only "
         "loosely. Choose no_match when the message is about something not listed, about the "
-        "resume in general, or does not clearly refer to a listed item.",
+        "resume in general, or does not clearly refer to a listed item." + _note(version),
         options, no_match=NO_MATCH)
 
 
+def clip_previous(previous: Optional[str]) -> str:
+    """The previous assistant turn as the state carries it: whitespace collapsed, and when it is longer
+    than `PREVIOUS_MAX` its last characters, behind an ellipsis (a reply answers the end of the turn)."""
+    text = _norm(previous)
+    return text if len(text) <= PREVIOUS_MAX else "…" + text[-(PREVIOUS_MAX - 1):]
+
+
 def build_state(text: str, previous: Optional[str] = None) -> Dict[str, Any]:
-    """The whole state: the message, and the previous assistant turn only when one is given."""
+    """The v1 state: the message alone. With `previous` it is the key #202 measured the turn under
+    (`previous_assistant`, the v1 questions): kept only so that measurement still replays, never a product
+    path; v2 is `build_state_v2`."""
     state: Dict[str, Any] = {"message": _norm(text)}
     if previous and _norm(previous):
         state["previous_assistant"] = _norm(previous)[:600]
     return state
 
 
-def questions_for(catalog: Sequence[Dict]) -> List[Any]:
+def build_state_v2(text: str, previous: str) -> Dict[str, Any]:
+    """The v2 state: `{message, previous_assistant_turn}`."""
+    return {"message": _norm(text), "previous_assistant_turn": clip_previous(previous)}
+
+
+def questions_for(catalog: Sequence[Dict], version: str = VERSION) -> List[Any]:
     """The four questions, in the order `parse_answers` reads them."""
-    return [question_standing(), question_direction(), question_strength(), question_target(catalog)]
+    return [question_standing(version), question_direction(version), question_strength(version),
+            question_target(catalog, version)]
 
 
 # ── answers → a guess ────────────────────────────────────────────────────────
@@ -301,6 +415,7 @@ class Guess:
     target_named: bool                    # the message says the target's name
     source: str                           # jev | cache
     model: Optional[str] = None
+    version: str = VERSION                # the question version that produced it: the thresholds follow it
 
     def as_dict(self) -> Dict[str, Any]:
         return {"p": self.p, "direction": self.direction, "direction_p": self.direction_p,
@@ -345,9 +460,10 @@ def names_target(text: str, entry: Dict[str, str]) -> bool:
 
 
 def parse_answers(answers: Sequence[Answer], catalog: Sequence[Dict],
-                  text: str = "") -> Optional[Guess]:
+                  text: str = "", version: str = VERSION) -> Optional[Guess]:
     """The four answers as a `Guess`, or None when any came from the fallback. `text` is the
-    message, to check that it names the target Jev picked."""
+    message, to check that it names the target Jev picked (never the previous turn: a name there is
+    not the user's). `version` is the question version the answers are to."""
     if len(answers) != 4 or any(a.fell_back or a.p is None and a.kind == "noul" for a in answers):
         return None
     standing, direction, strength, target = answers
@@ -362,7 +478,7 @@ def parse_answers(answers: Sequence[Answer], catalog: Sequence[Dict],
         hard_p=_r(strength.p_of("4")) or 0.0,
         target_key=key, target_label=label, target_p=_r(target.p),
         target_named=bool(entry and names_target(text, entry)),
-        source="jev" if "jev" in sources else "cache", model=standing.model)
+        source="jev" if "jev" in sources else "cache", model=standing.model, version=version)
 
 
 def unavailable_reason(answers: Sequence[Answer]) -> Optional[str]:
@@ -375,12 +491,22 @@ def unavailable_reason(answers: Sequence[Answer]) -> Optional[str]:
     return None
 
 
-def ask(text: str, catalog: Sequence[Dict], previous: Optional[str] = None, *, client=None):
-    """The four answers for one message, through the engine (cache, then Jev, then the fallback)."""
+def version_for(previous: Optional[str]) -> str:
+    """The question version a message is asked under: v2 when there is a previous turn to send, else v1."""
+    return VERSION_V2 if previous and _norm(previous) else VERSION
+
+
+def ask(text: str, catalog: Sequence[Dict], previous: Optional[str] = None, *, client=None,
+        version: Optional[str] = None):
+    """The four answers for one message, through the engine (cache, then Jev, then the fallback).
+    With a previous turn the questions are `memory_gate@v2` and the state carries the turn; without one
+    they are v1 over the message alone. `version=VERSION` with a turn is #202's measurement (the v1
+    questions over the legacy state), kept so its recordings replay."""
     from harness.decisions import engine
 
-    return engine.decide(POINT, build_state(text, previous), questions_for(catalog),
-                         fallback=None, client=client)
+    version = version or version_for(previous)
+    state = build_state_v2(text, previous or "") if version == VERSION_V2 else build_state(text, previous)
+    return engine.decide(POINT, state, questions_for(catalog, version), fallback=None, client=client)
 
 
 # ── routing ──────────────────────────────────────────────────────────────────
@@ -436,11 +562,13 @@ def explain(decision: Dict[str, Any]) -> str:
 
 def _decision(action: str, reason: str, pre: Prefilter, guess: Optional[Guess], text: str,
               scope: str = "global", source: Optional[str] = None) -> Dict[str, Any]:
+    """`version` is the question version whose answers decided (`memory_gate@v1` or `@v2`), None when no
+    Jev answer did (the prefilter settled it, or Jev was unavailable)."""
     return {"action": action, "reason": reason, "candidate": pre.candidate, "negated": pre.negated,
             "p": guess.p if guess else None,
             "source": source or (guess.source if guess else "prefilter"),
             "guess": guess.as_dict() if guess else None, "cues": list(pre.cues),
-            "text": _norm(text), "scope": scope}
+            "text": _norm(text), "scope": scope, "version": guess.version if guess else None}
 
 
 def route_prefilter(text: str, pre: Prefilter) -> Optional[Dict[str, Any]]:
@@ -464,9 +592,10 @@ def route(text: str, pre: Prefilter, guess: Optional[Guess], *, job_known: bool 
     guess, cues, text, scope}`. `action` is `drop`, `host` or `write`. Pure. `without` names code
     rules to skip (`CODE_RULES`); it exists only so the fit can choose thresholds as if those rules
     did not exist and measure what each one removes. Nothing in the product passes it."""
-    lo = TAU_LO if tau_lo is None else tau_lo
-    hi = TAU_HI if tau_hi is None else tau_hi
-    tgt = TAU_TARGET if tau_target is None else tau_target
+    v_lo, v_hi, v_tgt = thresholds(guess.version if guess else VERSION)
+    lo = v_lo if tau_lo is None else tau_lo
+    hi = v_hi if tau_hi is None else tau_hi
+    tgt = v_tgt if tau_target is None else tau_target
     early = route_prefilter(text, pre)
     if early is not None:
         return early

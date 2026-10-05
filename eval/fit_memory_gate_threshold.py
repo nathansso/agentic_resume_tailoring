@@ -94,17 +94,20 @@ def profile_catalog(name: Optional[str] = None) -> List[Dict[str, str]]:
                         projects=[p["name"] for p in prof.projects])
 
 
-def ask(pair: Dict[str, Any], catalog, previous: Optional[str] = None):
-    """The four answers `memory_gate.py` asks for this message, in the current mode."""
+def ask(pair: Dict[str, Any], catalog, previous: Optional[str] = None, version: Optional[str] = None):
+    """The four answers `memory_gate.py` asks for this message, in the current mode. This script is #202's
+    measurement: always the v1 questions (with `previous`, the legacy v1-plus-turn state it was recorded under).
+    The v2 questions are `fit_memory_gate_context.py`'s."""
     from harness.decisions import memory_gate
-    return memory_gate.ask(pair["message"], catalog, previous)
+    return memory_gate.ask(pair["message"], catalog, previous, version=version or memory_gate.VERSION)
 
 
-def make_row(pair: Dict[str, Any], catalog, answers, previous: Optional[str] = None) -> Dict[str, Any]:
+def make_row(pair: Dict[str, Any], catalog, answers, previous: Optional[str] = None,
+             version: Optional[str] = None) -> Dict[str, Any]:
     from harness.decisions import memory_gate as mg
 
     pre = mg.prefilter(pair["message"])
-    guess = mg.parse_answers(answers, catalog, pair["message"])
+    guess = mg.parse_answers(answers, catalog, pair["message"], version or mg.VERSION)
     return {**pair, "pre": pre, "guess": guess, "previous": previous, "answers": answers,
             "jev_pref": bool(guess and guess.p >= JEV_YES)}
 
@@ -591,7 +594,9 @@ def render_report(rows, ctx_rows, meta: Dict[str, Any]) -> str:
     # context
     o.append("## The previous assistant turn\n")
     o.append("Twelve short messages that lean on the turn before (`that`, `it`, `yes, always`), asked with the message "
-             "alone and with the previous assistant turn in the state. The shipped gate asks with the message alone.\n")
+             "alone and with the previous assistant turn in the state (the v1 questions over a legacy state: #202's "
+             "measurement). The `memory_gate@v1` gate asks with the message alone; #244 adds `memory_gate@v2`, which "
+             "reads the turn, and measures it on a larger set in `context/`.\n")
     body = []
     for c in ctx_rows:
         a, w, p = c["alone"], c["with_previous"], c["pair"]
@@ -701,7 +706,7 @@ def cmd_record(args) -> int:
     failures = []
     jobs = [(p, None) for p in pairs] + [(p, None) for p in ctx] + [(p, p["previous"]) for p in ctx]
     for i, (pair, previous) in enumerate(jobs, 1):
-        answers = memory_gate.ask(pair["message"], catalog, previous)
+        answers = memory_gate.ask(pair["message"], catalog, previous, version=memory_gate.VERSION)
         bad = next((a for a in answers if a.fell_back), None)
         if bad is not None:
             failures.append(f"{pair['id']}: {bad.reason}")

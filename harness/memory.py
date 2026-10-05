@@ -34,13 +34,14 @@ import logging
 import re
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
 
 import services
 from agents.preferences import (
     POLARITIES, STATUS_ACTIVE, compile_preferences, resolve_against_existing,
 )
+from harness import transcript
 from harness.decisions import memory_gate as mg
 
 log = logging.getLogger(__name__)
@@ -89,6 +90,7 @@ def _log_decision(decision: Dict[str, Any], session_id: Optional[str]) -> None:
     g = decision.get("guess") or {}
     row = {"ts": round(time.time(), 3), "session": session_id, "action": decision["action"],
            "reason": decision["reason"], "source": decision["source"], "p": decision.get("p"),
+           "version": decision.get("version"), "context": decision.get("context"),
            "candidate": decision["candidate"], "negated": decision["negated"],
            "direction": g.get("direction"), "strength": g.get("strength"), "target": g.get("target")}
     log.info("memory_gate %s", json.dumps(row, sort_keys=True))
@@ -123,21 +125,44 @@ def _client(bounded: bool):
     return client
 
 
+def previous_turn_for(text: str, catalog: List[Dict[str, str]], previous_turn: Optional[str] = None,
+                      transcript_path: Optional[str] = None) -> Tuple[Optional[str], str]:
+    """`(turn, context)`: the previous assistant turn to send with `text`, and why.
+
+    Only a message with an unresolved reference ("that", "it", "again", a short yes or no) gets one, so the
+    transcript is not even opened for the rest and their answers stay under v1's cache keys. `context` is
+    `none` (the message reads on its own), `used` (a turn was found: the gate runs v2) or `missing` (the
+    message needs a turn and none could be read, so the gate runs v1). The turn is the caller's
+    `previous_turn` when given, else the last assistant text in the host's transcript."""
+    if not mg.unresolved_reference(text, catalog):
+        return None, "none"
+    turn = " ".join((previous_turn or "").split()) or transcript.previous_assistant_turn(transcript_path, text)
+    return (turn, "used") if turn and turn.strip() else (None, "missing")
+
+
 def observe(user_id: UUID, text: str, session_id: Optional[str] = None, *, write: bool = True,
-            bounded: bool = False) -> Dict[str, Any]:
+            bounded: bool = False, previous_turn: Optional[str] = None,
+            transcript_path: Optional[str] = None) -> Dict[str, Any]:
     """Run the memory gate on one user message. See the module docstring. `write` False
-    (a read-only store) keeps the gate from writing; `bounded` shortens Jev's timeout for a hook."""
+    (a read-only store) keeps the gate from writing; `bounded` shortens Jev's timeout for a hook.
+    `previous_turn` (a host passing the assistant's last reply) or `transcript_path` (what the hook has)
+    give a message that depends on the turn before it (`memory_gate@v2`); the result says which question
+    version ran (`version`) and whether a turn was used (`context`)."""
     pre = mg.prefilter(text)
     decision = mg.route_prefilter(text, pre)
+    context = "none"
     if decision is None:
         catalog = memory_catalog(user_id)
-        answers = mg.ask(text, catalog, client=_client(bounded))
-        guess = mg.parse_answers(answers, catalog, text)
+        turn, context = previous_turn_for(text, catalog, previous_turn, transcript_path)
+        version = mg.version_for(turn)
+        answers = mg.ask(text, catalog, turn, client=_client(bounded))
+        guess = mg.parse_answers(answers, catalog, text, version)
         job_id = _session_job(session_id)
         decision = mg.route(text, pre, guess, job_known=bool(job_id), write_ok=write,
                             unavailable=mg.unavailable_reason(answers) if guess is None else None)
         if decision["action"] == "write":
             decision = _auto_write(user_id, decision, catalog, job_id, session_id)
+    decision["context"] = context
     decision["note"] = mg.explain(decision)
     _log_decision(decision, session_id)
     return decision
@@ -155,7 +180,8 @@ def _auto_write(user_id: UUID, decision: Dict[str, Any], catalog: List[Dict[str,
             "strength": g["strength"], "evidence": decision["text"], "confidence": g["p"]}
     compiled = compile_preferences([note], [entry], provenance={
         "source": "memory_gate", "job_id": job_id if scoped else None, "session_id": session_id,
-        "gate": {"p": g["p"], "source": decision["source"], "direction": g["direction"],
+        "gate": {"p": g["p"], "source": decision["source"], "version": decision.get("version"),
+                 "direction": g["direction"],
                  "strength": g["strength"], "target": g["target"]}})
     [proposal] = resolve_against_existing(compiled, services.load_preferences(user_id))
     if proposal["decision"] == "no_op":

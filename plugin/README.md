@@ -43,7 +43,10 @@ when you ask Claude to tailor a resume or update your experience.
   tells you. A rule you call absolute ("never", a negative pin) is never saved without
   your confirmation. The gate asks TypeSafe's Jev when `TYPESAFE_API_KEY` is set (your
   message leaves your machine in that request); without a key it only flags messages for
-  Claude to confirm and saves nothing on its own.
+  Claude to confirm and saves nothing on its own. A message that leans on Claude's last
+  reply ("never list that again") is sent with the end of that reply (at most 600
+  characters of its text, read from the transcript Claude Code passes the hook), so ART can
+  tell what "that" is. No other message carries a reply.
 - **After compaction:** your pinned preferences are re-injected word for word, along
   with the job you were working on.
 
