@@ -280,7 +280,7 @@ def test_postgres_timestamp_without_time_zone_columns_still_work(isolated_engine
     with isolated_engine.connect() as conn:
         schema = conn.execute(text("SELECT current_schema()")).scalar()
     odd =sa.create_engine(url, connect_args={
-        "options": f"-csearch_path={schema},public -ctimezone=America/Los_Angeles"})
+        "options": f"-csearch_path={schema},public -ctimezone=ABC-5"})
     pin_utc_session(odd)
     try:
         stamp = datetime(2026, 8, 12, 9, 0, 0, 123456, tzinfo=UTC)
