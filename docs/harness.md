@@ -879,7 +879,7 @@ The windows are the plan and have not moved. Status is as of 2026-10-05, from th
 | Phase | Window | Shipped | Open | Exit test | Status |
 |---|---|---|---|---|---|
 | H0 · Decide & Spike | Sep 28 – Oct 4 | #188, #189, #209 | | One real tailoring in Claude Code with read-only tools; gap list recorded | Done |
-| H1 · Core & Jev | Oct 5 – Oct 18 | #190, #191, #192, #193, #194, #195, #210, #237 | #249 (in progress) | Contract tests on both legs; `uvx art-mcp` without torch; every Jev point replays from cache | Shipped, but for #249 |
+| H1 · Core & Jev | Oct 5 – Oct 18 | #190, #191, #192, #193, #194, #195, #210, #237, #249 | | Contract tests on both legs; `uvx art-mcp` without torch; every Jev point replays from cache | Done |
 | H2 · Executor & Library | Oct 19 – Nov 8 | #113, #123, #126, #196, #197, #198, #199, #200, #229, #230, #232, #233 | #117, #127, #151, #163, #185, #241, #252 | Scripted-host benchmark replays byte-identically; stuffing rejected, preference delete kept | Mostly shipped; what is open is tuning and the policy artifact |
 | H3 · Plugin & Memory | Nov 9 – Nov 22 | #201, #202, #203, #244 | | Gate recall measured on a labelled set (negation separate); pins survive compaction | Done |
 | H3b · Editor | Nov 23 – Dec 6 | #204 | #205, #87, #82, #84, #136, #147 | Editor drag reaches the host's next turn; host commit reaches the editor without reload | The local editor and change feed shipped; the chat panel and the UI issues are open |

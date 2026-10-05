@@ -1137,8 +1137,10 @@ flowchart LR
   `art jev status` reports the mode,
   whether a key is set (never the key) and the cached decisions per point; `export` and `import`
   move them.
-- **Tests never reach the network.** `tests/conftest.py` sets `ART_JEV_MODE=off` and removes the
-  key; the one live test is `@pytest.mark.integration`. Decisions are replayed from the committed
+- **Tests never reach the network.** The suite is hermetic (#249, `tests/_hermetic.py`): it starts with
+  no credentials, `.env` loading off and every outbound connection but loopback and the test Postgres
+  refused, and `tests/conftest.py` also sets `ART_JEV_MODE=off`. The one live test is
+  `@pytest.mark.integration` and receives the developer's key through the `live_secrets` fixture. Decisions are replayed from the committed
   recordings under `eval/*_labels/`.
 - **Thresholds belong to the caller.** The engine never treats Jev's reported confidence as
   calibrated; each decision point fits its own cutoffs (§8.8).
@@ -1419,7 +1421,7 @@ has. The entries that use the present tense (#181, #185) report *defects* in cod
 exist, and are here because their fixes have not landed.
 
 **The harness pivot (epic #207, [`harness.md`](harness.md))** sequences all of it into phases
-H0–H5; § 18 there has the phase table with each issue's status. Everything in H0 and H1 but #249,
+H0–H5; § 18 there has the phase table with each issue's status. Everything in H0 and H1,
 the tree, executor, library and gates of H2, all of H3 and the editor of H3b (#204) is merged and
 described in §8. What follows is what is left.
 
@@ -1463,8 +1465,6 @@ described in §8. What follows is what is left.
 **Retrieval and infrastructure**
 - **#60** (the pgvector write path) is in the Icebox. The local default is SQLite with an FTS5/numpy
   fallback (#194).
-- **#249** will make the test suite hermetic: no `.env` secrets and no outbound network outside
-  `--integration`. Until it lands, run the suite with `PYTHON_DOTENV_DISABLED=1` (#210).
 
 **Surfaces**
 `art ui` (#204) is merged. These issues remain:
