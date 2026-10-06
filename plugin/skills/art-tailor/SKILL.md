@@ -38,7 +38,10 @@ The tools named below are the ART MCP server's tools.
   from your own reading of the posting; without it ART guesses from the title.
 - If `baseline` comes back with `applies: true`, the job's first version starts as a copy
   of the user's saved baseline for that track instead of the whole graph. Say so to the
-  user, and read it with `get_head` before planning. `baseline.source` says who chose the
+  user. The copy is made when the job's first version is committed, so `get_head` returns no
+  version until then. To read the baseline's wording before planning, commit it with an
+  empty plan (`execute_plan` with `parent` null and `nodes: []`), then call `get_head`.
+  `baseline.source` says who chose the
   track: `host` (the `role_family` you gave names a saved track exactly, so ART did not ask
   Jev), `jev` or `cache` (Jev chose among the user's saved tracks by reading the posting;
   `p` is its probability, not a calibrated confidence), or `fallback` (no Jev answer, so

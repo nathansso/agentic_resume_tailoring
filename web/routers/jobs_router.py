@@ -456,9 +456,11 @@ async def discard_tex(job_id: str, user: User = Depends(get_current_user)):
 
 def _known_layout_targets(content: dict) -> tuple[set, set, dict]:
     """Sections, skill names, and item->bullets this content actually has."""
-    from agents.tailor import ResumeTailorAgent
+    # `agents.checks` is model-free; `agents.tailor` pulls LangChain, which an
+    # `art ui` install (the model-free `[ui]` extra) does not have.
+    from agents.checks import expected_sections
 
-    sections = set(ResumeTailorAgent._expected_sections(content or {}))
+    sections = set(expected_sections(content or {}))
     skills = {
         (s.get("name") or "").strip().lower()
         for s in (content or {}).get("skills_ranked") or []

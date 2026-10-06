@@ -226,6 +226,23 @@ def test_a_drag_in_local_mode_appears_in_the_hosts_next_turn(
     assert [e["source"] for e in events] == ["editor"]
 
 
+def test_a_drag_saves_without_the_llm_stack(job, isolated_engine, local_client, short_stream,
+                                            monkeypatch):
+    """An `art ui` install is model-free (`art-mcp[ui]`): PUT /layout must not import
+    `agents.tailor`, which pulls LangChain. Live smoke test (Oct): it returned a 500."""
+    import sys
+    from harness import tree
+    uid, jid, rid = job
+    _host_commit(isolated_engine, uid, jid, rid, "Built an ensemble")
+    cursor = tree.get_head(uid, jid)["cursor"]
+    client = local_client(uid)
+    monkeypatch.setitem(sys.modules, "agents.tailor", None)   # `from agents.tailor import ...` fails
+    body = {"section_order": ["projects", "experience"], "skills": ["Python"]}
+    assert client.put(f"/api/jobs/{jid}/layout", json=body,
+                      headers={"Origin": LOCAL}).status_code == 200
+    assert tree.get_head(uid, jid, since_event=cursor)["head"]["layout_overrides"] == body
+
+
 # ── launcher ─────────────────────────────────────────────────────────────────
 
 def test_the_launcher_refuses_without_a_built_editor(tmp_path, capsys, monkeypatch):
