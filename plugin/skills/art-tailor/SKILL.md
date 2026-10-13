@@ -184,6 +184,9 @@ Call `execute_plan({program})`. Read the result:
   `patch_plan(program_id, edits)`, which takes JSON-pointer edits to the saved program.
   `cut_hints` say which bullets or projects to cut to fit the page. `stale_parent`
   means the user edited in the meantime: read `get_head`, then replace `/parent`.
+- `committed: false` with `reason: "no_change"`: the plan left the page identical to its
+  parent (every node reverted, refused or kept), so no version was made. Read `nodes[]` for
+  why, then revise the plan or tell the user nothing needed to change. This is not an error.
 - `rules_applied`: the job-scoped values ART set, such as a graduation date. Mention
   them.
 
