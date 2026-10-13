@@ -11,8 +11,11 @@ preferences, and every version, and it checks each change before committing it.
 /plugin install art@art
 ```
 
-It needs [uv](https://docs.astral.sh/uv/). The plugin runs ART with `uvx`, which
-installs it on first use. For PDFs you also need [tectonic](https://tectonic-typesetting.github.io)
+It needs [uv](https://docs.astral.sh/uv/). The plugin runs ART with `uvx` from one pinned
+release wheel (a GitHub Release asset, `v<version>`), which uv downloads on first use and
+then keeps in its cache, so later starts don't contact GitHub and the editor (`art ui`) is
+already in it. The first start needs the network. On Windows, see "Offline starts, and
+Windows" in [INSTALL.md](../INSTALL.md) for a short `UV_CACHE_DIR`. For PDFs you also need [tectonic](https://tectonic-typesetting.github.io)
 or pdflatex on your PATH. Without either, you get the `.tex` file.
 
 Your data lives in `~/.art/art.db`, or `$ART_DATA_DIR`. Rendered resumes go to
@@ -51,7 +54,10 @@ when you ask Claude to tailor a resume or update your experience.
 - **After compaction:** your pinned preferences are re-injected word for word, along
   with the job you were working on.
 
-If a hook fails, it stays silent rather than blocking your message.
+The hooks run offline (`uvx --offline`, from what the MCP server's start cached) and end
+in `; exit 0`. If uvx or the cache is missing, or anything else fails, a hook exits 0 and
+says nothing rather than blocking your message; until the server has started once, they do
+nothing.
 
 ## Not yet
 

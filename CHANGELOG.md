@@ -12,6 +12,31 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 256 — The plugin pins one released wheel, and hooks survive an offline start
+**Status:** complete | **Tests:** 2444 pass on SQLite (5 new), 16 skipped, 0 fail. The Postgres leg was not run locally; CI runs it
+
+The plugin ran `uvx --from git+https://github.com/nathansso/agentic_resume_tailoring`. That re-checks the git remote on every hook call and MCP start (2 to 3 s each), fails offline, and a hook that failed exited 1, which contradicted "hooks stay silent on failure". This pins the plugin to one released wheel and makes a hook unable to fail.
+
+### What shipped
+
+- **`.github/workflows/release.yml`.** A push of a tag `v*` builds the editor (`npm ci`, `npm run build`), runs `uv build`, asserts the wheel holds `web/static/index.html` and is named `art_mcp-<ART_VERSION>-py3-none-any.whl`, installs it into a clean venv and runs `scripts/smoke_art_mcp.py`, then a second job attaches the wheel and sdist to a GitHub Release for the tag (`gh release create --verify-tag`, the only job with `contents: write`). It fails when the tag is not `v<ART_VERSION>` or `plugin/.mcp.json` does not pin that tag. `workflow_dispatch` is a dry run that uploads `dist/` as a workflow artifact and creates nothing.
+- **The pin.** `harness/hooks.py` owns `WHEEL_URL` and `SOURCE = "art-mcp[ui] @ <WHEEL_URL>"`, derived from `ART_VERSION`. `plugin/.mcp.json`, `plugin/hooks/hooks.json`, `art hooks codex` and the install commands in INSTALL.md, the Codex README and `docs/harness.md` use it. `tests/test_plugin.py` fails when the plugin's URL and `ART_VERSION` disagree, so a version bump without a pin bump (or the reverse) fails CI.
+- **`art mcp`.** Runs the MCP server with its flags (`--database-url`, `--user-id`, `--allow-writes`). The plugin runs only the `art` entry point; `art-mcp` stays for compatibility.
+- **Hooks cannot fail.** `hook_command()` is `uvx --offline --from "<pin>" art hook <event>; exit 0`. `--offline` means a hook uses only what the MCP server's start cached, so it never waits on the network; `; exit 0` covers uvx failing before `art` runs (no uvx, cold cache), which nothing inside `art` can. The line is plain words, double quotes and `;`, which sh, Git Bash and PowerShell all run. Claude Code runs hook commands with `sh -c` on macOS and Linux, Git Bash on Windows, and PowerShell when Git Bash is missing. `art hook` also catches `SystemExit` now, and `art` wraps the hook import, so no failure inside it exits non-zero.
+- **INSTALL.md "Offline starts, and Windows"**, and `plugin/README.md`: the offline behaviour below, and `UV_CACHE_DIR` set to a short path (for example `C:\uvc`) against the long-path failure.
+
+### Deviations from spec
+
+- **The MCP server start is not made offline-proof by the plugin command.** uvx re-resolves on every start from uv's HTTP cache, and the cached answers for the wheel URL and PyPI's index expire after minutes. Measured on Windows with uv 0.9.18: with a warm cache and the wheel server down, a start inside that window works from cache; once it has aged, a start with the network dead and no `UV_OFFLINE` fails after about 15 s of retries. `UV_OFFLINE=1` works from the same cache, and so does `uv tool install` of the pin, after which uvx reports "Using existing tool". A `.mcp.json` entry is a bare command with no shell, so there is no portable try-online-then-offline form. Both fixes are documented, and the hooks, which are shell lines, do use `--offline`.
+- **A hook does nothing until the MCP server has started once**, because it never populates the cache. The server starts with the session, so the first prompt may have no hook output and the next has it.
+- **`art hooks codex --write` does not remove hooks an earlier install wrote** with the old `git+` source; they remain beside the new ones and fail silently. Remove them from `hooks.json` by hand.
+- **The `cmd.exe` shell is not covered** (`;` is not a separator there). Claude Code does not use it; Codex's Windows shell was not verified.
+- **The real release URL could not be verified before a release exists.** The offline and pinned-wheel runs used the same wheel served over local HTTP, and a public GitHub Release wheel (`poetry-core`) for the URL-revalidation case. The release workflow runs only on a tag, so it was validated as YAML and by running its steps by hand.
+- **The editor build step lives in this workflow**, since the pinned wheel is useless for `art ui` without it. #255 changes only the commands, docs and error text that point at that wheel.
+- **The Postgres leg was not run locally** (CI runs it).
+
+---
+
 ## Issue 249 — Hermetic test suite: no `.env` secrets, no outbound network outside `--integration`
 **Status:** complete | **Tests:** 2430 pass on SQLite (19 new), 24 skipped, 0 fail, on main at e280a87 (after #244) with sqlmodel 0.0.47. The full run was made with the developer's real `.env` (a production `DATABASE_URL`, `SUPABASE_URL`, Anthropic and TypeSafe keys) reachable and `PYTHON_DOTENV_DISABLED` unset, and the guard blocked 0 attempts; an earlier run with the variable set gave the same result. The Postgres leg was not run
 

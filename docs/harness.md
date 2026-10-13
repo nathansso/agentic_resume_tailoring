@@ -812,7 +812,7 @@ install is what the harness imports: `mcp`, `sqlmodel`, `pydantic`, `numpy`, `ne
 (the JSON CLI, plus `art ui`). INSTALL.md has the commands; a checkout still works as before:
 
 ```bash
-claude mcp add art -- uvx --from git+https://github.com/nathansso/agentic_resume_tailoring art-mcp
+claude mcp add art -- uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl" art mcp
 claude mcp add art -- <repo>/.venv/Scripts/python.exe <repo>/harness/mcp_server.py   # checkout
 art --list                                   # or python -m harness.cli --list
 art kg_search --args '{"query": "python"}'

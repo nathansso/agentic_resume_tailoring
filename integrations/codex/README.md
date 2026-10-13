@@ -15,14 +15,14 @@ codex plugin add art@art
 Or register only the server:
 
 ```bash
-codex mcp add art -- uvx --from git+https://github.com/nathansso/agentic_resume_tailoring art-mcp
+codex mcp add art -- uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl" art mcp
 ```
 
 The plugin doesn't install hooks, because Codex plugins can't ship them. Install them
 into `~/.codex/hooks.json`, or into `.codex/hooks.json` with `--project`:
 
 ```bash
-uvx --from git+https://github.com/nathansso/agentic_resume_tailoring art hooks codex --write
+uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl" art hooks codex --write
 ```
 
 Then run `/hooks` in Codex to review and trust them.
