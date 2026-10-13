@@ -27,7 +27,7 @@ Your data lives in `~/.art/art.db`, or `$ART_DATA_DIR`. Rendered resumes go to
 |---|---|
 | `/art:setup [files]` | Build your knowledge graph from your resume, LinkedIn export and project folders, and set your header |
 | `/art:tailor <posting or URL>` | Plan a tailored resume, wait for your approval, commit it and render the PDF |
-| `/art:open [job]` | Print the command that opens the local LaTeX editor (`art ui`) |
+| `/art:open [job]` | Print the command that opens the local LaTeX editor (`art ui`, from the release wheel: no build step) |
 | `/art:history [job]` | List every version and what changed |
 | `/art:revert <job> [version]` | Make an earlier version current again |
 | `/art:prefs` | Show your pinned rules, preferences and job-scoped rules |

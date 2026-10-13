@@ -22,8 +22,11 @@ from __future__ import annotations
 import sys
 from typing import Optional, Sequence
 
-UI_EXTRA_HINT = ("art ui needs the editor's server: install it with the [ui] extra, "
-                 "e.g. uvx --from 'art-mcp[ui]' art ui")
+
+def _ui_extra_hint() -> str:
+    from harness.hooks import SOURCE
+    return ("art ui needs the editor's server: install it with the [ui] extra, e.g.\n"
+            f'    uvx --from "{SOURCE}" art ui')
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -55,7 +58,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             import fastapi  # noqa: F401
             import uvicorn  # noqa: F401
         except ImportError:
-            print(UI_EXTRA_HINT, file=sys.stderr)
+            print(_ui_extra_hint(), file=sys.stderr)
             return 2
         from web.local_ui import main as ui_main
         return ui_main(argv[1:])

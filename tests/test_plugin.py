@@ -292,3 +292,23 @@ def test_the_release_workflow_builds_the_editor_into_a_tagged_wheel():
     assert "if: startsWith(github.ref, 'refs/tags/v')" in release
     assert "gh release create" in release and "contents: write" in release
     assert "contents: write" not in text[:text.index("release:\n    name")]
+
+
+def test_every_art_ui_command_in_the_docs_runs_the_pinned_wheel():
+    """`/art:open`, the skill and INSTALL tell the user one `art ui` command, and it is the
+    release wheel with the editor in it (#255), not a git install, which has none."""
+    from harness.hooks import SOURCE
+
+    files = [PLUGIN / "commands" / "open.md", PLUGIN / "skills" / "art-tailor" / "SKILL.md",
+             ROOT / "INSTALL.md"]
+    for path in files:
+        text = path.read_text(encoding="utf-8")
+        lines = [ln.strip() for ln in text.splitlines() if " art ui" in ln and "uvx" in ln]
+        assert lines, path
+        for ln in lines:
+            if "dist/" in ln:                       # INSTALL's build-it-yourself line
+                continue
+            assert ln.startswith(f'uvx --from "{SOURCE}" art ui'), (path.name, ln)
+    for path in [*PLUGIN.rglob("*.md"), *PLUGIN.rglob("*.json")]:
+        assert "git+https" not in path.read_text(encoding="utf-8"), path
+    assert "npm" not in (PLUGIN / "commands" / "open.md").read_text(encoding="utf-8")

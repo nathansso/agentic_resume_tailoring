@@ -51,14 +51,33 @@ uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/
 the other).
 
 On first start it creates `~/.art/art.db` (or `$ART_DATA_DIR/art.db`) and a default
-profile. For `art ui` from a checkout instead of a release, build the editor and a wheel
-yourself:
+profile.
+
+### The editor: `art ui` (#255)
+
+The release wheel has the built editor in it, so no checkout, Node or `npm` is needed:
+
+```bash
+uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl" art ui --job <job_id>
+```
+
+It opens http://127.0.0.1:8765/. The plugin's `/art:open` prints this command for the
+job you name. It needs the `[ui]` extra, which the pinned spec already has. An install
+straight from the repository (`uvx --from git+https://github.com/nathansso/agentic_resume_tailoring ...`)
+has no editor, because `web/static` is not committed; `art ui` says so and prints the
+command above.
+
+From a checkout, build the editor and run it from source or from a wheel you build:
 
 ```bash
 npm --prefix web/frontend ci && npm --prefix web/frontend run build
+python -m web.local_ui                     # from source
 uv build                                   # dist/art_mcp-<version>-py3-none-any.whl
 uvx --from "dist/art_mcp-0.1.0-py3-none-any.whl[ui]" art ui
 ```
+
+CI builds that wheel, installs it with no extras into an empty venv, and drives `art-mcp`
+over stdio (`scripts/smoke_art_mcp.py`).
 
 ### Offline starts, and Windows
 
@@ -87,9 +106,6 @@ one before starting Claude Code or Codex, in PowerShell:
 
 `UV_CACHE_DIR` takes effect in newly started programs. If Application Control blocks
 `art-mcp.exe`, the plugin is unaffected, since it runs `art mcp`.
-
-CI builds that wheel, installs it with no extras into an empty venv, and drives `art-mcp`
-over stdio (`scripts/smoke_art_mcp.py`).
 
 ### Jev (optional)
 
