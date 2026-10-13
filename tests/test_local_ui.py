@@ -179,19 +179,35 @@ def test_the_feed_resumes_from_last_event_id(job, isolated_engine, local_client,
 
 def test_a_fresh_stream_starts_at_now_and_sees_a_commit_made_while_open(
         job, isolated_engine, local_client, short_stream, monkeypatch):
+    import time
     uid, jid, rid = job
     _host_commit(isolated_engine, uid, jid, rid, "before the editor opened")
     monkeypatch.setattr(short_stream, "EVENTS_MAX_SECONDS", 2.0)
     committed = {}
-    timer = threading.Timer(0.3, lambda: committed.update(
-        _host_commit(isolated_engine, uid, jid, rid, "while the editor is open")))
+    dbg = {}
+    t0 = time.perf_counter()
+    real_tail = short_stream._feed_tail
+
+    def tail(*a):
+        out = real_tail(*a)
+        dbg["tail"] = (round(time.perf_counter() - t0, 3), out)
+        return out
+    monkeypatch.setattr(short_stream, "_feed_tail", tail)
+
+    def late():
+        dbg["commit_start"] = round(time.perf_counter() - t0, 3)
+        committed.update(_host_commit(isolated_engine, uid, jid, rid, "while the editor is open"))
+        dbg["commit_end"] = round(time.perf_counter() - t0, 3)
+    timer = threading.Timer(0.3, late)
     timer.start()
     try:
         body = local_client(uid).get(f"/api/jobs/{jid}/events").text
+        dbg["get_end"] = round(time.perf_counter() - t0, 3)
     finally:
         timer.join()
     events = _events(body)
-    assert [e["node_id"] for e in events] == [committed["node_id"]]
+    print("DBG", dbg, events)
+    assert [e["node_id"] for e in events] == [committed["node_id"]], dbg
 
 
 def test_the_feed_is_scoped_to_the_owner(job, isolated_engine, local_client, short_stream):
