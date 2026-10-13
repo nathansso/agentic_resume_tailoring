@@ -207,7 +207,7 @@ def test_a_fresh_stream_starts_at_now_and_sees_a_commit_made_while_open(
         timer.join()
     events = _events(body)
     print("DBG", dbg, events)
-    assert [e["node_id"] for e in events] == [committed["node_id"]], dbg
+    assert False, dbg
 
 
 def test_the_feed_is_scoped_to_the_owner(job, isolated_engine, local_client, short_stream):
