@@ -1181,7 +1181,9 @@ supplies the topic with its directive stripped, or the bare term when a negation
 would remain. Per node only changed text is checked; **finalize checks the whole final page**
 through `Context.pin_page_checker`, so a paraphrase already in the base version cannot render. A
 hit at or over the block cutoff reads exactly like a term hit (`negative_pin:<pin>@<key> :: …`)
-and de-duplicates with it; the band between the two cutoffs comes back as `review`.
+and de-duplicates with it; the band between the two cutoffs comes back as `review`. A pin on a skill
+(`skill:<name>`, #254) is a pin like any other: its term match includes the skill's aliases
+(`agents/skill_matching`), and Jev is asked about it too.
 
 **Semantic coverage.** `coverage` is substring matching, so a bullet can cover a requirement
 without naming its words and a woven keyword can count without showing anything.
