@@ -56,7 +56,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
+from agents import seniority  # noqa: E402
 import job_descriptions  # noqa: E402
 import job_sources  # noqa: E402
 import job_verification  # noqa: E402
@@ -92,24 +95,19 @@ ROLE_FAMILY_NAMES = tuple(ROLE_FAMILIES)
 
 LEVELS = ("intern", "entry")
 
-# Seniority markers. Roman numerals II+ are here because "Software Engineer II"
-# is a promoted rung, while "Software Engineer I" is the entry rung and is
-# matched by _ENTRY_TITLE below.
-SENIOR_TITLE = re.compile(
-    r"\bsenior\b|\bsr\.?\b|\bstaff\b|\bprincipal\b|\blead\b|\bdirector\b"
-    r"|\bmanager\b|\bvp\b|head of|distinguished|architect|\bii+\b|\bfellow\b",
-    re.I,
-)
-_INTERN_TITLE = re.compile(
-    r"\bintern\b|internship|\bco-?op\b|summer 20\d\d|\bapprentice", re.I)
-_ENTRY_TITLE = re.compile(
-    r"new ?grad|new graduate|entry.level|university|early career|campus"
-    r"|\bassociate\b|\bjunior\b|\bjr\.?\b|graduate program|\bI\b$|\b1\b$", re.I)
+# Seniority markers live in `agents/seniority.py` (issue #181), shared with the
+# ATS scorer so a posting is labelled the same way at scrape time and at score
+# time. "Software Engineer II" is a promoted rung and is rejected there;
+# "Software Engineer I" is the entry rung.
 
 # Years-of-experience gate for postings whose title states no level. The
 # *smallest* stated requirement is used: a posting asking "0-2 years" while
 # mentioning "5 years preferred" elsewhere is still an entry posting.
-MAX_ENTRY_YEARS = 2
+MAX_ENTRY_YEARS = seniority.MAX_ENTRY_YEARS
+# Deliberately looser than `seniority.min_stated_years`, which only counts a
+# figure sitting next to the word "experience". This is a scrape-time *filter*,
+# and widening or narrowing it re-labels the committed corpus (#181 left it
+# as it was so the dataset did not move under the scorer change).
 _YEARS_RE = re.compile(r"(\d{1,2})\s*\+?\s*(?:-|to|–|—)?\s*\d{0,2}\s*\+?\s*years?", re.I)
 
 MIN_DESCRIPTION_CHARS = 800  # skip stub postings with no real requirements text
@@ -152,12 +150,12 @@ def classify_level(title: str, description: str) -> "str | None":
     own years-of-experience language decides, so a plain "Machine Learning
     Engineer" asking for 0-2 years is correctly kept.
     """
-    title = title or ""
-    if _INTERN_TITLE.search(title):
+    tier = seniority.title_level(title, "title")
+    if tier == seniority.INTERN:
         return "intern"
-    if SENIOR_TITLE.search(title):
+    if seniority.is_above_entry_title(title):
         return None
-    if _ENTRY_TITLE.search(title):
+    if tier == seniority.JUNIOR:
         return "entry"
     years = min_stated_years(description)
     if years is not None and years <= MAX_ENTRY_YEARS:
