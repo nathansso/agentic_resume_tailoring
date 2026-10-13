@@ -209,6 +209,37 @@ def test_ingest_schema_returns_the_extraction_schema(isolated_engine):
     assert {"text", "type", "criticality", "terms"} <= set(req["properties"])
 
 
+def test_the_project_schema_asks_for_blurbs_apart_from_the_description(isolated_engine):
+    """#260: bullets are a field of their own, and the text says the description renders verbatim."""
+    uid = _new_user(isolated_engine, "U")
+    out = invoke("ingest_schema", uid, {"kind": "project"})
+    props = out["json_schema"]["properties"]
+    assert "blurbs" in props and props["blurbs"]["type"] == "array"
+    assert "verbatim" in props["description"]["description"]
+    assert "verbatim" in out["note"] and "blurbs" in out["note"]
+    assert out["required"] == ["name"]
+
+
+def test_upsert_stores_project_blurbs_beside_the_description_once(isolated_engine):
+    from database.models import ProjectBlurb
+
+    uid = _new_user(isolated_engine, "U")
+    data = {"name": "semantic-search", "description": "Semantic search over notes.",
+            "blurbs": ["Built semantic search over 40k notes.", "Cut query time 3x with FAISS."]}
+    first = _upsert(uid, {"kind": "project", "data": data})["results"][0]
+    assert (first["status"], first["key"]) == ("created", "proj:semantic-search")
+    again = _upsert(uid, {"kind": "project", "data": dict(
+        data, blurbs=[" built semantic search over 40k notes. ", "Added a CLI."])})["results"][0]
+    assert again["status"] == "merged"                  # one new bullet on a known project
+    same = _upsert(uid, {"kind": "project", "data": data})["results"][0]
+    assert same["status"] == "unchanged"
+    with Session(isolated_engine) as s:
+        row = s.exec(select(Project).where(Project.user_id == uid)).one()
+        assert row.description == "Semantic search over notes."
+        assert sorted(b.content for b in row.blurbs) == [
+            "Added a CLI.", "Built semantic search over 40k notes.", "Cut query time 3x with FAISS."]
+
+
 # ── open_job and list_jobs ───────────────────────────────────────────────────
 
 JD = ("Data Scientist Intern\n\nRequirements\n- Experience with Python and SQL\n"

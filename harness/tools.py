@@ -81,6 +81,82 @@ _KEY_FN = {"skill": skill_key, "experience": exp_key, "project": proj_key,
            "education": edu_key, "achievement": ach_key}
 
 
+# ── project bullets without blurbs (#260) ────────────────────────────────────
+# A project with no blurbs renders its description as its one bullet. A host that
+# folds a tagline into the description ("Semantic search library. Open-source
+# semantic search library using ...") then repeats itself on the page. At render
+# time only, the leading sentence is dropped when it adds nothing: short, no
+# number, and every content word is in the project's name or in the words right
+# after it. Stored descriptions are never changed. When in doubt, keep.
+
+_WORD = re.compile(r"[a-z0-9+#]+")
+_SENTENCE_END = re.compile(r"(?<!\.)\.(?=\s)")
+_ABBREVIATIONS = frozenset("e.g i.e vs etc inc ltd approx".split())
+# Words that name a kind of project, not a technology: "library" restates "a library called X".
+_TYPE_WORDS = frozenset(
+    "app application api bot cli client dashboard engine extension framework game library lib"
+    " module package platform plugin project repo repository script sdk server service site"
+    " system tool tools toolkit website wrapper".split())
+LEAD_IN_MAX_WORDS = 8
+LEAD_IN_WINDOW = 12         # content words after the lead-in that must repeat its words
+BULLET_MAX_WORDS = 30       # a description longer than this is not bullet-like
+
+
+def _stem(word: str) -> str:
+    return word[:-1] if len(word) > 3 and word.endswith("s") and not word.endswith("ss") else word
+
+
+def _content_words(text: str) -> List[str]:
+    return [_stem(w) for w in _WORD.findall((text or "").lower()) if w not in _STOP]
+
+
+def drop_redundant_lead_in(description: str, name: str = "") -> str:
+    """`description` without a first sentence that only restates the project, else
+    unchanged (stripped). Rendering only: callers never store the result."""
+    text = (description or "").strip()
+    m = _SENTENCE_END.search(text)
+    if not m:
+        return text                          # one sentence: never drop the whole description
+    lead, rest = text[:m.start()].strip(), text[m.end():].strip()
+    words = lead.split()
+    if (not rest or not words or len(words) > LEAD_IN_MAX_WORDS
+            or re.search(r"\d|%", lead)       # a number is a fact
+            or words[-1].lower() in _ABBREVIATIONS):
+        return text
+    content = set(_content_words(lead))
+    if not content:
+        return text
+    name_words = set(_content_words(name))
+    restates_name = bool(content & name_words) and content <= name_words | _TYPE_WORDS
+    repeated_after = content <= set(_content_words(rest)[:LEAD_IN_WINDOW])
+    return rest if (restates_name or repeated_after) else text
+
+
+def _bullet_like(description: str) -> bool:
+    """One short sentence on one line: fit to stand as a bullet as written."""
+    text = (description or "").strip()
+    return bool(text) and "\n" not in text and not _SENTENCE_END.search(text.rstrip(". ")) \
+        and len(text.split()) <= BULLET_MAX_WORDS
+
+
+def project_source_bullets(record: Dict) -> List[str]:
+    """A project's bullets for the page: its blurbs, else its description with a
+    redundant lead-in dropped. A project with blurbs is unchanged."""
+    blurbs = [b["content"] for b in record.get("blurbs") or [] if b.get("content")]
+    if blurbs:
+        return blurbs
+    desc = drop_redundant_lead_in(record.get("description") or "", record.get("name") or "")
+    return [desc] if desc else []
+
+
+def project_missing(record: Dict) -> List[str]:
+    """`["blurbs"]` when a project has none and its description would not read as
+    a bullet, so the host should offer to write some; else `[]`."""
+    if any(b.get("content") for b in record.get("blurbs") or []):
+        return []
+    return [] if _bullet_like(record.get("description") or "") else ["blurbs"]
+
+
 # ── records ───────────────────────────────────────────────────────────────────
 
 def _project_blurbs(project_ids: Sequence[str]) -> Dict[str, List[Dict]]:
@@ -121,6 +197,9 @@ def _records(user_id: UUID, kinds: Optional[Sequence[str]] = None) -> List[Dict]
         blurbs = _project_blurbs([p["id"] for p in projects])
         for p in projects:
             record = dict(p, blurbs=blurbs.get(p["id"], []))
+            # Modeled as experiences are (`incomplete`, `missing`): the host offers to write bullets.
+            record["missing"] = project_missing(record)
+            record["incomplete"] = bool(record["missing"])
             items.append({"kind": "project", "record": record, "title": p["name"],
                           "text": " ".join([p.get("description") or "",
                                             *(b["content"] for b in record["blurbs"])])})

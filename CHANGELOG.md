@@ -12,6 +12,28 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 260 — Projects without blurbs no longer render a repeated tagline as their bullet
+**Status:** complete | **Tests:** 2450 pass on SQLite (19 new), 24 skipped, 0 fail. The Postgres leg was not run locally; CI runs it
+
+In the October live run a project with no blurbs rendered its whole description as its one bullet: "Semantic search library. Open-source semantic search library using sentence-transformers, ...". The host had folded a tagline into the description, and the page said it twice. Nothing asked the host for bullets apart from the description, and nothing noticed a project without them.
+
+### What shipped
+
+- **A render-time lead-in drop** (`harness/tools.py::drop_redundant_lead_in`, used by `project_source_bullets` and so by the executor's source bullets). The first sentence of a blurb-less project's description is dropped only when it ends at a full stop that is followed by white space, has at most 8 words, carries no digit or `%`, does not end in an abbreviation (`e.g`, `i.e`, `vs`, `etc`, `inc`, ...), leaves a non-empty rest, and either every content word of it is in the 12 content words right after it, or its content words are the project's name words plus generic type words (`library`, `app`, `tool`, `game`, ...) with at least one name word. A technology, a result or a number that is not repeated after it therefore keeps the sentence. Stored descriptions are never changed; a project with blurbs renders them exactly as before.
+- **`get_item` marks such a project `incomplete`** with `missing: ["blurbs"]`, the shape `get_experiences` already gives a role (`incomplete`, `missing`). A project is flagged when it has no blurbs and its description is not one short sentence (a single sentence on one line, at most 30 words), or is empty. A project with blurbs, or a one-line description, is `incomplete: false`.
+- **`ingest_schema('project')` and `upsert_items` take `blurbs`**: a list of one-line bullets, stored as `ProjectBlurb` rows (style `host`) beside the description, deduplicated by words so a re-sent bullet is not stored twice. The schema text and the field descriptions say the description renders verbatim when there are no blurbs and should not carry a tagline. A re-send of a known project that adds only new bullets reports `merged`; a `manually_edited` project is left alone.
+- **`plugin/skills/art-setup/SKILL.md`** asks for a short description and separate `blurbs`, says the description renders verbatim without them, and tells the host to offer to write bullets for an `incomplete` project.
+- Tests: the drop and its false-positive cases (a number, a technology not repeated, a result, a long opening sentence, a lone sentence, an abbreviation, a multi-line description, an empty one) in `tests/test_harness_mcp.py`; the schema and the stored blurbs in `tests/test_host_ingest.py`; the executor's source bullets, with and without blurbs, in `tests/test_executor.py`.
+
+### Deviations from spec
+
+- **Blurbs could not be stored through `upsert_items` at all**, so asking the host for them needed a `blurbs` field on the project record. It is on the harness's own subclass of `ProjectItem` (`ProjectRecord`); the legacy extraction schema is unchanged.
+- **There is no tagline field, so "matches the project's tagline" is read as "repeated in the words right after it".** The name comparison covers a lead-in that restates the name.
+- **Only the harness path is changed.** The legacy tailor (`agents/tailor.py`) and the web Data Explorer still use the description as stored, and `services.get_projects` carries no `incomplete` flag; the flag is added in the harness's records only.
+- **The rule is deliberately narrow.** A lead-in that restates the project in words the following text does not repeat (a tagline "Semantic search library." over a description that says "retrieval over notes") stays. The `incomplete` flag and the skill's prompt for bullets are what handle it.
+
+---
+
 ## Issue 249 — Hermetic test suite: no `.env` secrets, no outbound network outside `--integration`
 **Status:** complete | **Tests:** 2430 pass on SQLite (19 new), 24 skipped, 0 fail, on main at e280a87 (after #244) with sqlmodel 0.0.47. The full run was made with the developer's real `.env` (a production `DATABASE_URL`, `SUPABASE_URL`, Anthropic and TypeSafe keys) reachable and `PYTHON_DOTENV_DISABLED` unset, and the guard blocked 0 attempts; an earlier run with the variable set gave the same result. The Postgres leg was not run
 

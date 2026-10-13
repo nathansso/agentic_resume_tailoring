@@ -64,7 +64,7 @@ from harness.decisions.negative_pins import (
 from harness.decisions.support import make_support_checker, reviews as support_reviews
 from harness.ingest import apply_job_rules, list_rules, resolve_rules
 from harness.program import Program, apply_patch, program_id
-from harness.tools import _records, edu_key, skill_key
+from harness.tools import _records, edu_key, project_source_bullets, skill_key
 
 log = logging.getLogger(__name__)
 
@@ -98,9 +98,8 @@ class _KG:
             if r["kind"] == "experience":
                 self.source_bullets[r["key"]] = [b for b in r["record"].get("bullets") or [] if b]
             elif r["kind"] == "project":
-                blurbs = [b["content"] for b in r["record"].get("blurbs") or [] if b.get("content")]
-                desc = (r["record"].get("description") or "").strip()
-                self.source_bullets[r["key"]] = blurbs or ([desc] if desc else [])
+                # Blurbs, else the description minus a lead-in that only restates the project (#260).
+                self.source_bullets[r["key"]] = project_source_bullets(r["record"])
         # The bullet library (#229): every variant of this user by id (any status, so a
         # draft is refused for what it is), and the normalized text of the approved ones.
         self.variants = library.variants_by_id(user_id)
