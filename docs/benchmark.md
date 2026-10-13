@@ -143,8 +143,7 @@ than pay to refresh a recording of a retired candidate against postings that no 
 exist. Replay therefore has nothing to replay until the next product-mode run records one;
 both replay tests skip, with the record command in the skip message.
 
-**And none is due until #181 lands.** Recording is gated on #181: `_detect_level` mislabels 128/150 postings, and `role_level` is 0.10 of the composite on both sides of every match, so a cassette recorded before it lands bakes in a known-wrong component at real API cost. So replay is a mode with no
-recording *by schedule*, not by neglect — the gap closes when the level detector does.
+**#181 has landed, so recording is no longer gated on it.** `_detect_level` used to mislabel 124/150 postings, and `role_level` is 0.10 of the composite on both sides of every match; `agents/seniority.py` replaced it. Any `role_level` or composite figure recorded before #181 is not comparable with one recorded after.
 
 `--judge` is silently limited to product mode (`judge=judge and mode == MODE_PRODUCT` in
 `run_benchmark`), so asking for it in replay or plumbing yields a `null` judge score rather
@@ -245,7 +244,8 @@ Read that carefully, because three of the four components carry a lesson:
   the highest tier found anywhere in the text: only **22 of the 150** corpus postings read
   at the tier they are filed under, 60 read as `lead` and 27 as `manager`. On the other
   two tasks in this same run the component scored 50.0 on both sides. A weight-0.10
-  component swinging between 0 and 50 on label noise is what #181 exists to fix.
+  component swinging between 0 and 50 on label noise is what #181 fixed (figures in this
+  section predate it and are not comparable with post-#181 runs).
 
 The other families for the same task:
 

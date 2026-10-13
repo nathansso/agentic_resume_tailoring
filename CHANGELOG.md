@@ -10,6 +10,53 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 **Benchmark figures from 2026-08-12 onward are measured on a different candidate too** (issue #172): 20 stratified intern/entry profiles, replacing the single mid-level fixture every earlier figure was measured on, and on repaired posting bodies — a third of the corpus had been cut mid-word at a fetch ceiling. Numbers either side of that line are not comparable, and the pooled figure now averages over candidates as well as postings. Nothing was deleted.
 
+**`role_level` and composite figures from #181 onward are measured with a different seniority detector** (issue #181): `agents/seniority.py` replaced a bare-substring matcher that read 124 of the 150 corpus postings, and the benchmark candidate, at the wrong tier. Every `role_level` and composite figure recorded before it, including every `ats_delta`, is **not comparable** with one recorded after. Nothing was deleted and nothing was re-measured.
+
+---
+
+## Issue 181 — `_detect_level` replaced: word-boundary, title-weighted seniority detection with an explicit `unknown` tier
+**Status:** complete | **Tests:** 2504 pass on SQLite (73 new), 24 skipped, 0 fail. The Postgres leg was not run locally (CI runs it)
+
+`agents/ats_scorer.py::_detect_level` matched seniority keywords as bare substrings and returned the highest tier found anywhere, so `leading`, `staffing`, `principal component analysis`, `hiring manager` and `associated with` each promoted a whole document, and the `mid` default penalised every posting that stated no level. It fed `role_level` (weight 0.10) on both sides of every match.
+
+**Before and after, on the committed data (`python scripts/audit_jd_corpus.py --detail level_mismatch`, `python eval/profile_checks.py --include-retired --verbose`):**
+
+| | before | after |
+|---|---|---|
+| postings (of 150) whose detected tier disagrees with the filed one (`level_mismatch`) | **124** (the issue counted 128 on an earlier corpus state) | **6** |
+| postings the detector reads as no tier (`level_unstated`, new) | n/a, they read as `mid` or higher | **18** |
+| postings read at an allowed tier (intern; intern or junior if filed entry) | 26 | 126 |
+| `benchmark_profile.md` (retired) detected level | `lead` ("saving staff ten hours weekly") | `unknown` |
+| profile checks passing, 21 profiles | 82/84 | **83/84** (the remaining failure is `evidence_density`, unrelated) |
+
+Before, the 150 postings read `lead` 59, `manager` 32, `senior` 14, `mid` 18, `junior` 8 and `intern` 19. The 6 remaining are postings whose own body states a different level from their title (a `5+ years` body under an entry title, `Engineer IV`); they are corpus quality, not detector error, and `scripts/audit_jd_corpus.py` still reports them.
+
+**Not comparable across this line.** `role_level` and the composite change for every posting and every candidate, so no figure recorded before this merge (the #51 baselines, the +42.4 delta, every `ats_delta`, every benchmark table in this file and in `docs/benchmark.md`) can be set beside one recorded after. This is the same treatment #171, #177 and #172 gave their changes. No cassette was re-recorded and no benchmark was run. Recording, which #181 gated, is now unblocked.
+
+### What shipped
+
+- **`agents/seniority.py`**, model-free, shared by the scorer, the JD profile, the profile checks, the corpus audit and the scraper. `detect_level(text, title=None, kind="posting"|"candidate")` returns `intern | junior | mid | senior | lead | manager | unknown`; `title_level`, `min_stated_years`, `years_level`, `is_above_entry_title`, `level_index` and `LEVEL_ORDER` are public.
+  1. **Word boundaries** everywhere; nothing matches inside another word.
+  2. **Title-ish context.** `lead`, `staff` and `principal` need an adjacent role noun in an inferred heading (`Staff Software Engineer`, not `staff ten hours`); a bare marker is a rung only for a title known to be one. `manager`, `director`, `vp` and `head of` are read from titles only, never from prose; `associate` is not a rung in `Research Associate` / `Sales Associate`.
+  3. **Title over body.** A posting's tier comes from its explicit `title`, else its first line when that line looks like a heading, and is final. Only an untitled posting consults the body, and then only through self-referential phrases (`entry-level`, `recent graduates`, `this internship`, `direct reports`) and stated years of experience, never a bare `senior`/`junior`, which usually describes the team. Years map `<=2` junior, `3-4` mid, `>=5` senior, using the minimum stated.
+  4. **A candidate is read from its role lines**, short unbulleted lines that do not open with a verb (`Mentored junior engineers` is not a role), with the highest tier winning, then from stated years. A résumé has no heading, so this replaces "the title".
+  5. **`unknown` is a tier.** `ATSScoringEngine._role_level` scores it a fixed neutral 75.0 when either side is unknown, independent of the other side's tier, instead of defaulting both sides to `mid`.
+- **`_detect_level(text, kind=...)` stays in `agents/ats_scorer.py`** as a thin wrapper, so `agents/jd_payload.py`, `eval/profile_checks.py` and `scripts/audit_jd_corpus.py` keep importing it. `_LEVELS` is gone.
+- **`scripts/scrape_job_descriptions.py::classify_level`** now reads the title through `seniority.title_level` and `MAX_ENTRY_YEARS` from the same module; its `SENIOR_TITLE`/`_ENTRY_TITLE`/`_INTERN_TITLE` regexes are removed. The 150 filed labels are unchanged and `check_domain` still raises nothing new.
+- **`scripts/audit_jd_corpus.py`** reports a posting with no stated tier as `level_unstated` instead of folding it into `level_mismatch`; `eval/profile_checks.py` reads profiles as candidates and now allows `unknown` (`ALLOWED_LEVELS = intern, junior, unknown`).
+- **Tests.** `tests/test_seniority.py` (every word in the issue's table as a regression, in a posting body and in a candidate; title-over-body; years; candidate role lines; `level_index` on stored strings including `mid`; the benchmark profile; the committed corpus held to at most 10 mislabels). `tests/test_ats_scoring.py`: the `defaults_to_mid` test became `unknown scores neutrally`, plus neutrality independent of the known tier and a known pair still paying the gap.
+- Docs: `eval/README.md`, `docs/benchmark.md` and the cassette skip message no longer say recording is gated on #181.
+
+### Deviations from spec
+
+- **The scorer does not read the job's title field.** The issue says to weight the title, and `JobDescription.title` exists, but `score_tailored` (the tailoring and harness path) receives only the description. Using the title in `score()` alone would make the baseline and the tailored score disagree about the posting's tier and put an artefact into `delta`. Both read description text only, so the first line stands in for the title; `detect_level(..., title=)` takes a real one for callers that have it (the scraper does).
+- **Stored `JDProfile.role_level` values are not rewritten.** Existing rows keep whatever the old detector wrote (`mid`, `lead`, ...) until a profile is re-extracted. Nothing scores from the stored value (`_role_level` recomputes from text); it is only returned by the profile API. New profiles may store `unknown`. `level_index` returns `None` for it and for any unrecognised string rather than raising. `PROFILE_VERSION` was not bumped, since that would force a paid re-extraction of every cached profile.
+- **The scraper keeps its own looser years gate.** `classify_level` uses the old `\d years` regex, not `seniority.min_stated_years`, which only counts a figure beside the word "experience". Sharing it moved three committed postings out of the entry gate (`check_domain` errors), and the corpus is not this issue's to relabel. The title logic and `MAX_ENTRY_YEARS` are shared; the years regex is not. One scraper behaviour did change: a `Mid-Level` title is now rejected outright, where before it fell through to the years gate.
+- **Years count only beside the word "experience".** The old detector read any `5+ years` as senior; `5+ years of Python` now reads nothing, because `20+ years of innovation` in a company blurb would otherwise promote a posting. One existing test (`test_get_profile_returns_the_requirements`) changed its seeded description to say "of experience". `jd_payload.detect_role_level` still takes the description only, so a stored profile's `role_level` equals what `_role_level` scores against; the profile's title is not consulted there either.
+- **Neutral is 75.0.** The issue asks for a neutral score without a number. 75 is what one tier of gap used to cost, so an unknown side is treated as "no worse than adjacent"; it is a constant (`_NEUTRAL_ROLE_LEVEL_SCORE`), not tuned.
+- **`level_unstated` is a new audit check**, warn severity, so 18 postings are visible rather than counted as a pass. The audit's `level_mismatch` is therefore not an apples-to-apples successor of the old count: a posting that read `lead` by accident and now reads `unknown` leaves the mismatch count and appears under `level_unstated`.
+- **Not measured:** no `role_level`/composite re-baseline, no benchmark, no Postgres leg (CI runs it). The candidate-side rules were checked on the 21 committed profiles and unit cases only; a real résumé with an unusual layout (titles on bullet lines, a title in a table) will read `unknown`, which is the safe failure.
+
 ---
 
 ## Issue 249 — Hermetic test suite: no `.env` secrets, no outbound network outside `--integration`
