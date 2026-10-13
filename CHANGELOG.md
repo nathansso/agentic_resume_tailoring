@@ -12,6 +12,26 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 259 — Infer missing skill categories so the skills section doesn't render as "Other"
+**Status:** complete | **Tests:** 2442 pass on SQLite (11 new), 24 skipped, 0 fail. The Postgres leg was not run locally
+
+In the October live run a host filled the skills through `upsert_items` without a `category`, and the section rendered as one long "Other:" line. Nothing on the harness path inferred a category, and `postprocess_skills` stored the literal string "Other" for a missing one, so even the stored rows looked categorized. A missing category is now filled deterministically from a curated map, and a page with no categorized skills renders without a label.
+
+### What shipped
+
+- **`agents/skill_postprocessor.py`:** `SKILL_CATEGORIES`, a small explicit map (145 skills) from the canonical lowercase name to one of the five buckets the formatter groups on (`Languages & Libraries`, `AI & Machine Learning`, `Data Engineering`, `Tools`, `Cloud`), and `infer_skill_category(name)`, which resolves aliases first (`pytorch`, `torch` and `PyTorch` agree). No model call and no embeddings. `postprocess_skills` now sets `category` to the given one, else the inferred one, else `None`. It used to default to "Other". The parser path and the host path both go through it, so they still store identical rows.
+- **`agents/kg_store.py::_save_skills`:** a stored skill whose category is empty or the old default "Other" gets the incoming category filled in. A category that is set is never replaced, and an update that omits `category` never clears one.
+- **Rendering (`agents/formatter.py::_ordered_skill_cats`):** when every skill falls in the one uncategorized group (empty, or "Other"), the group is returned with an empty label and the LaTeX, docx and markdown renderers emit the skills with no `Other:` label. The section is already headed "Technical Skills". When any skill is categorized, leftover skills keep a trailing "Other" group, and categorized output is byte-identical (a snapshot test pins the exact `.tex`).
+- **Host guidance:** `ingest_schema('skill')`'s note and `plugin/skills/art-setup/SKILL.md` ask the host to fill `category` with one of the five buckets and say what happens when it does not.
+
+### Deviations from spec
+
+- **No "Technical Skills:" label.** The spec suggested a neutral heading. The tex and docx section is already titled "Technical Skills", so a `Technical Skills:` line under it read as a stutter; the uncategorized line carries no label and the section heading is the neutral one. The markdown `_build_skills` uses its `label` argument the same way.
+- **`harness/render_cache.py` is unchanged.** It only counts skills lines from the number of distinct categories after the formatter's merge. A lone uncategorized group is one category either way, so the count is the same; a test pins it.
+- **"Other" is read as uncategorized.** `executor.py`, `tailor.py` and the scorers all default a missing category to "Other" before the formatter sees it, so the formatter cannot tell an unset category from a chosen "Other". Existing rows that are all "Other" now also render without the label, and a re-upsert fills them in. A page of one real custom category is unchanged.
+- **Unknown stays `None`, not "Other".** Stored rows for unlisted skills changed from the literal "Other" to empty. Every renderer already treated the two the same.
+- A re-upsert that only fills a category reports `unchanged`, not `merged`.
+
 ## Issue 249 — Hermetic test suite: no `.env` secrets, no outbound network outside `--integration`
 **Status:** complete | **Tests:** 2430 pass on SQLite (19 new), 24 skipped, 0 fail, on main at e280a87 (after #244) with sqlmodel 0.0.47. The full run was made with the developer's real `.env` (a production `DATABASE_URL`, `SUPABASE_URL`, Anthropic and TypeSafe keys) reachable and `PYTHON_DOTENV_DISABLED` unset, and the guard blocked 0 attempts; an earlier run with the variable set gave the same result. The Postgres leg was not run
 
