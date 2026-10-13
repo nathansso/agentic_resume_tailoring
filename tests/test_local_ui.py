@@ -185,6 +185,17 @@ def test_a_fresh_stream_starts_at_now_and_sees_a_commit_made_while_open(
     monkeypatch.setattr(short_stream, "EVENTS_MAX_SECONDS", 2.0)
     committed = {}
     dbg = {}
+    import gc
+    gcs = []
+    gcstart = {}
+
+    def cb(phase, info):
+        if phase == "start":
+            gcstart["t"] = time.perf_counter()
+        else:
+            gcs.append((info["generation"], round(time.perf_counter() - gcstart["t"], 3)))
+    gc.callbacks.append(cb)
+    nobj = len(gc.get_objects())
     t0 = time.perf_counter()
     real_tail = short_stream._feed_tail
 
@@ -205,6 +216,10 @@ def test_a_fresh_stream_starts_at_now_and_sees_a_commit_made_while_open(
         dbg["get_end"] = round(time.perf_counter() - t0, 3)
     finally:
         timer.join()
+    gc.callbacks.remove(cb)
+    dbg['objs'] = nobj
+    dbg['gc'] = [g for g in gcs if g[1] > 0.005]
+    dbg['gc_total'] = round(sum(g[1] for g in gcs), 3)
     events = _events(body)
     print("DBG", dbg, events)
     assert False, dbg
