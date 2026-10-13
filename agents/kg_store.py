@@ -771,6 +771,12 @@ class KGStoreMixin:
                     session.add(skill)
                     session.commit()
                     session.refresh(skill)
+                elif (item.get("category") or "").strip() not in ("", "Other") \
+                        and (skill.category or "").strip() in ("", "Other"):
+                    # Fill a missing category on a stored skill (#259), never replace
+                    # one a host or the user set. "Other" is the old default, not a choice.
+                    skill.category = item["category"].strip()
+                    session.add(skill)
                 touched_skill_ids.add(skill.skill_id)
 
                 # Check if this exact user+skill+source edge already exists

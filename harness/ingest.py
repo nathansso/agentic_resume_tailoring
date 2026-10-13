@@ -129,7 +129,11 @@ _NOTES = {
     "experience": "One role. Bullets verbatim from the source. Dedup is by company plus title.",
     "education": "One degree. end_date is the graduation date. Dedup is by institution plus degree.",
     "project": "One project. Dedup is by repo_url, else name.",
-    "skill": "One skill. Names are normalized and deduplicated against the stored skills.",
+    "skill": "One skill. Names are normalized and deduplicated against the stored skills. "
+             "Fill category: the resume groups skills by it, and a skill without one renders "
+             "under 'Other'. Use one of 'Languages & Libraries', 'AI & Machine Learning', "
+             "'Data Engineering', 'Tools', 'Cloud'. ART fills a missing category for common "
+             "skills (Python, SQL, PyTorch, AWS, Docker) and never replaces one you set.",
     "achievement": "One award or honor. Dedup is by title.",
     "requirement": "One atomic requirement from a posting, for open_job.",
     "rule": "A job-scoped rule. open_job asks for its answer per posting.",

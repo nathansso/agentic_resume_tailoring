@@ -38,7 +38,10 @@ Read them yourself. ART does not read files.
   - **Project:** name, description, repo_url. For a local repo, describe what the code
     shows, and check any claim against the files.
   - **Skill:** name, category and a 1–5 proficiency from the evidence. Only skills the
-    sources show.
+    sources show. Always fill `category`, one of `Languages & Libraries`,
+    `AI & Machine Learning`, `Data Engineering`, `Tools` or `Cloud`: the resume groups
+    skills by it, and a skill without one lands under "Other". ART infers a missing
+    category for common skills but not for the rest, and never replaces one you set.
 - Call `upsert_items({records, source})` with `source` set to where the records came
   from (`resume.pdf`, `github:<repo>`, `linkedin`). Records are
   `{"kind": ..., "data": {...}}`.
