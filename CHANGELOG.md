@@ -12,6 +12,26 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 255 — `art ui` from a plugin install: the pinned release wheel carries the built editor
+**Status:** complete | **Tests:** 2446 pass on SQLite (2 new), 16 skipped, 0 fail. The Postgres leg was not run locally; CI runs it
+
+`/art:open`, the art-tailor skill and INSTALL.md told a plugin user to run `uvx --from "art-mcp[ui] @ git+..." art ui`. A git install has no `web/static` (it is not committed), so that command exited with "the editor has not been built" and an `npm --prefix web/frontend ...` hint that cannot work without a checkout. This points every one of them at the release wheel from #256, which the release workflow builds after the editor, and fixes the error text.
+
+### What shipped
+
+- **The command.** `/art:open`, `plugin/skills/art-tailor/SKILL.md` (the one command line in "Render"; the baseline paragraph is untouched) and a new "The editor" section of INSTALL.md give `uvx --from "art-mcp[ui] @ <pinned wheel URL>" art ui --job <job_id>`. The plugin's server and hooks use the same spec, so uvx shares one environment and `art ui` starts at once. `plugin/README.md` says so.
+- **`art ui`'s error text.** `web/local_ui.py::missing_static` tells a checkout (detected by `web/frontend/package.json`, which the wheel excludes) to build the editor as before. Any other install is told the install has no editor to build and given the release-wheel command, taken from `harness.hooks.SOURCE`. The "needs the `[ui]` extra" message in `harness/entry.py` prints the same command.
+- **The editor in the wheel** needed no new build step: #256's release workflow builds the frontend before `uv build` and fails if `web/static/index.html` is not in the wheel. The `package` CI job did that already for every PR.
+- **Tests.** The launcher's refusal is covered for both kinds of install; a test holds every `art ui` command in `/art:open`, the skill and INSTALL.md to the pinned spec and forbids `git+https` and `npm` in the plugin's texts.
+
+### Deviations from spec
+
+- **The acceptance ("from a clean machine with no checkout, `/art:open`'s command opens a working editor") could only be run against a local copy of the wheel.** It was built from this branch after `npm run build`, run with `uvx --from "art-mcp[ui] @ file:///..." art ui --no-open` from a directory with no checkout, a fresh short `UV_CACHE_DIR` and a fresh data dir, and `GET /` served the editor's `index.html`. The real URL works once the `v0.1.0` tag has been pushed and the release workflow has run.
+- **Nothing in a git install is fixed.** A git install still has no editor; it now says so and gives the working command, as the issue's "at minimum" allows.
+- **The Postgres leg was not run locally** (CI runs it).
+
+---
+
 ## Issue 256 — The plugin pins one released wheel, and hooks survive an offline start
 **Status:** complete | **Tests:** 2444 pass on SQLite (5 new), 16 skipped, 0 fail. The Postgres leg was not run locally; CI runs it
 
