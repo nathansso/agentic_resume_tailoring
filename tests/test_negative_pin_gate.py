@@ -469,3 +469,125 @@ def test_key_unset_finalize_is_exactly_the_term_match(env, isolated_engine, monk
     assert any(v["detail"].startswith("negative_pin:kafka@") for v in before_jev["violations"])
     assert len({json.dumps(_strip(r), sort_keys=True) for r in (before_jev, no_key, off)}) == 1
     assert "negative_pins" not in no_key
+
+
+# ── a pin on a skill (#254) ──────────────────────────────────────────────────
+
+PARAPHRASE = ("Moved billing and search onto event-driven services built on a distributed commit log, "
+              "to integrate them and retire the monolith.")
+
+
+def _skill_pin_pref(isolated_engine, uid, name, text=None):
+    """What `record_preference` stores for "Never mention <name>" when <name> is one of the user's skills."""
+    from sqlmodel import Session
+
+    from database.models import UserPreference
+    with Session(isolated_engine) as s:
+        s.add(UserPreference(user_id=uid, text=text or f"Never mention {name}", polarity="suppress",
+                             target_key=f"skill:{name.lower()}", target_term=f"skill: {name}",
+                             scope_type="global", strength=5))
+        s.commit()
+
+
+def test_record_preference_on_a_skill_is_refused_in_a_bullet_by_the_executor(env):
+    """The issue's scenario, end to end: "Never mention Kafka" resolves to skill:kafka."""
+    from harness import memory
+
+    uid, *_ = env
+    out = memory.record_preference(uid, "Never mention Kafka", "suppress", "Kafka", 5)
+    assert out["target_key"] == "skill:kafka" and out["negative_pin"]
+    _, _, ran = run_weave(env, dry_run=True)                       # the woven bullet says "using Kafka"
+    node = ran["nodes"][0]
+    assert node["status"] == "refused" and node["reason"].startswith("negative_pin: bullet 3 mentions 'kafka'")
+
+
+def test_a_paraphrase_of_a_skill_keyed_pin_is_refused_through_a_recorded_answer(auto, env, isolated_engine):
+    from harness.executor import _KG
+
+    uid, job_id, _ = env
+    _skill_pin_pref(isolated_engine, uid, "Kafka")
+    t = FakeTransport(answer_for=scripted({"Kafka": 0.95}, only=PARAPHRASE))
+    auto.use(t)
+    bullets = _woven(_KG(uid).source_bullets[EXP2])
+    bullets[3]["text"] = PARAPHRASE
+    program = {"job_id": job_id, "nodes": [{"id": "weave", "op": "revise", "item_key": EXP2,
+                                            "strategy": "keyword_weave", "keywords": ["integrate"],
+                                            "bullets": bullets}]}
+    node = _run(uid, program, dry_run=True)["nodes"][0]
+    assert node["status"] == "reverted" and node["reason"].startswith("hard_gate: preferences")
+    assert f'negative_pin:kafka@{EXP2} :: "Moved billing and search onto event-driven services built o' in node["reason"]
+    (call,) = [c for c in pin_calls(t) if c["state"]["text"] == PARAPHRASE]
+    assert call["state"] == build_state(PARAPHRASE, "bullet")
+    (wire,) = call["questions"].values()
+    assert wire["instructions"].startswith("Does this text mention or refer to Kafka?")
+
+
+def test_a_base_bullet_that_paraphrases_a_skill_keyed_pin_blocks_finalize(auto, env, isolated_engine):
+    uid, job_id, _ = env
+    _skill_pin_pref(isolated_engine, uid, "Kafka")
+    text = _base_bullet(uid)
+    auto.use(FakeTransport(answer_for=scripted({"Kafka": 0.95}, only=text)))
+    out = _run(uid, {"job_id": job_id, "nodes": []})
+    detail = f'negative_pin:kafka@{EXP2} :: "{negative_pins._short(text)}"'
+    assert not out["committed"]
+    assert {"check": "preferences", "detail": detail,
+            "hint": f"revise {EXP2} so it no longer mentions 'kafka'"} in out["violations"]
+
+
+def test_a_text_that_names_the_skill_by_an_alias_is_the_term_matchs_and_is_not_sent_to_jev(auto):
+    t = FakeTransport(answer_for=scripted({}))
+    auto.use(t)
+    content = page(["Trained models in torch."])
+    skill = make_pin_checker([{**pin("pytorch"), "skill": True}], {"experiences": []})
+    assert [f for f in skill(content) if f["kind"] == "bullet"] == []   # "torch" is PyTorch: the term match owns it
+    assert all(c["state"]["text"] != "Trained models in torch." for c in t.calls)
+    assert negative_pin_violations(content, {"pytorch"}, {"pytorch"})
+    topic = make_pin_checker([pin("pytorch")], {"experiences": []})
+    assert [f["pin"] for f in topic(content) if f["kind"] == "bullet"] == ["pytorch"]   # a topic pin asks Jev
+
+
+# ── what is reported is what is enforced ─────────────────────────────────────
+
+def test_the_negative_pin_flag_is_what_the_executor_enforces(env):
+    """`record_preference`, `art_pins` and the briefing report `negative_pin` through
+    `negative_pins.is_negative_pin`; `execute_plan` enforces through `_hard_preferences`, which
+    classifies with the same `pin_target`. Pinned here over every kind of target and strength."""
+    from uuid import UUID
+
+    from harness import executor, memory, tools
+
+    uid, job_id, _ = env
+    kinds = [
+        ("Never mention Kafka", "suppress", "Kafka", 5),                      # skill:kafka
+        ("Never mention Python", "suppress", "skill:python", 5),
+        ("Never mention GPA", "suppress", "GPA", 5),                          # a topic bound to nothing
+        ("Drop the streaming project", "suppress", "proj:streamboard", 5),
+        ("Drop the Bluefin role", "suppress", EXP2, 5),
+        ("Never show achievements", "suppress", "section:achievements", 5),   # a section: not enforced
+        ("Always lead with SQL", "emphasize", "skill:sql", 5),                # a pin, not a negative one
+        ("Avoid Snowflake", "suppress", "Snowflake", 4),                      # not a pin at all
+    ]
+    reported = {}
+    for text, polarity, target, strength in kinds:
+        out = memory.record_preference(uid, text, polarity, target, strength)
+        assert out["status"] == "stored", (text, out)
+        reported[text] = out["negative_pin"]
+    suppress, emphasize, skills = executor._hard_preferences(uid, UUID(job_id))
+    enforced = {p["text"] for p in [*suppress.values(), *skills.values()]}
+    pins = tools.art_pins(uid)["pins"]
+    five = {t for t, _, _, s in kinds if s == 5}
+    assert {p["text"]: p["negative_pin"] for p in pins if p["text"] in five} == {t: t in enforced for t in five}
+    assert {t: reported[t] for t in five} == {t: t in enforced for t in five}
+    assert reported["Avoid Snowflake"] is False and "Avoid Snowflake" not in enforced
+    briefing = tools.art_briefing(uid)["pins"]
+    assert [(p["text"], p["negative_pin"]) for p in briefing] == [(p["text"], p["negative_pin"]) for p in pins]
+    assert enforced == {"Never mention Kafka", "Never mention Python", "Never mention GPA",
+                        "Drop the streaming project", "Drop the Bluefin role"}
+
+
+def test_the_pin_strength_constants_agree():
+    from agents.arbitration import HARD_STRENGTH
+    from harness.decisions import memory_gate as mg
+    from harness.tools import PIN_STRENGTH
+
+    assert HARD_STRENGTH == PIN_STRENGTH == mg.PIN_STRENGTH == 5
