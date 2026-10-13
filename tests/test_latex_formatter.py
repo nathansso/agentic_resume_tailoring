@@ -810,3 +810,83 @@ def test_ranked_section_order_defaults_to_ingested_position():
     # rows; the ingested order is preserved on the tie.
     assert "education" not in order
     assert order.index("achievements") < order.index("projects")
+
+
+# ── Uncategorized skills (#259) ───────────────────────────────────────────────
+
+def _skills_tex(engine, monkeypatch, ranked):
+    monkeypatch.setattr(fmt_module, "engine", engine)
+    user = _seed_jake_user(engine)
+    return ResumeFormatterAgent(user.user_id)._build_tex_skills(ranked)
+
+
+def test_skills_with_no_category_render_no_other_label(isolated_engine, monkeypatch):
+    ranked = [{"name": "Python", "category": None}, {"name": "Rust", "category": ""},
+              {"name": "Zig", "category": "Other"}]
+    tex = _skills_tex(isolated_engine, monkeypatch, ranked)
+    assert "Other" not in tex and r"\textbf" not in tex
+    assert r"\section{Technical Skills}" in tex
+    assert "Python, Rust, Zig" in tex
+
+
+def test_uncategorized_skills_render_without_a_label_in_docx_and_markdown(isolated_engine, monkeypatch):
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    agent = ResumeFormatterAgent(_seed_jake_user(isolated_engine).user_id)
+    ranked = [{"name": "Python"}, {"name": "Rust", "category": "Other"}]
+    assert agent._build_skills("Skills", ranked) == "Skills\nPython, Rust"
+    from docx import Document
+    doc = Document(io.BytesIO(agent.format_docx({"skills_ranked": ranked})))
+    text = "\n".join(p.text for p in doc.paragraphs)
+    assert "Python, Rust" in text and "Other" not in text
+
+
+def test_leftover_uncategorized_skills_keep_an_other_group_when_some_are_categorized(
+        isolated_engine, monkeypatch):
+    ranked = [{"name": "Python", "category": "Languages & Libraries"},
+              {"name": "Zig", "category": None}]
+    tex = _skills_tex(isolated_engine, monkeypatch, ranked)
+    assert r"\textbf{Languages \& Libraries}{: Python}" in tex
+    assert r"\textbf{Other}{: Zig}" in tex
+
+
+def test_categorized_skills_render_exactly_as_before(isolated_engine, monkeypatch):
+    ranked = [{"name": "PyTorch", "category": "AI & Machine Learning"},
+              {"name": "Python", "category": "Language"},
+              {"name": "SQL", "category": "Language"},
+              {"name": "Docker", "category": "Tools"},
+              {"name": "Zig", "category": "Hobbies"}]
+    assert _skills_tex(isolated_engine, monkeypatch, ranked) == "\n".join([
+        r"\section{Technical Skills}",
+        r" \begin{itemize}[leftmargin=0.15in, label={}]",
+        r"    \small{\item{",
+        r"     \textbf{AI \& Machine Learning}{: PyTorch} \\",
+        r"     \textbf{Languages \& Libraries}{: Python, SQL} \\",
+        r"     \textbf{Tools}{: Docker} \\",
+        r"     \textbf{Hobbies}{: Zig} \\",
+        r"    }}",
+        r" \end{itemize}",
+    ])
+
+
+def test_untailored_skills_table_with_no_categories_has_no_other_label(isolated_engine, monkeypatch):
+    from sqlmodel import select
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    user = _seed_jake_user(isolated_engine)
+    with Session(isolated_engine) as s:
+        for sk in s.exec(select(Skill)).all():
+            sk.category = None
+            s.add(sk)
+        s.commit()
+    tex = ResumeFormatterAgent(user.user_id)._build_tex_skills(None)
+    assert "Other" not in tex and r"\textbf" not in tex and "Python" in tex
+
+
+def test_page_budget_counts_one_skills_line_for_uncategorized_skills():
+    from harness.render_cache import page_budget
+
+    def used(skills):
+        return page_budget({"skills_ranked": skills}, education_entries=0,
+                           measurer=lambda texts: [1] * len(texts))["lines_used"]
+
+    assert used([{"name": "Python"}, {"name": "Rust", "category": "Other"}]) == \
+        used([{"name": "Python", "category": "Tools"}])

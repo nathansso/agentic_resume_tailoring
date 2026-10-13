@@ -640,9 +640,10 @@ class ResumeFormatterAgent:
                 p.paragraph_format.space_before = Pt(2)
                 p.paragraph_format.space_after  = Pt(2)
                 for cat, skills in self._ordered_skill_cats(cats, ranked):
-                    r_bold = p.add_run(cat + ": ")
-                    r_bold.bold = True
-                    r_bold.font.size = Pt(10)
+                    if cat:
+                        r_bold = p.add_run(cat + ": ")
+                        r_bold.bold = True
+                        r_bold.font.size = Pt(10)
                     r_text = p.add_run(", ".join(skills) + "    ")
                     r_text.font.size = Pt(10)
 
@@ -905,6 +906,9 @@ class ResumeFormatterAgent:
         skill_lines = []
         for cat, skills in self._ordered_skill_cats(cats, ranked):
             skills_str = _escape_tex(", ".join(skills))
+            if not cat:
+                skill_lines.append(rf"     {skills_str} \\")
+                continue
             skill_lines.append(
                 rf"     \textbf{{{_escape_tex(cat)}}}{{: {skills_str}}} \\"
             )
@@ -919,6 +923,9 @@ class ResumeFormatterAgent:
         ])
 
     # Static fallback category order, used only when no JD-ranked list is given.
+    # What a skill with no category groups under.
+    UNCATEGORIZED = "Other"
+
     _STATIC_CAT_ORDER = [
         "Languages & Libraries", "AI & Machine Learning",
         "Data Engineering", "Tools", "Cloud", "Other",
@@ -975,16 +982,25 @@ class ResumeFormatterAgent:
         Ranked input is already relevance-ordered (categories by first
         appearance, skills by score), so it is rendered as-is. The untailored
         fallback uses the static category order with skills sorted A→Z.
+
+        When no skill is categorized, the lone "Other" group is returned with an
+        empty label: the section is already headed "Technical Skills", and a
+        bare "Other:" there reads as a failure to categorize (#259). The
+        renderers drop the label for an empty one. With any categorized skill,
+        leftovers keep their "Other" group.
         """
         if ranked:
-            return list(cats.items())
-        cats = dict(cats)
-        pairs: List[tuple] = []
-        for cat in self._STATIC_CAT_ORDER:
-            if cat in cats:
-                pairs.append((cat, sorted(cats.pop(cat))))
-        for cat, skills in cats.items():
-            pairs.append((cat, sorted(skills)))
+            pairs = list(cats.items())
+        else:
+            cats = dict(cats)
+            pairs = []
+            for cat in self._STATIC_CAT_ORDER:
+                if cat in cats:
+                    pairs.append((cat, sorted(cats.pop(cat))))
+            for cat, skills in cats.items():
+                pairs.append((cat, sorted(skills)))
+        if len(pairs) == 1 and pairs[0][0] == self.UNCATEGORIZED:
+            return [("", pairs[0][1])]
         return pairs
 
     # ── Deprecated: Markdown ──────────────────────────────────────────────────
@@ -1128,7 +1144,7 @@ class ResumeFormatterAgent:
             return ""
         lines = [label]
         for cat, skills in self._ordered_skill_cats(cats, ranked):
-            lines.append(f"**{cat}:** {', '.join(skills)}")
+            lines.append(f"**{cat}:** {', '.join(skills)}" if cat else ", ".join(skills))
         return "\n".join(lines)
 
     @staticmethod
