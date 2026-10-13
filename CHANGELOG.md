@@ -12,6 +12,26 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 258 — Render ISO dates as "Mon YYYY" on the page
+**Status:** complete | **Tests:** 2461 pass on SQLite (30 new cases: 26 parametrised date cases plus 4 render tests), 24 skipped, 0 fail
+
+`ingest_schema` asks hosts for `YYYY-MM` dates and the formatter printed them raw ("2024-01 – Present") beside free-form dates like "June 2021". Every date that reaches the page now has one display form, "Mon YYYY" with a 3-letter English month. Render-only: stored values, the knowledge graph and the render cache are untouched.
+
+### What shipped
+
+- **`agents/dates.py`**, a pure model-free helper with two functions. `format_date` parses `YYYY-MM`, `YYYY-MM-DD`, `YYYY/MM`, `MM/YYYY` and month-name forms ("June 2021", "Sept 2021", "Sep. 2018", "jun 2021", "June 15, 2021") into "Mon YYYY"; a bare `YYYY`, "Present" and anything it cannot parse (including an out-of-range month such as `2024-13`) pass through verbatim; "Expected"/"Anticipated" keep their prefix and normalise the date after it ("Expected 2027-06" becomes "Expected Jun 2027"). `format_date_text` also splits a range string ("2024-01 - 2024-06", "June 2020 -- Present") and normalises each end, keeping the separator as written.
+- **`agents/formatter.py`** applies it on every path that prints a date: education (LaTeX, DOCX and the deprecated markdown, through `_education_date_line`), experience (LaTeX through `_clean_date`, DOCX, markdown), projects (LaTeX and DOCX), and the achievement `(issuer, date)` meta. `_clean_date` still blanks placeholder tokens first, then formats.
+- **Tests** in `tests/test_latex_formatter.py`: the helper table (ISO, free-form, Present, Expected, bare year, unparseable, empty), range handling, a LaTeX render mixing ISO and free-form dates across education, experience and projects, DOCX and markdown parity, and a check that neither the content dict nor the stored Education rows change. Two existing assertions that pinned "June 2020" now expect "Jun 2020".
+
+### Deviations from spec
+
+- No change under `harness/`. `render_cache.py` caches bullet lines only and `render.py` goes through `ResumeFormatterAgent`, so nothing there formats a date; the formatter is the single place.
+- The chat context line in `agents/chat.py` (`({start} – {end})`) is a prompt, not a page, so it is left raw.
+- ATS scoring (`agents/ats_scorer.py`) and `web/frontend` never read experience or education dates, so they are unaffected and unchanged.
+- Month-name parsing is English only, and a bare-year range end ("May 2018 to 2020") stays a bare year.
+
+---
+
 ## Issue 249 — Hermetic test suite: no `.env` secrets, no outbound network outside `--integration`
 **Status:** complete | **Tests:** 2430 pass on SQLite (19 new), 24 skipped, 0 fail, on main at e280a87 (after #244) with sqlmodel 0.0.47. The full run was made with the developer's real `.env` (a production `DATABASE_URL`, `SUPABASE_URL`, Anthropic and TypeSafe keys) reachable and `PYTHON_DOTENV_DISABLED` unset, and the guard blocked 0 attempts; an earlier run with the variable set gave the same result. The Postgres leg was not run
 
