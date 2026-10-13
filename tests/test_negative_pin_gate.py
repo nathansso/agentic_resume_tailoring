@@ -548,7 +548,7 @@ def test_a_text_that_names_the_skill_by_an_alias_is_the_term_matchs_and_is_not_s
 
 # ── what is reported is what is enforced ─────────────────────────────────────
 
-def test_the_negative_pin_flag_is_what_the_executor_enforces(env):
+def test_the_negative_pin_flag_is_what_the_executor_enforces(env, isolated_engine):
     """`record_preference`, `art_pins` and the briefing report `negative_pin` through
     `negative_pins.is_negative_pin`; `execute_plan` enforces through `_hard_preferences`, which
     classifies with the same `pin_target`. Pinned here over every kind of target and strength."""
@@ -563,7 +563,7 @@ def test_the_negative_pin_flag_is_what_the_executor_enforces(env):
         ("Never mention GPA", "suppress", "GPA", 5),                          # a topic bound to nothing
         ("Drop the streaming project", "suppress", "proj:streamboard", 5),
         ("Drop the Bluefin role", "suppress", EXP2, 5),
-        ("Never show achievements", "suppress", "section:achievements", 5),   # a section: not enforced
+        ("Never show achievements", "suppress", "section:achievements", 5),   # keyed, with the label as its term
         ("Always lead with SQL", "emphasize", "skill:sql", 5),                # a pin, not a negative one
         ("Avoid Snowflake", "suppress", "Snowflake", 4),                      # not a pin at all
     ]
@@ -572,17 +572,56 @@ def test_the_negative_pin_flag_is_what_the_executor_enforces(env):
         out = memory.record_preference(uid, text, polarity, target, strength)
         assert out["status"] == "stored", (text, out)
         reported[text] = out["negative_pin"]
+    # A key the executor cannot enforce by key (`edu:`) with a term, and the same with none.
+    from sqlmodel import Session
+
+    from database.models import UserPreference
+    with Session(isolated_engine) as sess:
+        for text, term in (("Never mention my high school", "High School"),
+                           ("Never mention that degree", None)):
+            sess.add(UserPreference(user_id=uid, text=text, polarity="suppress", scope_type="global",
+                                    strength=5, target_key="edu:some school|b.s.", target_term=term))
+        sess.commit()
+    kinds += [("Never mention my high school", "suppress", None, 5),
+              ("Never mention that degree", "suppress", None, 5)]
+    for text in ("Never mention my high school", "Never mention that degree"):
+        reported[text] = None                          # not stored through record_preference
     suppress, emphasize, skills = executor._hard_preferences(uid, UUID(job_id))
     enforced = {p["text"] for p in [*suppress.values(), *skills.values()]}
     pins = tools.art_pins(uid)["pins"]
     five = {t for t, _, _, s in kinds if s == 5}
     assert {p["text"]: p["negative_pin"] for p in pins if p["text"] in five} == {t: t in enforced for t in five}
-    assert {t: reported[t] for t in five} == {t: t in enforced for t in five}
+    assert {t: reported[t] for t in five if reported[t] is not None} == {
+        t: t in enforced for t in five if reported[t] is not None}
     assert reported["Avoid Snowflake"] is False and "Avoid Snowflake" not in enforced
     briefing = tools.art_briefing(uid)["pins"]
     assert [(p["text"], p["negative_pin"]) for p in briefing] == [(p["text"], p["negative_pin"]) for p in pins]
     assert enforced == {"Never mention Kafka", "Never mention Python", "Never mention GPA",
-                        "Drop the streaming project", "Drop the Bluefin role"}
+                        "Drop the streaming project", "Drop the Bluefin role",
+                        "Never show achievements", "Never mention my high school"}
+    assert "Never mention that degree" not in enforced          # a key and no term: nothing to enforce
+    flags = {p["text"]: p["negative_pin"] for p in pins}
+    assert flags["Never mention my high school"] and flags["Never mention that degree"] is False
+
+
+def test_an_edu_keyed_pin_with_a_term_refuses_a_bullet_naming_the_term(env, isolated_engine):
+    """A key the executor cannot enforce by key is still enforced by the term the user named."""
+    from sqlmodel import Session
+
+    from database.models import UserPreference
+    from harness import tools
+
+    uid, *_ = env
+    with Session(isolated_engine) as sess:
+        sess.add(UserPreference(user_id=uid, text="Never mention message brokers", polarity="suppress",
+                                scope_type="global", strength=5, target_key="edu:some school|b.s.",
+                                target_term="Kafka"))
+        sess.commit()
+    (pin,) = [p for p in tools.art_pins(uid)["pins"] if p["text"] == "Never mention message brokers"]
+    assert pin["negative_pin"] is True
+    _, _, ran = run_weave(env, dry_run=True)                     # the woven bullet says "using Kafka"
+    node = ran["nodes"][0]
+    assert node["status"] == "refused" and node["reason"].startswith("negative_pin: bullet 3 mentions 'kafka'")
 
 
 def test_the_pin_strength_constants_agree():

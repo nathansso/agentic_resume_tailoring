@@ -120,7 +120,9 @@ def pin_target(pref: Dict[str, Any]) -> Optional[Tuple[str, str]]:
       it (or an alias) in any bullet or item field.
     - `term`: a topic bound to nothing in the knowledge graph. Its words cannot render.
 
-    A key bound to anything else (`section:`, `edu:`) is not enforced as a pin, so it is not one.
+    A key bound to anything else (`section:`, `edu:`) cannot be enforced by key, but the stored
+    `target_term` is the label the user named, and that is enforced as a term, as it was before
+    (#198); only a preference with neither an enforceable key nor a term is not a pin.
     """
     if (pref.get("strength") or 0) < HARD_STRENGTH or pref.get("polarity") != "suppress":
         return None
@@ -129,9 +131,8 @@ def pin_target(pref: Dict[str, Any]) -> Optional[Tuple[str, str]]:
         return "item", key
     if key.startswith("skill:"):
         name = key.split(":", 1)[1].strip()
-        return ("skill", name) if name else None
-    if key:
-        return None
+        if name:
+            return "skill", name
     term = (pref.get("target_term") or "").strip().lower()
     return ("term", term) if term else None
 
