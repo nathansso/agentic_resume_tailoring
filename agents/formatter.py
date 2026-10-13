@@ -16,6 +16,7 @@ from sqlmodel import Session, select
 
 from database.db import engine
 from database.models import Education, Skill, User, UserSkill
+from agents.dates import format_date_text
 from agents.skill_postprocessor import normalize_skill_name, should_reject_skill
 
 logger = logging.getLogger(__name__)
@@ -326,9 +327,10 @@ _PLACEHOLDER_DATE_TOKENS = {
 
 
 def _clean_date(value) -> str:
-    """Blank out placeholder date strings; pass real dates through unchanged."""
+    """Blank out placeholder date strings and render real dates as 'Mon YYYY'
+    (#258). Display only; the stored value is never changed."""
     v = str(value or "").strip()
-    return "" if v.lower() in _PLACEHOLDER_DATE_TOKENS else v
+    return "" if v.lower() in _PLACEHOLDER_DATE_TOKENS else format_date_text(v)
 
 
 def sanitize_text(text: str) -> str:
@@ -375,7 +377,7 @@ class ResumeFormatterAgent:
         """Parenthetical '(issuer, date)' for an achievement, or '' when both are
         absent."""
         return ", ".join(x for x in (
-            (a.get("issuer") or "").strip(), (a.get("date") or "").strip()) if x)
+            (a.get("issuer") or "").strip(), format_date_text(a.get("date"))) if x)
 
     @staticmethod
     def _education_degree_line(entry: Education) -> str:
@@ -383,9 +385,10 @@ class ResumeFormatterAgent:
 
     @staticmethod
     def _education_date_line(entry: Education) -> str:
-        if entry.start_date and entry.end_date:
-            return f"{entry.start_date} -- {entry.end_date}"
-        return entry.end_date or entry.start_date or ""
+        start, end = format_date_text(entry.start_date), format_date_text(entry.end_date)
+        if start and end:
+            return f"{start} -- {end}"
+        return end or start
 
     def _build_known_labels(self) -> frozenset:
         labels: set = set()
@@ -606,7 +609,7 @@ class ResumeFormatterAgent:
                 for exp in exps:
                     _subheading(
                         exp.get("title", ""),
-                        f"{exp.get('start_date','')} -- {exp.get('end_date','')}".strip(" --"),
+                        f"{format_date_text(exp.get('start_date'))} -- {format_date_text(exp.get('end_date'))}".strip(" --"),
                         exp.get("company", ""),
                         exp.get("location", ""),
                     )
@@ -621,7 +624,7 @@ class ResumeFormatterAgent:
                 for proj in projs:
                     name  = proj.get("name", "")
                     techs = proj.get("tech_stack", proj.get("technologies", ""))
-                    dates = proj.get("date_range", proj.get("dates", ""))
+                    dates = format_date_text(proj.get("date_range", proj.get("dates", "")))
                     heading = f"{name} | {techs}" if techs else name
                     links = [u for u in (proj.get("repo_url"), proj.get("demo_url")) if u]
                     if links:
@@ -1114,8 +1117,8 @@ class ResumeFormatterAgent:
         for exp in experiences:
             title   = exp.get("title", "")
             company = exp.get("company", "")
-            start   = exp.get("start_date", "")
-            end     = exp.get("end_date", "")
+            start   = format_date_text(exp.get("start_date"))
+            end     = format_date_text(exp.get("end_date"))
             lines.append(f"**{title},** {company}\t{f'{start} - {end}' if start else ''}")
             for b in exp.get("bullets", []):
                 lines.append(f"{bullet_prefix}{self._format_bullet(b)}")
