@@ -172,6 +172,8 @@ def test_a_first_plan_builds_on_the_kg_and_commits_a_host_node(isolated_engine, 
     assert node["program"]["nodes"][0]["id"] == "k"
     assert node["provenance"]["host"] == "claude-code"
     assert node["provenance"]["program_id"] == out["program_id"]
+    from harness import policy
+    assert node["provenance"]["policy_version"] == policy.version() != policy.UNVERSIONED   # #241
     with Session(isolated_engine) as s:     # materialized for the web app / art ui
         result = s.exec(select(UserJobResult).where(
             UserJobResult.job_id == UUID(node["job_id"]))).one()

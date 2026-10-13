@@ -38,6 +38,7 @@ import re
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
 from agents.checks import exp_key, proj_key
+from harness import policy
 from harness.decisions.questions import Noul, canonical
 
 POINT = "negative_pin"
@@ -54,8 +55,8 @@ LABEL = "mentions"
 #   TAU_REVIEW 0.15: the band [0.15, 0.85) holds 4 pairs (3 mentions: i_ms_github 0.27,
 #     i_employer_field 0.42, i_meta_react 0.57; 1 not: n_hadoop_spark); no mention passes silently.
 #     The highest score under the band is 0.13 (n_rl_replay, a near-miss).
-TAU_BLOCK = 0.85
-TAU_REVIEW = 0.15
+TAU_BLOCK = policy.get("negative_pin.tau_block")
+TAU_REVIEW = policy.get("negative_pin.tau_review")
 
 _ROUND = 4
 TOPIC_MAX_CHARS = 120

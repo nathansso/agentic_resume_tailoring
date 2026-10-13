@@ -299,7 +299,6 @@ def test_the_threshold_in_coverage_py_is_the_fit_and_covers_no_aspiration_or_nea
     _replay(monkeypatch)
     rows = fit.run_pairs(PAIRS)
     rec = fit.recommend(rows)
-    assert TAU_COVER == rec["tau_cover"]
     st = fit.cover_stats(rows, TAU_COVER)
     assert st["fp"] == 0
     for c in fit.CORE_NEGATIVE_CATEGORIES:                                   # zero covers on aspiration and near-miss

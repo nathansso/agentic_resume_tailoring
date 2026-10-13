@@ -41,6 +41,7 @@ from agents.redundancy import (
 )
 from harness.decisions.negative_pins import term_pattern, violations as pin_finding_violations
 from harness.decisions.support import violations as support_finding_violations
+from harness import policy
 
 TARGETS = ("coverage", "relevance_density", "semantic_coverage")
 OPTIONAL_TARGETS = ("semantic_coverage",)    # present only when Jev answered (#126)
@@ -59,12 +60,12 @@ GATES =("preferences", "faithfulness", "citations", "bullet_lines", "consistency
 # trimmed clause on a 15-20 token bullet (2-4 edits, 0.1-0.25), and stops a rewrite that
 # only borrows the topic (a half-new bullet is 0.5 and up). Provisional like the rest, to be
 # refit once real library use exists.
-VARIANT_DRIFT_TOLERANCE = 0.35
+VARIANT_DRIFT_TOLERANCE = policy.get("guards.variant_drift")
 DEFAULT_TOLERANCES: Dict[str, float] = {
-    "stuffing": 0.0,
-    "verb_entropy": 0.35,
-    "mtld": 0.10,
-    "duplication": 0.15,
+    "stuffing": policy.get("guards.stuffing"),
+    "verb_entropy": policy.get("guards.verb_entropy"),
+    "mtld": policy.get("guards.mtld"),
+    "duplication": policy.get("guards.duplication"),
     "variant_drift": VARIANT_DRIFT_TOLERANCE,
 }
 # +1: a larger value is worse. -1: a smaller value is worse.
