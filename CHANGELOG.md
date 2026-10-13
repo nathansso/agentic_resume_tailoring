@@ -12,6 +12,30 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 241 — Policy artifact: one versioned home for fitted thresholds and guard tolerances
+**Status:** complete | **Tests:** 2452 pass on SQLite (21 new), 24 skipped, 0 fail
+
+Every fitted or provisional threshold the harness decides with, and the guard tolerances, now live in one file, `harness/policy.json`, with the fit each came from. The modules read it through `harness/policy.py` into the names they always had, so importers and tests are unchanged. This is a consolidation, not a refit: every value equals the constant it replaces, and a test pins that. Every committed tailoring-tree node records the artifact's `version` as `provenance.policy_version`, and a re-fit that changes a value fails its drift test until the artifact is updated.
+
+### What shipped
+
+- **`harness/policy.json`** (version 1) holds 23 values: `support` TAU_BLOCK 0.85 / TAU_REVIEW 0.35; `negative_pin` 0.85 / 0.15; `coverage` TAU_COVER 0.65; `memory_gate` v1 TAU_LO/HI/TARGET 0.25/0.65/0.75 and v2 0.20/0.65/0.75 (v2's write thresholds are `kind: pinned`, with `fit_alone` 0.50 / 0.40 and `pinned_to` v1's, per #244), plus HI_FLOOR 0.5, HARD_MASS 0.25 and V1_WOULD_BE_WRITES 29; `library` TAU_VARIANT 0.50, TAU_BASELINE 0.50, TAU_FLOOR 0.5 and VARIANT_MATCH_FLOOR 0.10; the five `DEFAULT_TOLERANCES` (stuffing 0.0, verb_entropy 0.35, mtld 0.10, duplication 0.15, variant_drift 0.35). Each value has a `kind` (`fitted`, `pinned`, `rule`, `provisional`), its source issue and, if fitted or pinned, a `fits` entry: decision point and question version, fit script, model, fit date (the recordings' export date), and the path and sha256 of the label set and recordings. Hashes normalise line endings, so a Windows and a Linux checkout agree.
+- **`harness/policy.py`** (stdlib only): `get(key)`, `version()`, `digest()`, `file_sha256()`. Its `_FALLBACK` table is today's constants and is what a module sees if the file is missing, unreadable or malformed; `version()` then reads `unversioned`. The only other edits in the decision modules (`support.py`, `negative_pins.py`, `coverage.py`, `memory_gate.py`, `decisions/library.py`, `library.py`, `acceptance.py`) swap the constant definitions for `policy.get(...)`; their fit comments stay.
+- **`policy_version` in provenance.** `tree.commit_node` stamps it, so the executor's host commits, the pipeline and editor hooks and every other writer are covered at one place; a caller's own `policy_version` wins (an import). Nodes from before it have no key and load unchanged.
+- **`tests/test_policy.py`** (21 tests): the artifact equals the shipped values, types included; the fallback table equals the artifact; the modules see the artifact's values and the same values with the file missing or broken; an AST check that each constant is assigned from `policy.get`; every value has a kind, issue and fit; `digest` covers the values; the file is in the wheel's `only-include`; each fit's label and recordings hashes match the committed files; and, for support, negative pins, coverage, memory gate v1, memory gate v2 (the pinned fit, `fit_alone`, and the 29 would-be writes) and the library, the artifact equals the fit script's recommendation computed offline from the committed recordings. Mutating a value in the file fails five of them.
+- **Existing drift tests folded in.** The "constant equals the fit" assertions (and their literal-value twins) are removed from the six `tests/test_*_labels.py` files and live only in `test_policy.py`; the rest of each fit's checks (headroom, categories, floors, report currency) stay where they were. `tests/test_executor.py` asserts the stamp on a host commit.
+- **Docs.** `docs/harness.md` and `docs/architecture.md` (§8.8) describe the artifact as shipped; the README and harness roadmap rows list #241 as shipped.
+
+### Deviations from spec
+
+- **Adversarial cases are deferred.** The issue's note to add adversarial poor-fit cases to the #199 variant set (the gap is thin: highest poor-fit 0.46 against 0.50) and soft-skill pairs to the #126 set applies "when refitting"; this is not a refit, no Jev call was made, and neither set changed. They remain the first additions at the next refit.
+- **A value change needs a new `version` and `digest`, enforced softly.** The file carries a `digest` of its values and a test fails until it matches, but nothing stops a contributor updating the digest without bumping `version`. A hash of the file in the stamp would close that; it was left out to keep the stamp readable.
+- **More than the issue's list moved.** The floors that bound the fits (`HI_FLOOR`, `TAU_FLOOR`), the safety margin `HARD_MASS`, the pin rule's `V1_WOULD_BE_WRITES` and the Jev-free `VARIANT_MATCH_FLOOR` are in the artifact as `rule` and `provisional` values, so no threshold-like number is left in a module. The text-overlap helpers (`support.ORIGINAL_MIN_OVERLAP`) and the other non-Jev heuristics (`agents/`, `eval/`) are not decision thresholds of the harness and stay where they are.
+- **Fit dates are the recordings' export dates,** not the day a fit was last read; the file says so (`fit_date_basis`).
+- **#127 is untouched.** The guard tolerances are `provisional` with a note; #127 writes its fitted ones into the same file.
+
+---
+
 ## Issue 249 — Hermetic test suite: no `.env` secrets, no outbound network outside `--integration`
 **Status:** complete | **Tests:** 2430 pass on SQLite (19 new), 24 skipped, 0 fail, on main at e280a87 (after #244) with sqlmodel 0.0.47. The full run was made with the developer's real `.env` (a production `DATABASE_URL`, `SUPABASE_URL`, Anthropic and TypeSafe keys) reachable and `PYTHON_DOTENV_DISABLED` unset, and the guard blocked 0 attempts; an earlier run with the variable set gave the same result. The Postgres leg was not run
 

@@ -1323,8 +1323,14 @@ from raw facts is for `no_match`.
 ### 8.8 How a threshold is fitted
 
 Every Jev point's cutoffs follow one procedure, so a new point can be added by pattern. The
-constants live beside their decision point (`support.py`, `negative_pins.py`, `coverage.py`,
-`memory_gate.py`, `library.py`); gathering them into one versioned policy artifact is open (#241).
+values live in one versioned **policy artifact**, `harness/policy.json` (#241): each fitted or
+provisional threshold and each guard tolerance, with the fit it came from (label set, recordings
+hash, model, date, source issue). The decision points (`support.py`, `negative_pins.py`,
+`coverage.py`, `memory_gate.py`, `library.py`, `acceptance.py`) read their values through
+`harness/policy.py` into the module-level names they always had; the loader's fallback table is the
+same numbers, used only if the file cannot be read. `harness.tree.commit_node` stamps the
+artifact's `version` into every node's provenance as `policy_version`; nodes from before it lack
+the key and load unchanged.
 
 1. **A labelled set** under `eval/<point>_labels/` (`pairs.json`, or `variants.json` and
    `baselines.json`), built from the synthetic profiles in `eval/profiles/` and never from a real
@@ -1357,8 +1363,10 @@ constants live beside their decision point (`support.py`, `negative_pins.py`, `c
    evidence-backed ones of the version it extends while its own would-be write set is thinner:
    `TAU_HI_V2` is `max(fit, TAU_HI)`. A threshold fitted on three would-be writes sits wherever the
    rule leaves it, which is not evidence that a looser cut is safe.
-8. **Drift tests.** Each constant has a comment with its fit and a test that the constant equals the
-   fit's output on the committed recordings, that the 0.5 floor holds, that the committed `REPORT.md`
+8. **Drift tests.** Each value has a comment with its fit, and `tests/test_policy.py` checks that the
+   artifact equals the fit script's output on the committed recordings, that the label and
+   recordings hashes it records are the committed files', and that its `digest` covers its values (a
+   value change needs a new `version`). The per-module tests check that the 0.5 floor holds, that the committed `REPORT.md`
    and `REVIEW.md` are current and that `analyze` runs offline. Changing the model, a question or a
    label therefore fails a test until the fit is rerun and the constant updated deliberately.
 
@@ -1429,8 +1437,8 @@ described in §8. What follows is what is left.
 - **#127** will fit per-guard tolerances on the #172 anchor set. Until then
   `DEFAULT_TOLERANCES` are hand-set and provisional (§8.2). There is no λ and no scalar objective, and the
   ATS composite is report-only. It waits on the anchor set (#172 chunk 7).
-- **#241** will give every fitted threshold and the guard tolerances one versioned home. Today each Jev
-  point keeps its constants beside its code (§8.8).
+- **#241** (shipped) gave every fitted threshold and the guard tolerances one versioned home,
+  `harness/policy.json` (§8.8). #127 writes its per-guard tolerances into the same file.
 - **#151** will split `skill_coverage` into required and preferred components, each a separate
   target metric.
 - **#163** will rank keyword-insertion candidates by importance × supportability instead of the
