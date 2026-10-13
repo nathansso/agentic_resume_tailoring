@@ -179,8 +179,15 @@ def test_the_feed_resumes_from_last_event_id(job, isolated_engine, local_client,
 
 def test_a_fresh_stream_starts_at_now_and_sees_a_commit_made_while_open(
         job, isolated_engine, local_client, short_stream, monkeypatch):
+    import gc
     uid, jid, rid = job
     _host_commit(isolated_engine, uid, jid, rid, "before the editor opened")
+    # The commit below fires 0.3 s after the timer starts and must land after the stream reads
+    # "now". A full garbage collection of a suite-sized heap (about 2M objects, over a second
+    # on a CI runner) that happens to fall inside the request stalls the stream past that
+    # point, so collect first: the next one is then far off. (Surfaced by #241, whose few
+    # extra allocations moved when the collection fell; nothing in the feed was wrong.)
+    gc.collect()
     monkeypatch.setattr(short_stream, "EVENTS_MAX_SECONDS", 2.0)
     committed = {}
     timer = threading.Timer(0.3, lambda: committed.update(
