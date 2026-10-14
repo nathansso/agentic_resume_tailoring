@@ -571,6 +571,12 @@ def page_line_budget(content: Dict, lines_by_bullet: Dict[str, int],
     whole projects (keeping one), then below the floor — and stop once the
     lines they free cover `over_by`. Each hint names what to cut and the lines
     it frees; nothing is cut here.
+
+    Each hint also names the plan op that carries it out (#289): `delete_bullet`
+    (`cut_bullets: [bullet]`) for a `cut_bullet`, `delete` for a `drop_item`, both with a
+    `because`. The ladder can cut several bullets of one item; a plan holds one node per
+    item, so those go in that node's one `cut_bullets` list. A hint sent as a `revise`
+    would face every guard and be reverted by MTLD, which is why the ops exist.
     """
     missing = [bid for bid in bullet_texts(content) if bid not in lines_by_bullet]
     if missing:
@@ -630,8 +636,8 @@ def _cut_hints(exps: List[Dict], projs: List[Dict],
         for key, ids in reversed(items):
             if len(ids) > floor:
                 bid = ids.pop()
-                return {"action": "cut_bullet", "item": key, "bullet": bid,
-                        "frees": float(lines_by_bullet[bid])}
+                return {"action": "cut_bullet", "op": "delete_bullet", "item": key,
+                        "bullet": bid, "frees": float(lines_by_bullet[bid])}
         return None
 
     def step():
@@ -642,7 +648,7 @@ def _cut_hints(exps: List[Dict], projs: List[Dict],
             key, ids = work_p.pop()
             frees = c["entry:project"] + sum(lines_by_bullet[b] for b in ids) + (
                 c["item_list"] if ids else 0.0)
-            return {"action": "drop_item", "item": key, "bullets": ids,
+            return {"action": "drop_item", "op": "delete", "item": key, "bullets": ids,
                     "frees": round(frees, 2)}
         return shave(work_e, 1) or shave(work_p, 1)
 

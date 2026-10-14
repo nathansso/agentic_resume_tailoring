@@ -112,6 +112,12 @@ Draft a plan program for `execute_plan`. Its input schema is published with the 
   - `replace`: swap one project for another (`replacement_key`).
   - `delete`: drop the item. Set `because` to `user:<what they asked>` or
     `pref:<preference_id>`.
+  - `delete_bullet`: remove whole bullets from the item and change nothing else. Give
+    `cut_bullets` (ids like `exp:...#b3`, the index in the item's list on the version you build
+    on) and a `because`. Never send a cut as a `revise` with one bullet fewer: a `revise` faces
+    every guard and MTLD reverts it. A `delete` or `delete_bullet` with a `because` is judged on
+    the hard gates; a guard regression it causes is accepted and listed under `waived`, which
+    you should tell the user.
   - `accept.improves`: the targets a node should raise (`coverage`,
     `relevance_density`, `semantic_coverage`). `semantic_coverage` counts a requirement as
     met when some bullet shows it, in any words; a node that only makes a requirement
@@ -188,7 +194,10 @@ Call `execute_plan({program})`. Read the result:
   - Absent (no key, or no required or preferred requirement): plan on `coverage` alone.
 - `committed: false` with `violations`: nothing was saved. Fix the plan with
   `patch_plan(program_id, edits)`, which takes JSON-pointer edits to the saved program.
-  `cut_hints` say which bullets or projects to cut to fit the page. `stale_parent`
+  `cut_hints` say which bullets or projects to cut to fit the page, each with the op that
+  carries it out: a `cut_bullet` is a `delete_bullet` (one node per item, all its bullets in
+  `cut_bullets`) and a `drop_item` is a `delete`, both with `because: "user:fit the one-page
+  budget"`. Add those nodes with `patch_plan`. `stale_parent`
   means the user edited in the meantime: read `get_head`, then replace `/parent`.
 - `committed: false` with `reason: "no_change"`: the plan left the page identical to its
   parent (every node reverted, refused or kept), so no version was made. Read `nodes[]` for
@@ -200,8 +209,8 @@ Call `execute_plan({program})`. Read the result:
 
 - Call `render(job_id)`. It writes `resume.tex` and `resume.pdf` and returns their
   paths, `pages` and `line_budget`.
-- If `pages` > 1, cut using `line_budget.cut_hints` through `patch_plan`, then render
-  again.
+- If `pages` > 1, cut using `line_budget.cut_hints` through `patch_plan` (the same
+  `delete_bullet` and `delete` nodes as in step 5), then render again.
 - If `pdf_path` is null, give the user the `.tex` path and the `hint`.
 - Tell the user where the PDF is.
 - If they want to edit by hand, give them the editor command to run in a terminal,
