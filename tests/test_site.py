@@ -99,7 +99,7 @@ def test_layout_sets_the_theme_before_first_paint_with_the_apps_storage_key():
     assert "prefers-color-scheme: dark" in head
     # Storage can throw (private mode): the script must swallow that.
     assert re.search(r"try\s*\{.*localStorage\.getItem.*\}\s*catch", head, re.S)
-    # Same key as the app, so a visitor's choice carries between the two.
+    # Same key as the app, so the two themes behave identically.
     app_key = re.search(r'THEME_KEY\s*=\s*"([^"]+)"', (ROOT / "web/frontend/src/lib/theme.ts").read_text(encoding="utf-8"))
     assert app_key and f'"{app_key.group(1)}"' in head
 

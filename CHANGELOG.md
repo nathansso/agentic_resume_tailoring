@@ -12,6 +12,31 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 272 — Landing site scaffold (Astro + Tailwind) on Vercel
+**Status:** complete | **Tests:** 2443 pass (11 new), 24 skipped, on SQLite; the Postgres leg was not run (nothing here touches storage)
+
+First child of the landing-site epic (#271): a public marketing and docs site for ARTie, aimed at students applying for internships and new-grad roles. This ships the skeleton only: the build, the theme, the layout, a placeholder home page and two stub docs pages. The real content is #273 (home) and #274 (install and usage).
+
+### What shipped
+
+- **`site/`, a standalone Astro + Tailwind v4 static site.** Its own `package.json` and `package-lock.json`, sharing no build with `web/frontend`. Astro 7.3.5, `tailwindcss` and `@tailwindcss/vite` 4.3.3, all exact-pinned and at least two weeks old. `output: 'static'`, no base path, Node 24. `npm ci --dry-run` was checked against both the local npm 11.6 and npm 11.19.
+- **The Supabase-light theme, ported.** `src/styles/global.css` carries the light and dark HSL tokens, radius and Switzer fonts from `web/frontend/src/index.css`, mapped into Tailwind with `@theme inline` so the `.dark` overrides apply at use time. Dark mode is the `.dark` class. An inline `<head>` script sets it before first paint (stored `art:theme`, else `prefers-color-scheme`, localStorage in try/catch), and a vanilla-JS toggle writes the same `art:theme` key the app uses (different origins, so nothing is shared between them). No React.
+- **Layout and pages.** `Base.astro` has a sticky nav (ARTie wordmark; Home, Install, Usage, GitHub; collapses behind a menu button below 768px), a footer, a per-page title and description, and a favicon. `index.astro` is the hero ("Land your first role with ARTie", an "Install in Claude Code" button to `/install`, a "How it works" button to a marked placeholder section) and nothing more. `install.astro` and `usage.astro` are stubs linking to `INSTALL.md` on GitHub. Checked at 375px in both themes: no horizontal scroll.
+- **`site/vercel.json`** with `"framework": "astro"` and `"ignoreCommand": "git diff --quiet HEAD^ HEAD -- ."`, so commits that don't touch `site/` skip the build once the project's root directory is `site/`. `site/README.md` has the dev commands and the one-time dashboard steps for the owner (import the repo, root directory `site`, framework Astro, Node 24).
+- **CI.** `.github/workflows/site.yml` runs `npm ci && npm run build` in `site/` on pull requests and on pushes to `main`, filtered to `site/**` and the workflow file, with the same action versions as `tests.yml`.
+- **Packaging.** `/site` is now excluded explicitly from both the wheel and the sdist (they already used `only-include`, which left it out). A real `uv build` with `site/node_modules` present produced neither a `site/` entry in the wheel nor in the sdist. `site/node_modules`, `site/dist` and `site/.astro` are gitignored.
+- **`tests/test_site.py`** (no network, no npm): exact-pinned deps and a committed lockfile, the `build` script and static output, the Vercel config, light and dark theme tokens identical to the app's, the Tailwind mapping and `.dark` variant, the no-flash script and its storage key, the nav links and hero links, the workflow, the packaging exclusion, and the gitignore entries.
+
+### Deviations from spec
+
+- **The CI job is a separate workflow file (`site.yml`), not a job in `tests.yml`.** Other open PRs (#266, #269) edit `tests.yml`, and a separate file avoids conflicts. The issue said "add a `site` job to CI"; this is the same check in its own file, with path filters so it only runs when `site/` changes.
+- **The epic's child list says "deploy to GitHub Pages"; the issue and this work target Vercel.** Nothing here touches Pages.
+- **Not done: the Vercel project and the repo `homepageUrl`.** Both need the owner's Vercel dashboard and GitHub app grant. The acceptance criteria about a production URL and PR preview URLs can only be checked after that setup.
+- **Switzer fonts are copied into `site/public/fonts/`** rather than shared with `web/frontend/public/fonts/`, because the site is a separate project. The monospace face from Google Fonts is not used; the mono stack is the system one.
+- **Astro 7.3.5, not the newest 7.3.8.** 7.3.8 was six days old, inside the two-week window.
+
+---
+
 ## Issue 249 — Hermetic test suite: no `.env` secrets, no outbound network outside `--integration`
 **Status:** complete | **Tests:** 2430 pass on SQLite (19 new), 24 skipped, 0 fail, on main at e280a87 (after #244) with sqlmodel 0.0.47. The full run was made with the developer's real `.env` (a production `DATABASE_URL`, `SUPABASE_URL`, Anthropic and TypeSafe keys) reachable and `PYTHON_DOTENV_DISABLED` unset, and the guard blocked 0 attempts; an earlier run with the variable set gave the same result. The Postgres leg was not run
 
