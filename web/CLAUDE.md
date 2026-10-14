@@ -30,7 +30,7 @@ web/
       context/AuthContext.tsx  # Auth state, setUser, logout
       index.css                # Tailwind directives + the palette custom properties
       pages/
-        LandingPage.tsx        # Public marketing page at `/` for signed-out visitors
+        LandingPage.tsx        # Public marketing page at `/` for signed-out visitors (frozen; the public site is `site/`)
         LoginPage.tsx
         RegisterPage.tsx
         ForgotPasswordPage.tsx # Request a reset link
@@ -167,12 +167,12 @@ in the root `CLAUDE.md`.
 railway up   # from repo root — builds the Docker image, pushes to Railway
 ```
 
-- **Railway is the deployment target.** URL: https://web-production-2ead7.up.railway.app/
+- **Railway is the web app's deployment target, and that deploy is frozen and currently down** (the trial lapsed). URL: https://web-production-2ead7.up.railway.app/
 - Config: `railway.json` in repo root (Dockerfile builder, `/api/health` healthcheck)
 - Dockerfile: multi-stage — Node 24 builds React (`npm run build` → `web/static/`), Python 3.12 serves it via FastAPI `StaticFiles`. Do not add a `VOLUME` instruction; Railway rejects it.
 - **Database: Supabase Postgres via the `DATABASE_URL` secret.** The `/data` volume holds uploads and generated artifacts (`ART_DATA_DIR`), *not* the database — the SQLite file at `/data/art.db` is only used if `DATABASE_URL` is unset, which is never the case in production.
 - Health check: `GET /api/health`
-- Railway is the only deployment. Do not reintroduce host-specific configuration for any other platform.
+- Railway is the only deployment of the web app. Do not reintroduce host-specific configuration for any other platform. The public landing site is a separate project in `site/` on Vercel (see `site/README.md`), not part of this layer.
 
 Required env vars (set as Railway variables):
 - `DATABASE_URL` — Supabase Postgres (use the pooler string, port 6543)
