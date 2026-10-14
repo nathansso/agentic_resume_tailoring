@@ -237,12 +237,16 @@ def main(argv: Sequence[str]) -> int:
     return 0
 
 
-# ── installing the hooks (Codex, #203) ───────────────────────────────────────
+# ── installing the hooks (Codex, #203, #290) ──────────────────────────────────
 #
-# Claude Code loads these hooks from the plugin (plugin/hooks/hooks.json). Codex
-# cannot: its plugins no longer carry hooks (`plugin_hooks` was removed), so they
-# go in the user's `$CODEX_HOME/hooks.json` or a repo's `.codex/hooks.json`, and
-# Codex asks the user to trust them (`/hooks`). Both hosts read the same JSON.
+# Both hosts read the same JSON, and both load it from the plugin
+# (plugin/hooks/hooks.json): Codex 0.131 and later load a plugin's hooks by default
+# (`hooks/hooks.json`, or the manifest's `hooks` entry), and ask the user to trust them
+# (`/hooks`). So a Codex plugin install already carries ART's hooks. `art hooks codex
+# --write` is the fallback for a Codex without plugin hooks (or one used without the
+# plugin): it puts them in the user's `$CODEX_HOME/hooks.json` or a repo's
+# `.codex/hooks.json`. Running both fires every hook twice, so `--write` checks whether an
+# enabled plugin already bundles ART's hooks and then removes its own entries instead.
 
 REPO = "nathansso/agentic_resume_tailoring"
 # The one released wheel the plugin runs (#256): the editor is built into it (#255), the URL
@@ -260,7 +264,8 @@ def hook_command(arg: str, source: str = SOURCE) -> str:
     """The shell line for one hook. It must run unchanged in sh, Git Bash and PowerShell
     (the shells Claude Code uses, and the ones Codex runs hooks in: its session shell, which
     is PowerShell on Windows), so it is plain words, double quotes and `;`. `cmd.exe`, where
-    Codex falls back only with no session shell, is not covered (#283).
+    Codex falls back only with no session shell, is not covered (#283). Codex's Windows-only
+    `commandWindows` swaps the command text, not the shell, so it does not help (#290).
 
     `--offline` makes uvx use only what the MCP server's start already cached: a hook
     never waits on the network (an online start re-checks the package indexes and takes
@@ -341,28 +346,122 @@ def merge_hooks(existing: Dict[str, Any], new: Dict[str, Any]) -> Tuple[int, Lis
     return added, removed
 
 
-def codex_hooks_path(project: bool = False) -> Path:
+def codex_home() -> Path:
     import os
+    return Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
+
+
+def codex_hooks_path(project: bool = False) -> Path:
     if project:
         return Path.cwd() / ".codex" / "hooks.json"
-    return Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "hooks.json"
+    return codex_home() / "hooks.json"
+
+
+# The first stable Codex that loads plugin hooks by default (openai/codex#22549, "Enable plugin
+# hooks by default"). 0.126 to 0.130 load them only with `features.plugin_hooks = true`; before
+# 0.126 they do not load at all (#290).
+PLUGIN_HOOKS_MIN_CODEX = (0, 131, 0)
+
+
+def codex_version() -> Optional[Tuple[int, int, int]]:
+    """The installed Codex's version from `codex --version`, or None when it is not on PATH or
+    its output is not a version."""
+    import shutil
+    import subprocess
+
+    exe = shutil.which("codex")
+    if not exe:
+        return None
+    try:
+        out = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=15).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    m = re.search(r"(\d+)\.(\d+)\.(\d+)", out)
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else None
+
+
+def _has_art_hook(config: Any) -> bool:
+    """Whether a hooks JSON object carries any ART hook line."""
+    hooks = config.get("hooks") if isinstance(config, dict) else None
+    if not isinstance(hooks, dict):
+        return False
+    for groups in hooks.values():
+        for group in groups if isinstance(groups, list) else []:
+            for handler in group.get("hooks", []) if isinstance(group, dict) else []:
+                if isinstance(handler, dict) and is_art_hook(handler.get("command")):
+                    return True
+    return False
+
+
+def plugin_with_art_hooks(home: Path) -> Optional[str]:
+    """The id (`name@marketplace`) of an enabled Codex plugin whose installed copy bundles ART's
+    hooks, or None. Codex records installs in `<home>/config.toml` (`[plugins."art@art"]
+    enabled = true`) and copies each into `<home>/plugins/cache/<marketplace>/<name>/<version>/`;
+    the answer is read from the copied `hooks/hooks.json`, so a different plugin that happens to
+    be called `art` does not count."""
+    import tomllib
+
+    try:
+        config = tomllib.loads((home / "config.toml").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    plugins = config.get("plugins")
+    for plugin_id, entry in (plugins.items() if isinstance(plugins, dict) else []):
+        name, _, market = plugin_id.partition("@")
+        if not (name and market and isinstance(entry, dict) and entry.get("enabled") is True):
+            continue
+        for path in sorted((home / "plugins" / "cache" / market / name).glob("*/hooks/hooks.json")):
+            try:
+                if _has_art_hook(json.loads(path.read_text(encoding="utf-8"))):
+                    return plugin_id
+            except (OSError, ValueError):
+                continue
+    return None
+
+
+def remove_art_hooks(existing: Dict[str, Any]) -> List[Tuple[str, str]]:
+    """Remove every ART hook from `existing`, in place, and return [(event, command) removed].
+    Other hooks keep their order and are never edited."""
+    removed = merge_hooks(existing, {"hooks": {event: [] for event, _, _ in _WIRING}})[1]
+    table = existing.get("hooks")
+    for event in {event for event, _ in removed}:
+        if isinstance(table, dict) and table.get(event) == []:
+            del table[event]                           # an event this left empty
+    return removed
 
 
 def codex_main(argv: Sequence[str]) -> int:
-    """`art hooks codex [--project] [--write] [--from SOURCE]`."""
+    """`art hooks codex [--project] [--write] [--from SOURCE] [--standalone]`."""
     import argparse
 
     p = argparse.ArgumentParser(prog="art hooks codex", description=(
-        "Print the ART hooks for Codex, or merge them into its hooks.json."))
+        "Print the ART hooks for Codex, or merge them into its hooks.json. A Codex plugin "
+        "install already carries them; with it, --write removes ART's own entries from the "
+        "file instead, so they do not fire twice."))
     p.add_argument("--project", action="store_true",
                    help="this repo's .codex/hooks.json instead of $CODEX_HOME/hooks.json")
     p.add_argument("--write", action="store_true", help="merge into the file (else print)")
     p.add_argument("--from", dest="source", default=SOURCE,
                    help="where uvx gets ART (default: the pinned release wheel)")
+    p.add_argument("--standalone", action="store_true",
+                   help="install into the file even though the ART plugin is installed "
+                        "(your Codex does not load plugin hooks)")
     args = p.parse_args(list(argv))
     config = hook_config(args.source)
+
+    plugin = None if args.standalone else plugin_with_art_hooks(codex_home())
+    version = codex_version() if plugin else None
+    if plugin and version is not None and version < PLUGIN_HOOKS_MIN_CODEX:
+        print(f"art hooks: plugin {plugin} bundles the hooks, but Codex "
+              f"{'.'.join(map(str, version))} does not load plugin hooks by default (0.131 "
+              "and later do); installing them in the file.", file=sys.stderr)
+        plugin = None
+
     if not args.write:
         sys.stdout.write(json.dumps(config, indent=2) + "\n")
+        if plugin:
+            print(f"art hooks: plugin {plugin} already carries these; you do not need to "
+                  "install them.", file=sys.stderr)
         return 0
     path = codex_hooks_path(args.project)
     existing: Dict[str, Any] = {}
@@ -372,6 +471,23 @@ def codex_main(argv: Sequence[str]) -> int:
         except ValueError:
             print(f"art hooks: {path} is not valid JSON; not touching it.", file=sys.stderr)
             return 2
+
+    if plugin:
+        # The plugin already runs the hooks: remove ART's own entries from the file so each
+        # one fires once. Nothing is added, and a file without any is not created or touched.
+        removed = remove_art_hooks(existing)
+        if not removed:
+            print(f"art hooks: plugin {plugin} already carries the ART hooks and {path} has "
+                  "none; nothing changed.", file=sys.stderr)
+            return 0
+        path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+        for event, command in removed:
+            print(f"art hooks: removed {event} hook, plugin {plugin} runs it: {command}",
+                  file=sys.stderr)
+        print(f"art hooks: plugin {plugin} already carries the ART hooks, so {len(removed)} "
+              f"duplicate(s) were removed from {path}.", file=sys.stderr)
+        return 0
+
     added, removed = merge_hooks(existing, config)
     if not (added or removed):
         print(f"art hooks: {path} already has the ART hooks; nothing changed.", file=sys.stderr)

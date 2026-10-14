@@ -5,7 +5,7 @@
     art mcp                                      # the MCP server over stdio (what art-mcp runs)
     art ui --job <job_id>                        # the local editor (needs [ui])
     art hook user-prompt < hook.json             # Claude Code plugin hooks (#201)
-    art hooks codex --write                      # install those hooks for Codex (#203)
+    art hooks codex --write                      # the file fallback for Codex without plugin hooks (#203, #290)
     art jev status|export|import                 # the Jev decision cache (#193)
     art export --out backup.zip                  # back up a profile (#195)
     art import backup.zip                        # restore it into the local store
