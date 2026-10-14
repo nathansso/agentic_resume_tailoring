@@ -240,7 +240,7 @@ Read that carefully, because three of the four components carry a lesson:
   edits" and "monotone from baseline to tailored" are different claims, and only the first
   one is true.
 - **`role_level` scored 0.0 on both sides, and its value is not trustworthy anyway.** #181
-  reports that `_detect_level` matches seniority keywords as bare substrings and returns
+  found that `_detect_level` matched seniority keywords as bare substrings and returned
   the highest tier found anywhere in the text: only **22 of the 150** corpus postings read
   at the tier they are filed under, 60 read as `lead` and 27 as `manager`. On the other
   two tasks in this same run the component scored 50.0 on both sides. A weight-0.10
@@ -470,9 +470,11 @@ and without 25 distractors, `ats_delta` (30.9), `baseline_composite` (53.4),
 **The dial found a product defect the first time it was used.** Padding the profile made
 `MAX_SKILLS` bind for the first time, and the cap did not hold — 19 and 20 skills rendered
 against a cap of 18. `select_skills` applies the cap and then appends the core floor past
-it, so the worst case is `MAX_SKILLS + CORE_FLOOR_K` = 22. Filed as **#185**. Saturation and
-overshoot look identical until the candidate set can be pushed well past the cap, which is
-why #158 and #171 could not see it.
+it, so the worst case is `MAX_SKILLS + CORE_FLOOR_K` = 22. Filed as **#185**, and fixed there:
+the floor now fills only the slots the cap left free, so no run renders more than `MAX_SKILLS`
+unless skills are pinned. Skills figures recorded before the fix that sit at 19 or 20 will now read
+at most 18. Saturation and overshoot look identical until the candidate set can be pushed well past
+the cap, which is why #158 and #171 could not see it.
 
 ### How postings are sourced and verified
 
@@ -551,7 +553,8 @@ stats, a flat CSV, and per-task rendered `.tex`/`.json` under `results/renders/<
 
 **What a single delta establishes.** That this candidate, against this posting, under this
 mode, scored N points higher after tailoring on a composite whose weights are hand-set and
-whose `role_level` component is known to be mislabelled (#181). That is genuinely useful as
+whose `role_level` component was mislabelled before #181 (`agents/seniority.py` replaced the
+detector, so a figure recorded before it is not comparable with one after). That is genuinely useful as
 a regression signal and genuinely weak as an efficacy claim.
 
 **What it does not establish.** That the resume reads better, that a recruiter would prefer
@@ -649,15 +652,10 @@ Specified but **not shipped**. Nothing below describes the harness today.
   so it comes last. *(Chunks 1–4, 5 and 6 have shipped and are described above.)* Under the
   harness plan the same judgments also label #174's pairs where metric dominance doesn't
   decide, and fit #127's per-guard tolerances.
-- **#185** — `select_skills` renders up to `MAX_SKILLS + CORE_FLOOR_K`, found by the
-  distractor dial. Until it lands, `skills.within_cap_bounds` can read `false` for a product
-  reason rather than a fixture one on any padded run.
-- **No replay cassette is committed, and none is due until #181.** #182 deleted the dead
-  one rather than leave it advertised. The profile set is final, but recording is gated on
-  the level detector below: `role_level` is 0.10 of the composite on both sides of every
-  match, so a cassette recorded now would bake a known-wrong component into an artifact
-  that cost real API spend. The run that records should name its `--tasks` rather than use
-  `--limit`, which takes an alphabetical prefix of the corpus.
+- **No replay cassette is committed.** #182 deleted the dead one rather than leave it
+  advertised. The profile set is final and #181 has landed, so recording is no longer gated:
+  the next product-mode run can record one. The run that records should name its `--tasks`
+  rather than use `--limit`, which takes an alphabetical prefix of the corpus.
 - **Ability B has a filter but no tasks.** `eval/implicitness.py` decides whether a pair is
   implicit, and nothing yet *runs* the pipeline against implicit-only requirements. The
   filter is the admission criterion such a task set would be built with.
@@ -677,7 +675,4 @@ Specified but **not shipped**. Nothing below describes the harness today.
   B vs A comes first.
 - **#178** — a per-profile simulated conversation corpus, so knowledge extraction and
   preference recall have profile-bound fixtures.
-- **#181** — will fix `_detect_level`'s substring matching. Until it lands, `role_level`
-  (weight 0.10) compares two independently wrong labels on both sides of every match, and
-  **no product-mode recording should be paid for**: only 22 of 150 postings read at their
-  filed tier, so any cassette made first captures that error permanently.
+
