@@ -35,9 +35,11 @@ Model-free apart from `engine.decide`, imported only when a check runs.
 from __future__ import annotations
 
 import re
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
+from agents.arbitration import HARD_STRENGTH
 from agents.checks import exp_key, proj_key
+from agents.skill_matching import SkillMatcher
 from harness import policy
 from harness.decisions.questions import Noul, canonical
 
@@ -94,6 +96,53 @@ def term_pattern(term: str) -> "re.Pattern":
     return re.compile(r"(?<![a-z0-9])" + re.escape(term.lower()) + r"(?![a-z0-9])")
 
 
+def term_matcher(term: str, skill: bool = False) -> Callable[[str], bool]:
+    """`text -> bool`: whether `text` names the pinned `term`. The text is passed as written.
+
+    A pin on a skill (`skill:<name>`, #254) matches the way the knowledge graph links the skill to
+    its experiences (`agents/skill_matching.SkillMatcher`): the name and its aliases ("torch" for
+    PyTorch), word-bounded, with the short-name rules (R, C, Go). Any other pin is a whole-word term."""
+    if skill:
+        return SkillMatcher(term).mentions
+    pat = term_pattern(term)
+    return lambda text: bool(pat.search((text or "").lower()))
+
+
+def pin_target(pref: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+    """What a preference pins, as `(kind, target)`, or None when it is not a negative pin.
+
+    The one definition of a negative pin (#254): a strength-5 suppression that names something the
+    executor enforces. `execute_plan` enforces it (`executor._hard_preferences`), and
+    `record_preference`, `art_pins` and the briefing report it (`is_negative_pin`), through this
+    function, so what is reported cannot drift from what is enforced.
+
+    - `item`: the key of an experience or project (`exp:` / `proj:`). The item cannot render.
+    - `skill`: the name of a skill (`skill:`). The skill cannot render, and neither can a mention of
+      it (or an alias) in any bullet or item field.
+    - `term`: a topic bound to nothing in the knowledge graph. Its words cannot render.
+
+    A key bound to anything else (`section:`, `edu:`) cannot be enforced by key, but the stored
+    `target_term` is the label the user named, and that is enforced as a term, as it was before
+    (#198); only a preference with neither an enforceable key nor a term is not a pin.
+    """
+    if (pref.get("strength") or 0) < HARD_STRENGTH or pref.get("polarity") != "suppress":
+        return None
+    key = (pref.get("target_key") or "").strip().lower()
+    if key.startswith(("exp:", "proj:")):
+        return "item", key
+    if key.startswith("skill:"):
+        name = key.split(":", 1)[1].strip()
+        if name:
+            return "skill", name
+    term = (pref.get("target_term") or "").strip().lower()
+    return ("term", term) if term else None
+
+
+def is_negative_pin(pref: Dict[str, Any]) -> bool:
+    """Whether `pref` is a negative pin: the flag `record_preference`, `art_pins` and the briefing report."""
+    return pin_target(pref) is not None
+
+
 def pin_topic(term: str, statement: Optional[str] = None) -> str:
     """What the question asks about: the pin's statement without its leading directive,
     when that is a clean description, else the term."""
@@ -148,7 +197,8 @@ def make_pin_checker(pins: Sequence[Dict[str, Any]],
                      base_content: Optional[Dict] = None) -> Callable[[Dict], List[Dict]]:
     """`content -> findings`, one per (changed text, pin) that needs checking.
 
-    `pins` is `[{"term", "statement"}]`. A finding is `{item, kind, text, pin, topic, status,
+    `pins` is `[{"term", "statement", "skill"?}]`; `skill` marks a pin on a skill (#254), whose term
+    match includes its aliases. A finding is `{item, kind, text, pin, topic, status,
     p, source, reason}`: `status` is `checked` (Jev or the cache answered) or `unchecked` (the
     fallback did; `reason` says why). Results are memoized for the life of the checker, so the
     many metric vectors one plan computes ask each text once.
@@ -158,7 +208,7 @@ def make_pin_checker(pins: Sequence[Dict[str, Any]],
         term = _norm(str(pin.get("term") or "")).lower()
         if term:
             topic = pin_topic(term, pin.get("statement"))
-            entries.append((term, term_pattern(term), topic, question_for(topic)))
+            entries.append((term, term_matcher(term, bool(pin.get("skill"))), topic, question_for(topic)))
     memo: Dict[str, List[Dict]] = {}
 
     def check(content: Dict) -> List[Dict]:
@@ -171,7 +221,7 @@ def make_pin_checker(pins: Sequence[Dict[str, Any]],
             state = build_state(text, kind)
             memo_key = canonical(state)
             if memo_key not in memo:
-                todo = [e for e in entries if not e[1].search(text.lower())]   # the term match owns those
+                todo = [e for e in entries if not e[1](text)]   # the term match owns those
                 answers = engine.decide(POINT, state, [e[3] for e in todo], fallback=None) if todo else []
                 memo[memo_key] = [_finding(term, topic, kind, text, ans)
                                   for (term, _pat, topic, _q), ans in zip(todo, answers)]

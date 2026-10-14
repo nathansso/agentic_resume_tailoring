@@ -37,6 +37,49 @@ Every fitted or provisional threshold the harness decides with, and the guard to
 
 ---
 
+## Issue 254 — Skill-keyed negative pins are enforced in bullets and item fields
+**Status:** complete | **Tests:** 2440 pass on SQLite (10 new)
+
+"Never mention Kafka" resolves to `skill:kafka`. `record_preference`, `art_pins` and the briefing reported it as a negative pin, but the executor treated a `skill:`-keyed suppression as a skills-line filter only: a bullet "using Kafka" was accepted and committed, and the #232 Jev paraphrase check never ran for it. A skill-keyed strength-5 suppression is now a negative term like any other, and the `negative_pin` flag is computed by the function the executor enforces with.
+
+### What shipped
+
+- **`negative_pins.pin_target(pref)` is the one definition of a negative pin.** A strength-5 suppression is `("item", key)` for `exp:` / `proj:`, `("skill", name)` for `skill:`, `("term", term)` for a topic bound to nothing or to a key that cannot be enforced by key (`section:`, `edu:`), by its stored `target_term`, and not a pin otherwise (a lower strength, an emphasis, a key with no term). `is_negative_pin` is its boolean.
+  - `executor._hard_preferences` classifies with it, so what is enforced is what it returns.
+  - `record_preference` (`memory._summary`), `art_pins` and `art_briefing` (`tools._pins`) report `negative_pin` through `is_negative_pin`. Before, they said `polarity == "suppress"` at strength 5, whatever the target.
+- **A skill-keyed pin refuses a bullet that names the skill, and its aliases.** `negative_pins.term_matcher(term, skill=True)` matches with `agents/skill_matching.SkillMatcher`, the matcher that links skills to experiences, so "torch" is PyTorch and `R` is not `R&D`. A topic pin keeps the whole-word term match. It applies in all three places the term match ran: the per-node arbitration refusal (`negative_pin: bullet N mentions 'kafka'`), the `preferences` hard gate on every item field and bullet (`Context.negative_skill_terms`, a subset of `negative_terms`), and finalize.
+- **The #232 Jev check covers them.** The pin goes to `make_pin_checker` with `skill: True`, so a paraphrase is asked about (per changed text per node, and over the whole page at finalize) and a confident yes reverts the node or blocks the commit, in the term match's own `negative_pin:<term>@<key> :: …` format. Text the alias-aware term match already catches is not sent to Jev.
+- **The skills line is filtered as before** (`suppressed_skills`).
+- **Docs.** `docs/harness.md` § 7 (which said a `skill:` suppression "still only drops the skill") and `docs/architecture.md` are updated, as is the `negative_pin` field description in the contract. The #198 entry below carries a note that its "a `skill:`-keyed suppression is not a negative pin" was reversed here.
+- **Tests.** In `tests/test_citations.py`: the old test that pinned the bug is replaced by a refused cited bullet, a finalize block that clears when the item is cut, and the alias and short-name matching. In `tests/test_negative_pin_gate.py`: `record_preference("Never mention Kafka")` refused end to end, a paraphrase reverted through a scripted Jev answer, a base paraphrase blocking finalize, an alias skipping Jev, and `test_the_negative_pin_flag_is_what_the_executor_enforces`, which stores ten kinds of preference (through `record_preference`, and directly for an `edu:` key with and without a term) and checks the flag from `record_preference`, `art_pins` and `art_briefing` against what `_hard_preferences` enforces; `test_an_edu_keyed_pin_with_a_term_refuses_a_bullet_naming_the_term` covers the keyed-with-term case end to end.
+
+### Deviations from spec
+
+- **Executor enforcement, not a storage change.** The issue offered two options: enforce skill-keyed pins in the executor, or have `record_preference` store a skill-named pin as a topic pin. The second leaves every pin already in a user's database, stored as `skill:<x>`, unenforced. The first covers old and new rows with no migration, and `record_preference` stores exactly what it stored before.
+- **A key the executor cannot enforce by key is still enforced by its term, so it is still a negative pin.** `compile_preferences` stores `target_term` (the label) even when `target_key` resolves, and `_hard_preferences` on main enforced a `section:`- or `edu:`-keyed suppression through that term. `pin_target` keeps that (`("term", term)`); only a preference with neither an enforceable key nor a term is not a pin. The term for a `section:` key is the catalog label (`"section: achievements"`), which matches no bullet in practice; that is as before and not changed here.
+- **Jev answers in the tests are scripted, not recorded.** The new tests use the same `FakeTransport` the #232 tests use; no live Jev call was made and no recording file was added. The pin question is unchanged (`negative_pin@v1`), so the fitted thresholds (#232) stand.
+- **A skill pin and a same-named topic pin keep the skill's alias matching.** Both can exist for one name ("kafka"); the term map holds one entry per name, and the skill-keyed one wins so its aliases are not lost.
+- **A page that already says the skill now fails finalize.** As with any negative pin (#198), a base bullet that names a skill the user has pinned blocks the commit until it is revised or its item is cut. This is the intended reach of the pin, but it will show up on profiles where the pinned skill is in existing bullets.
+
+## Issue 257 — `execute_plan` no longer commits a version identical to its parent
+**Status:** complete | **Tests:** 2438 pass on SQLite (7 new), 24 skipped, 0 fail. The full run found 3 failures from the new rule, all fixed in the same change and re-run singly (100 pass across their three files); the full suite was not repeated after the fix. The Postgres leg was not run locally
+
+When every node of a plan was reverted or refused, `execute_plan` still reported `committed: true` and wrote a tree node whose `diff_nodes` against its parent was empty. That added a history entry and an editor change-feed event for nothing. A plan with a parent whose final page equals the parent's content now commits nothing.
+
+### What shipped
+
+- **`harness/executor.py`:** `_execute` snapshots the parent's content before job rules touch it (`base` is `head["content"]`, edited in place), and after finalize compares the whole would-be page with that snapshot. Equal means `committed: false`, `node_id: null`, `reason: "no_change: ..."` (`executor.NO_CHANGE`), no `TailorNode`, no `TreeEvent`, HEAD and `UserJobResult` untouched. `nodes[]` still carries every reverted, refused and kept node with its reason. The comparison is on the full content dict, so a plan that only re-ranks skills (`skills`), sets `section_order`, drops hard-suppressed skills, or applies a newly answered job rule still commits. Violations are checked first and win over `no_change`. `dry_run` reports the same `reason`.
+- **A job's first plan always commits** (no parent, so the check never runs), including `parent: null, nodes: []`, which the `art-tailor` skill uses to save the track baseline copy before `get_head`.
+- **`harness/contract.py`:** `ExecuteOutput.reason` (absent otherwise) and the `execute_plan` tool description. `patch_plan` shares the output model.
+- **Docs:** `docs/harness.md` (§ 7 step 5), `docs/architecture.md` (§ 8.2 step 4) and one bullet in `plugin/skills/art-tailor/SKILL.md` telling the host `no_change` is not an error.
+- **Tests:** in `tests/test_executor.py`, all-reverted/refused/kept (nothing written, HEAD and feed unchanged, per-node reasons kept), an empty plan and a dry run on a parent, the empty first plan still committing the baseline, a skills re-rank still committing, a real node still committing, and a no-op leaving a hand-edited `.tex` HEAD alone; in `tests/test_host_ingest.py`, a newly answered job rule alone still committing. Three existing tests that relied on a keep-only plan committing now use a real change (`test_citations`, `test_consistency_gate`) or assert `no_change` (`test_jev_library`'s replay re-run, which re-submits the same plan on its own HEAD).
+
+### Deviations from spec
+
+- **Only content and layout overrides are compared, not `edited_tex`.** A plan commit carries the parent's layout overrides but never its hand-edited `.tex`, so committing over a hand-edited HEAD silently dropped the `.tex`. Treating a no-op plan as "no change" there leaves the user's version as HEAD instead. Whether a changing plan should carry `edited_tex` forward is a separate question and not changed here.
+- **Skills compare as stored.** A parent whose content lacks `skills_ranked` entirely (not written by the executor or the pipeline) differs from a plan result that sets it to `[]`, and commits once.
+- The `art-tailor` skill edit is one bullet in a file PR #253 also changes.
+
 ## Issue 249 — Hermetic test suite: no `.env` secrets, no outbound network outside `--integration`
 **Status:** complete | **Tests:** 2430 pass on SQLite (19 new), 24 skipped, 0 fail, on main at e280a87 (after #244) with sqlmodel 0.0.47. The full run was made with the developer's real `.env` (a production `DATABASE_URL`, `SUPABASE_URL`, Anthropic and TypeSafe keys) reachable and `PYTHON_DOTENV_DISABLED` unset, and the guard blocked 0 attempts; an earlier run with the variable set gave the same result. The Postgres leg was not run
 
@@ -725,7 +768,7 @@ Every bullet on a host-built page now rests on live evidence, and a fact the use
   - Arbitration now refuses a node that cites a deleted item with `tombstoned_cite: … which the user deleted`, ahead of the generic unresolved reason.
   - A node that names a deleted item, or uses one as a replacement, is refused with `tombstoned: the user deleted …`.
 - **Negative pins:**
-  - A strength-5 suppression by `target_term` (not keyed `skill:`) is now also a fact that must never render (`_negative_terms`).
+  - A strength-5 suppression by `target_term` (not keyed `skill:`) is now also a fact that must never render (`_negative_terms`). *(#254 later made a `skill:`-keyed suppression one too, and replaced `_negative_terms` with `negative_pins.pin_target`.)*
   - `preference_violations` flags any bullet, title, company, project name or description containing the term, on word boundaries (`negative_pin:<term>@<key> :: …`).
   - Arbitration refuses a revise or replace whose bullets mention it, even when cited.
   - Finalize reports a pinned term already on the page with the hint "revise <key> so it no longer mentions '<term>'".
@@ -740,7 +783,7 @@ Every bullet on a host-built page now rests on live evidence, and a fact the use
   - a cited bullet mentioning a negative pin is refused;
   - a pinned fact already on the page blocks finalize with hints naming the items, and the same program with it cut commits;
   - negative pins match whole words only (Java, not JavaScript);
-  - a `skill:`-keyed suppression is not a negative pin.
+  - a `skill:`-keyed suppression is not a negative pin *(reversed by #254)*.
 
 ### Deviations from spec
 

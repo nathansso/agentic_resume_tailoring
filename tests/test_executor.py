@@ -416,3 +416,104 @@ def test_benchmark_tasks_run_end_to_end_through_a_scripted_host_and_replay(tmp_p
         runs.append([_ids_masked(o, o["job_id"]) for o in outs])
         engine.dispose()
     assert runs[0] == runs[1]
+
+
+# â”€â”€ a plan that changes nothing is not a version (#257) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+def _events(engine):
+    from database.models import TreeEvent
+    with Session(engine) as s:
+        return len(s.exec(select(TreeEvent)).all())
+
+
+def _nodes(engine):
+    from database.models import TailorNode
+    with Session(engine) as s:
+        return len(s.exec(select(TailorNode)).all())
+
+
+def test_a_plan_whose_nodes_are_all_reverted_or_refused_commits_nothing(isolated_engine, env):
+    from harness import executor, tree
+
+    uid, job_id, _ = env
+    first = _run(uid, {"job_id": job_id})
+    nodes_before, events_before = _nodes(isolated_engine), _events(isolated_engine)
+    src = executor._KG(uid).source_bullets[EXP]
+    out = _run(uid, {"job_id": job_id, "parent": first["node_id"], "nodes": [
+        {"id": "same", "op": "revise", "item_key": EXP,           # no target can improve
+         "bullets": [{"text": t, "cites": [f"{EXP}#b{i}"]} for i, t in enumerate(src)]},
+        {"id": "ghost", "op": "revise", "item_key": "exp:astronaut|nasa",
+         "bullets": [{"text": "Flew", "cites": ["exp:astronaut|nasa"]}]},
+        {"id": "keep", "op": "keep", "item_key": EXP2},
+    ]})
+    assert out.get("error") is None and out["committed"] is False and out["node_id"] is None
+    assert out["reason"] == executor.NO_CHANGE and out["reason"].startswith("no_change")
+    assert out["violations"] == [] and out["parent"] == first["node_id"]
+    status = {n["id"]: n["status"] for n in out["nodes"]}      # the host still learns why
+    assert status == {"same": "reverted", "ghost": "refused", "keep": "kept"}
+    assert all(n["reason"] for n in out["nodes"] if n["status"] != "kept")
+    assert _nodes(isolated_engine) == nodes_before and _events(isolated_engine) == events_before
+    assert _head(isolated_engine, job_id) == first["node_id"]
+    assert [e["kind"] for e in tree.events_since(uid, 0, job_id)] == ["commit"]
+
+
+def test_an_empty_plan_on_a_parent_commits_nothing_and_a_dry_run_says_so(isolated_engine, env):
+    uid, job_id, _ = env
+    first = _run(uid, {"job_id": job_id})
+    again = _run(uid, {"job_id": job_id, "parent": first["node_id"]})
+    dry = _run(uid, {"job_id": job_id, "parent": first["node_id"]}, dry_run=True)
+    assert not again["committed"] and again["reason"].startswith("no_change")
+    assert dry["dry_run"] and not dry["committed"] and dry["reason"].startswith("no_change")
+    assert _nodes(isolated_engine) == 1 and _events(isolated_engine) == 1
+
+
+def test_an_empty_first_plan_still_commits_the_baseline_copy(isolated_engine, env):
+    """The art-tailor skill commits a job's track baseline with `parent: null, nodes: []`."""
+    from harness import tree
+
+    uid, job_id, _ = env
+    out = _run(uid, {"job_id": job_id, "parent": None, "nodes": []})
+    assert out["committed"] and out["node_id"] and "reason" not in out
+    assert tree.get_node(uid, out["node_id"])["parent_id"] is None
+    assert _head(isolated_engine, job_id) == out["node_id"]
+    assert _nodes(isolated_engine) == 1 and _events(isolated_engine) == 1
+
+
+def test_a_skills_reranking_alone_still_commits(isolated_engine, env):
+    from harness import tree
+
+    uid, job_id, _ = env
+    first = _run(uid, {"job_id": job_id})
+    names = [s["name"] for s in tree.get_node(uid, first["node_id"])["content"]["skills_ranked"]]
+    assert len(names) > 1
+    out = _run(uid, {"job_id": job_id, "parent": first["node_id"], "skills": names[::-1]})
+    assert out["committed"] and "reason" not in out
+    got = [s["name"] for s in tree.get_node(uid, out["node_id"])["content"]["skills_ranked"]]
+    assert got == names[::-1]
+    assert _nodes(isolated_engine) == 2 and _events(isolated_engine) == 2
+
+
+def test_a_node_that_changes_the_page_still_commits(isolated_engine, env):
+    uid, job_id, _ = env
+    first = _run(uid, {"job_id": job_id})
+    out = _run(uid, {"job_id": job_id, "parent": first["node_id"], "nodes": [
+        {"id": "d", "op": "delete", "item_key": PROJ, "because": "user:less games"}]})
+    assert out["committed"] and out["nodes"][0]["status"] == "accepted"
+
+
+def test_a_no_change_plan_leaves_the_parents_hand_edits_alone(isolated_engine, env):
+    """A plan commit carries layout overrides but not a hand-edited .tex; skipping the no-op
+    keeps the editor's version as HEAD instead of replacing it with one that drops the .tex."""
+    from harness import tree
+
+    uid, job_id, _ = env
+    first = _run(uid, {"job_id": job_id})
+    with Session(isolated_engine) as s:
+        r = s.exec(select(UserJobResult)).one()
+        r.edited_tex = "\\documentclass{article}\\begin{document}by hand\\end{document}"
+        s.add(r)
+        s.commit()
+    edit = tree.record_result(uid, job_id, source="editor", note="tex")
+    out = _run(uid, {"job_id": job_id, "parent": edit["node_id"]})
+    assert not out["committed"] and out["reason"].startswith("no_change")
+    assert _head(isolated_engine, job_id) == edit["node_id"] != first["node_id"]
