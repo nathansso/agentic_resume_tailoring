@@ -1,0 +1,4 @@
+{
+  "framework": "astro",
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- ."
+}

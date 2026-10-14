@@ -1,0 +1,47 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base
+  title="ARTie: land your first role"
+  description="ARTie helps students and new grads tailor their resume to the internships and entry-level roles they apply for."
+>
+  <section class="relative overflow-hidden border-b border-border/60">
+    <div class="bg-grid absolute inset-0 [mask-image:radial-gradient(ellipse_at_top,black,transparent_72%)]"></div>
+    <div class="absolute left-1/2 top-0 h-[420px] w-[820px] -translate-x-1/2 rounded-full bg-primary/15 blur-[130px]"></div>
+
+    <div class="relative mx-auto max-w-4xl px-4 py-20 text-center sm:px-6 sm:py-32">
+      <h1 class="text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-6xl md:text-7xl">
+        Land your first role
+        <br />
+        <span class="text-gradient">with ARTie</span>
+      </h1>
+
+      <p class="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground sm:text-xl">
+        ARTie helps you tailor your resume to each internship or entry-level role you apply for.
+      </p>
+
+      <div class="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
+        <a
+          href="/install"
+          class="inline-flex w-full items-center justify-center rounded-lg bg-primary px-7 py-3.5 font-semibold text-primary-foreground transition-opacity hover:opacity-90 sm:w-auto"
+        >
+          Install in Claude Code
+        </a>
+        <a
+          href="#how-it-works"
+          class="inline-flex w-full items-center justify-center rounded-lg border border-border bg-card px-7 py-3.5 font-semibold transition-colors hover:bg-elevated sm:w-auto"
+        >
+          How it works
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- PLACEHOLDER: the "how it works" content is written in a separate issue.
+       Keep the id: the hero's secondary button links here. -->
+  <section id="how-it-works" class="mx-auto max-w-4xl scroll-mt-20 px-4 py-20 text-center sm:px-6">
+    <h2 class="text-2xl font-bold tracking-tight sm:text-3xl">How it works</h2>
+    <p class="mt-3 text-muted-foreground">Coming soon.</p>
+  </section>
+</Base>

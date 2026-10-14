@@ -1,0 +1,180 @@
+---
+import "../styles/global.css";
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+
+const GITHUB_URL = "https://github.com/nathansso/agentic_resume_tailoring";
+const NAV = [
+  { href: "/", label: "Home" },
+  { href: "/install", label: "Install" },
+  { href: "/usage", label: "Usage" },
+];
+
+const path = Astro.url.pathname.replace(/\/+$/, "") || "/";
+const isCurrent = (href: string) => path === href;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#3ECF8E" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preload" href="/fonts/Switzer-Regular.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/Switzer-Semibold.woff2" as="font" type="font/woff2" crossorigin />
+    <!-- Set the theme class before first paint so a dark-mode visitor never sees
+         a white flash. Same logic as web/frontend/index.html: a stored choice
+         wins, otherwise follow the OS preference. -->
+    <script is:inline>
+      (function () {
+        try {
+          var stored = localStorage.getItem("art:theme");
+          var dark =
+            stored === "dark" ||
+            (stored !== "light" &&
+              window.matchMedia &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.classList.add("dark");
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body class="flex min-h-screen flex-col">
+    <header class="sticky top-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur-md">
+      <nav
+        class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6"
+        aria-label="Primary"
+      >
+        <a href="/" class="flex items-center gap-2 font-bold tracking-tight">
+          <span class="grid h-8 w-8 place-items-center rounded-md bg-primary text-primary-foreground">A</span>
+          <span class="text-lg">ARTie</span>
+        </a>
+
+        <ul class="hidden items-center gap-8 text-sm md:flex">
+          {NAV.map((item) => (
+            <li>
+              <a
+                href={item.href}
+                aria-current={isCurrent(item.href) ? "page" : undefined}
+                class="text-muted-foreground transition-colors hover:text-foreground aria-[current=page]:font-semibold aria-[current=page]:text-foreground"
+              >
+                {item.label}
+              </a>
+            </li>
+          ))}
+          <li>
+            <a
+              href={GITHUB_URL}
+              class="text-muted-foreground transition-colors hover:text-foreground"
+              rel="noopener"
+            >
+              GitHub
+            </a>
+          </li>
+        </ul>
+
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            data-theme-toggle
+            aria-label="Toggle color theme"
+            title="Toggle color theme"
+            class="grid h-8 w-8 place-items-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            <!-- Moon in light mode, sun in dark mode; the class on <html> picks. -->
+            <svg class="h-4 w-4 dark:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+            </svg>
+            <svg class="hidden h-4 w-4 dark:block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="4"></circle>
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path>
+            </svg>
+          </button>
+
+          <button
+            type="button"
+            data-menu-toggle
+            aria-label="Open menu"
+            aria-expanded="false"
+            aria-controls="mobile-menu"
+            class="grid h-8 w-8 place-items-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground md:hidden"
+          >
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <path d="M4 7h16M4 12h16M4 17h16"></path>
+            </svg>
+          </button>
+        </div>
+      </nav>
+
+      <ul id="mobile-menu" hidden class="border-t border-border/60 px-4 py-2 text-sm md:hidden">
+        {NAV.map((item) => (
+          <li>
+            <a
+              href={item.href}
+              aria-current={isCurrent(item.href) ? "page" : undefined}
+              class="block py-2.5 text-muted-foreground aria-[current=page]:font-semibold aria-[current=page]:text-foreground"
+            >
+              {item.label}
+            </a>
+          </li>
+        ))}
+        <li>
+          <a href={GITHUB_URL} class="block py-2.5 text-muted-foreground" rel="noopener">GitHub</a>
+        </li>
+      </ul>
+    </header>
+
+    <main class="flex-1">
+      <slot />
+    </main>
+
+    <footer class="border-t border-border/60">
+      <div class="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <p>ARTie: resume tailoring for internship and new-grad applicants.</p>
+        <ul class="flex flex-wrap gap-x-6 gap-y-2">
+          <li><a href="/install" class="transition-colors hover:text-foreground">Install</a></li>
+          <li><a href="/usage" class="transition-colors hover:text-foreground">Usage</a></li>
+          <li><a href={GITHUB_URL} class="transition-colors hover:text-foreground" rel="noopener">GitHub</a></li>
+        </ul>
+      </div>
+    </footer>
+
+    <script>
+      const THEME_KEY = "art:theme";
+
+      document.querySelector("[data-theme-toggle]")?.addEventListener("click", () => {
+        const root = document.documentElement;
+        const next = root.classList.contains("dark") ? "light" : "dark";
+        root.classList.toggle("dark", next === "dark");
+        root.style.colorScheme = next;
+        try {
+          localStorage.setItem(THEME_KEY, next);
+        } catch {
+          // Storage unavailable: the choice just won't survive a reload.
+        }
+      });
+
+      const menuButton = document.querySelector<HTMLButtonElement>("[data-menu-toggle]");
+      const menu = document.getElementById("mobile-menu");
+      menuButton?.addEventListener("click", () => {
+        if (!menu) return;
+        const open = menu.hasAttribute("hidden");
+        menu.toggleAttribute("hidden", !open);
+        menuButton.setAttribute("aria-expanded", String(open));
+        menuButton.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+      });
+    </script>
+  </body>
+</html>
