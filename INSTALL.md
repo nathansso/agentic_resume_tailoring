@@ -24,13 +24,20 @@ The same plugin works in Codex:
 ```bash
 codex plugin marketplace add nathansso/agentic_resume_tailoring
 codex plugin add art@art
+```
+
+Codex 0.131 and later load a plugin's hooks, so that is the whole install, plus trusting
+the hooks with `/hooks` in Codex (it skips a plugin's hooks until you do). For an older
+Codex, or Codex without the plugin, install them into your own `hooks.json` instead:
+
+```bash
 uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl" art hooks codex --write
 ```
 
-Codex plugins can't carry hooks, which is why the last command is needed. Trust the
-hooks with `/hooks` in Codex. Running it again after an upgrade replaces ART's hooks from
-an earlier install (any `uvx --from` git or wheel source) and leaves your own alone. See
-[`integrations/codex/README.md`](integrations/codex/README.md).
+With the plugin installed that command adds nothing and removes ART's own entries from
+`hooks.json`, so no hook runs twice. Without it, running it again after an upgrade replaces
+ART's hooks from an earlier install (any `uvx --from` git or wheel source) and leaves your own
+alone. See [`integrations/codex/README.md`](integrations/codex/README.md).
 
 ## The harness: `art-mcp` (#194)
 

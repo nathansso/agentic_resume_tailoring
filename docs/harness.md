@@ -758,8 +758,32 @@ Codex CLI (0.149) was checked against its docs and live runs.
     its source and was **not checked against a live run**, which the fallback makes safe.
     Docs: [Claude Code hooks](https://code.claude.com/docs/en/hooks), Codex's hooks page
     (developers.openai.com/codex/hooks).
-  - **Plugins can't carry hooks** (`plugin_hooks` was removed). `art hooks codex --write`
-    merges them into `$CODEX_HOME/hooks.json`, and the user trusts them with `/hooks`.
+  - **Plugins carry hooks (#290).** The earlier note that they can't was a misreading of
+    `plugin_hooks`: that was a feature flag, removed because plugin hooks became always-on.
+    Sources (`openai/codex`): #19705 added discovery (default `hooks/hooks.json` in the plugin
+    root, or a `hooks` entry in `.codex-plugin/plugin.json`: a `./` path, an array of paths, or
+    inline hooks), behind `features.plugin_hooks`, in 0.126.0. #22549 turned it on by default,
+    in 0.131.0 (the first stable release holding it). #22552 removed the flag, in 0.134.0. The
+    hooks page: [learn.chatgpt.com/docs/hooks](https://learn.chatgpt.com/docs/hooks)
+    (developers.openai.com/codex/hooks redirects there), § "Plugin-bundled hooks". Installing a
+    plugin does not trust its hooks: Codex skips them until the user reviews them in `/hooks`.
+    Verified live on 0.149: after `codex plugin add art@art`, the app-server's `hooks/list`
+    returns `plugin/hooks/hooks.json`'s two hooks with `source: "plugin"`, `trustStatus:
+    "untrusted"`. So the Codex plugin names that one file in its manifest (`"hooks":
+    "./hooks/hooks.json"`), the file Claude Code reads, and installs need no extra command
+    beyond the trust step.
+  - **The file install is a fallback.** `art hooks codex --write` merges the hooks into
+    `$CODEX_HOME/hooks.json` for a Codex that does not load plugin hooks (before 0.131), or one
+    used without the plugin. It checks `$CODEX_HOME/config.toml` and the installed plugin copy
+    for an enabled plugin that bundles ART's hooks (`plugin_with_art_hooks`). With one, it adds
+    nothing and removes ART's own entries from the file (`is_art_hook`), so a user who ran
+    `--write` before installing the plugin stops getting each hook twice; it reads
+    `codex --version` first and installs anyway below 0.131. `--standalone` forces the install.
+  - **`commandWindows` is not used.** It is a Windows-only override of the hook's command
+    text (`command_windows.unwrap_or(command)` in `codex-rs/hooks/src/engine/discovery.rs`);
+    the shell is still chosen separately (`codex-rs/hooks/src/engine/command_runner.rs`: the
+    session shell, `%COMSPEC%` only with none). It cannot choose between PowerShell and
+    `cmd.exe`, so the one line stays the only line.
   - A project's `.codex/hooks.json` loads only in a trusted project. In live runs a
     user-level hook fired in `codex exec`, and the project file in an untrusted directory
     did not.
