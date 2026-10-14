@@ -14,6 +14,30 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 283 — `art hooks codex --write` replaces ART's hooks from earlier installs
+**Status:** complete | **Tests:** 2625 pass on SQLite (5 new), 24 skipped, 0 fail. The Postgres leg was not run locally; CI runs it
+
+`art hooks codex --write` only appended. A user who had installed the hooks from the old `git+` source (before #256) ended up with both sets in `hooks.json`; the old ones re-check the remote on every call and fail silently offline. It now recognizes ART's own earlier entries and replaces them.
+
+### What shipped
+
+- **`harness/hooks.py::is_art_hook`.** A hook line is ART's when it runs `art hook user-prompt` or `art hook session-start` through `uvx --from`, whatever the source: a `git+https://github.com/nathansso/agentic_resume_tailoring` source with or without a ref, or a release wheel of any version. `art-mcp` / `art mcp` run through `uvx --from` counts only when the line names this repo. Everything else is the user's.
+- **`merge_hooks` replaces instead of appending.** For each event ART installs (`UserPromptSubmit`, `SessionStart`), ART entries that are not the current ones (matched by group matcher and command), and duplicates of a current one, are removed; the current entries are added. Other hooks keep their order and are never edited. A group that mixes the user's handler with an old ART handler loses only the ART handler. It now returns `(groups added, [(event, command) removed])`.
+- **`art hooks codex --write` output.** It prints each replaced command and a count, and writes the file only when something changed, so a second run leaves the file byte for byte unchanged (mtime too) and says "nothing changed". File format and location are as before.
+- **Docs.** `integrations/codex/README.md` and `INSTALL.md` say to rerun the command after an upgrade, and the README states the Windows hook-shell requirement below.
+- **Tests (`tests/test_plugin.py`, 5 new, 1 tightened).** Old git, git-with-ref, `.git@tag`, older-wheel and unpinned entries all end up replaced by only the pinned ones; non-ART hooks (including a `uvx --from` of another project and another project's `art-mcp`) and their order survive; a second write is a no-op by bytes; a duplicate current entry is dropped; `is_art_hook` accepts any ART source and rejects non-ART lines. The existing idempotence test now compares bytes.
+
+### Deviations from spec
+
+- **The Codex hook shell on Windows was checked in Codex's source (`openai/codex`, `codex-rs/hooks` and `codex-rs/core`), not by running a hook.** Codex builds a hook's process from the session shell. On Windows the default session shell is PowerShell (`powershell -NoProfile -Command <line>`), where the hook line runs as written, `; exit 0` included. Only when Codex has no session shell does it fall back to `%COMSPEC%` (`cmd.exe /C`), where `;` is not a separator: `art hook` is handed `user-prompt;`, reports an unknown event and exits 0, so the hook does nothing (and a uvx failure there is not masked by `; exit 0`). The line was not changed to cover `cmd.exe`: no one line runs in both `cmd.exe` and PowerShell with a `; exit 0` equivalent. The requirement is documented in the Codex README. A live Codex run was not done, since it needs the user's Codex auth.
+- **Codex has a Windows-only `commandWindows` handler field** (per its hooks docs). It cannot pick between `cmd.exe` and PowerShell, so it is not used. Those docs also say hooks can be bundled with plugins, which contradicts the "plugins can't carry hooks" note in `docs/harness.md` § 15 and #203; not changed here.
+- **An ART entry under a different `--from` source is replaced too.** A line like `uvx --from /local/checkout art hook user-prompt` is ART's by name, so `--write` replaces it with the pinned one. Rerun with `--from` to keep a local source.
+- **Hooks in the other Codex file are not touched.** ART hooks in both `~/.codex/hooks.json` and a project's `.codex/hooks.json` both run; `--write` handles only the file it writes.
+- **No backup is made.** The replaced commands are printed instead.
+- **The Postgres leg was not run locally** (CI runs it).
+
+---
+
 ## Issue 272 — Landing site scaffold (Astro + Tailwind) on Vercel
 **Status:** complete | **Tests:** 2443 pass (11 new), 24 skipped, on SQLite; the Postgres leg was not run (nothing here touches storage)
 

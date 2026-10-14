@@ -27,6 +27,16 @@ uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/
 
 Then run `/hooks` in Codex to review and trust them.
 
+Run the same command again after you upgrade ART. It replaces ART's hooks from an earlier
+install (a `git+` source, or an older release wheel) with the current ones, prints each one it
+replaced, and leaves every other hook alone. A second run changes nothing.
+
+- **Windows.** Codex runs a hook with the shell of the session. On Windows that is PowerShell
+  (`powershell -NoProfile -Command`), which runs the hook line as written. Only if Codex has no
+  session shell does it fall back to `%COMSPEC%` (`cmd.exe`), where `;` is not a separator, so
+  the hook line is not supported there: `art hook` is handed `user-prompt;` and exits 0 without
+  doing anything. Use a PowerShell or bash session shell.
+
 - **Where hooks are loaded from.** Codex loads user-level hooks (`~/.codex/hooks.json`)
   everywhere. A project's `.codex/hooks.json` loads only in a project Codex trusts.
 - **Approving writes.** ART's write tools (`upsert_items`, `open_job`, `execute_plan`,
