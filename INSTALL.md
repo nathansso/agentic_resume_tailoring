@@ -28,7 +28,9 @@ uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/
 ```
 
 Codex plugins can't carry hooks, which is why the last command is needed. Trust the
-hooks with `/hooks` in Codex. See [`integrations/codex/README.md`](integrations/codex/README.md).
+hooks with `/hooks` in Codex. Running it again after an upgrade replaces ART's hooks from
+an earlier install (any `uvx --from` git or wheel source) and leaves your own alone. See
+[`integrations/codex/README.md`](integrations/codex/README.md).
 
 ## The harness: `art-mcp` (#194)
 

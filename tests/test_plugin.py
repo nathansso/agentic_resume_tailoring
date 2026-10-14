@@ -198,12 +198,128 @@ def test_art_hooks_codex_merges_without_touching_existing_hooks(tmp_path, monkey
     assert got["SessionStart"] == ours["SessionStart"]
     assert "/hooks" in capsys.readouterr().err
 
+    first = (tmp_path / "hooks.json").read_bytes()
     entry.main(["hooks", "codex", "--write", "--from", "art-mcp"])    # idempotent
-    again = json.loads((tmp_path / "hooks.json").read_text(encoding="utf-8"))["hooks"]
-    assert again == got
+    assert (tmp_path / "hooks.json").read_bytes() == first
 
     assert entry.main(["hooks", "codex"]) == 0                       # print only
     assert json.loads(capsys.readouterr().out) == hook_config()
+
+
+_OLD_GIT = "git+https://github.com/nathansso/agentic_resume_tailoring"
+_OLD_WHEEL = ("art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/"
+              "download/v0.0.9/art_mcp-0.0.9-py3-none-any.whl")
+
+
+def _old_hook(source, arg, tail=""):
+    return {"type": "command", "timeout": 30, "command": f'uvx --from "{source}" art hook {arg}{tail}'}
+
+
+def _codex_config(tmp_path, monkeypatch, config):
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    path = tmp_path / "hooks.json"
+    path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def test_art_hooks_codex_replaces_hooks_from_earlier_installs(tmp_path, monkeypatch, capsys):
+    """#283: the git+ source (with and without a ref), an older release wheel and the pre-#256
+    line shape all go; only the pinned entries stay."""
+    from harness import entry
+    from harness.hooks import hook_config
+
+    old = {"hooks": {
+        "UserPromptSubmit": [
+            {"hooks": [_old_hook(_OLD_GIT, "user-prompt")]},
+            {"hooks": [_old_hook(_OLD_GIT + "@main", "user-prompt", "; exit 0")]},
+            {"hooks": [_old_hook("art-mcp[ui] @ " + _OLD_GIT + ".git@v0.0.1", "user-prompt")]},
+        ],
+        "SessionStart": [
+            {"matcher": "compact", "hooks": [_old_hook(_OLD_WHEEL, "session-start", "; exit 0")]},
+            {"matcher": "compact",
+             "hooks": [_old_hook(_OLD_GIT, "session-start", "; exit 0")]},
+        ]}}
+    path = _codex_config(tmp_path, monkeypatch, old)
+
+    assert entry.main(["hooks", "codex", "--write"]) == 0
+    got = json.loads(path.read_text(encoding="utf-8"))
+    assert got == hook_config()                         # only the pinned entries remain
+    commands = [h["command"] for gs in got["hooks"].values() for g in gs for h in g["hooks"]]
+    assert len(commands) == 2 and all("git+" not in c and "0.0.9" not in c for c in commands)
+    err = capsys.readouterr().err
+    assert err.count("replaced") >= 5 and "git+https" in err and "/hooks" in err
+
+
+def test_art_hooks_codex_keeps_other_hooks_and_their_order(tmp_path, monkeypatch):
+    from harness import entry
+    from harness.hooks import hook_config
+
+    lint = {"type": "command", "command": "my-lint"}
+    other_uvx = {"type": "command",
+                 "command": 'uvx --from "git+https://github.com/acme/other" tool hook user-prompt'}
+    other_mcp = {"type": "command", "command": 'uvx --from "art-mcp" art-mcp --serve'}
+    notify = {"type": "command", "command": "notify"}
+    config = {"description": "mine", "hooks": {
+        "UserPromptSubmit": [{"hooks": [lint]}, {"hooks": [_old_hook(_OLD_GIT, "user-prompt")]},
+                             {"hooks": [other_uvx]}, {"hooks": [other_mcp]}],
+        "SessionStart": [{"matcher": "compact", "hooks": [notify, _old_hook(_OLD_GIT, "session-start")]}],
+        "Stop": [{"hooks": [notify]}]}}
+    path = _codex_config(tmp_path, monkeypatch, config)
+
+    assert entry.main(["hooks", "codex", "--write"]) == 0
+    got = json.loads(path.read_text(encoding="utf-8"))
+    ours = hook_config()["hooks"]
+    assert got["description"] == "mine" and got["hooks"]["Stop"] == [{"hooks": [notify]}]
+    # The user's groups keep their order; ours follow them.
+    assert got["hooks"]["UserPromptSubmit"] == (
+        [{"hooks": [lint]}, {"hooks": [other_uvx]}, {"hooks": [other_mcp]}] + ours["UserPromptSubmit"])
+    # A group shared with the user's handler loses only ART's old handler.
+    assert got["hooks"]["SessionStart"] == (
+        [{"matcher": "compact", "hooks": [notify]}] + ours["SessionStart"])
+
+
+def test_art_hooks_codex_second_write_changes_nothing(tmp_path, monkeypatch, capsys):
+    from harness import entry
+
+    path = _codex_config(tmp_path, monkeypatch, {"hooks": {
+        "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "my-lint"},
+                                        _old_hook(_OLD_GIT, "user-prompt")]}]}})
+    assert entry.main(["hooks", "codex", "--write"]) == 0
+    first = path.read_bytes()
+    mtime = path.stat().st_mtime_ns
+    capsys.readouterr()
+
+    assert entry.main(["hooks", "codex", "--write"]) == 0
+    assert path.read_bytes() == first
+    assert path.stat().st_mtime_ns == mtime             # not even rewritten
+    assert "nothing changed" in capsys.readouterr().err
+
+
+def test_art_hooks_codex_drops_a_duplicate_current_entry(tmp_path, monkeypatch):
+    from harness import entry
+    from harness.hooks import hook_config
+
+    ours = hook_config()["hooks"]
+    path = _codex_config(tmp_path, monkeypatch, {"hooks": {
+        "UserPromptSubmit": ours["UserPromptSubmit"] * 2, "SessionStart": ours["SessionStart"]}})
+    assert entry.main(["hooks", "codex", "--write"]) == 0
+    assert json.loads(path.read_text(encoding="utf-8")) == hook_config()
+
+
+def test_is_art_hook_recognises_any_source_and_only_art():
+    from harness.hooks import hook_command, is_art_hook
+
+    assert is_art_hook(hook_command("user-prompt"))
+    assert is_art_hook(hook_command("session-start", _OLD_WHEEL))
+    assert is_art_hook(f'uvx --from {_OLD_GIT} art hook user-prompt')
+    assert is_art_hook(f'uvx --from {_OLD_GIT} art-mcp')
+    for command in ("my-lint", None, 3, "",
+                    "uvx --from ruff ruff check",                       # uvx, not ART
+                    "uvx --from other-pkg other hook user-prompt",
+                    'uvx --from "art-mcp" art-mcp',                      # another project's art-mcp
+                    f"art hook user-prompt",                             # no uvx --from
+                    f"echo uvx --from {_OLD_GIT}"):
+        assert not is_art_hook(command), command
 
 
 def test_art_hooks_codex_refuses_to_rewrite_a_broken_file(tmp_path, monkeypatch):
