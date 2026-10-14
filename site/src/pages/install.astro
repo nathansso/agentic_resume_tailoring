@@ -1,24 +1,304 @@
 ---
-import Base from "../layouts/Base.astro";
+import Docs from "../layouts/Docs.astro";
+import DocSection from "../components/docs/DocSection.astro";
+import CommandBlock from "../components/docs/CommandBlock.astro";
+import Callout from "../components/docs/Callout.astro";
+import { block } from "../components/docs/commands";
+
+const REPO = "https://github.com/nathansso/agentic_resume_tailoring";
+
+// One list drives both the table of contents and the section headings.
+const S = {
+  prerequisites: { id: "prerequisites", title: "Before you start" },
+  claude: { id: "claude-code", title: "Install in Claude Code" },
+  codex: { id: "codex", title: "Install in Codex" },
+  manual: { id: "other-clients", title: "Other MCP clients" },
+  verify: { id: "check-it-worked", title: "Check that it worked" },
+  optional: { id: "optional", title: "Optional extras" },
+  trouble: { id: "troubleshooting", title: "Troubleshooting" },
+};
+const toc = Object.values(S);
 ---
 
-<Base
+<Docs
   title="Install: ARTie"
-  description="How to install ARTie. Full documentation is coming soon."
+  description="Install ARTie in Claude Code or Codex in a few minutes: what you need first, the install commands, how to check it worked, and what to do if it doesn't."
+  heading="Install"
+  lede="ARTie is a plugin for your coding agent. Install it once and your agent can tailor your resume to a job posting from facts you have approved."
+  toc={toc}
 >
-  <div class="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-24">
-    <h1 class="text-4xl font-extrabold tracking-tight sm:text-5xl">Install</h1>
-    <p class="mt-4 text-lg text-muted-foreground">
-      Full install docs are coming soon. Until then, see INSTALL.md in the repository.
+  <Callout title="New to MCP?">
+    <p>
+      MCP (Model Context Protocol) is how a coding agent such as Claude Code or Codex plugs into
+      outside tools. The ARTie plugin sets up an MCP server named <code>art</code> for you, and
+      your agent calls its tools for you. You never call them yourself.
     </p>
-    <p class="mt-8">
-      <a
-        href="https://github.com/nathansso/agentic_resume_tailoring/blob/main/INSTALL.md"
-        rel="noopener"
-        class="inline-flex items-center justify-center rounded-lg border border-border bg-card px-6 py-3 font-semibold transition-colors hover:bg-elevated"
-      >
-        Read INSTALL.md on GitHub
-      </a>
+  </Callout>
+
+  <DocSection section={S.prerequisites}>
+    <p>You need three things on your computer. The first two are required.</p>
+
+    <h3>1. A coding agent: Claude Code or Codex</h3>
+    <p>
+      Follow the official install page for the one you use: <a href="https://code.claude.com/docs/en/setup" rel="noopener">Claude
+      Code</a> or <a href="https://github.com/openai/codex" rel="noopener">Codex</a>. Claude
+      Code is the recommended path. Both run in a terminal.
     </p>
-  </div>
-</Base>
+
+    <h3>2. uv</h3>
+    <p>
+      <a href="https://docs.astral.sh/uv/getting-started/installation/" rel="noopener">uv</a> is
+      a Python tool runner. ARTie runs through <code>uvx</code>, which comes with uv, so you do
+      not install Python yourself. The official page has the installer for Windows, macOS and
+      Linux. When it is done, open a new terminal and run <code>uv --version</code> to confirm.
+    </p>
+
+    <h3>3. A LaTeX engine, for PDFs</h3>
+    <p>
+      ARTie writes your resume in LaTeX and needs a LaTeX engine on your <code>PATH</code> to
+      turn it into a PDF. Either of these works: <a href="https://tectonic-typesetting.github.io" rel="noopener">tectonic</a> or <code>pdflatex</code>. <code>pdflatex</code> comes
+      with <a href="https://miktex.org" rel="noopener">MiKTeX</a> on Windows, <a href="https://www.tug.org/mactex/" rel="noopener">MacTeX</a> on
+      macOS and <a href="https://www.tug.org/texlive/" rel="noopener">TeX Live</a> on Linux.
+      Without either you still get the <code>.tex</code> file, just not the PDF, so you can
+      install this later.
+    </p>
+
+    <h3>Notes for your system</h3>
+    <dl>
+      <dt>Windows</dt>
+      <dd>
+        Claude Code runs ARTie's hooks with Git Bash, or PowerShell if Git Bash is missing.
+        Codex runs them with the session's shell, which is PowerShell by default. If an install
+        fails on a long file path, see <a href="#troubleshooting">Troubleshooting</a>.
+      </dd>
+      <dt>macOS and Linux</dt>
+      <dd>Nothing extra. Hooks run with <code>sh</code>.</dd>
+    </dl>
+  </DocSection>
+
+  <DocSection section={S.claude}>
+    <p>
+      This is the recommended route. Open a terminal, start <code>claude</code>, and enter these
+      two commands inside Claude Code:
+    </p>
+    <CommandBlock label="In Claude Code" lines={block("claude-plugin")} />
+    <p>
+      The first adds ARTie's plugin catalog. The second installs the plugin, which registers
+      the MCP server, the <code>/art:*</code> commands and the hooks in one step.
+    </p>
+    <p>
+      The first start downloads ARTie and takes longer than later ones. It needs the network
+      once, then reuses what it downloaded.
+    </p>
+  </DocSection>
+
+  <DocSection section={S.codex}>
+    <p>The same plugin works in Codex. Run these two commands in a terminal:</p>
+    <CommandBlock label="In a terminal" lines={block("codex-plugin")} />
+    <p>
+      The plugin carries ARTie's hooks, which keep your pinned preferences in front of the agent
+      and tell it what you changed by hand in the editor. Codex 0.131 and later load them, and
+      skip them until you trust them: run <code>/hooks</code> inside Codex once after
+      installing, and again after an upgrade changes them.
+    </p>
+
+    <h3>Older Codex, or Codex without the plugin</h3>
+    <p>
+      If your Codex is older than 0.131, or you register only the server (see <a href="#other-clients">Other MCP clients</a>), install the hooks into your own <code>hooks.json</code> instead:
+    </p>
+    <CommandBlock label="In a terminal" lines={block("codex-hooks")} />
+    <p>
+      Then run <code>/hooks</code> to review and trust them. With the plugin installed this
+      command adds nothing and removes ARTie's own entries from <code>hooks.json</code>, so no
+      hook runs twice. Without the plugin, run it again after you upgrade ARTie: it replaces
+      ARTie's earlier hooks and leaves your own alone.
+    </p>
+
+    <h3>Approving writes</h3>
+    <p>
+      ARTie's write tools (the ones that save to your resume library or render a file) ask for
+      approval under Codex's default policy. Approve them, or choose to always allow the <code>art</code> server.
+    </p>
+  </DocSection>
+
+  <DocSection section={S.manual}>
+    <p>
+      If you use another MCP client, or want only the tools without the plugin, register the
+      server by hand. For Claude Code:
+    </p>
+    <CommandBlock label="In a terminal" lines={block("claude-mcp-add")} />
+    <p>For Codex:</p>
+    <CommandBlock label="In a terminal" lines={block("codex-mcp-add")} />
+    <p>
+      For any other client that starts MCP servers over stdio, the server is everything after
+      the <code>--</code> in those lines: the command <code>uvx</code> with the arguments that
+      follow it.
+    </p>
+    <Callout title="What you give up">
+      <p>
+        A by-hand registration gives your agent ARTie's tools only. The <code>/art:*</code> commands,
+        the skills that teach the agent the workflow, and the hooks come with the plugin.
+      </p>
+    </Callout>
+    <p>
+      The install runs <code>art mcp</code>, which is the same server as <code>art-mcp</code>.
+      Use <code>art mcp</code>: a machine's Application Control policy may block one executable
+      and not the other.
+    </p>
+  </DocSection>
+
+  <DocSection section={S.verify}>
+    <p>
+      The first time it starts, ARTie creates its local store at <code>~/.art/art.db</code> and
+      a default profile. Your data stays in that local file; ARTie keeps no copy on a server.
+    </p>
+    <ol class="steps">
+      <li>
+        <strong>See that the server is connected.</strong> In Claude Code, type <code>/mcp</code> and
+        find the entry for <code>art</code>. In Codex, ask the agent in the next step.
+      </li>
+      <li>
+        <strong>Ask the agent for ARTie's tools.</strong> Say: "List the ART tools you can use."
+        The answer should include <code>art_briefing</code>, <code>open_job</code>, <code>execute_plan</code> and <code>render</code>.
+      </li>
+      <li>
+        <strong>Claude Code only: run a read-only command.</strong> <code>/art:prefs</code> shows
+        your saved preferences. On a fresh install it has none, and that is a good result: it
+        means the agent reached ARTie.
+      </li>
+    </ol>
+    <p>
+      You can also check from a terminal, without any agent. This prints every tool as JSON:
+    </p>
+    <CommandBlock label="In a terminal" lines={block("list-tools")} />
+    <p>If any of these fail, see <a href="#troubleshooting">Troubleshooting</a>.</p>
+  </DocSection>
+
+  <DocSection section={S.optional}>
+    <p>ARTie works fully without any of this. Add what you want, later.</p>
+
+    <h3>Extras</h3>
+    <dl>
+      <dt><code>[ui]</code></dt>
+      <dd>
+        <code>art ui</code>, a local editor where you adjust a tailored resume by hand. The
+        plugin's install already includes it.
+      </dd>
+      <dt><code>[pdf]</code></dt>
+      <dd>Document readers (docling, pypdf, python-docx).</dd>
+      <dt><code>[embed]</code></dt>
+      <dd>Sentence-transformers for semantic matching.</dd>
+    </dl>
+    <p>
+      The walkthrough on the <a href="/usage">Usage page</a> needs none of them. The default
+      install is deliberately light: no torch, no model clients.
+    </p>
+
+    <h3>The local editor: art ui</h3>
+    <p>
+      The release ships with the editor built in, so you need no checkout, Node or <code>npm</code>.
+      Fill in the job's id (your agent can tell you, or run <code>/art:open</code> in Claude
+      Code and it prints this line for you):
+    </p>
+    <CommandBlock label="In a terminal" lines={block("art-ui")} />
+    <p>
+      It opens at <code>http://127.0.0.1:8765/</code>, on your machine only. Anything you save
+      there comes back to your agent on your next message.
+    </p>
+
+    <h3>TypeSafe Jev key</h3>
+    <p>
+      ARTie can ask <a href="https://typesafe.ai/blog/introducing-system-one-models-and-jev" rel="noopener">TypeSafe's
+      Jev</a> a few narrow yes/no and multiple-choice questions: does a reworded bullet say more
+      than its evidence supports, does a bullet touch a topic you banned, which of your saved
+      bullets fits a job. Jev never writes resume text.
+    </p>
+    <p>
+      It needs a TypeSafe API key, and <strong>everything works without one</strong>. With no
+      key, each question falls back to a plain rule (word overlap, a literal term match, or your
+      agent asking you), and no safety check is skipped. To use a key, set it in the environment
+      Claude Code or Codex starts from, for example in your shell profile:
+    </p>
+    <CommandBlock label="Shell profile (macOS, Linux, Git Bash)" lines={block("typesafe-key")} />
+    <p>
+      On Windows, set it as a user environment variable named <code>TYPESAFE_API_KEY</code>, the
+      same way as <code>UV_CACHE_DIR</code> under <a href="#troubleshooting">Troubleshooting</a>.
+      Then restart your agent.
+    </p>
+    <p>
+      The key is never logged or stored in the database. When a key is set and an answer is not
+      already cached, a small piece of text goes to <code>api.typesafe.ai</code>: the bullet or
+      message in question and the posting requirements it is checked against, never your whole
+      resume or the whole posting. To be certain nothing is sent, leave the key unset or set <code>ART_JEV_MODE=off</code>.
+      To see whether ARTie can see a key, run the check command from above with <code>art jev
+      status</code> in place of <code>art --list</code>.
+    </p>
+    <p>
+      The full list of what is sent is in <a href={`${REPO}/blob/main/INSTALL.md`} rel="noopener">INSTALL.md</a>.
+    </p>
+  </DocSection>
+
+  <DocSection section={S.trouble}>
+    <h3>The first start is slow</h3>
+    <p>
+      The first start downloads the release and builds its environment. That needs the network
+      and takes a while. After that, uv keeps both in its cache. ARTie's hooks do nothing until
+      the server has started once, so the first message you send may get no hook output and the
+      next one will.
+    </p>
+
+    <h3>It fails to start when you are offline</h3>
+    <p>
+      uv re-checks its cached answers a few minutes after they were made. With the network on,
+      that costs a second or two. With it off, a start after the cache has aged fails once uv
+      gives up retrying, about 15 seconds. There are two fixes, both using what is already
+      cached.
+    </p>
+    <p>
+      Set this in the environment Claude Code or Codex starts from. uv then never touches the
+      network and uses the cache as it is (after one earlier online start):
+    </p>
+    <CommandBlock label="Environment variable" lines={block("uv-offline")} />
+    <p>Or install ARTie as a uv tool once, so uvx stops re-resolving it:</p>
+    <CommandBlock label="In a terminal" lines={block("uv-tool-install")} />
+    <p>Upgrade it later by installing the next release the same way.</p>
+
+    <h3>Windows: the install fails on a long path</h3>
+    <p>
+      uv's default cache folder on Windows can be nested deep enough to break the install. Point
+      uv at a short one before you start Claude Code or Codex. In PowerShell:
+    </p>
+    <CommandBlock label="PowerShell" lines={block("uv-cache-dir")} />
+    <p>
+      Programs read it when they start, so open a new terminal and start your agent again.
+    </p>
+
+    <h3>Windows: Application Control blocks an executable</h3>
+    <p>
+      If a policy on your machine blocks <code>art-mcp.exe</code>, the plugin is unaffected,
+      because it runs <code>art mcp</code>. If you registered the server by hand, use <code>art
+      mcp</code> as in <a href="#other-clients">Other MCP clients</a>.
+    </p>
+
+    <h3>Codex hooks do nothing on Windows</h3>
+    <p>
+      The hook line needs a PowerShell or bash session shell. If Codex has none and falls back
+      to <code>cmd.exe</code>, <code>;</code> is not a separator there and the hook exits
+      without doing anything. Use a PowerShell or bash session.
+    </p>
+
+    <h3>You get a .tex file but no PDF</h3>
+    <p>
+      ARTie found no LaTeX engine. Install tectonic or <code>pdflatex</code> (see <a href="#prerequisites">Before
+      you start</a>), make sure it is on your <code>PATH</code>, and ask your agent to render
+      again.
+    </p>
+
+    <Callout title="Still stuck?">
+      <p>
+        Open an issue on <a href={`${REPO}/issues`} rel="noopener">GitHub</a> with the command
+        you ran and what it printed.
+      </p>
+    </Callout>
+  </DocSection>
+</Docs>

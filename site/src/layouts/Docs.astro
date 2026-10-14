@@ -1,0 +1,180 @@
+---
+import Base from "./Base.astro";
+
+interface Props {
+  title: string;
+  description: string;
+  /** The page's h1. */
+  heading: string;
+  /** One or two sentences under the h1. */
+  lede: string;
+  /** The page's sections, in order: also the table of contents. */
+  toc: { id: string; title: string }[];
+}
+
+const { title, description, heading, lede, toc } = Astro.props;
+---
+
+<Base title={title} description={description}>
+  <div class="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-14 lg:grid lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-12">
+    <aside class="min-w-0 lg:order-first">
+      <!-- Phone and tablet: a collapsible list above the page. -->
+      <details class="toc-mobile mb-8 rounded-lg border border-border bg-card px-4 py-2 text-sm lg:hidden">
+        <summary class="cursor-pointer py-1 font-semibold">On this page</summary>
+        <ol class="mt-2 space-y-1 pb-2">
+          {toc.map((item) => (
+            <li><a href={`#${item.id}`} class="block py-1 text-muted-foreground hover:text-foreground">{item.title}</a></li>
+          ))}
+        </ol>
+      </details>
+
+      <!-- Desktop: a sticky list beside the page. -->
+      <nav aria-label="On this page" class="sticky top-24 hidden text-sm lg:block">
+        <p class="mb-3 font-semibold">On this page</p>
+        <ol class="space-y-1 border-l border-border">
+          {toc.map((item) => (
+            <li>
+              <a
+                href={`#${item.id}`}
+                data-toc-link
+                class="-ml-px block border-l border-transparent py-1 pl-3 text-muted-foreground transition-colors hover:text-foreground aria-[current=true]:border-accent aria-[current=true]:font-semibold aria-[current=true]:text-foreground"
+              >
+                {item.title}
+              </a>
+            </li>
+          ))}
+        </ol>
+      </nav>
+    </aside>
+
+    <article class="doc min-w-0 max-w-3xl">
+      <h1 class="text-4xl font-extrabold tracking-tight sm:text-5xl">{heading}</h1>
+      <p class="mt-4 text-lg text-muted-foreground">{lede}</p>
+      <slot />
+    </article>
+  </div>
+
+  <script>
+    // Mark the section being read in the desktop table of contents.
+    const links = Array.from(document.querySelectorAll<HTMLAnchorElement>("a[data-toc-link]"));
+    const byId = new Map(links.map((a) => [a.hash.slice(1), a]));
+    const headings = [...byId.keys()]
+      .map((id) => document.getElementById(id))
+      .filter((el): el is HTMLElement => el !== null);
+
+    if (headings.length && "IntersectionObserver" in window) {
+      const mark = (id: string) =>
+        links.forEach((a) => a.setAttribute("aria-current", String(a.hash.slice(1) === id)));
+      const observer = new IntersectionObserver(
+        (entries) => {
+          const visible = entries.filter((e) => e.isIntersecting);
+          if (visible.length) {
+            visible.sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+            mark(visible[0].target.id);
+          }
+        },
+        { rootMargin: "-80px 0px -65% 0px" },
+      );
+      headings.forEach((h) => observer.observe(h));
+    }
+  </script>
+</Base>
+
+<style is:global>
+  /* Prose for the docs pages. Scoped by the `.doc` class on the article, since
+     the content arrives through slots and Astro's per-component scoping would
+     not reach it. Colors are the site's tokens, so light and dark both work. */
+  .doc h2 {
+    margin-top: 3rem;
+    padding-top: 0.25rem;
+    font-size: 1.5rem;
+    line-height: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    scroll-margin-top: 6rem;
+  }
+  .doc h3 {
+    margin-top: 1.75rem;
+    font-size: 1.05rem;
+    font-weight: 600;
+    scroll-margin-top: 6rem;
+  }
+  .doc p,
+  .doc ul,
+  .doc ol,
+  .doc dl {
+    margin-top: 0.85rem;
+  }
+  .doc ul {
+    list-style: disc;
+    padding-left: 1.25rem;
+  }
+  .doc ol.steps {
+    list-style: decimal;
+    padding-left: 1.25rem;
+  }
+  .doc li {
+    margin-top: 0.4rem;
+    padding-left: 0.15rem;
+  }
+  .doc dt {
+    margin-top: 0.85rem;
+    font-weight: 600;
+  }
+  .doc dd {
+    margin-top: 0.15rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .doc a:not([data-copy]) {
+    color: hsl(var(--accent));
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .doc a:not([data-copy]):hover {
+    text-decoration-thickness: 2px;
+  }
+  /* Inline code wraps (a long token must never widen the page); code inside a
+     command block does not, it scrolls inside the block. */
+  .doc :not(pre) > code {
+    padding: 0.1rem 0.35rem;
+    border-radius: 0.3rem;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    overflow-wrap: anywhere;
+  }
+  .doc pre code {
+    font-family: var(--font-mono);
+    white-space: pre;
+  }
+  .doc .callout > p:first-child,
+  .doc .callout-body p:first-child {
+    margin-top: 0;
+  }
+  .doc .callout-body :not(pre) > code {
+    color: hsl(var(--foreground));
+  }
+  .doc table {
+    display: block;
+    max-width: 100%;
+    margin-top: 1rem;
+    overflow-x: auto;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  .doc th,
+  .doc td {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid hsl(var(--border));
+    text-align: left;
+    vertical-align: top;
+  }
+  .doc th {
+    background: hsl(var(--card));
+    font-weight: 600;
+  }
+  .doc summary {
+    list-style-position: inside;
+  }
+</style>
