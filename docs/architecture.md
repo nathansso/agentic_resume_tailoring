@@ -1047,7 +1047,7 @@ errors carried as an `error` field. It currently holds **27 tools**, in five gro
 `harness/mcp_server.py` serves the contract over stdio and `harness/cli.py` prints one JSON
 document per call; `tests/test_harness_contract.py` holds both to identical results. The `art`
 console script (`harness/entry.py`) adds what is not a tool: `art hook` (the plugin hooks),
-`art hooks codex` (installs them for Codex), `art jev` (§8.3), `art export` and `art import`
+`art hooks codex` (installs them in Codex's `hooks.json`, the fallback for a Codex without plugin hooks), `art jev` (§8.3), `art export` and `art import`
 (§8.9), and `art ui`. A write tool returns `read_only` on a remote or Postgres store unless the
 process was started with `--allow-writes`; local SQLite is writable. `record_feedback` and
 `check_draft` are named in `harness.md` and are **not built** (#252).
@@ -1067,9 +1067,10 @@ legacy readers keep working.
 2. **Each node, in section order**, is applied to a copy and judged by
    `harness/acceptance.py::accept` on the metric vectors before and after. The rule has three
    parts: no hard gate gains a violation, no guard regresses past its tolerance, and at least
-   one target improves (a delete the user or a preference requested is exempt from the third,
-   and from the second: a guard regression on one is accepted and reported under `waived`, #279;
-   hard gates still apply). A
+   one target improves (a delete the user or a preference requested, whether of a whole item
+   (`delete`) or of whole bullets (`delete_bullet`, #289), is exempt from the third, and from the
+   second: a guard regression on one is accepted and reported under `waived`, #279; hard gates
+   still apply). A
    node that fails is reverted and the independent ones continue. There is no scalar and no
    weight; the vectors are compared metric by metric.
 3. **Finalize** checks the whole page: the preferences (including the whole-page negative-pin

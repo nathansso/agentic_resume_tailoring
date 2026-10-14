@@ -331,6 +331,139 @@ def test_art_hooks_codex_refuses_to_rewrite_a_broken_file(tmp_path, monkeypatch)
     assert (tmp_path / "hooks.json").read_text(encoding="utf-8") == "{not json"
 
 
+# ── the Codex plugin carries the hooks (#290) ────────────────────────────────
+
+def test_the_codex_plugin_bundles_the_hooks_pinned_to_this_version():
+    """Codex 0.131+ loads a plugin's hooks by default; the manifest names the file Claude Code
+    uses, so one file serves both and it pins the wheel of ART_VERSION."""
+    from harness import ART_VERSION
+    from harness.hooks import SOURCE, WHEEL_URL, hook_config, is_art_hook
+
+    manifest = _json("plugin/.codex-plugin/plugin.json")
+    declared = (PLUGIN / manifest["hooks"]).resolve()
+    assert declared == (PLUGIN / "hooks" / "hooks.json").resolve() and declared.is_file()
+    text = declared.read_text(encoding="utf-8")
+    config = json.loads(text)
+    assert config == hook_config()
+    assert SOURCE.endswith(WHEEL_URL)
+    assert f"/v{ART_VERSION}/art_mcp-{ART_VERSION}-py3-none-any.whl" in WHEEL_URL
+    assert text.count(WHEEL_URL) == 2
+    commands = [h["command"] for groups in config["hooks"].values()
+                for g in groups for h in g["hooks"]]
+    assert len(commands) == 2 and all(is_art_hook(c) for c in commands)
+    # `commandWindows` only swaps the command text on Windows; it cannot pick between
+    # PowerShell and cmd.exe, so the one line stays the only line.
+    assert "commandWindows" not in text and "command_windows" not in text
+
+
+def _install_plugin(home, hooks_config=None, enabled=True, plugin="art", market="art"):
+    """What `codex plugin add art@art` leaves in a CODEX_HOME: the config entry and the copied
+    plugin, hooks file included."""
+    from harness.hooks import hook_config
+
+    root = home / "plugins" / "cache" / market / plugin / "0.1.0"
+    (root / "hooks").mkdir(parents=True)
+    (root / "hooks" / "hooks.json").write_text(
+        json.dumps(hook_config() if hooks_config is None else hooks_config), encoding="utf-8")
+    with (home / "config.toml").open("a", encoding="utf-8") as f:
+        f.write(f'[plugins."{plugin}@{market}"]\nenabled = {"true" if enabled else "false"}\n')
+
+
+def _art_hook_lines(*configs):
+    from harness.hooks import is_art_hook
+
+    return [h["command"] for c in configs for groups in c.get("hooks", {}).values()
+            for g in groups for h in g["hooks"] if is_art_hook(h["command"])]
+
+
+def test_write_with_the_plugin_installed_removes_its_own_hooks_not_the_users(
+        tmp_path, monkeypatch, capsys):
+    """The duplicate case: `--write` was run before the plugin was installed. Each ART hook must
+    fire once, so the plugin's stay and the file's go; everything else in the file is kept."""
+    from harness import entry
+    from harness.hooks import hook_config
+
+    mine = {"hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": "my-lint"}]}],
+                      "Stop": [{"hooks": [{"type": "command", "command": "notify"}]}]}}
+    path = _codex_config(tmp_path, monkeypatch, mine)
+    assert entry.main(["hooks", "codex", "--write"]) == 0          # no plugin yet: file install
+    written = json.loads(path.read_text(encoding="utf-8"))
+    assert len(_art_hook_lines(written)) == 2
+
+    _install_plugin(tmp_path)
+    monkeypatch.setattr("harness.hooks.codex_version", lambda: (0, 149, 0))
+    capsys.readouterr()
+    assert entry.main(["hooks", "codex", "--write"]) == 0
+    after = json.loads(path.read_text(encoding="utf-8"))
+    assert after == mine                                            # only the user's remain
+    plugin_hooks = json.loads((tmp_path / "plugins/cache/art/art/0.1.0/hooks/hooks.json")
+                              .read_text(encoding="utf-8"))
+    assert plugin_hooks == hook_config()
+    assert len(_art_hook_lines(plugin_hooks, after)) == 2           # one of each, in all
+    err = capsys.readouterr().err
+    assert "art@art" in err and "2 duplicate" in err
+
+    before = path.read_bytes()
+    assert entry.main(["hooks", "codex", "--write"]) == 0          # a second run changes nothing
+    assert path.read_bytes() == before
+
+
+def test_write_with_the_plugin_installed_creates_nothing(tmp_path, monkeypatch, capsys):
+    from harness import entry
+
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    monkeypatch.setattr("harness.hooks.codex_version", lambda: None)   # unknown: assume current
+    _install_plugin(tmp_path)
+    assert entry.main(["hooks", "codex", "--write"]) == 0
+    assert not (tmp_path / "hooks.json").exists()
+    assert "nothing changed" in capsys.readouterr().err
+    # Printing says the same instead of inviting a second install.
+    assert entry.main(["hooks", "codex"]) == 0
+    assert "already carries" in capsys.readouterr().err
+
+
+def test_write_still_installs_when_the_plugin_does_not_supply_the_hooks(tmp_path, monkeypatch):
+    """The file install stays the path for a Codex without plugin hooks, a disabled plugin, an
+    unrelated plugin called `art`, and `--standalone`."""
+    from harness import entry
+    from harness.hooks import hook_config
+
+    def written(*extra):
+        path = tmp_path / "hooks.json"
+        path.unlink(missing_ok=True)
+        assert entry.main(["hooks", "codex", "--write", *extra]) == 0
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    monkeypatch.setattr("harness.hooks.codex_version", lambda: (0, 149, 0))
+
+    _install_plugin(tmp_path, enabled=False)                        # installed but disabled
+    assert written() == hook_config()
+    (tmp_path / "config.toml").unlink()
+
+    _install_plugin(tmp_path, hooks_config={"hooks": {"Stop": [{"hooks": [
+        {"type": "command", "command": "other-plugin-hook"}]}]}}, market="other")
+    assert written() == hook_config()                               # a different plugin's hooks
+    (tmp_path / "config.toml").unlink()
+
+    _install_plugin(tmp_path, market="art2")
+    assert written("--standalone") == hook_config()                 # asked for explicitly
+    assert written() is None                                        # without it, nothing is written
+
+    monkeypatch.setattr("harness.hooks.codex_version", lambda: (0, 125, 0))
+    assert written() == hook_config()                               # a Codex too old for them
+
+
+def test_plugin_detection_ignores_a_missing_or_broken_config(tmp_path):
+    from harness.hooks import plugin_with_art_hooks
+
+    assert plugin_with_art_hooks(tmp_path) is None
+    (tmp_path / "config.toml").write_text("[plugins\n", encoding="utf-8")
+    assert plugin_with_art_hooks(tmp_path) is None
+    (tmp_path / "config.toml").write_text('[plugins."art@art"]\nenabled = true\n', encoding="utf-8")
+    assert plugin_with_art_hooks(tmp_path) is None                  # enabled, but no cache copy
+
+
 # ── a pinned, offline-safe source (#256) ─────────────────────────────────────
 
 def _server_source():

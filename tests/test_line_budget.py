@@ -224,6 +224,19 @@ def test_hint_order_follows_the_formatters_trim_ladder():
     assert ("drop_item", "proj:project 3") in got
 
 
+def test_every_hint_names_the_plan_op_that_carries_it_out():
+    """A `cut_bullet` is a `delete_bullet` and a `drop_item` a `delete` (#289), never a `revise`:
+    the op is what the executor treats as a requested delete."""
+    from harness.program import PLAN_OPS
+
+    content = copy.deepcopy(_OVERFLOW_CONTENT)
+    content["projects"][0]["bullets"] = content["projects"][0]["bullets"][:3]
+    hints = page_line_budget(content, _lines_for(content, n=2), budget=0)["cut_hints"]
+    assert {h["action"] for h in hints} == {"cut_bullet", "drop_item"}
+    assert {h["action"]: h["op"] for h in hints} == {"cut_bullet": "delete_bullet", "drop_item": "delete"}
+    assert {h["op"] for h in hints} <= set(PLAN_OPS)
+
+
 def test_missing_line_count_is_an_error():
     with pytest.raises(ValueError, match="no rendered line count"):
         page_line_budget(_JAKE_CONTENT, {})
