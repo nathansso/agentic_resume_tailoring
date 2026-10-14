@@ -10,6 +10,9 @@ has a role:
 - **Guards** (`stuffing`, `verb_entropy`, `mtld`, `duplication`,
   `variant_drift`): may not regress by more than a tolerance. A node may
   tighten a tolerance, never loosen one (`harness/program.py` enforces that).
+  A *requested delete* (#279) is exempt: removing text cannot fabricate and
+  lowers MTLD and the other diversity measures almost by definition, so a guard
+  regression there is expected. The regressions are still reported, under `waived`.
   `variant_drift` (#229) is absolute, not relative to the parent: how far a
   bullet that names an approved variant has moved from it.
 - **Targets** (`coverage`, `relevance_density`, `semantic_coverage`): an action
@@ -364,9 +367,14 @@ def accept(before: Dict, after: Dict, *, improves: Iterable[str] = (),
 
     1. No hard gate gains a violation.
     2. No guard regresses by more than its tolerance.
-    3. At least one of `improves` (every target when empty) strictly improves,
-       or the action is `requested` (a delete a preference or the user asked
-       for). `semantic_coverage` is a target only when both vectors carry it.
+    3. At least one of `improves` (every target when empty) strictly improves.
+       `semantic_coverage` is a target only when both vectors carry it.
+
+    `requested` marks a *delete* a preference or the user asked for (the caller
+    passes it for deletes only). It waives rules 2 and 3 but never rule 1: a delete
+    cannot fabricate, and a guard regression on one (MTLD above all) is expected, not
+    a quality failure (#279). A waived regression is accepted but still reported, in
+    `guard_regressions` and `waived`, and `reason` says so.
     """
     tol = {**DEFAULT_TOLERANCES, **(tolerances or {})}
     new_violations = {}
@@ -394,16 +402,22 @@ def accept(before: Dict, after: Dict, *, improves: Iterable[str] = (),
     deltas = {t: _r((after["targets"].get(t) or 0.0) - (before["targets"].get(t) or 0.0))
               for t in live}
 
+    waived = {}
     if new_violations:
         reason = "hard_gate: " + "; ".join(f"{g} {v}" for g, v in new_violations.items())
+    elif regressed and requested:
+        waived = dict(regressed)
+        reason = ("guard_waived: requested delete; "
+                  + ", ".join(f"{g} regressed {v}" for g, v in regressed.items()))
     elif regressed:
         reason = "guard: " + ", ".join(f"{g} regressed {v}" for g, v in regressed.items())
     elif not improved and not requested:
         reason = "no_target_improved: " + ", ".join(wanted)
     else:
         reason = None
-    return {"accepted": reason is None, "reason": reason, "improved": improved,
-            "deltas": deltas, "gate_violations": new_violations, "guard_regressions": regressed}
+    return {"accepted": reason is None or bool(waived), "reason": reason, "improved": improved,
+            "deltas": deltas, "gate_violations": new_violations, "guard_regressions": regressed,
+            "waived": waived}
 
 
 __all__ = ["Context", "DEFAULT_TOLERANCES", "GATES", "GUARDS", "OPTIONAL_TARGETS", "TARGETS", "accept",

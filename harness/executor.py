@@ -735,11 +735,14 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
             # Compliance with a hard preference is itself a hard gate, which
             # outranks guards: finalize would refuse the page without this
             # delete, so a guard must not be able to veto it.
-            verdict = {**verdict, "accepted": True,
+            verdict = {**verdict, "accepted": True, "waived": verdict["guard_regressions"],
                        "reason": f"hard_preference_override: {verdict['reason']}"}
         row.update(status="accepted" if verdict["accepted"] else "reverted",
                    reason=verdict["reason"], improved=verdict["improved"],
                    deltas=verdict["deltas"])
+        if verdict["waived"]:
+            # A requested delete accepted despite a guard regression (#279): shown, not hidden.
+            row["waived"] = verdict["waived"]
         if ctx.coverage_checker:
             # What this node did to the requirements' semantic coverage (#126), compactly.
             detail = coverage_node_detail(ctx.coverage_checker(working),
