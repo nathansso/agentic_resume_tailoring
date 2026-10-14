@@ -667,6 +667,11 @@ class NodeResult(_Model):
     reason: Optional[str] = None
     improved: List[str] = Field(default_factory=list)
     deltas: Dict[str, Optional[float]] = Field(default_factory=dict)
+    waived: Optional[Dict[str, float]] = Field(
+        None, description="Guard regressions (guard -> how far it moved) that did not veto an "
+                          "accepted requested delete (#279). Guards never veto a delete the user "
+                          "or a preference asked for; hard gates still do. Absent when none. "
+                          "Tell the user what the cut cost.")
     review: Optional[List[Dict[str, Any]]] = Field(
         None, description="Bullets Jev could not clearly call supported by their cited "
                           "evidence (item, bullet, label, p), and bullets or item fields it "

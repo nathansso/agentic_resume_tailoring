@@ -32,6 +32,47 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 - The optional route-warming fixture was skipped. Nothing now depends on the first request being fast, so it would only hide cost.
 - `TestClient` buffers the whole response, so the stream cannot be read incrementally from the test; the hooks on the router's module-level functions stand in for "read the first event".
 
+## Issue 283 — `art hooks codex --write` replaces ART's hooks from earlier installs
+**Status:** complete | **Tests:** 2625 pass on SQLite (5 new), 24 skipped, 0 fail. The Postgres leg was not run locally; CI runs it
+
+`art hooks codex --write` only appended. A user who had installed the hooks from the old `git+` source (before #256) ended up with both sets in `hooks.json`; the old ones re-check the remote on every call and fail silently offline. It now recognizes ART's own earlier entries and replaces them.
+
+### What shipped
+
+- **`harness/hooks.py::is_art_hook`.** A hook line is ART's when it runs `art hook user-prompt` or `art hook session-start` through `uvx --from`, whatever the source: a `git+https://github.com/nathansso/agentic_resume_tailoring` source with or without a ref, or a release wheel of any version. `art-mcp` / `art mcp` run through `uvx --from` counts only when the line names this repo. Everything else is the user's.
+- **`merge_hooks` replaces instead of appending.** For each event ART installs (`UserPromptSubmit`, `SessionStart`), ART entries that are not the current ones (matched by group matcher and command), and duplicates of a current one, are removed; the current entries are added. Other hooks keep their order and are never edited. A group that mixes the user's handler with an old ART handler loses only the ART handler. It now returns `(groups added, [(event, command) removed])`.
+- **`art hooks codex --write` output.** It prints each replaced command and a count, and writes the file only when something changed, so a second run leaves the file byte for byte unchanged (mtime too) and says "nothing changed". File format and location are as before.
+- **Docs.** `integrations/codex/README.md` and `INSTALL.md` say to rerun the command after an upgrade, and the README states the Windows hook-shell requirement below.
+- **Tests (`tests/test_plugin.py`, 5 new, 1 tightened).** Old git, git-with-ref, `.git@tag`, older-wheel and unpinned entries all end up replaced by only the pinned ones; non-ART hooks (including a `uvx --from` of another project and another project's `art-mcp`) and their order survive; a second write is a no-op by bytes; a duplicate current entry is dropped; `is_art_hook` accepts any ART source and rejects non-ART lines. The existing idempotence test now compares bytes.
+
+### Deviations from spec
+
+- **The Codex hook shell on Windows was checked in Codex's source (`openai/codex`, `codex-rs/hooks` and `codex-rs/core`), not by running a hook.** Codex builds a hook's process from the session shell. On Windows the default session shell is PowerShell (`powershell -NoProfile -Command <line>`), where the hook line runs as written, `; exit 0` included. Only when Codex has no session shell does it fall back to `%COMSPEC%` (`cmd.exe /C`), where `;` is not a separator: `art hook` is handed `user-prompt;`, reports an unknown event and exits 0, so the hook does nothing (and a uvx failure there is not masked by `; exit 0`). The line was not changed to cover `cmd.exe`: no one line runs in both `cmd.exe` and PowerShell with a `; exit 0` equivalent. The requirement is documented in the Codex README. A live Codex run was not done, since it needs the user's Codex auth.
+- **Codex has a Windows-only `commandWindows` handler field** (per its hooks docs). It cannot pick between `cmd.exe` and PowerShell, so it is not used. Those docs also say hooks can be bundled with plugins, which contradicts the "plugins can't carry hooks" note in `docs/harness.md` § 15 and #203; not changed here.
+- **An ART entry under a different `--from` source is replaced too.** A line like `uvx --from /local/checkout art hook user-prompt` is ART's by name, so `--write` replaces it with the pinned one. Rerun with `--from` to keep a local source.
+- **Hooks in the other Codex file are not touched.** ART hooks in both `~/.codex/hooks.json` and a project's `.codex/hooks.json` both run; `--write` handles only the file it writes.
+- **No backup is made.** The replaced commands are printed instead.
+- **The Postgres leg was not run locally** (CI runs it).
+
+## Issue 279 — A requested delete is not vetoed by a guard
+**Status:** complete | **Tests:** 2624 pass on SQLite (4 new), 24 skipped, 0 fail
+
+A delete the user or a preference asked for (`because: "user:..."` / `"pref:..."`) is now judged on the hard gates alone. Before, `accept(..., requested=True)` waived only rule 3 (a target must improve), so on an over-budget profile every `drop_item` that `cut_hints` recommended came back `reverted` with `guard: mtld regressed 0.11`-`0.25`, the budget stayed violated and nothing committed. Removing text lowers MTLD almost by definition, and a delete cannot fabricate, so the regression is expected, not a quality failure. The rule now mirrors the existing `hard_preference_override` for suppress deletes.
+
+### What shipped
+
+- **`harness/acceptance.py::accept`:** with `requested=True`, guard regressions no longer veto. A requested delete that regresses a guard is accepted with `reason: "guard_waived: requested delete; mtld regressed 0.2073"`, and the result gains `waived` (guard to how far it moved) beside the unchanged `guard_regressions`. A new hard-gate violation still refuses it, and then `waived` is empty. No tolerance in `harness/policy.json` changed.
+- **Only deletes get it.** The executor already passed `requested` for `op == "delete"` with a `because` only (the schema lets `because` sit on any op), so a `revise` or `replace` carrying `because` faces every guard as before.
+- **Visible to the host.** The executor puts `waived` on the node result (added to `NodeResult` in `harness/contract.py`; the contract forbids extra fields), including for the existing suppress-preference override, so a guard regression there is no longer silent either.
+- **Docs.** `docs/harness.md` § 5 states the rule and the guard table's MTLD row notes the waiver; `docs/architecture.md` (the executor walkthrough) and the `because` field description say the same.
+- **Tests (`tests/test_executor.py`):** a requested delete that only regresses MTLD is accepted and reports it; a requested delete that breaks a hard gate is still refused even with a guard regression; a `revise` with `because` that stuffs terms is still reverted; and an end-to-end run on an over-budget profile where `cut_hints` are all `drop_item`s, the host sends them as requested deletes, an MTLD regression is waived on at least one, and the plan commits with the budget met. The first and last fail on the previous code.
+
+### Deviations from spec
+
+- **Option 1 of the issue (guards do not veto a requested delete), not the other two.** MTLD is still evaluated on deletes, and `cut_hints` are unchanged; they and the acceptance rule now agree because the rule accepts what they recommend.
+- **All guards are waived, not MTLD alone.** A delete can also move `verb_entropy` or `duplication` (the remaining bullets may share leading verbs); the same argument applies, so the waiver is by role, not by metric.
+- **`cut_hints` of the `cut_bullet` kind are not deletes.** A host still sends those as `revise` nodes, which keep facing every guard; this issue does not change that.
+
 ---
 
 ## Issue 272 — Landing site scaffold (Astro + Tailwind) on Vercel

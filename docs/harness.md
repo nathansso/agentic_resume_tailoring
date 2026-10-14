@@ -170,7 +170,7 @@ And pooling hid real results: the per-stratum spread in #172 vanished when poole
 | Term stuffing (bullet-level term DF) | Yes, upward | Guard | `agents/redundancy.py` (#122) |
 | Semantic duplication | Yes, upward | Guard | `agents/redundancy.py` (the metric). The shipped guard is token-set Jaccard in `harness/acceptance.py`; the Jev or embedding reading is planned (§ 4) |
 | Leading-verb entropy | No | Guard | `agents/redundancy.py` |
-| MTLD (dilution) | No | Guard | `agents/redundancy.py` |
+| MTLD (dilution) | No | Guard; waived for a requested delete (#279) | `agents/redundancy.py` |
 | Edit distance from the approved variant (`variant_drift`) | Yes | Guard, default tolerance 0.35, judged on the node's own bullets rather than against the parent | `harness/acceptance.py`, #229 |
 | Supportable weighted coverage | Yes, but flat on unsupported terms | Target | `agents/keyword_weights.py` (#125) |
 | Semantic requirement coverage | Only in what a bullet evidences | Target | `harness/decisions/coverage.py`, Jev, #126 |
@@ -182,9 +182,20 @@ And pooling hid real results: the per-stratum spread in #172 vanished when poole
 **The acceptance rule (#113).** An action commits if and only if all of the following hold:
 
 1. It passes every hard gate.
-2. No guard regresses by more than its tolerance.
+2. No guard regresses by more than its tolerance, unless it is a requested delete (below).
 3. It improves at least one target, or it is a delete or reorder that the user or a
    preference requested.
+
+**A requested delete is not vetoed by a guard (#279).** A delete carrying `because: "user:..."`
+or `"pref:..."` faces every hard gate and no guard. A delete cannot fabricate, and removing text
+lowers MTLD (and can move the other diversity guards) almost by definition, so a guard
+regression there is expected, not a quality failure; the relative MTLD tolerance would
+otherwise revert the very `drop_item`s `cut_hints` recommend and leave the budget unmet. It
+mirrors the hard-preference override of a suppress delete. Only a delete gets the waiver: a
+`revise` or `replace` writes text and faces every guard, whatever its `because`. The regressions
+are never hidden: the node is `accepted` with `reason: "guard_waived: requested delete; ..."`,
+`guard_regressions` and a `waived` map in its result, so the host can tell the user what the cut
+cost. No tolerance changes; a delete with no `because` is judged as before.
 
 A stuffing edit fails the target test (unsupported terms weigh zero) or the stuffing guard.
 A preference-driven delete passes, and relevance density usually rises. Tolerances today are

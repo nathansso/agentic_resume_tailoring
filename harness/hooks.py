@@ -35,7 +35,7 @@ import logging
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 from uuid import UUID
 
 from harness import ART_VERSION
@@ -258,7 +258,9 @@ _WIRING = (("UserPromptSubmit", None, "user-prompt"), ("SessionStart", "compact"
 
 def hook_command(arg: str, source: str = SOURCE) -> str:
     """The shell line for one hook. It must run unchanged in sh, Git Bash and PowerShell
-    (the shells Claude Code uses), so it is plain words, double quotes and `;`.
+    (the shells Claude Code uses, and the ones Codex runs hooks in: its session shell, which
+    is PowerShell on Windows), so it is plain words, double quotes and `;`. `cmd.exe`, where
+    Codex falls back only with no session shell, is not covered (#283).
 
     `--offline` makes uvx use only what the MCP server's start already cached: a hook
     never waits on the network (an online start re-checks the package indexes and takes
@@ -280,20 +282,63 @@ def hook_config(source: str = SOURCE) -> Dict[str, Any]:
     return {"hooks": hooks}
 
 
-def merge_hooks(existing: Dict[str, Any], new: Dict[str, Any]) -> int:
-    """Add `new`'s hook groups to `existing` in place, skipping any command
-    already configured. Never removes or edits the user's own hooks. Returns
-    how many groups were added."""
+_UVX = re.compile(r"\buvx\b")
+_FROM = re.compile(r"--from\b")
+_HOOK_CALL = re.compile(r"\bart hook (?:%s)\b" % "|".join(re.escape(e) for e in EVENTS))
+_SERVER_CALL = re.compile(r"(?:^|\s)(?:art-mcp|art mcp)(?:\s|$)")
+
+
+def is_art_hook(command: Any) -> bool:
+    """Whether `command` is one of ART's own hook lines, whichever source an earlier install
+    pointed `uvx --from` at: a git source with or without a ref, or a release wheel of any
+    version (#283). `art hook <event>` run through `uvx --from` is ART's by its name alone; the
+    server entry point `art-mcp` / `art mcp` counts only when the line names this repo, since
+    other projects ship an `art-mcp`. Anything else is the user's."""
+    if not isinstance(command, str) or not _UVX.search(command) or not _FROM.search(command):
+        return False
+    if _HOOK_CALL.search(command):
+        return True
+    return REPO in command and bool(_SERVER_CALL.search(command))
+
+
+def merge_hooks(existing: Dict[str, Any], new: Dict[str, Any]) -> Tuple[int, List[Tuple[str, str]]]:
+    """Make `existing` carry `new`'s hook groups, in place.
+
+    ART's own entries from an earlier install (`is_art_hook`) that are not in `new` are removed
+    rather than left beside the new ones, where they re-check a remote on every call and fail
+    silently offline (#283); so is a duplicate of a current entry. Entries that are not ART's
+    keep their order and are never edited. An entry is "the same" by (group matcher, command).
+    Returns (groups added, [(event, command) removed])."""
     added = 0
+    removed: List[Tuple[str, str]] = []
     table = existing.setdefault("hooks", {})
     for event, groups in new["hooks"].items():
-        have = {h.get("command") for g in table.get(event, []) for h in g.get("hooks", [])}
+        wanted = {(g.get("matcher"), h["command"]) for g in groups for h in g["hooks"]}
+        kept: set = set()
+        survivors: List[Dict[str, Any]] = []
+        for group in table.get(event, []):
+            handlers = group.get("hooks", [])
+            keep = []
+            for h in handlers:
+                key = (group.get("matcher"), h.get("command"))
+                if is_art_hook(h.get("command")):
+                    if key not in wanted or key in kept:
+                        removed.append((event, h["command"]))
+                        continue
+                    kept.add(key)
+                keep.append(h)
+            if len(keep) == len(handlers):
+                survivors.append(group)
+            elif keep:
+                survivors.append({**group, "hooks": keep})   # a mixed group keeps the user's handlers
+        if event in table:
+            table[event] = survivors
         for group in groups:
-            if all(h["command"] in have for h in group["hooks"]):
+            if all((group.get("matcher"), h["command"]) in kept for h in group["hooks"]):
                 continue
             table.setdefault(event, []).append(group)
             added += 1
-    return added
+    return added, removed
 
 
 def codex_hooks_path(project: bool = False) -> Path:
@@ -327,10 +372,15 @@ def codex_main(argv: Sequence[str]) -> int:
         except ValueError:
             print(f"art hooks: {path} is not valid JSON; not touching it.", file=sys.stderr)
             return 2
-    added = merge_hooks(existing, config)
-    if added:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
-    print(f"art hooks: {added} hook group(s) added to {path}. In Codex, run /hooks to review "
-          "and trust them.", file=sys.stderr)
+    added, removed = merge_hooks(existing, config)
+    if not (added or removed):
+        print(f"art hooks: {path} already has the ART hooks; nothing changed.", file=sys.stderr)
+        return 0
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+    for event, command in removed:
+        print(f"art hooks: replaced {event} hook from an earlier install: {command}",
+              file=sys.stderr)
+    print(f"art hooks: {added} hook group(s) added, {len(removed)} replaced, in {path}. In Codex, "
+          "run /hooks to review and trust them.", file=sys.stderr)
     return 0
