@@ -9,9 +9,14 @@ workflow (`.github/workflows/site.yml`) is what actually builds it.
 """
 
 import json
+import os
 import re
+import shutil
+import subprocess
 import tomllib
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 SITE = ROOT / "site"
@@ -59,11 +64,60 @@ def test_site_has_a_build_script_and_static_output():
 # ---------------------------------------------------------------- vercel.json
 
 
-def test_vercel_config_skips_builds_that_do_not_touch_site():
+def test_vercel_config_is_astro():
     config = json.loads((SITE / "vercel.json").read_text(encoding="utf-8"))
     assert config["framework"] == "astro"
-    # The Vercel project's root directory is site/, so `.` is site/.
-    assert config["ignoreCommand"] == "git diff --quiet HEAD^ HEAD -- ."
+
+
+def _git(cwd, *args):
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
+
+
+def _ignore_step(cwd, previous_sha):
+    """Run vercel.json's ignoreCommand the way Vercel does: from the root
+    directory (site/), under sh. Exit 0 skips the build; anything else builds."""
+    command = json.loads((SITE / "vercel.json").read_text(encoding="utf-8"))["ignoreCommand"]
+    env = {**os.environ, "VERCEL_GIT_PREVIOUS_SHA": previous_sha}
+    return subprocess.run([SH, "-c", command], cwd=cwd, env=env, capture_output=True).returncode
+
+
+SH = shutil.which("sh")
+
+
+@pytest.mark.skipif(SH is None or shutil.which("git") is None, reason="needs sh and git")
+def test_vercel_ignore_step_compares_against_the_last_deploy(tmp_path):
+    # The first version compared HEAD^ with HEAD, so the project's first
+    # deploy was cancelled whenever main's latest commit didn't touch site/.
+    repo = tmp_path / "repo"
+    (repo / "site").mkdir(parents=True)
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "t@example.com")
+    _git(repo, "config", "user.name", "t")
+    (repo / "site" / "index.html").write_text("v1")
+    (repo / "other.py").write_text("v1")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "one")
+    deployed = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, check=True,
+                              capture_output=True, text=True).stdout.strip()
+    site = repo / "site"
+
+    # No previous deploy (a new project or branch): build.
+    assert _ignore_step(site, "") != 0
+
+    # Only files outside site/ changed since the last deploy: skip.
+    (repo / "other.py").write_text("v2")
+    _git(repo, "commit", "-qam", "outside")
+    assert _ignore_step(site, deployed) == 0
+
+    # site/ changed since the last deploy, even several commits back: build.
+    (site / "index.html").write_text("v2")
+    _git(repo, "commit", "-qam", "site")
+    (repo / "other.py").write_text("v3")
+    _git(repo, "commit", "-qam", "outside again")
+    assert _ignore_step(site, deployed) != 0
+
+    # The last deploy's commit isn't in Vercel's shallow clone: build.
+    assert _ignore_step(site, "0" * 40) != 0
 
 
 # ----------------------------------------------------------------- the theme

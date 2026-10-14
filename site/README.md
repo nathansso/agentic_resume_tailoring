@@ -28,6 +28,6 @@ Hosting is Vercel (Hobby plan) with the Git integration. One-time setup in the V
 4. Set **Node.js Version** to 24.x (Project Settings, General).
 5. Deploy. `main` becomes the production deployment and each PR gets a preview URL.
 
-`vercel.json` carries an `ignoreCommand` (`git diff --quiet HEAD^ HEAD -- .`), which runs from the root directory, so commits that don't touch `site/` skip the build.
+`vercel.json` carries an `ignoreCommand` that runs from the root directory and diffs `site/` against `$VERCEL_GIT_PREVIOUS_SHA`, the commit of the last successful deployment on that branch. A push that changed nothing under `site/` since then skips the build. With no previous deployment, or when that commit isn't in Vercel's shallow clone, the command fails and the build runs. `tests/test_site.py` runs the command against a scratch git repo.
 
 Hobby is for non-commercial use. If ARTie ever earns money, move to Vercel Pro or to Cloudflare Pages.
