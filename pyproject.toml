@@ -56,7 +56,7 @@ only-include = [
     "agents", "database", "harness", "web", "knowledge_graph", "ingestion", "graph",
     "config.py", "services.py", "institution.py", "llm.py",
 ]
-exclude = ["web/frontend", "**/__pycache__", "**/CLAUDE.md"]
+exclude = ["/site", "web/frontend", "**/__pycache__", "**/CLAUDE.md"]
 artifacts = ["web/static"]
 
 [tool.hatch.build.targets.sdist]
@@ -64,5 +64,5 @@ only-include = [
     "agents", "database", "harness", "web", "knowledge_graph", "ingestion", "graph",
     "config.py", "services.py", "institution.py", "llm.py", "README.md", "pyproject.toml",
 ]
-exclude = ["web/frontend/node_modules", "**/__pycache__", "**/CLAUDE.md"]
+exclude = ["/site", "web/frontend/node_modules", "**/__pycache__", "**/CLAUDE.md"]
 artifacts = ["web/static"]

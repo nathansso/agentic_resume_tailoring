@@ -40,7 +40,9 @@ carries both levels — see `tests/test_profile_set.py`.
 the precedent and it is not negotiable: no real user résumé ever enters `eval/`.
 
 **Two vocabulary hazards constrain the wording**, both discovered by reading
-`agents/ats_scorer.py` rather than by running anything:
+`agents/ats_scorer.py` rather than by running anything. (Hazard one describes the
+pre-#181 substring detector; `agents/seniority.py` no longer promotes on those
+words, but the profiles still avoid them, which keeps them valid under either.)
 
 * `_detect_level()` returns the **highest** seniority tier whose keyword appears
   *anywhere* in the résumé text, and its `lead` tier matches the bare substring

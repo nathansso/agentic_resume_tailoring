@@ -172,6 +172,8 @@ def test_a_first_plan_builds_on_the_kg_and_commits_a_host_node(isolated_engine, 
     assert node["program"]["nodes"][0]["id"] == "k"
     assert node["provenance"]["host"] == "claude-code"
     assert node["provenance"]["program_id"] == out["program_id"]
+    from harness import policy
+    assert node["provenance"]["policy_version"] == policy.version() != policy.UNVERSIONED   # #241
     with Session(isolated_engine) as s:     # materialized for the web app / art ui
         result = s.exec(select(UserJobResult).where(
             UserJobResult.job_id == UUID(node["job_id"]))).one()
@@ -179,6 +181,28 @@ def test_a_first_plan_builds_on_the_kg_and_commits_a_host_node(isolated_engine, 
         assert {e["title"] for e in node["content"]["experiences"]} >= {"Machine Learning Engineer"}
         # ...and the job says it has a resume, so art ui shows the editor for it (#276).
         assert s.get(JobDescription, UUID(job_id)).status == "tailored"
+
+
+def test_a_project_without_blurbs_renders_its_description_minus_a_restating_lead_in(env):
+    """#260: a tagline folded into the description is not said twice on the page; a project
+    with blurbs renders those, unchanged."""
+    from harness.executor import _KG
+    from harness.ingest import upsert_items
+
+    uid, _, _ = env
+    upsert_items(uid, [
+        {"kind": "project", "data": {
+            "name": "semantic-search",
+            "description": "Semantic search library. Open-source semantic search library "
+                           "using sentence-transformers."}},
+        {"kind": "project", "data": {
+            "name": "notes-index", "description": "Notes index. Notes index over markdown.",
+            "blurbs": ["Indexed 40k markdown notes."]}}])
+    kg = _KG(uid)
+    assert kg.source_bullets["proj:semantic-search"] == [
+        "Open-source semantic search library using sentence-transformers."]
+    assert kg.source_bullets["proj:notes-index"] == ["Indexed 40k markdown notes."]
+    assert kg.item("proj:semantic-search")["bullets"] == kg.source_bullets["proj:semantic-search"]
 
 
 def test_refused_nodes_never_execute_and_say_why(isolated_engine, env):
@@ -449,3 +473,212 @@ def test_benchmark_tasks_run_end_to_end_through_a_scripted_host_and_replay(tmp_p
         runs.append([_ids_masked(o, o["job_id"]) for o in outs])
         engine.dispose()
     assert runs[0] == runs[1]
+
+
+# â”€â”€ a plan that changes nothing is not a version (#257) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+def _events(engine):
+    from database.models import TreeEvent
+    with Session(engine) as s:
+        return len(s.exec(select(TreeEvent)).all())
+
+
+def _nodes(engine):
+    from database.models import TailorNode
+    with Session(engine) as s:
+        return len(s.exec(select(TailorNode)).all())
+
+
+def test_a_plan_whose_nodes_are_all_reverted_or_refused_commits_nothing(isolated_engine, env):
+    from harness import executor, tree
+
+    uid, job_id, _ = env
+    first = _run(uid, {"job_id": job_id})
+    nodes_before, events_before = _nodes(isolated_engine), _events(isolated_engine)
+    src = executor._KG(uid).source_bullets[EXP]
+    out = _run(uid, {"job_id": job_id, "parent": first["node_id"], "nodes": [
+        {"id": "same", "op": "revise", "item_key": EXP,           # no target can improve
+         "bullets": [{"text": t, "cites": [f"{EXP}#b{i}"]} for i, t in enumerate(src)]},
+        {"id": "ghost", "op": "revise", "item_key": "exp:astronaut|nasa",
+         "bullets": [{"text": "Flew", "cites": ["exp:astronaut|nasa"]}]},
+        {"id": "keep", "op": "keep", "item_key": EXP2},
+    ]})
+    assert out.get("error") is None and out["committed"] is False and out["node_id"] is None
+    assert out["reason"] == executor.NO_CHANGE and out["reason"].startswith("no_change")
+    assert out["violations"] == [] and out["parent"] == first["node_id"]
+    status = {n["id"]: n["status"] for n in out["nodes"]}      # the host still learns why
+    assert status == {"same": "reverted", "ghost": "refused", "keep": "kept"}
+    assert all(n["reason"] for n in out["nodes"] if n["status"] != "kept")
+    assert _nodes(isolated_engine) == nodes_before and _events(isolated_engine) == events_before
+    assert _head(isolated_engine, job_id) == first["node_id"]
+    assert [e["kind"] for e in tree.events_since(uid, 0, job_id)] == ["commit"]
+
+
+def test_an_empty_plan_on_a_parent_commits_nothing_and_a_dry_run_says_so(isolated_engine, env):
+    uid, job_id, _ = env
+    first = _run(uid, {"job_id": job_id})
+    again = _run(uid, {"job_id": job_id, "parent": first["node_id"]})
+    dry = _run(uid, {"job_id": job_id, "parent": first["node_id"]}, dry_run=True)
+    assert not again["committed"] and again["reason"].startswith("no_change")
+    assert dry["dry_run"] and not dry["committed"] and dry["reason"].startswith("no_change")
+    assert _nodes(isolated_engine) == 1 and _events(isolated_engine) == 1
+
+
+def test_an_empty_first_plan_still_commits_the_baseline_copy(isolated_engine, env):
+    """The art-tailor skill commits a job's track baseline with `parent: null, nodes: []`."""
+    from harness import tree
+
+    uid, job_id, _ = env
+    out = _run(uid, {"job_id": job_id, "parent": None, "nodes": []})
+    assert out["committed"] and out["node_id"] and "reason" not in out
+    assert tree.get_node(uid, out["node_id"])["parent_id"] is None
+    assert _head(isolated_engine, job_id) == out["node_id"]
+    assert _nodes(isolated_engine) == 1 and _events(isolated_engine) == 1
+
+
+def test_a_skills_reranking_alone_still_commits(isolated_engine, env):
+    from harness import tree
+
+    uid, job_id, _ = env
+    first = _run(uid, {"job_id": job_id})
+    names = [s["name"] for s in tree.get_node(uid, first["node_id"])["content"]["skills_ranked"]]
+    assert len(names) > 1
+    out = _run(uid, {"job_id": job_id, "parent": first["node_id"], "skills": names[::-1]})
+    assert out["committed"] and "reason" not in out
+    got = [s["name"] for s in tree.get_node(uid, out["node_id"])["content"]["skills_ranked"]]
+    assert got == names[::-1]
+    assert _nodes(isolated_engine) == 2 and _events(isolated_engine) == 2
+
+
+def test_a_node_that_changes_the_page_still_commits(isolated_engine, env):
+    uid, job_id, _ = env
+    first = _run(uid, {"job_id": job_id})
+    out = _run(uid, {"job_id": job_id, "parent": first["node_id"], "nodes": [
+        {"id": "d", "op": "delete", "item_key": PROJ, "because": "user:less games"}]})
+    assert out["committed"] and out["nodes"][0]["status"] == "accepted"
+
+
+def test_a_no_change_plan_leaves_the_parents_hand_edits_alone(isolated_engine, env):
+    """A plan commit carries layout overrides but not a hand-edited .tex; skipping the no-op
+    keeps the editor's version as HEAD instead of replacing it with one that drops the .tex."""
+    from harness import tree
+
+    uid, job_id, _ = env
+    first = _run(uid, {"job_id": job_id})
+    with Session(isolated_engine) as s:
+        r = s.exec(select(UserJobResult)).one()
+        r.edited_tex = "\\documentclass{article}\\begin{document}by hand\\end{document}"
+        s.add(r)
+        s.commit()
+    edit = tree.record_result(uid, job_id, source="editor", note="tex")
+    out = _run(uid, {"job_id": job_id, "parent": edit["node_id"]})
+    assert not out["committed"] and out["reason"].startswith("no_change")
+    assert _head(isolated_engine, job_id) == edit["node_id"] != first["node_id"]
+
+
+# ── a requested delete is not vetoed by a guard (#279) ───────────────────────
+
+def _mtld_down(vector, by=0.30):
+    """`vector` with MTLD lower by a fraction, as any delete lowers it."""
+    out = copy.deepcopy(vector)
+    out["guards"]["mtld"] = round(out["guards"]["mtld"] * (1 - by), 4)
+    return out
+
+
+def test_a_requested_delete_that_only_regresses_mtld_is_accepted_and_reports_it():
+    from harness.acceptance import Context, accept, metric_vector
+
+    ctx = Context(jd_text="retail demand forecasting")
+    before = metric_vector(_content(BASE), ctx)
+    before["guards"]["mtld"] = 80.0                  # a short fixture has none (None)
+    after = _mtld_down(before)
+    assert not accept(before, after, improves=["coverage"])["accepted"]       # an edit is still vetoed
+    verdict = accept(before, after, requested=True)
+    assert verdict["accepted"] and verdict["gate_violations"] == {}
+    assert verdict["guard_regressions"] == verdict["waived"] and set(verdict["waived"]) == {"mtld"}
+    assert verdict["reason"].startswith("guard_waived") and "mtld" in verdict["reason"]
+    assert accept(before, copy.deepcopy(before), requested=True)["waived"] == {}   # nothing to waive
+
+
+def test_a_requested_delete_that_breaks_a_hard_gate_is_still_refused():
+    from harness.acceptance import Context, accept, metric_vector
+
+    ctx = Context(jd_text="retail demand forecasting", hard_emphasize={"exp:engineer|acme"})
+    before = metric_vector(_content(BASE), ctx)
+    emptied = _content(BASE)
+    emptied["experiences"] = []
+    after = metric_vector(emptied, ctx)
+    before["guards"]["mtld"] = 80.0                     # a short fixture has none (None)
+    after["guards"]["mtld"] = 40.0                      # and a guard regresses too
+    verdict = accept(before, after, requested=True)
+    assert not verdict["accepted"] and verdict["reason"].startswith("hard_gate: preferences")
+    assert verdict["waived"] == {}                      # nothing is waived on a refused node
+
+
+def _spread_profile():
+    """The benchmark profile cut to two bullets an item (the floor `cut_hints` respects), plus
+    five projects of varied wording: every `cut_hints` entry is a `drop_item`, and cutting a
+    varied project lowers the page's MTLD by more than the 10% tolerance."""
+    from eval.profile_fixture import load_profile
+    from eval.tailoring_benchmark import PROFILES_DIR
+
+    words = ("alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike "
+             "november oscar papa quebec romeo sierra tango uniform victor whiskey xray yankee "
+             "zulu amber basil cedar dune ember fjord glade harbor iris jade koala lotus maple "
+             "nectar olive pearl quartz ridge sable tundra umber velvet willow yarrow zephyr").split()
+
+    def varied(i, j):
+        return "Built " + " ".join(words[(i * 7 + j * 5 + k * 3) % len(words)] for k in range(9)) + " service"
+
+    profile = load_profile(PROFILES_DIR / BENCH_PROFILE)
+    for item in (*profile.experiences, *profile.projects):
+        item["bullets"] = item["bullets"][:2]
+    profile.projects += [{"name": f"Tool {words[i]}", "description": None, "repo_url": None,
+                          "bullets": [varied(i, 0), varied(i, 1)]} for i in range(5)]
+    return profile
+
+
+def test_cut_hints_and_the_acceptance_rule_agree_end_to_end(isolated_engine, monkeypatch):
+    """The #279 run: an over-budget page, `cut_hints` recommending `drop_item`s, the host sending
+    them as requested deletes. Each used to come back `reverted` (`guard: mtld regressed`),
+    so the budget stayed violated and nothing committed."""
+    from eval.scripted_host import open_task_job, seed_profile
+    from eval.tailoring_benchmark import load_tasks
+    from harness import executor
+
+    monkeypatch.setattr(executor, "MEASURER", lambda texts: [2 for _ in texts])
+    uid = seed_profile(_spread_profile())
+    job_id = open_task_job(uid, load_tasks(limit=5)[3])
+    finalize = {"min_skills": 0}
+
+    over = _run(uid, {"job_id": job_id, "finalize": finalize}, dry_run=True)
+    assert not over["committed"] and over["line_budget"]["over_by"] > 0
+    drops = [h["item"] for h in over["cut_hints"]]
+    assert drops and {h["action"] for h in over["cut_hints"]} == {"drop_item"}
+
+    nodes = [{"id": f"d{i}", "op": "delete", "item_key": key, "because": "user:fewer projects"}
+             for i, key in enumerate(drops)]
+    out = _run(uid, {"job_id": job_id, "finalize": finalize, "nodes": nodes})
+    assert out.get("error") is None
+    assert [n["status"] for n in out["nodes"]] == ["accepted"] * len(drops), out["nodes"]
+    waived = [n for n in out["nodes"] if n.get("waived")]
+    assert any("mtld" in n["waived"] for n in waived), "the scenario must exercise the MTLD guard"
+    assert all(n["reason"].startswith("guard_waived") for n in waived)
+    assert out["violations"] == [] and out["line_budget"]["over_by"] <= 0 and out["committed"]
+    assert _head(isolated_engine, job_id) == out["node_id"]
+
+
+def test_a_requested_revise_that_stuffs_is_still_reverted(env):
+    """`because` waives guards for a delete only: an action that writes text faces every guard."""
+    from harness.executor import _KG
+
+    uid, job_id, _ = env
+    src = _KG(uid).source_bullets[EXP2]
+    bullets = [{"text": f"{b.rstrip('.')} using Kafka and Redis and Airflow", "cites": [f"{EXP2}#b{i}"]}
+               for i, b in enumerate(src)]
+    out = _run(uid, {"job_id": job_id, "nodes": [
+        {"id": "stuff", "op": "revise", "item_key": EXP2, "strategy": "keyword_weave",
+         "bullets": bullets, "because": "user:work in more of the posting"}]}, dry_run=True)
+    node = out["nodes"][0]
+    assert node["status"] == "reverted" and "waived" not in node, node
+    assert node["reason"].startswith(("guard:", "hard_gate:")), node

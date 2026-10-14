@@ -10,6 +10,9 @@ has a role:
 - **Guards** (`stuffing`, `verb_entropy`, `mtld`, `duplication`,
   `variant_drift`): may not regress by more than a tolerance. A node may
   tighten a tolerance, never loosen one (`harness/program.py` enforces that).
+  A *requested delete* (#279) is exempt: removing text cannot fabricate and
+  lowers MTLD and the other diversity measures almost by definition, so a guard
+  regression there is expected. The regressions are still reported, under `waived`.
   `variant_drift` (#229) is absolute, not relative to the parent: how far a
   bullet that names an approved variant has moved from it.
 - **Targets** (`coverage`, `relevance_density`, `semantic_coverage`): an action
@@ -39,8 +42,9 @@ from agents.redundancy import (
     bullet_texts as all_bullets, bullet_tokens, leading_verb_entropy, mtld,
     term_document_frequency,
 )
-from harness.decisions.negative_pins import term_pattern, violations as pin_finding_violations
+from harness.decisions.negative_pins import term_matcher, term_pattern, violations as pin_finding_violations
 from harness.decisions.support import violations as support_finding_violations
+from harness import policy
 
 TARGETS = ("coverage", "relevance_density", "semantic_coverage")
 OPTIONAL_TARGETS = ("semantic_coverage",)    # present only when Jev answered (#126)
@@ -59,12 +63,12 @@ GATES =("preferences", "faithfulness", "citations", "bullet_lines", "consistency
 # trimmed clause on a 15-20 token bullet (2-4 edits, 0.1-0.25), and stops a rewrite that
 # only borrows the topic (a half-new bullet is 0.5 and up). Provisional like the rest, to be
 # refit once real library use exists.
-VARIANT_DRIFT_TOLERANCE = 0.35
+VARIANT_DRIFT_TOLERANCE = policy.get("guards.variant_drift")
 DEFAULT_TOLERANCES: Dict[str, float] = {
-    "stuffing": 0.0,
-    "verb_entropy": 0.35,
-    "mtld": 0.10,
-    "duplication": 0.15,
+    "stuffing": policy.get("guards.stuffing"),
+    "verb_entropy": policy.get("guards.verb_entropy"),
+    "mtld": policy.get("guards.mtld"),
+    "duplication": policy.get("guards.duplication"),
     "variant_drift": VARIANT_DRIFT_TOLERANCE,
 }
 # +1: a larger value is worse. -1: a smaller value is worse.
@@ -98,6 +102,9 @@ class Context:
     # Negative pins (#198): terms a hard preference says must never render, in
     # any bullet or item name, cited or not.
     negative_terms: Set[str] = field(default_factory=set)
+    # The negative terms that are skills (#254): a pin on `skill:<name>` also matches the skill's
+    # aliases, the way the knowledge graph links the skill to text. A subset of `negative_terms`.
+    negative_skill_terms: Set[str] = field(default_factory=set)
     # Citations (#198): each item's KG source bullets (a verbatim source bullet
     # cites itself), and `cite -> None | "unresolved" | "tombstoned"`. With no
     # checker the citation gate is off (a context built outside the executor).
@@ -154,7 +161,7 @@ def preference_violations(content: Dict, ctx: Context) -> List[str]:
     skills = {str(s.get("name", "")).strip().lower()
               for s in content.get("skills_ranked") or []}
     out += [f"suppressed:skill:{s}" for s in sorted(skills & ctx.suppressed_skills)]
-    out += negative_pin_violations(content, ctx.negative_terms)
+    out += negative_pin_violations(content, ctx.negative_terms, ctx.negative_skill_terms)
     if ctx.pin_checker is not None:
         # Jev only adds: a reworded mention the term match cannot see. One mention, one violation.
         out += [v for v in pin_finding_violations(ctx.pin_checker(content)) if v not in out]
@@ -172,19 +179,21 @@ def _page_items(content: Dict):
             yield key_fn(item), item
 
 
-def negative_pin_violations(content: Dict, terms: Iterable[str]) -> List[str]:
+def negative_pin_violations(content: Dict, terms: Iterable[str],
+                            skill_terms: Iterable[str] = ()) -> List[str]:
     """A negative pin (#198) is a fact that must never render: any bullet,
     title, company, project name or description containing the term, whatever
-    it cites."""
+    it cites. A term in `skill_terms` (a pin on a skill, #254) matches its aliases too."""
+    skills = {t.strip().lower() for t in skill_terms if t and t.strip()}
     out = []
     for term in sorted({t.strip().lower() for t in terms if t and t.strip()}):
-        pat = term_pattern(term)
+        mentions = term_matcher(term, term in skills)
         for key, item in _page_items(content):
             for field_ in ("title", "company", "name", "description"):
-                if pat.search(str(item.get(field_) or "").lower()):
+                if mentions(str(item.get(field_) or "")):
                     out.append(f"negative_pin:{term}@{key} :: {field_}")
             for b in item.get("bullets") or []:
-                if b and pat.search(b.lower()):
+                if b and mentions(b):
                     out.append(f'negative_pin:{term}@{key} :: "{_short(b)}"')
     return out
 
@@ -358,9 +367,14 @@ def accept(before: Dict, after: Dict, *, improves: Iterable[str] = (),
 
     1. No hard gate gains a violation.
     2. No guard regresses by more than its tolerance.
-    3. At least one of `improves` (every target when empty) strictly improves,
-       or the action is `requested` (a delete a preference or the user asked
-       for). `semantic_coverage` is a target only when both vectors carry it.
+    3. At least one of `improves` (every target when empty) strictly improves.
+       `semantic_coverage` is a target only when both vectors carry it.
+
+    `requested` marks a *delete* a preference or the user asked for (the caller
+    passes it for deletes only). It waives rules 2 and 3 but never rule 1: a delete
+    cannot fabricate, and a guard regression on one (MTLD above all) is expected, not
+    a quality failure (#279). A waived regression is accepted but still reported, in
+    `guard_regressions` and `waived`, and `reason` says so.
     """
     tol = {**DEFAULT_TOLERANCES, **(tolerances or {})}
     new_violations = {}
@@ -388,16 +402,22 @@ def accept(before: Dict, after: Dict, *, improves: Iterable[str] = (),
     deltas = {t: _r((after["targets"].get(t) or 0.0) - (before["targets"].get(t) or 0.0))
               for t in live}
 
+    waived = {}
     if new_violations:
         reason = "hard_gate: " + "; ".join(f"{g} {v}" for g, v in new_violations.items())
+    elif regressed and requested:
+        waived = dict(regressed)
+        reason = ("guard_waived: requested delete; "
+                  + ", ".join(f"{g} regressed {v}" for g, v in regressed.items()))
     elif regressed:
         reason = "guard: " + ", ".join(f"{g} regressed {v}" for g, v in regressed.items())
     elif not improved and not requested:
         reason = "no_target_improved: " + ", ".join(wanted)
     else:
         reason = None
-    return {"accepted": reason is None, "reason": reason, "improved": improved,
-            "deltas": deltas, "gate_violations": new_violations, "guard_regressions": regressed}
+    return {"accepted": reason is None or bool(waived), "reason": reason, "improved": improved,
+            "deltas": deltas, "gate_violations": new_violations, "guard_regressions": regressed,
+            "waived": waived}
 
 
 __all__ = ["Context", "DEFAULT_TOLERANCES", "GATES", "GUARDS", "OPTIONAL_TARGETS", "TARGETS", "accept",

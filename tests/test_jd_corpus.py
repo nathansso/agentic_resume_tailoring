@@ -123,6 +123,12 @@ def test_seniority_markers_are_disqualifying(title):
     assert classify_level(title, _FILLER) is None
 
 
+def test_a_mid_level_title_is_not_entry_even_with_entry_years():
+    """#181: the shared title reader rejects `mid` too, not only senior words."""
+    entry_years = "- 1+ years of experience\n" + _FILLER
+    assert classify_level("Mid-Level Data Engineer", entry_years) is None
+
+
 def test_an_intern_posting_beats_a_seniority_marker_in_the_same_title():
     """"Senior" here modifies the student's year, not the rung."""
     assert classify_level("Senior-Year Software Engineering Intern", _FILLER) == "intern"
@@ -385,11 +391,11 @@ def test_every_task_carries_a_valid_role_family_and_level():
 
 def test_no_posting_in_the_corpus_is_senior():
     """The #177 defect, asserted on the shipped corpus rather than the filter."""
-    from scrape_job_descriptions import SENIOR_TITLE
+    from agents.seniority import is_above_entry_title
     senior = [
         json.loads(p.read_text(encoding="utf-8"))["title"]
         for p in _corpus()
-        if SENIOR_TITLE.search(json.loads(p.read_text(encoding="utf-8"))["title"])
+        if is_above_entry_title(json.loads(p.read_text(encoding="utf-8"))["title"])
     ]
     assert not senior, f"senior postings in the corpus: {senior}"
 

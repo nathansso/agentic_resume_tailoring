@@ -12,7 +12,7 @@ from sqlmodel import Session, select
 
 from database.models import Project, UserPreference
 from harness.acceptance import Context, citation_violations, negative_pin_violations
-from test_executor import EXP, EXP2, _run, env  # noqa: F401  (fixture)
+from test_executor import EXP, EXP2, PROJ, _run, env  # noqa: F401  (fixture)
 
 STREAM = "proj:streamboard"
 
@@ -102,7 +102,9 @@ def test_verbatim_source_bullets_count_as_cited_and_editor_bullets_never_block(e
     exp.pop("cites", None)
     node = tree.commit_node(uid, job_id, content=content, source="editor")
     out = _run(uid, {"job_id": job_id, "parent": node["node_id"],
-                     "nodes": [{"id": "k", "op": "keep", "item_key": EXP}]})
+                     "nodes": [{"id": "k", "op": "keep", "item_key": EXP},
+                               {"id": "d", "op": "delete", "item_key": PROJ,   # a real change (#257)
+                                "because": "user:less games"}]})
     assert out["committed"], out["violations"]
     assert any("uncited" in v for v in out["metrics"]["base"]["gates"]["citations"])
 
@@ -173,9 +175,51 @@ def test_negative_pins_match_whole_words_only():
     assert negative_pin_violations(content, set()) == []
 
 
-@pytest.mark.parametrize("target_key", ["skill:kafka"])
-def test_a_skill_keyed_suppression_is_not_a_negative_pin(target_key):
-    from harness.executor import _negative_terms
+def _skill_pin(engine, uid, name):
+    """What `record_preference` stores for "Never mention <name>" when <name> is one of the user's skills."""
+    with Session(engine) as s:
+        pref = UserPreference(user_id=uid, text=f"Never mention {name}", polarity="suppress",
+                              target_key=f"skill:{name.lower()}", target_term=f"skill: {name}",
+                              scope_type="global", strength=5)
+        s.add(pref)
+        s.commit()
+        return str(pref.preference_id)
 
-    assert _negative_terms({"kafka": {"target_key": target_key}}) == {}
-    assert _negative_terms({"kafka": {"target_key": None}}) == {"kafka": {"target_key": None}}
+
+def test_a_cited_bullet_that_names_a_skill_keyed_pin_is_refused(env, isolated_engine):
+    """#254: "Never mention Kafka" resolves to `skill:kafka`; the bullet "using Kafka" was accepted."""
+    uid, job_id, _ = env
+    _skill_pin(isolated_engine, uid, "Kafka")
+    src = _src(uid, EXP2)
+    node = _run(uid, {"job_id": job_id, "nodes": [_revise(EXP2, _cited(EXP2, src))]},
+                dry_run=True)["nodes"][0]
+    assert node["status"] == "refused" and node["reason"].startswith("negative_pin: bullet 3 mentions 'kafka'")
+
+
+def test_a_skill_keyed_pin_already_on_the_page_blocks_finalize_until_it_is_cut(env, isolated_engine):
+    uid, job_id, _ = env
+    pref_id = _skill_pin(isolated_engine, uid, "Kafka")
+    blocked = _run(uid, {"job_id": job_id, "nodes": []})
+    pins = [v for v in blocked["violations"] if v["detail"].startswith("negative_pin:kafka@")]
+    assert not blocked["committed"]
+    assert {v["detail"].split("@", 1)[1].split(" :: ")[0] for v in pins} >= {EXP2, STREAM}
+    src = _src(uid, EXP2)
+    fixed = _run(uid, {"job_id": job_id, "nodes": [
+        _revise(EXP2, _cited(EXP2, src[:3])),
+        {"id": "d", "op": "delete", "item_key": STREAM, "because": f"pref:{pref_id}"}]})
+    assert fixed["committed"], fixed["violations"]
+
+
+def test_a_skill_keyed_pin_matches_the_skills_aliases_and_a_topic_pin_does_not():
+    content = {"experiences": [{"title": "Engineer", "company": "Acme",
+                                "bullets": ["Trained models in torch.", "Wrote PyTorch layers."]}]}
+    key = "exp:engineer|acme"
+    assert negative_pin_violations(content, {"pytorch"}) == [
+        f'negative_pin:pytorch@{key} :: "Wrote PyTorch layers."']                       # a topic: the words only
+    assert negative_pin_violations(content, {"pytorch"}, {"pytorch"}) == [
+        f'negative_pin:pytorch@{key} :: "Trained models in torch."',
+        f'negative_pin:pytorch@{key} :: "Wrote PyTorch layers."']                        # a skill: "torch" names it
+    short = {"experiences": [{"title": "Engineer", "company": "Acme",
+                              "bullets": ["Analysed data in R.", "Led R&D and Go-to-market work."]}]}
+    assert negative_pin_violations(short, {"r"}, {"r"}) == [
+        f'negative_pin:r@{key} :: "Analysed data in R."']                               # R, not R&D

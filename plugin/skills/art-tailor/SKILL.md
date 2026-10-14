@@ -38,7 +38,10 @@ The tools named below are the ART MCP server's tools.
   from your own reading of the posting; without it ART guesses from the title.
 - If `baseline` comes back with `applies: true`, the job's first version starts as a copy
   of the user's saved baseline for that track instead of the whole graph. Say so to the
-  user, and read it with `get_head` before planning. `baseline.source` says who chose the
+  user. The copy is made when the job's first version is committed, so `get_head` returns no
+  version until then. To read the baseline's wording before planning, commit it with an
+  empty plan (`execute_plan` with `parent` null and `nodes: []`), then call `get_head`.
+  `baseline.source` says who chose the
   track: `host` (the `role_family` you gave names a saved track exactly, so ART did not ask
   Jev), `jev` or `cache` (Jev chose among the user's saved tracks by reading the posting;
   `p` is its probability, not a calibrated confidence), or `fallback` (no Jev answer, so
@@ -184,6 +187,9 @@ Call `execute_plan({program})`. Read the result:
   `patch_plan(program_id, edits)`, which takes JSON-pointer edits to the saved program.
   `cut_hints` say which bullets or projects to cut to fit the page. `stale_parent`
   means the user edited in the meantime: read `get_head`, then replace `/parent`.
+- `committed: false` with `reason: "no_change"`: the plan left the page identical to its
+  parent (every node reverted, refused or kept), so no version was made. Read `nodes[]` for
+  why, then revise the plan or tell the user nothing needed to change. This is not an error.
 - `rules_applied`: the job-scoped values ART set, such as a graduation date. Mention
   them.
 
@@ -199,7 +205,7 @@ Call `execute_plan({program})`. Read the result:
   with the job id filled in:
 
   ```
-  uvx --from "art-mcp[ui] @ git+https://github.com/nathansso/agentic_resume_tailoring" art ui --job <job_id>
+  uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl" art ui --job <job_id>
   ```
 
   Their saves come back to you: through the prompt hook if it's installed, and

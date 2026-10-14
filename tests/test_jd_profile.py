@@ -557,7 +557,11 @@ def test_get_profile_404s_before_extraction(isolated_engine, profile_client):
 
 def test_get_profile_returns_the_requirements(isolated_engine, profile_client, monkeypatch):
     import services
-    user, job = _seed_job(isolated_engine)
+    # States its level the way the shared detector reads one (#181): "5+ years"
+    # beside a bare noun is not evidence, "5+ years of experience" is.
+    user, job = _seed_job(
+        isolated_engine,
+        description="We need 5+ years of experience with Python. Kafka a plus.")
     _script(monkeypatch)
     services.rebuild_jd_profile(job.job_id, user_id=job.user_id)
 

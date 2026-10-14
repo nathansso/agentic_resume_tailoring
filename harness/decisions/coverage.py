@@ -60,6 +60,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
 from agents.ats_scorer import ATSScoringEngine
 from agents.redundancy import bullet_texts
+from harness import policy
 from harness.decisions.questions import Noul, canonical
 
 POINT = "requirement_covered"
@@ -84,7 +85,7 @@ TARGET = "semantic_coverage"
 #     0.70 gives the same counts but sits 0.09 over the worst false candidate and only 0.02 under
 #     a genuine match, which protects one side of the gap only. Soft-skill scores are the thin
 #     part: under v1 of the bullet question they overlapped (0.67 not covered, 0.66 covered).
-TAU_COVER = 0.65
+TAU_COVER = policy.get("coverage.tau_cover")
 
 _ROUND = 4
 REQUIREMENT_MAX_CHARS = 300

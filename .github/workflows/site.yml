@@ -1,0 +1,39 @@
+name: site
+
+# The landing site (issue #272). It deploys from Vercel's Git integration; this
+# job exists so a broken site fails the PR even without Vercel. It is its own
+# workflow, not a job in tests.yml, and runs only when site/ changes.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/site.yml"
+  pull_request:
+    paths:
+      - "site/**"
+      - ".github/workflows/site.yml"
+
+concurrency:
+  group: site-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: site build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install
+        working-directory: site
+        run: npm ci
+
+      - name: Build
+        working-directory: site
+        run: npm run build

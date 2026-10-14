@@ -191,7 +191,8 @@ class RecordPreferenceOutput(_Output):
     strength: Optional[int] = None
     pinned: bool = Field(False, description="Strength 5: a hard gate, restored word for word "
                                             "after compaction.")
-    negative_pin: bool = Field(False, description="A strength-5 suppression.")
+    negative_pin: bool = Field(False, description="A strength-5 suppression the executor enforces: what it names "
+                                                  "(a topic, a skill, an experience or a project) never renders.")
     supersedes: Optional[str] = Field(None, description="The earlier preference this replaced.")
     suggestions: List[str] = Field(default_factory=list,
                                    description="Catalog keys the target may have meant.")
@@ -666,6 +667,11 @@ class NodeResult(_Model):
     reason: Optional[str] = None
     improved: List[str] = Field(default_factory=list)
     deltas: Dict[str, Optional[float]] = Field(default_factory=dict)
+    waived: Optional[Dict[str, float]] = Field(
+        None, description="Guard regressions (guard -> how far it moved) that did not veto an "
+                          "accepted requested delete (#279). Guards never veto a delete the user "
+                          "or a preference asked for; hard gates still do. Absent when none. "
+                          "Tell the user what the cut cost.")
     review: Optional[List[Dict[str, Any]]] = Field(
         None, description="Bullets Jev could not clearly call supported by their cited "
                           "evidence (item, bullet, label, p), and bullets or item fields it "
@@ -691,6 +697,11 @@ class ExecuteOutput(_Output):
     dry_run: bool = False
     committed: bool = False
     node_id: Optional[str] = None
+    reason: Optional[str] = Field(
+        None, description="Why nothing was committed when no violation says so: no_change means "
+                          "the plan left the page identical to its parent (every node reverted, "
+                          "refused or kept, no skills or job-rule change), so no version was made. "
+                          "Absent otherwise; see nodes for the per-node reasons.")
     nodes: List[NodeResult] = Field(default_factory=list)
     skills: Dict[str, List[str]] = Field(default_factory=dict)
     metrics: Dict[str, Any] = Field(
@@ -1058,7 +1069,8 @@ TOOLS: List[ToolSpec] = [
         "execute_plan",
         "Run a whole tailoring plan as one program: arbitration, each node under the "
         "per-metric acceptance rule, then finalize (preferences, sections, skills cap, line "
-        "budget). Commits one version unless a check fails or dry_run is set. Writes.",
+        "budget). Commits one version unless a check fails, dry_run is set, or the result would "
+        "be identical to its parent (committed false, reason no_change). Writes.",
         ExecuteInput, ExecuteOutput,
         lambda uid, program, dry_run=False:
             _executor().execute_plan(uid, program, dry_run=dry_run),

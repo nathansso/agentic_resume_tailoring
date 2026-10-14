@@ -153,14 +153,12 @@ def test_the_analysis_matches_what_the_gate_computes(isolated_engine, monkeypatc
 
 
 def test_the_thresholds_in_support_py_are_the_fit_and_leave_headroom(isolated_engine, monkeypatch):
-    """`TAU_BLOCK` / `TAU_REVIEW` are what the analysis recommends from the confirmed labels, with
-    real headroom over the highest score of any supported pair, no false block, and no should-block
+    """`TAU_BLOCK` / `TAU_REVIEW` (equal to the fit: tests/test_policy.py) leave real headroom over the highest score of any supported pair, no false block, and no should-block
     pair passing silently. A relabelled pair or a new recording that moves the fit fails this."""
     from harness.decisions import support
     _replay(monkeypatch)
     rows = fit.run_pairs(PAIRS)
     rec = fit.recommend(rows)
-    assert (support.TAU_BLOCK, support.TAU_REVIEW) == (rec["tau_block"], rec["tau_review"])
     st = fit.block_stats(rows, support.TAU_BLOCK)
     assert st["fp"] == 0 and st["by_label"]["contradicts"][0] == st["by_label"]["contradicts"][1]
     assert support.TAU_BLOCK - rec["top_supported"]["p_worst"] >= 0.05

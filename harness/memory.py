@@ -43,6 +43,7 @@ from agents.preferences import (
 )
 from harness import transcript
 from harness.decisions import memory_gate as mg
+from harness.decisions.negative_pins import is_negative_pin
 
 log = logging.getLogger(__name__)
 
@@ -221,7 +222,7 @@ def _summary(pref: Dict[str, Any]) -> Dict[str, Any]:
             "scope_value": pref.get("scope_value"), "strength": pref.get("strength"),
             "target_resolved": bool(pref.get("target_key")),
             "pinned": strength >= mg.PIN_STRENGTH,
-            "negative_pin": strength >= mg.PIN_STRENGTH and pref["polarity"] == "suppress"}
+            "negative_pin": is_negative_pin(pref)}
 
 
 def record_preference(user_id: UUID, text: str, polarity: str, target: Optional[str] = None,

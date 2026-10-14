@@ -1,0 +1,208 @@
+@import "tailwindcss";
+
+/* Dark mode is the `.dark` class on <html>, set before first paint by the
+   inline script in layouts/Base.astro. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Switzer, self-hosted from Fontshare (free for commercial use), the same face
+ * the app uses. Files live in public/fonts/ and are served from /fonts/.
+ */
+@font-face {
+  font-family: "Switzer";
+  src: url("/fonts/Switzer-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Switzer";
+  src: url("/fonts/Switzer-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Switzer";
+  src: url("/fonts/Switzer-Semibold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Switzer";
+  src: url("/fonts/Switzer-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Switzer";
+  src: url("/fonts/Switzer-Extrabold.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+/*
+ * Palette: ported from web/frontend/src/index.css (the Supabase-light theme,
+ * issue #134). Keep the values in step with that file; tests/test_site.py
+ * fails when the core tokens drift.
+ *
+ * Light is the designed-for default: white ground, near-black ink, hairline
+ * borders, and the mint brand green on CTAs with a deep green label. Mint is
+ * fill-only (about 1.8:1 as text on white), so green text uses `accent`.
+ */
+:root {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 9%;
+
+  --card: 210 17% 98%;
+  --card-foreground: 0 0% 9%;
+  --elevated: 210 16% 95%;
+
+  --muted: 210 16% 95%;
+  --muted-foreground: 0 0% 42%;
+
+  --primary: 152 60% 53%;
+  --primary-foreground: 159 100% 19%;
+
+  --secondary: 210 16% 95%;
+  --secondary-foreground: 0 0% 9%;
+
+  --accent: 159 100% 19%;
+  --accent-foreground: 0 0% 100%;
+
+  --success: 159 100% 22%;
+  --warning: 28 88% 33%;
+
+  --destructive: 0 72% 44%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 213 13% 91%;
+  --input: 213 13% 91%;
+  --ring: 152 60% 42%;
+
+  --radius: 0.375rem;
+}
+
+.dark {
+  --background: 0 0% 9%;
+  --foreground: 0 0% 93%;
+
+  --card: 0 0% 12%;
+  --card-foreground: 0 0% 93%;
+  --elevated: 0 0% 16%;
+
+  --muted: 0 0% 16%;
+  --muted-foreground: 0 0% 64%;
+
+  --primary: 152 60% 53%;
+  --primary-foreground: 159 100% 11%;
+
+  --secondary: 0 0% 16%;
+  --secondary-foreground: 0 0% 93%;
+
+  --accent: 152 55% 62%;
+  --accent-foreground: 0 0% 9%;
+
+  --success: 152 60% 53%;
+  --warning: 38 92% 62%;
+
+  --destructive: 0 72% 60%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 0 0% 20%;
+  --input: 0 0% 20%;
+  --ring: 152 60% 53%;
+}
+
+/* Map the tokens into Tailwind. `inline` keeps the `var(--x)` reference live so
+   the `.dark` overrides above take effect at use time. */
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-elevated: hsl(var(--elevated));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-success: hsl(var(--success));
+  --color-warning: hsl(var(--warning));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 6px);
+
+  --font-sans: "Switzer", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono",
+    monospace;
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  html {
+    /* Never let a wide child create a horizontal scrollbar on a phone. */
+    overflow-x: clip;
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  /* Faint grid used behind the hero. */
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, hsl(var(--border) / 0.6) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--border) / 0.6) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+
+  /* Mint to deep-green run for the hero's second line. */
+  .text-gradient {
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    background-image: linear-gradient(
+      100deg,
+      hsl(152 60% 45%) 0%,
+      hsl(159 80% 26%) 100%
+    );
+  }
+  .dark .text-gradient {
+    background-image: linear-gradient(
+      100deg,
+      hsl(152 60% 60%) 0%,
+      hsl(152 55% 45%) 100%
+    );
+  }
+}

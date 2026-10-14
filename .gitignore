@@ -78,3 +78,8 @@ scratchpad/
 
 # Claude Code personal/machine-local config (never commit - may hold credentials)
 .claude/settings.local.json
+
+# Landing site (site/)
+site/node_modules/
+site/dist/
+site/.astro/

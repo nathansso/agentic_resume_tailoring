@@ -179,8 +179,15 @@ def test_the_feed_resumes_from_last_event_id(job, isolated_engine, local_client,
 
 def test_a_fresh_stream_starts_at_now_and_sees_a_commit_made_while_open(
         job, isolated_engine, local_client, short_stream, monkeypatch):
+    import gc
     uid, jid, rid = job
     _host_commit(isolated_engine, uid, jid, rid, "before the editor opened")
+    # The commit below fires 0.3 s after the timer starts and must land after the stream reads
+    # "now". A full garbage collection of a suite-sized heap (about 2M objects, over a second
+    # on a CI runner) that happens to fall inside the request stalls the stream past that
+    # point, so collect first: the next one is then far off. (Surfaced by #241, whose few
+    # extra allocations moved when the collection fell; nothing in the feed was wrong.)
+    gc.collect()
     monkeypatch.setattr(short_stream, "EVENTS_MAX_SECONDS", 2.0)
     committed = {}
     timer = threading.Timer(0.3, lambda: committed.update(
@@ -226,11 +233,29 @@ def test_a_drag_in_local_mode_appears_in_the_hosts_next_turn(
     assert [e["source"] for e in events] == ["editor"]
 
 
+def test_a_drag_saves_without_the_llm_stack(job, isolated_engine, local_client, short_stream,
+                                            monkeypatch):
+    """An `art ui` install is model-free (`art-mcp[ui]`): PUT /layout must not import
+    `agents.tailor`, which pulls LangChain. Live smoke test (Oct): it returned a 500."""
+    import sys
+    from harness import tree
+    uid, jid, rid = job
+    _host_commit(isolated_engine, uid, jid, rid, "Built an ensemble")
+    cursor = tree.get_head(uid, jid)["cursor"]
+    client = local_client(uid)
+    monkeypatch.setitem(sys.modules, "agents.tailor", None)   # `from agents.tailor import ...` fails
+    body = {"section_order": ["projects", "experience"], "skills": ["Python"]}
+    assert client.put(f"/api/jobs/{jid}/layout", json=body,
+                      headers={"Origin": LOCAL}).status_code == 200
+    assert tree.get_head(uid, jid, since_event=cursor)["head"]["layout_overrides"] == body
+
+
 # ── launcher ─────────────────────────────────────────────────────────────────
 
 def test_the_launcher_refuses_without_a_built_editor(tmp_path, capsys, monkeypatch):
     from web import local_ui
     monkeypatch.delenv("ART_LOCAL_UI", raising=False)
+    assert local_ui.in_checkout()                      # these tests run from a checkout
     assert "npm --prefix web/frontend ci" in local_ui.missing_static(tmp_path)
     assert local_ui.main(["--no-open"], static_dir=tmp_path) == 2
     assert "has not been built" in capsys.readouterr().err
@@ -246,3 +271,27 @@ def test_the_launcher_url_carries_the_job():
     from web.local_ui import editor_url
     assert editor_url(8765, "abc") == "http://127.0.0.1:8765/?job=abc"
     assert editor_url(9000) == "http://127.0.0.1:9000/"
+
+
+def test_a_non_checkout_install_is_pointed_at_the_release_wheel(tmp_path, capsys, monkeypatch):
+    """A git install has no `web/frontend` to build from and no `web/static` (#255), so
+    the npm hint is wrong there; the release wheel carries the editor."""
+    from harness.hooks import SOURCE
+    from web import local_ui
+
+    assert not local_ui.in_checkout(tmp_path)                 # no package.json beside it
+    msg = local_ui.missing_static(tmp_path, checkout=False)
+    assert "npm" not in msg and "web/frontend" not in msg
+    assert f'uvx --from "{SOURCE}" art ui' in msg
+    assert "has not been built" in msg
+
+    # Same message through the launcher, and it exits before pinning anything.
+    monkeypatch.delenv("ART_LOCAL_UI", raising=False)
+    monkeypatch.setattr(local_ui, "in_checkout", lambda *a: False)
+    assert local_ui.main(["--no-open"], static_dir=tmp_path) == 2
+    err = capsys.readouterr().err
+    assert "npm" not in err and SOURCE in err
+
+    # A built editor passes in either kind of install.
+    (tmp_path / "index.html").write_text("<html></html>", encoding="utf-8")
+    assert local_ui.missing_static(tmp_path, checkout=False) is None
