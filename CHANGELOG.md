@@ -14,6 +14,34 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 278 — A host commit no longer drops the user's `.tex` edits, and `diff_nodes` says which bullets they changed
+**Status:** complete | **Tests:** 2688 pass on SQLite (25 new), 24 skipped, 0 fail. The Postgres leg was not run locally; CI runs it
+
+A live MCP run found that a bullet the user changed in the editor's `.tex` vanished on the host's next `execute_plan`, and that the host was never told what the edit was: `get_head` listed the editor node with a note, `diff_nodes` returned `items: []` and `tex_changed: true`. An editor save keeps the user's text as `edited_tex` beside a `content` that still holds the pre-edit bullets, and a committed version renders from content. The host now sees which bullets changed, and a commit that would drop them is refused until the host carries them over or the user agrees to discard them.
+
+### What shipped
+
+- **`harness/texdiff.py`: the edited source read back into bullets (model-free).** It splits on the `%% ART-SECTION` markers (falling back to `\section` when they are gone), reads the formatter's headings (`\resumeSubheading` over two lines, `\resumeProjectHeading`) into the same item keys the plan uses, and turns `\resumeItem{...}` back into the markdown-ish text `content` holds (`untex` inverts `_escape_tex` and `_convert_inline`, including `\href`).
+- **`diff_nodes.tex_edits`.** Per item, bullets `revised` (the `<item key>#b<n>` id on the earlier version, text before and after), `added` and `removed`; `reordered` items; `section_order` when sections moved; `unmapped` regions (headings, header, skills, preamble, a deleted marker) as a unified diff. The earlier side is the node's own `edited_tex`, or the formatter's output for its content with its layout override laid over it.
+- **`get_head` and the prompt hook.** The last node of each run of editor saves carries `changes` (`tex_edits` plus the content diff), shortened: eight bullet edits, texts clipped at 160 characters, diffs at 12 lines, with `truncated` counting the rest. The run is measured from the last version that was not an editor save, so several autosaves read as one change.
+- **`execute_plan` refuses to drop an edit.** When the parent has `edited_tex` and the plan would commit, the unreflected part of the edit becomes the violation `discards_editor_edits` (detail: the bullets, the reordered items, the unmapped regions; hint: what to do). A revised or added bullet counts as carried when its text is on the item in the new content, a removed one when it is gone, a reorder when the order matches. So the host carries edits over as ordinary nodes (`revise` with the user's text, `delete_bullet`), which face the usual gates. The new `discard_editor_edits: true` commits anyway after the user agreed, and the response records `discarded_editor_edits`. Dry runs report the violation too.
+- **Unchanged behavior.** A parent with no `edited_tex` is untouched. A plan that changes nothing still returns `no_change` and refuses nothing (#257). A drag saves a reordered `.tex` together with a layout override; the parent's own override is laid over its content before comparing, so a drag is no edit to protect and a commit over it still renders the dragged order (#277).
+- **Docs and tool text.** `execute_plan`, `diff_nodes` and `get_head` in `harness/contract.py` (shared by MCP and the CLI), `docs/harness.md` § 13, `docs/architecture.md`, the `art-tailor` skill, the plugin README and `/art:open`, and the Codex `AGENTS.md` snippet.
+- **Tests (25 new).** `test_tailor_tree.py`: a text edit, an added bullet, a removed bullet, moved bullets, a header edit and a rewrite with no markers (both unmapped), a whitespace-only save, `get_head` across two saves, the short form's caps. `test_executor.py`: refuse, carry over, partly carried (revise carried, delete left; delete carried, revise left), explicit discard, an unmapped region, whitespace-only, `no_change`, a drag unaffected, a hand reorder. `test_plugin.py`: the prompt hook lists tex edits across a run. `test_latex_formatter.py`: `untex` inverts the formatter on special characters, and the parser reads the committed formatter fixture.
+
+### Deviations from spec
+
+- **Edited text is not folded back into `content`.** As decided: the raw tex would render without the support check. The host carries the user's wording over as `revise` nodes, which go through it.
+- **Unmapped regions and non-addressable items need the flag.** A plan has no node for the header, education, skills or achievements, so an edit there can only be discarded explicitly. A user who edits their phone number in the tex will see `discards_editor_edits` on every later commit until the host asks.
+- **Skills and education are compared as text, not as items,** so a skills edit is an unmapped diff rather than a list of skills.
+- **A heading edit reads as a removed and an added item.** The item key is the title and company, so renaming an experience in the tex shows its bullets under two keys plus an unmapped diff of the heading lines.
+- **The comparison renders the earlier version with the formatter,** education overrides included, which is what `render` writes. The editor's `GET /tex` seeds from the store's education without the node's job-rule overrides, so an edit saved in a job with a graduation-date rule can show an education diff the user did not type.
+- **`program_id` changes for every program** because `Program` gained `discard_editor_edits` (false by default). Saved programs still load.
+- **Not verified in a browser.** A real drag was not replayed against the Python comparison; the drag test builds the editor's tex from the same layout function the executor uses.
+- **The Postgres leg was not run locally** (CI runs it).
+
+---
+
 ## Issues 276 & 277 — The editor round trip through MCP: host-tailored jobs reach `art ui`, and drags last
 **Status:** complete | **Tests:** 2638 pass on SQLite (7 new), 16 skipped; frontend 112 pass (6 new)
 
