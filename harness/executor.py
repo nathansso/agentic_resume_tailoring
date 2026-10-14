@@ -48,6 +48,7 @@ from agents.ats_scorer import ATSScoringEngine
 from agents.checks import bullet_line_violations, exp_key, expected_sections, proj_key
 from agents.preferences import preferences_in_scope
 from agents.jd_payload import iter_requirements
+from agents.layout import resolve_bullets, resolve_section_order, resolve_skills
 from agents.skill_matching import match_requirement_terms, priority_skills
 from agents.skill_scorer import MAX_SKILLS, rank_and_select_skills, score_skills
 from database.models import JDProfile, JobDescription, PlanProgram, UserJobResult
@@ -751,6 +752,7 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     skill_notes = _apply_skills(working, prog.get("skills"), kg, ctx)
     if prog.get("section_order") is not None:
         working["_section_order"] = list(prog["section_order"])
+    working = _apply_layout((head or {}).get("layout_overrides"), working)
     ctx.variant_origin = accepted_origin
     final_vector = metric_vector(working, ctx)
     ctx.variant_origin = {}
@@ -801,6 +803,27 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     except tree.StaleParent as exc:
         raise PlanError("stale_parent", str(exc), [str(exc.head)] if exc.head else [])
     return {**out, "committed": True, "node_id": node["node_id"]}
+
+
+def _apply_layout(overrides: Optional[Dict], content: Dict) -> Dict:
+    """The user's editor arrangement (#118) laid over the plan's content.
+
+    It outranks the plan's own order as it outranks the pipeline's ranking: the
+    node is rendered from its content, so without this a host commit drops a
+    drag the editor saved (#277). Only a permutation: an override naming a
+    bullet, item, section or skill the content no longer has is skipped.
+    """
+    if not overrides:
+        return content
+    out = resolve_bullets(overrides.get("bullets"), content)
+    skills = resolve_skills(overrides.get("skills"), out.get("skills_ranked") or [])
+    if skills:
+        out["skills_ranked"] = skills
+    if overrides.get("section_order"):
+        present = expected_sections(out)
+        out["_section_order"] = resolve_section_order(
+            overrides["section_order"], out.get("_section_order") or present, present)
+    return out
 
 
 def _apply_skills(content: Dict, names: Optional[List[str]], kg: _KG, ctx: Context) -> Dict:
