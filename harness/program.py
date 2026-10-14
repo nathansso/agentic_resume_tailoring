@@ -75,7 +75,8 @@ class ProgramNode(_M):
     use_variant: Optional[str] = None
     because: Optional[str] = Field(
         None, description="Why a delete is wanted: 'pref:<preference_id>' or 'user:<what they "
-                          "asked>'. A delete with a reason needs no target to improve.")
+                          "asked>'. A delete with a reason needs no target to improve, and no guard "
+                          "vetoes it (hard gates still do; #279).")
     accept: Accept = Field(default_factory=Accept)
 
     @model_validator(mode="after")
