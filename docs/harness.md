@@ -946,7 +946,7 @@ The windows are the plan and have not moved. Status is as of 2026-10-14, from th
 | H1 · Core & Jev | Oct 5 – Oct 18 | #190, #191, #192, #193, #194, #195, #210, #237, #249, #255, #256 | | Contract tests on both legs; `uvx art-mcp` without torch; every Jev point replays from cache | Done |
 | H2 · Executor & Library | Oct 19 – Nov 8 | #113, #123, #126, #185, #196, #197, #198, #199, #200, #229, #230, #232, #233, #241, #254, #257, #258, #259, #260, #279, #289 | #117, #127, #151, #163, #252, #291 | Scripted-host benchmark replays byte-identically; stuffing rejected, preference delete kept | Mostly shipped; what is open is tuning |
 | H3 · Plugin & Memory | Nov 9 – Nov 22 | #201, #202, #203, #244, #283, #290 | | Gate recall measured on a labelled set (negation separate); pins survive compaction | Done |
-| H3b · Editor | Nov 23 – Dec 6 | #204 | #205, #87, #82, #84, #136, #147, #276, #277, #278, #288 | Editor drag reaches the host's next turn; host commit reaches the editor without reload | The local editor and change feed shipped; the chat panel and the UI issues are open |
+| H3b · Editor | Nov 23 – Dec 6 | #204, #276, #277 | #205, #87, #82, #84, #136, #147, #278, #288 | Editor drag reaches the host's next turn; host commit reaches the editor without reload | The local editor and change feed shipped; the chat panel and the UI issues are open |
 | H4 · Host Evaluation | Dec 7 – Dec 27 | #181 | #206, #172 (chunks 1–6 of 7 shipped), #173, #178 | Written result, B vs A first; go/no-go on H5 | Not started |
 | H5 · Offline Policy | From Dec 28 | | #174, #152, #157, #119, #51, #114 | Arm C beats B on anchor-agreed quality on ≥ 2 hosts | Not started; runs only if H4 says go |
 

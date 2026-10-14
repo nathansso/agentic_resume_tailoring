@@ -1501,6 +1501,21 @@ Three host-ingest defects from the October live run, each fixed at one place.
   `incomplete` with `missing: ["blurbs"]` so the host offers to write bullets. Only the harness path
   changed; the legacy tailor still uses the description as stored.
 
+### 8.13 The editor round trip (issues #276, #277)
+
+Two defects stopped a host-tailored job from reaching `art ui` and back. Both are fixed.
+
+- **The editor opens on a host-built job.** `JobWorkspace` renders the editor only for `tailored` or
+  `exported` jobs, and only the web pipeline set that status. `harness/tree.py::_materialize` (used by
+  `execute_plan` and `checkout`) now moves `created` and `analyzed` to `tailored`.
+- **A drag survives the host's next commit.** `web/frontend/src/lib/texStructure.ts` now reads the
+  formatter's multi-line `\resumeSubheading` headings, ignores the preamble's `\newcommand`, and
+  unescapes labels, so `PUT /layout` accepts the drag. `harness/executor.py::_apply_layout` applies the
+  stored override to the new node's content (bullets, skills, then section order, as the pipeline does
+  in §2.6), so the next `execute_plan` renders the dragged order; the user's override outranks the
+  plan's own `section_order`. `tests/test_layout_overrides.py` fails when the formatter's output drifts
+  from the editor's committed fixture.
+
 ---
 
 ## 9. The landing site (issue #272)
@@ -1527,7 +1542,7 @@ sdist, and is **not** part of the web app or the harness. Its theme tokens are p
 ## In flight
 
 Open issues, specified but **not shipped**. Nothing below describes a capability the system
-has. The entries that use the present tense (#276 to #278, #288, #291) report *defects* in
+has. The entries that use the present tense (#278, #288, #291) report *defects* in
 code that does exist, and are here because their fixes have not landed.
 
 **The harness pivot (epic #207, [`harness.md`](harness.md))** sequences all of it into phases
@@ -1577,10 +1592,7 @@ described in §8. What follows is what is left.
 
 **Surfaces**
 `art ui` (#204) is merged. These issues remain:
-- **#276** reports that `art ui` hides the editor for a job tailored through the harness (its status
-  stays `created`). **#277** reports that an editor drag never saves a layout override: the heading
-  parser misses the formatter's multi-line headings and the save returns 422. **#278** reports that a
-  host commit drops the user's editor `.tex` edits, and `diff_nodes` reports only `tex_changed`.
+- **#278** reports that a host commit drops the user's editor `.tex` edits, and `diff_nodes` reports only `tex_changed`.
   **#288** will give the host and `art ui` one shared current-job id.
 - **#205** will add the editor chat panel (an Agent SDK session with `art-mcp`, and an API-key fallback).
 - **#147** will add the inline chat-panel UI for knowledge-artifact suggestions, in that panel. It carries
