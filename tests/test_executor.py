@@ -66,6 +66,14 @@ PROJ = "proj:pixel adventure"
     ({"id": "a", "op": "keep", "item_key": "skill:python"}, "exp: or proj:"),
     ({"id": "a", "op": "delete", "item_key": PROJ,
       "accept": {"tolerances": {"duplication": 0.9}}}, "only tighten"),
+    ({"id": "a", "op": "delete_bullet", "item_key": EXP}, "delete_bullet needs cut_bullets"),
+    ({"id": "a", "op": "delete_bullet", "item_key": EXP, "cut_bullets": [f"{EXP2}#b1"]},
+     "must be 'exp:machine learning engineer"),
+    ({"id": "a", "op": "delete_bullet", "item_key": EXP, "cut_bullets": [f"{EXP}#bx"]}, "#b<n>"),
+    ({"id": "a", "op": "delete_bullet", "item_key": EXP, "cut_bullets": [f"{EXP}#b1"],
+      "bullets": [{"text": "x", "cites": [EXP]}]}, "takes no bullets"),
+    ({"id": "a", "op": "delete", "item_key": EXP, "cut_bullets": [f"{EXP}#b1"]},
+     "cut_bullets is for delete_bullet"),
 ])
 def test_the_schema_rejects_malformed_nodes(node, msg):
     from harness.program import Program
@@ -580,10 +588,12 @@ def test_a_requested_delete_that_breaks_a_hard_gate_is_still_refused():
     assert verdict["waived"] == {}                      # nothing is waived on a refused node
 
 
-def _spread_profile():
+def _spread_profile(exp_bullets=0, extra_projects=5):
     """The benchmark profile cut to two bullets an item (the floor `cut_hints` respects), plus
     five projects of varied wording: every `cut_hints` entry is a `drop_item`, and cutting a
-    varied project lowers the page's MTLD by more than the 10% tolerance."""
+    varied project lowers the page's MTLD by more than the 10% tolerance. With `exp_bullets`,
+    each experience instead carries that many varied bullets, so `cut_bullet` hints come first
+    (#289)."""
     from eval.profile_fixture import load_profile
     from eval.tailoring_benchmark import PROFILES_DIR
 
@@ -598,8 +608,13 @@ def _spread_profile():
     profile = load_profile(PROFILES_DIR / BENCH_PROFILE)
     for item in (*profile.experiences, *profile.projects):
         item["bullets"] = item["bullets"][:2]
+    for n, item in enumerate(profile.experiences if exp_bullets else ()):
+        # The first two bullets repeat each other's words; the later ones, the ones `cut_hints`
+        # cut, are varied, so cutting them lowers the page's MTLD.
+        item["bullets"] = [f"Built reporting dashboards for weekly service reviews {j}" if j < 2
+                           else varied(20 + n, j) for j in range(exp_bullets)]
     profile.projects += [{"name": f"Tool {words[i]}", "description": None, "repo_url": None,
-                          "bullets": [varied(i, 0), varied(i, 1)]} for i in range(5)]
+                          "bullets": [varied(i, 0), varied(i, 1)]} for i in range(extra_projects)]
     return profile
 
 
@@ -647,3 +662,165 @@ def test_a_requested_revise_that_stuffs_is_still_reverted(env):
     node = out["nodes"][0]
     assert node["status"] == "reverted" and "waived" not in node, node
     assert node["reason"].startswith(("guard:", "hard_gate:")), node
+
+
+# ── bullet removal is a delete, not a revise (#289) ──────────────────────────
+
+def _wide_env(monkeypatch):
+    """Four experiences of four varied bullets and projects of two, at two rendered lines a
+    bullet: over the page budget, with `cut_bullet` hints ahead of the `drop_item`s."""
+    from eval.scripted_host import open_task_job, seed_profile
+    from eval.tailoring_benchmark import load_tasks
+    from harness import executor
+
+    monkeypatch.setattr(executor, "MEASURER", lambda texts: [2 for _ in texts])
+    uid = seed_profile(_spread_profile(exp_bullets=4, extra_projects=0))
+    return uid, open_task_job(uid, load_tasks(limit=5)[3]), {"min_skills": 0}
+
+
+def _cut_index(bullet_id):
+    return int(bullet_id.rpartition("#b")[2])
+
+
+def _nodes_from_hints(hints, because="user:fit the one-page budget"):
+    """What the art-tailor skill tells a host to do: each hint carries its op; the cut bullets
+    of one item share one `delete_bullet` node (a plan holds one node per item)."""
+    cuts, nodes = {}, []
+    for h in hints:
+        if h["op"] == "delete_bullet":
+            cuts.setdefault(h["item"], []).append(h["bullet"])
+        else:
+            nodes.append({"id": f"drop:{h['item']}", "op": h["op"], "item_key": h["item"],
+                          "because": because})
+    nodes += [{"id": f"cut:{key}", "op": "delete_bullet", "item_key": key, "cut_bullets": ids,
+               "because": because} for key, ids in cuts.items()]
+    return nodes
+
+
+def test_a_host_following_cut_hints_commits_with_the_budget_met(isolated_engine, monkeypatch):
+    """The #289 run: over budget, `cut_hints` leading with `cut_bullet`s. Sent as a `revise` each
+    came back `reverted` (`guard: mtld regressed`) and nothing committed. Sent as the
+    `delete_bullet` the hint names, every hint kind is accepted, the survivors are verbatim and
+    the page fits."""
+    from harness import tree
+    from harness.executor import _KG
+
+    uid, job_id, finalize = _wide_env(monkeypatch)
+    hints = _run(uid, {"job_id": job_id, "finalize": finalize}, dry_run=True)["cut_hints"]
+    assert {h["action"] for h in hints} == {"cut_bullet", "drop_item"}
+    assert {h["op"] for h in hints} == {"delete_bullet", "delete"} and hints[0]["action"] == "cut_bullet"
+    per_item = [h["item"] for h in hints if h["action"] == "cut_bullet"]
+    assert len(per_item) > len(set(per_item)), "an item must lose more than one bullet"
+
+    out = _run(uid, {"job_id": job_id, "finalize": finalize, "nodes": _nodes_from_hints(hints)})
+    assert out.get("error") is None
+    assert {n["status"] for n in out["nodes"]} == {"accepted"}, out["nodes"]
+    assert out["violations"] == [] and out["line_budget"]["over_by"] <= 0 and out["committed"]
+    assert _head(isolated_engine, job_id) == out["node_id"]
+
+    page = tree.get_node(uid, out["node_id"])["content"]
+    src = _KG(uid).source_bullets
+    for item in page["experiences"]:
+        key = f"exp:{item['title']}|{item['company']}".lower()
+        cut = {_cut_index(h["bullet"]) for h in hints if h["item"] == key and h["action"] == "cut_bullet"}
+        assert item["bullets"] == [b for n, b in enumerate(src[key]) if n not in cut], key
+    dropped = {h["item"] for h in hints if h["action"] == "drop_item"}
+    assert dropped and not dropped & {f"proj:{p['name']}".lower() for p in page["projects"]}
+
+
+def test_the_same_cuts_sent_as_a_revise_are_still_reverted_by_a_guard(isolated_engine, monkeypatch):
+    """`revise` keeps facing every guard, whatever its `because`: only the delete forms are waived."""
+    from harness.executor import _KG
+
+    uid, job_id, finalize = _wide_env(monkeypatch)
+    hints = _run(uid, {"job_id": job_id, "finalize": finalize}, dry_run=True)["cut_hints"]
+    src = _KG(uid).source_bullets
+    nodes = []
+    for node in _nodes_from_hints(hints):
+        if node["op"] != "delete_bullet":
+            continue
+        key, cut = node["item_key"], {_cut_index(r) for r in node["cut_bullets"]}
+        nodes.append({"id": node["id"], "op": "revise", "item_key": key, "strategy": "tighten",
+                      "because": node["because"],
+                      "bullets": [{"text": b, "cites": [f"{key}#b{n}"]}
+                                  for n, b in enumerate(src[key]) if n not in cut]})
+    out = _run(uid, {"job_id": job_id, "finalize": finalize, "nodes": nodes}, dry_run=True)
+    assert all(n["status"] == "reverted" and "waived" not in n for n in out["nodes"]), out["nodes"]
+    assert any(n["reason"].startswith("guard:") for n in out["nodes"]), out["nodes"]
+    assert not out["committed"] and out["line_budget"]["over_by"] > 0
+
+
+def test_a_delete_bullet_that_regresses_a_guard_is_accepted_and_reports_it(isolated_engine, monkeypatch):
+    uid, job_id, finalize = _wide_env(monkeypatch)
+    hints = _run(uid, {"job_id": job_id, "finalize": finalize}, dry_run=True)["cut_hints"]
+    out = _run(uid, {"job_id": job_id, "finalize": finalize, "nodes": _nodes_from_hints(hints)},
+               dry_run=True)
+    waived = [n for n in out["nodes"] if n.get("waived")]
+    assert any(n["op"] == "delete_bullet" for n in waived), "the scenario must exercise a guard"
+    assert all(n["reason"].startswith("guard_waived") for n in waived)
+
+
+def test_a_revise_that_removes_a_bullet_and_adds_text_faces_every_guard(env):
+    """Bullet removal plus a rewrite is a revise: the waiver is for whole-bullet deletes only."""
+    from harness.executor import _KG
+
+    uid, job_id, _ = env
+    src = _KG(uid).source_bullets[EXP2]
+    bullets = [{"text": f"{b.rstrip('.')} using Kafka and Redis and Airflow", "cites": [f"{EXP2}#b{i}"]}
+               for i, b in list(enumerate(src))[:-1]]
+    out = _run(uid, {"job_id": job_id, "nodes": [
+        {"id": "r", "op": "revise", "item_key": EXP2, "strategy": "keyword_weave",
+         "bullets": bullets, "because": "user:fit the one-page budget"}]}, dry_run=True)
+    node = out["nodes"][0]
+    assert node["status"] == "reverted" and "waived" not in node, node
+    assert node["reason"].startswith(("guard:", "hard_gate:")), node
+
+
+def test_delete_bullet_removes_only_what_it_names_and_cites_follow(env):
+    from harness import tree
+    from harness.executor import _KG
+
+    uid, job_id, _ = env
+    src = _KG(uid).source_bullets[EXP]
+    assert len(src) >= 3
+    out = _run(uid, {"job_id": job_id, "nodes": [
+        {"id": "c", "op": "delete_bullet", "item_key": EXP, "because": "user:too long",
+         "cut_bullets": [f"{EXP}#b1"]}]})
+    assert out["nodes"][0]["status"] == "accepted" and out["committed"]
+    item = next(i for i in tree.get_node(uid, out["node_id"])["content"]["experiences"]
+                if i["title"] == "Machine Learning Engineer")
+    assert item["bullets"] == [b for n, b in enumerate(src) if n != 1]
+    assert set(item["cites"]) == set(item["bullets"])
+
+
+@pytest.mark.parametrize("cut,expect", [
+    ([f"{EXP}#b99"], "unknown_bullet"),
+    ([f"{EXP}#b0", f"{EXP}#b1", f"{EXP}#b2", f"{EXP}#b3"], "would_empty_item"),
+])
+def test_delete_bullet_is_refused_when_it_names_nothing_or_leaves_nothing(env, cut, expect):
+    uid, job_id, _ = env
+    out = _run(uid, {"job_id": job_id, "nodes": [
+        {"id": "c", "op": "delete_bullet", "item_key": EXP, "because": "user:x", "cut_bullets": cut}]},
+        dry_run=True)
+    node = out["nodes"][0]
+    assert node["status"] == "refused" and node["reason"].startswith(expect), node
+
+
+def test_a_delete_bullet_with_no_reason_is_judged_like_any_edit(env):
+    """No `because`, no waiver: the node must improve a target and no guard may regress."""
+    uid, job_id, _ = env
+    out = _run(uid, {"job_id": job_id, "nodes": [
+        {"id": "c", "op": "delete_bullet", "item_key": EXP, "cut_bullets": [f"{EXP}#b3"]}]},
+        dry_run=True)
+    node = out["nodes"][0]
+    assert "waived" not in node and not (node["reason"] or "").startswith("guard_waived"), node
+
+
+def test_patch_plan_applies_cut_hints_as_delete_bullet_nodes(isolated_engine, monkeypatch):
+    from harness.executor import patch_plan
+
+    uid, job_id, finalize = _wide_env(monkeypatch)
+    over = _run(uid, {"job_id": job_id, "finalize": finalize}, dry_run=True)
+    out = patch_plan(uid, over["program_id"], [{"op": "add", "path": "/nodes/-", "value": n}
+                                               for n in _nodes_from_hints(over["cut_hints"])])
+    assert out["committed"] and out["violations"] == []
