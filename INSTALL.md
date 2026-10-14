@@ -1,9 +1,10 @@
 # Installing ART
 
-> **The harness pivot (#207):** ART is becoming a package your coding agent drives. The
-> harness install is below; a Claude Code plugin follows in #201. Options A–C install the
-> legacy web app and CLI. The hosted deploy (Option C / Railway) is frozen and gets no new
-> features. See [`docs/harness.md`](docs/harness.md).
+> **The harness pivot (#207):** ART is a package your coding agent drives. The Claude Code
+> plugin (#201), the Codex integration (#203) and the `art-mcp` package (#194) are below.
+> Options A–C install the legacy web app and CLI. The hosted deploy (Option C / Railway) is
+> frozen, gets no new features, and is currently down. See [`docs/harness.md`](docs/harness.md).
+> The public site is https://artie-sand.vercel.app; this file is the full reference.
 
 ## The Claude Code plugin (#201)
 
@@ -324,7 +325,10 @@ Each test gets a throwaway schema that is dropped on teardown.
 
 ## Option C — Cloud deploy
 
-### Railway (current target)
+### Railway (frozen, currently down)
+
+The hosted web app is frozen under the harness pivot, and its Railway trial has lapsed, so
+the live URL does not respond. These steps are kept for reference; nothing new ships to it.
 
 > **Pre-requisites:** [Railway CLI installed](https://docs.railway.com/guides/cli),
 > a Railway account, and a Supabase project with auth enabled.
