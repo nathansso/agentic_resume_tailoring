@@ -53,6 +53,7 @@ from database.models import (
     BulletVariant, JobDescription, JobRoleFamily, TailorNode, TrackBaseline,
 )
 from harness import tree
+from harness import policy
 from harness.acceptance import VARIANT_DRIFT_TOLERANCE, token_distance
 from harness.decisions import library as jev
 from harness.tools import _records
@@ -72,7 +73,7 @@ ROLE_FAMILIES = tuple(f.value for f in RoleFamily)
 # whenever it answers, with its own fitted threshold. Real scores run low because the
 # weights are relative to the heaviest term: a bullet made of the posting's top six terms
 # scored about 0.30.
-VARIANT_MATCH_FLOOR = 0.10
+VARIANT_MATCH_FLOOR = policy.get("library.variant_match_floor")
 
 _ROUND = 4
 

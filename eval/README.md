@@ -245,18 +245,21 @@ are regex false positives — company heritage lines, an age question, a UK
 residency rule, and one "**no more than** 3 years of professional experience",
 which is an entry-level constraint).
 
-**The `level` mismatch is a product finding, not a corpus one.**
-`_detect_level` returns the highest tier whose keyword appears *anywhere*, and
+**The `level` mismatch was a product finding, not a corpus one — fixed in #181.**
+Before #181, `_detect_level` returned the highest tier whose keyword appeared *anywhere*, and
 its `lead` tier matches the bare substring `lead` — so "leadership", "leading"
 and "hiring manager" promote an entry-level posting. 60 of 150 postings read as
 `lead` and 27 as `manager`; only 22 are read at the tier they are filed under.
 The same defect hits the candidate side: the retired `benchmark_profile.md`
 reads as `lead` because one bullet says "saving staff ten hours weekly". So
 `role_level` (weight 0.10) has been comparing two mostly-wrong tiers for the
-whole life of this benchmark. Fixing the detector belongs to the product-scoring
-issues (#124/#126/#151/#152), not here — filed as **#181**. Note that
-`scrape_job_descriptions.py::classify_level` reads the same 150 postings
-correctly, so the corpus labels are sound and only the scorer is wrong.
+whole life of this benchmark. #181 replaced the detector with
+`agents/seniority.py`, shared with `scrape_job_descriptions.py::classify_level`:
+the audit's `level_mismatch` fell from 124 to 7 postings (plus 18 that state no
+tier and now read `unknown`), and the retired benchmark profile reads `unknown`
+instead of `lead`. Every `role_level` and composite figure recorded before #181
+is not comparable with one recorded after. The corpus labels were always sound;
+only the scorer was wrong.
 
 ### The profile set (issue #172)
 
@@ -304,8 +307,9 @@ does not belong to, and the table would still look complete —
 skill count, redundancy modes, detected seniority tier) with thresholds set from
 the measured set rather than borrowed.
 
-Two vocabulary hazards constrain every profile, both consequences of
-`_detect_level` returning the *highest* tier matched anywhere: no profile may
+Two vocabulary hazards constrain every profile, both consequences of the
+pre-#181 `_detect_level` returning the *highest* tier matched anywhere (the
+profiles still avoid them, which keeps them valid under either detector): no profile may
 contain `senior`, `staff`, `principal`, `manager` or any `lead…` word (so no
 "principal component analysis", no "leadership", no "staffing"), and an
 intern-level profile may not say `junior` or `associate`. Tests assert no

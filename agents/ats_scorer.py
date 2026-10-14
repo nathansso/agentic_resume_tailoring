@@ -7,6 +7,7 @@ from sqlmodel import Session, select
 
 from database.models import User, UserSkill, Skill, Experience, Project
 from agents import skill_selection
+from agents.seniority import detect_level, level_index
 
 logger = logging.getLogger(__name__)
 
@@ -52,15 +53,12 @@ _PURE_NUMBER = re.compile(r"^\d+$")
 
 # ── Seniority level detection ─────────────────────────────────────────────────
 
-_LEVELS = [
-    ("intern",   ["intern", "internship"]),
-    ("junior",   ["junior", "entry level", "entry-level", "associate", " jr "]),
-    ("mid",      ["mid level", "mid-level", "2+ years", "3+ years", "4+ years"]),
-    ("senior",   ["senior", "sr.", "5+ years", "6+ years", "7+ years", "8+ years",
-                  "9+ years", "10+ years"]),
-    ("lead",     ["lead", "staff", "principal", "tech lead", "team lead"]),
-    ("manager",  ["manager", "director", " vp ", "head of"]),
-]
+# Detection lives in `agents/seniority.py` (issue #181), shared with the JD
+# scraper so a posting is labelled the same way at scrape and score time.
+# `unknown` is a tier of its own and scores neutrally: it is the absence of
+# evidence, not a mid-level assumption.
+_NEUTRAL_ROLE_LEVEL_SCORE = 75.0
+_ROLE_LEVEL_GAP_PENALTY = 25.0
 
 _WEIGHTS = {
     "skill_coverage":  0.45,
@@ -369,16 +367,23 @@ class ATSScoringEngine:
 
     @staticmethod
     def _role_level(resume_text: str, jd_text: str) -> Dict:
-        """Detect seniority tier from both texts, penalise mismatches."""
+        """Detect seniority tier from both texts, penalise mismatches.
+
+        When either side states no tier the component scores a fixed neutral
+        value: no evidence of a mismatch is not evidence of a match, and it must
+        not depend on the other side's tier (#181).
+        """
         jd_level = _detect_level(jd_text)
-        resume_level = _detect_level(resume_text)
+        resume_level = _detect_level(resume_text, kind="candidate")
 
-        level_names = [name for name, _ in _LEVELS]
-        jd_idx = level_names.index(jd_level)
-        res_idx = level_names.index(resume_level)
+        jd_idx = level_index(jd_level)
+        res_idx = level_index(resume_level)
 
-        gap = abs(jd_idx - res_idx)
-        score = max(0.0, 100.0 - gap * 25.0)
+        if jd_idx is None or res_idx is None:
+            score = _NEUTRAL_ROLE_LEVEL_SCORE
+        else:
+            gap = abs(jd_idx - res_idx)
+            score = max(0.0, 100.0 - gap * _ROLE_LEVEL_GAP_PENALTY)
 
         return {
             "score": round(score, 1),
@@ -433,14 +438,13 @@ class ATSScoringEngine:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _detect_level(text: str) -> str:
-    """Return the highest seniority tier whose keywords appear in text."""
-    lower = text.lower()
-    detected = "mid"  # default assumption
-    for name, keywords in _LEVELS:
-        if any(kw in lower for kw in keywords):
-            detected = name
-    return detected
+def _detect_level(text: str, *, kind: str = "posting") -> str:
+    """Seniority tier of a posting (default) or a candidate, or `unknown`.
+
+    Thin wrapper over `agents.seniority.detect_level`, kept under its old name
+    for `jd_payload`, `profile_checks` and the corpus audit.
+    """
+    return detect_level(text, kind=kind)
 
 
 def _weight_meta(weight: float) -> Dict:

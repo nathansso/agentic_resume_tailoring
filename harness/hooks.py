@@ -38,6 +38,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 from uuid import UUID
 
+from harness import ART_VERSION
+
 log = logging.getLogger(__name__)
 
 MAX_ITEMS = 6
@@ -230,7 +232,7 @@ def main(argv: Sequence[str]) -> int:
         reply = run(event, payload, user_id, allow_writes=writes)
         if reply:
             sys.stdout.write(json.dumps(reply) + "\n")
-    except Exception as exc:                          # never block the prompt
+    except (Exception, SystemExit) as exc:            # never block the prompt
         print(f"art hook: {exc}", file=sys.stderr)
     return 0
 
@@ -242,8 +244,29 @@ def main(argv: Sequence[str]) -> int:
 # go in the user's `$CODEX_HOME/hooks.json` or a repo's `.codex/hooks.json`, and
 # Codex asks the user to trust them (`/hooks`). Both hosts read the same JSON.
 
-SOURCE = "git+https://github.com/nathansso/agentic_resume_tailoring"
+REPO = "nathansso/agentic_resume_tailoring"
+# The one released wheel the plugin runs (#256): the editor is built into it (#255), the URL
+# never changes for a version, and uv caches it by URL, so a start needs no remote check.
+# Releasing is pushing the tag v<ART_VERSION>; .github/workflows/release.yml builds and
+# attaches the wheel. tests/test_plugin.py fails when this, plugin/.mcp.json and ART_VERSION
+# disagree.
+WHEEL_URL = (f"https://github.com/{REPO}/releases/download/v{ART_VERSION}/"
+             f"art_mcp-{ART_VERSION}-py3-none-any.whl")
+SOURCE = f"art-mcp[ui] @ {WHEEL_URL}"
 _WIRING = (("UserPromptSubmit", None, "user-prompt"), ("SessionStart", "compact", "session-start"))
+
+
+def hook_command(arg: str, source: str = SOURCE) -> str:
+    """The shell line for one hook. It must run unchanged in sh, Git Bash and PowerShell
+    (the shells Claude Code uses), so it is plain words, double quotes and `;`.
+
+    `--offline` makes uvx use only what the MCP server's start already cached: a hook
+    never waits on the network (an online start re-checks the package indexes and takes
+    seconds, or 30 s to time out with no connection), and a cold cache is a silent no-op
+    until the server has started once. `; exit 0` covers what `art hook` cannot, uvx
+    failing before `art` runs (no uvx, no cache, no wheel), so a hook never blocks the
+    message."""
+    return f'uvx --offline --from "{source}" art hook {arg}; exit 0'
 
 
 def hook_config(source: str = SOURCE) -> Dict[str, Any]:
@@ -252,7 +275,7 @@ def hook_config(source: str = SOURCE) -> Dict[str, Any]:
     for event, matcher, arg in _WIRING:
         group: Dict[str, Any] = {} if matcher is None else {"matcher": matcher}
         group["hooks"] = [{"type": "command", "timeout": 30,
-                           "command": f"uvx --from {source} art hook {arg}"}]
+                           "command": hook_command(arg, source)}]
         hooks[event] = [group]
     return {"hooks": hooks}
 
@@ -290,7 +313,7 @@ def codex_main(argv: Sequence[str]) -> int:
                    help="this repo's .codex/hooks.json instead of $CODEX_HOME/hooks.json")
     p.add_argument("--write", action="store_true", help="merge into the file (else print)")
     p.add_argument("--from", dest="source", default=SOURCE,
-                   help="where uvx gets ART (default: the GitHub repo)")
+                   help="where uvx gets ART (default: the pinned release wheel)")
     args = p.parse_args(list(argv))
     config = hook_config(args.source)
     if not args.write:

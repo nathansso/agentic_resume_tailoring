@@ -42,6 +42,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from harness import policy
 
 from harness.decisions.questions import Answer, Choice
 
@@ -56,7 +57,7 @@ MAX_REQUIREMENTS = 8            # Jev is distracted by large state: the posting'
 REQUIREMENT_MAX_CHARS = 300
 MAX_TRACKS = 254                # a choice takes at most 255 options, one of them `none`
 MAX_VARIANTS = 254
-TAU_FLOOR = 0.5                 # a pick needs Jev to call it more likely than not
+TAU_FLOOR = policy.get("library.tau_floor")                 # a pick needs Jev to call it more likely than not
 _ROUND = 4
 
 # Fitted (#199) on eval/library_labels/ (48 variant cases, 36 baseline cases, synthetic, labels
@@ -87,8 +88,8 @@ _ROUND = 4
 #     close call to pool and its own probability stays the gate. The thin part is the sets, not the rule:
 #     refit when the model or a question changes, and with adversarial cases (a track that is almost right, a
 #     job the host mislabels) once real use turns some up.
-TAU_VARIANT = 0.50
-TAU_BASELINE = 0.50
+TAU_VARIANT = policy.get("library.tau_variant")
+TAU_BASELINE = policy.get("library.tau_baseline")
 
 
 def _norm(text: Any) -> str:

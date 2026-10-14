@@ -53,18 +53,19 @@ from agents.skill_scorer import MAX_SKILLS, rank_and_select_skills, score_skills
 from database.models import JDProfile, JobDescription, PlanProgram, UserJobResult
 from harness import ART_VERSION, library, tree
 from harness.acceptance import (
-    Context, accept, metric_vector, preference_violations, term_pattern,
+    Context, accept, metric_vector, preference_violations,
 )
 from harness.decisions.coverage import (
     make_coverage_checker, node_detail as coverage_node_detail, summary as coverage_summary,
 )
 from harness.decisions.negative_pins import (
-    make_pin_checker, reviews as pin_reviews, violations as pin_violations,
+    make_pin_checker, pin_target, reviews as pin_reviews, term_matcher,
+    violations as pin_violations,
 )
 from harness.decisions.support import make_support_checker, reviews as support_reviews
 from harness.ingest import apply_job_rules, list_rules, resolve_rules
 from harness.program import Program, apply_patch, program_id
-from harness.tools import _records, edu_key, skill_key
+from harness.tools import _records, edu_key, project_source_bullets, skill_key
 
 log = logging.getLogger(__name__)
 
@@ -72,6 +73,11 @@ log = logging.getLogger(__name__)
 # when a LaTeX engine is installed, and "unmeasured" when none is. Tests
 # inject a fake here so CI needs no TeX.
 MEASURER: Optional[Callable[[Sequence[str]], List[int]]] = None
+
+
+# `execute_plan`'s `reason` when the plan would leave its parent's page unchanged (#257).
+NO_CHANGE = ("no_change: the plan leaves the page identical to its parent, so nothing was "
+             "committed; see nodes[] for why each node was reverted, refused or kept")
 
 
 class PlanError(Exception):
@@ -98,9 +104,8 @@ class _KG:
             if r["kind"] == "experience":
                 self.source_bullets[r["key"]] = [b for b in r["record"].get("bullets") or [] if b]
             elif r["kind"] == "project":
-                blurbs = [b["content"] for b in r["record"].get("blurbs") or [] if b.get("content")]
-                desc = (r["record"].get("description") or "").strip()
-                self.source_bullets[r["key"]] = blurbs or ([desc] if desc else [])
+                # Blurbs, else the description minus a lead-in that only restates the project (#260).
+                self.source_bullets[r["key"]] = project_source_bullets(r["record"])
         # The bullet library (#229): every variant of this user by id (any status, so a
         # draft is refused for what it is), and the normalized text of the approved ones.
         self.variants = library.variants_by_id(user_id)
@@ -354,33 +359,35 @@ def _page_budget(content: Dict, budget: float) -> Optional[Dict]:
         return None
 
 
-def _negative_terms(skills: Dict[str, Dict]) -> Dict[str, Dict]:
-    """Negative pins (#198): a hard suppression by term, not by key, names a
-    fact that must never render, in bullets as well as skills."""
-    return {t: p for t, p in skills.items()
-            if not (p.get("target_key") or "").strip().lower().startswith("skill:")}
-
-
 def _hard_preferences(user_id: UUID, job_id: UUID) -> Tuple[Dict[str, Dict], Dict[str, Dict], Dict[str, Dict]]:
     """Strength-5 preferences in scope: suppressed items, emphasized items,
-    suppressed skills — each keyed to the preference that set it."""
+    suppressed skills and topics — each keyed to the preference that set it.
+
+    The third dict is the negative terms (#198): a hard suppression by name, not by item key,
+    names a fact that must never render, in bullets as well as skills. A skill-keyed pin is one
+    (#254), and so is a topic bound to nothing. `negative_pins.pin_target` decides which."""
     prefs = preferences_in_scope(services.load_preferences(user_id), job_id=str(job_id))
     suppress, emphasize, skills = {}, {}, {}
     for p in sorted(prefs, key=lambda p: str(p.get("preference_id"))):
         if (p.get("strength") or 0) < HARD_STRENGTH:
             continue
-        key = (p.get("target_key") or "").strip().lower()
-        term = (p.get("target_term") or "").strip().lower()
-        if p.get("polarity") == "suppress":
+        target = pin_target(p)
+        if target is not None:
+            kind, name = target
+            if kind == "item":
+                suppress[name] = p
+            elif kind == "skill" or not (name in skills and pin_target(skills[name])[0] == "skill"):
+                skills[name] = p                # a skill pin keeps its alias matching over a same-named topic
+        elif p.get("polarity") == "emphasize":
+            key = (p.get("target_key") or "").strip().lower()
             if key.startswith(("exp:", "proj:")):
-                suppress[key] = p
-            elif key.startswith("skill:"):
-                skills[key.split(":", 1)[1]] = p
-            elif term:
-                skills[term] = p
-        elif p.get("polarity") == "emphasize" and key.startswith(("exp:", "proj:")):
-            emphasize[key] = p
+                emphasize[key] = p
     return suppress, emphasize, skills
+
+
+def _skill_pin_terms(skills: Dict[str, Dict]) -> set:
+    """The negative terms that are pins on a skill (#254), whose match includes the skill's aliases."""
+    return {t for t, p in skills.items() if pin_target(p)[0] == "skill"}
 
 
 def _context(user_id: UUID, job: JobDescription, kg: _KG, max_bullet_lines: int) -> Tuple[Context, Dict]:
@@ -403,7 +410,8 @@ def _context(user_id: UUID, job: JobDescription, kg: _KG, max_bullet_lines: int)
         # (#129), so it cannot demand an item that does not exist.
         hard_emphasize={k for k in emphasize if k in kg.by_key},
         suppressed_skills=set(skills),
-        negative_terms=set(_negative_terms(skills)),
+        negative_terms=set(skills),
+        negative_skill_terms=_skill_pin_terms(skills),
         source_bullets=kg.source_bullets,
         cite_status=kg.cite_status,
         matched_skills=matched,
@@ -411,8 +419,8 @@ def _context(user_id: UUID, job: JobDescription, kg: _KG, max_bullet_lines: int)
         max_bullet_lines=max_bullet_lines,
         approved_variants=kg.approved_texts,
     )
-    return ctx, {"suppress": suppress, "emphasize": emphasize,
-                 "negative_terms": _negative_terms(skills)}
+    return ctx, {"suppress": suppress, "emphasize": emphasize, "negative_terms": skills,
+                 "skill_terms": _skill_pin_terms(skills)}
 
 
 # ── nodes ────────────────────────────────────────────────────────────────────
@@ -482,7 +490,7 @@ def _refusal(node: Dict, content: Dict, kg: _KG, prefs: Dict, pref_ids: set) -> 
         if bad:
             return f"unresolved_cite: bullet {i} cites {', '.join(bad)}"
         for term, pref in sorted(prefs.get("negative_terms", {}).items()):
-            if term_pattern(term).search(bullet["text"].lower()):
+            if term_matcher(term, term in prefs.get("skill_terms", ()))(bullet["text"]):
                 return (f"negative_pin: bullet {i} mentions {term!r}, which "
                         f"{pref.get('text')!r} says must never appear")
     because = node.get("because") or ""
@@ -651,6 +659,9 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
 
     head = tree.get_head(user_id, job_id)["head"]
     head_id = head["node_id"] if head else None
+    # What the parent held before job rules touch `base` (it is `head["content"]`, edited in
+    # place): the no-change check below compares the would-be version to this (#257).
+    parent_content = copy.deepcopy(head["content"]) if head else None
     parent = (prog["parent"] or None)
     if parent != head_id:
         raise PlanError("stale_parent",
@@ -683,7 +694,8 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     ctx.support_checker = make_support_checker(kg.source_bullets, base, kg.approved_texts, evidence)
     # The negative-pin check (#232): Jev on whether a changed bullet or item field mentions a
     # pinned topic in other words. The pin's own statement describes the topic.
-    pins = [{"term": t, "statement": p.get("text")} for t, p in sorted(prefs["negative_terms"].items())]
+    pins = [{"term": t, "statement": p.get("text"), "skill": t in prefs["skill_terms"]}
+            for t, p in sorted(prefs["negative_terms"].items())]
     ctx.pin_checker = make_pin_checker(pins, base) if pins else None
     # Finalize checks the whole page, so a paraphrase already in the base cannot render.
     ctx.pin_page_checker = make_pin_checker(pins, None) if pins else None
@@ -780,7 +792,17 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     semantic = coverage_summary(ctx.coverage_checker(working), working) if ctx.coverage_checker else None
     if semantic:
         out["semantic_coverage"] = semantic
-    if violations or dry_run:
+    if violations:
+        return out
+    if head is not None and working == parent_content:
+        # Every node reverted, refused or kept, and nothing else moved the page (skills,
+        # section order, job rules): the version would equal its parent, so it is not history
+        # and not an editor event (#257). The first version of a job always commits (the
+        # track baseline copy), so only a plan with a parent can land here. A plan that
+        # re-ranks skills or applies a job rule changes `working` and commits.
+        out["reason"] = NO_CHANGE
+        return out
+    if dry_run:
         return out
 
     breakdown = ATSScoringEngine.score_tailored(
