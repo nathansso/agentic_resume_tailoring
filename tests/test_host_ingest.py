@@ -209,6 +209,37 @@ def test_ingest_schema_returns_the_extraction_schema(isolated_engine):
     assert {"text", "type", "criticality", "terms"} <= set(req["properties"])
 
 
+def test_the_project_schema_asks_for_blurbs_apart_from_the_description(isolated_engine):
+    """#260: bullets are a field of their own, and the text says the description renders verbatim."""
+    uid = _new_user(isolated_engine, "U")
+    out = invoke("ingest_schema", uid, {"kind": "project"})
+    props = out["json_schema"]["properties"]
+    assert "blurbs" in props and props["blurbs"]["type"] == "array"
+    assert "verbatim" in props["description"]["description"]
+    assert "verbatim" in out["note"] and "blurbs" in out["note"]
+    assert out["required"] == ["name"]
+
+
+def test_upsert_stores_project_blurbs_beside_the_description_once(isolated_engine):
+    from database.models import ProjectBlurb
+
+    uid = _new_user(isolated_engine, "U")
+    data = {"name": "semantic-search", "description": "Semantic search over notes.",
+            "blurbs": ["Built semantic search over 40k notes.", "Cut query time 3x with FAISS."]}
+    first = _upsert(uid, {"kind": "project", "data": data})["results"][0]
+    assert (first["status"], first["key"]) == ("created", "proj:semantic-search")
+    again = _upsert(uid, {"kind": "project", "data": dict(
+        data, blurbs=[" built semantic search over 40k notes. ", "Added a CLI."])})["results"][0]
+    assert again["status"] == "merged"                  # one new bullet on a known project
+    same = _upsert(uid, {"kind": "project", "data": data})["results"][0]
+    assert same["status"] == "unchanged"
+    with Session(isolated_engine) as s:
+        row = s.exec(select(Project).where(Project.user_id == uid)).one()
+        assert row.description == "Semantic search over notes."
+        assert sorted(b.content for b in row.blurbs) == [
+            "Added a CLI.", "Built semantic search over 40k notes.", "Cut query time 3x with FAISS."]
+
+
 # ── open_job and list_jobs ───────────────────────────────────────────────────
 
 JD = ("Data Scientist Intern\n\nRequirements\n- Experience with Python and SQL\n"
@@ -348,6 +379,69 @@ def test_init_db_adds_the_new_columns_to_an_existing_database(isolated_engine):
         job = s.exec(select(JobDescription)).one()
         assert job.application_status == "drafting"
 
+
+# ── Skill category inference (#259) ──────────────────────────────────────────
+
+def _skill_category(engine, uid, name):
+    with Session(engine) as s:
+        return s.exec(select(Skill.category).join(UserSkill, UserSkill.skill_id == Skill.skill_id)
+                      .where(UserSkill.user_id == uid, Skill.name == name)).first()
+
+
+def test_common_skills_get_a_category_on_upsert_without_one(isolated_engine):
+    uid = _new_user(isolated_engine, "U")
+    _upsert(uid, *({"kind": "skill", "data": {"name": n}}
+                   for n in ("python", "SQL", "pytorch", "AWS", "Docker", "Basket Weaving")))
+    got = {n: _skill_category(isolated_engine, uid, n)
+           for n in ("Python", "SQL", "PyTorch", "AWS", "Docker", "Basket Weaving")}
+    assert got == {"Python": "Languages & Libraries", "SQL": "Languages & Libraries",
+                   "PyTorch": "AI & Machine Learning", "AWS": "Cloud", "Docker": "Tools",
+                   "Basket Weaving": None}
+
+
+def test_every_mapped_category_is_a_formatter_bucket():
+    from agents.formatter import ResumeFormatterAgent
+    from agents.skill_postprocessor import SKILL_CATEGORIES
+    for name, cat in SKILL_CATEGORIES.items():
+        assert ResumeFormatterAgent._normalize_category(cat) == cat, name
+        assert name == name.lower()
+
+
+def test_a_host_set_category_is_never_overwritten(isolated_engine):
+    uid = _new_user(isolated_engine, "U")
+    _upsert(uid, {"kind": "skill", "data": {"name": "Python", "category": "Scripting"}},
+            {"kind": "skill", "data": {"name": "Docker", "category": "Hobby"}})
+    # Omitting the category, or sending another, leaves the stored one alone.
+    _upsert(uid, {"kind": "skill", "data": {"name": "Python", "proficiency": 5}},
+            {"kind": "skill", "data": {"name": "Docker", "category": "Tools"}}, source="b.md")
+    assert _skill_category(isolated_engine, uid, "Python") == "Scripting"
+    assert _skill_category(isolated_engine, uid, "Docker") == "Hobby"
+
+
+def test_a_reupsert_fills_a_missing_or_default_category_on_a_stored_skill(isolated_engine):
+    uid = _new_user(isolated_engine, "U")
+    _upsert(uid, {"kind": "skill", "data": {"name": "Python"}},
+            {"kind": "skill", "data": {"name": "Docker"}},
+            {"kind": "skill", "data": {"name": "Zig"}})
+    with Session(isolated_engine) as s:
+        for name, cat in (("Python", None), ("Docker", "Other")):
+            row = s.exec(select(Skill).where(Skill.name == name)).one()
+            row.category = cat
+            s.add(row)
+        s.commit()
+    _upsert(uid, {"kind": "skill", "data": {"name": "Python"}},
+            {"kind": "skill", "data": {"name": "Docker"}},
+            {"kind": "skill", "data": {"name": "Zig", "category": "Languages & Libraries"}})
+    assert _skill_category(isolated_engine, uid, "Python") == "Languages & Libraries"
+    assert _skill_category(isolated_engine, uid, "Docker") == "Tools"
+    assert _skill_category(isolated_engine, uid, "Zig") == "Languages & Libraries"
+
+
+def test_ingest_schema_for_skill_asks_the_host_to_fill_category(isolated_engine):
+    uid = _new_user(isolated_engine, "U")
+    out = invoke("ingest_schema", uid, {"kind": "skill"})
+    assert "category" in out["json_schema"]["properties"]
+    assert "Fill category" in out["note"] and "Other" in out["note"]
 
 def test_a_newly_answered_job_rule_alone_still_commits(isolated_engine):
     """#257: a plan with no accepted node commits when a job rule changes the page."""

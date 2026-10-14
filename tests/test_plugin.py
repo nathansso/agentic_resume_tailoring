@@ -38,7 +38,8 @@ def test_manifests_point_at_the_plugin_and_its_server():
     market = _json(".claude-plugin/marketplace.json")
     assert [p["source"] for p in market["plugins"]] == ["./plugin"]
     server = _json("plugin/.mcp.json")["mcpServers"]["art"]
-    assert server["command"] == "uvx" and server["args"][-1] == "art-mcp"
+    # The plugin runs through the `art` entry point alone (#256).
+    assert server["command"] == "uvx" and server["args"][-2:] == ["art", "mcp"]
 
 
 def test_hooks_run_art_hook_events_from_the_same_package_as_the_server():
@@ -46,13 +47,14 @@ def test_hooks_run_art_hook_events_from_the_same_package_as_the_server():
 
     hooks = _json("plugin/hooks/hooks.json")["hooks"]
     source = _json("plugin/.mcp.json")["mcpServers"]["art"]["args"][1]
+    from harness.hooks import hook_command
     wiring = {"UserPromptSubmit": ("user-prompt", None), "SessionStart": ("session-start", "compact")}
     assert set(hooks) == set(wiring)
     for event, (arg, matcher) in wiring.items():
         [group] = hooks[event]
         assert group.get("matcher") == matcher
         [hook] = group["hooks"]
-        assert hook["command"] == f"uvx --from {source} art hook {arg}"
+        assert hook["command"] == hook_command(arg, source)
         assert EVENTS[arg][0] == event
 
 
@@ -211,3 +213,102 @@ def test_art_hooks_codex_refuses_to_rewrite_a_broken_file(tmp_path, monkeypatch)
     (tmp_path / "hooks.json").write_text("{not json", encoding="utf-8")
     assert entry.main(["hooks", "codex", "--write"]) == 2
     assert (tmp_path / "hooks.json").read_text(encoding="utf-8") == "{not json"
+
+
+# ── a pinned, offline-safe source (#256) ─────────────────────────────────────
+
+def _server_source():
+    return _json("plugin/.mcp.json")["mcpServers"]["art"]["args"][1]
+
+
+def test_the_plugin_pins_the_release_wheel_of_this_version():
+    """A version bump without a pin bump (or the reverse) fails here, so the plugin never
+    runs a wheel that is not the code it was released with."""
+    from harness import ART_VERSION
+    from harness.hooks import SOURCE, WHEEL_URL
+
+    assert _server_source() == SOURCE
+    assert SOURCE == f"art-mcp[ui] @ {WHEEL_URL}"
+    assert WHEEL_URL == ("https://github.com/nathansso/agentic_resume_tailoring/releases/"
+                         f"download/v{ART_VERSION}/art_mcp-{ART_VERSION}-py3-none-any.whl")
+    # The tag the release workflow reacts to is the one in the URL.
+    assert f"/v{ART_VERSION}/" in _server_source()
+    # Nothing in the plugin still floats on the repository's default branch.
+    for path in [PLUGIN / ".mcp.json", PLUGIN / "hooks" / "hooks.json"]:
+        assert "git+https" not in path.read_text(encoding="utf-8"), path
+
+
+def test_a_hook_line_cannot_fail_or_wait_on_the_network():
+    from harness.hooks import SOURCE, hook_command
+
+    line = hook_command("user-prompt")
+    # Offline: only what the server's start cached. `; exit 0`: uvx failing before
+    # `art` runs (no uvx, cold cache) still exits 0.
+    assert line.startswith("uvx --offline --from ")
+    assert line.endswith("art hook user-prompt; exit 0")
+    assert f'"{SOURCE}"' in line
+    # Plain words, double quotes and `;`, so sh, Git Bash and PowerShell all run it.
+    for token in ("||", "&&", "2>", "$", "'", "`"):
+        assert token not in line
+    for event in _json("plugin/hooks/hooks.json")["hooks"].values():
+        for group in event:
+            for hook in group["hooks"]:
+                assert "--offline" in hook["command"] and hook["command"].endswith("; exit 0")
+
+
+def test_art_mcp_subcommand_runs_the_server_with_its_arguments(monkeypatch):
+    from harness import entry, mcp_server
+
+    seen = []
+    monkeypatch.setattr(mcp_server, "main", lambda argv=None: seen.append(argv))
+    assert entry.main(["mcp", "--allow-writes"]) == 0
+    assert seen == [["--allow-writes"]]
+
+
+def test_art_hook_exits_zero_whatever_breaks(monkeypatch, capsys):
+    from harness import entry
+
+    def boom(*a, **k):
+        raise SystemExit("no store")                 # SystemExit is not an Exception
+
+    monkeypatch.setattr("harness.runtime.bootstrap", boom)
+    monkeypatch.setattr("sys.stdin", io.StringIO("{}"))
+    assert entry.main(["hook", "user-prompt"]) == 0
+    assert capsys.readouterr().out == ""
+
+    monkeypatch.setattr("harness.hooks.main", boom)  # even the hook module failing
+    assert entry.main(["hook", "session-start"]) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_the_release_workflow_builds_the_editor_into_a_tagged_wheel():
+    text = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert re.search(r"tags:\s*\[\"v\*\"\]", text) and "workflow_dispatch:" in text
+    # The wheel is built after the editor, and checked for it.
+    assert text.index("npm --prefix web/frontend ci") < text.index("uv build")
+    assert "web/static/index.html" in text
+    # Only a tag publishes; a manual run is a dry run.
+    release = text[text.index("release:\n    name"):]
+    assert "if: startsWith(github.ref, 'refs/tags/v')" in release
+    assert "gh release create" in release and "contents: write" in release
+    assert "contents: write" not in text[:text.index("release:\n    name")]
+
+
+def test_every_art_ui_command_in_the_docs_runs_the_pinned_wheel():
+    """`/art:open`, the skill and INSTALL tell the user one `art ui` command, and it is the
+    release wheel with the editor in it (#255), not a git install, which has none."""
+    from harness.hooks import SOURCE
+
+    files = [PLUGIN / "commands" / "open.md", PLUGIN / "skills" / "art-tailor" / "SKILL.md",
+             ROOT / "INSTALL.md"]
+    for path in files:
+        text = path.read_text(encoding="utf-8")
+        lines = [ln.strip() for ln in text.splitlines() if " art ui" in ln and "uvx" in ln]
+        assert lines, path
+        for ln in lines:
+            if "dist/" in ln:                       # INSTALL's build-it-yourself line
+                continue
+            assert ln.startswith(f'uvx --from "{SOURCE}" art ui'), (path.name, ln)
+    for path in [*PLUGIN.rglob("*.md"), *PLUGIN.rglob("*.json")]:
+        assert "git+https" not in path.read_text(encoding="utf-8"), path
+    assert "npm" not in (PLUGIN / "commands" / "open.md").read_text(encoding="utf-8")

@@ -39,8 +39,9 @@ from agents.redundancy import (
     bullet_texts as all_bullets, bullet_tokens, leading_verb_entropy, mtld,
     term_document_frequency,
 )
-from harness.decisions.negative_pins import term_pattern, violations as pin_finding_violations
+from harness.decisions.negative_pins import term_matcher, term_pattern, violations as pin_finding_violations
 from harness.decisions.support import violations as support_finding_violations
+from harness import policy
 
 TARGETS = ("coverage", "relevance_density", "semantic_coverage")
 OPTIONAL_TARGETS = ("semantic_coverage",)    # present only when Jev answered (#126)
@@ -59,12 +60,12 @@ GATES =("preferences", "faithfulness", "citations", "bullet_lines", "consistency
 # trimmed clause on a 15-20 token bullet (2-4 edits, 0.1-0.25), and stops a rewrite that
 # only borrows the topic (a half-new bullet is 0.5 and up). Provisional like the rest, to be
 # refit once real library use exists.
-VARIANT_DRIFT_TOLERANCE = 0.35
+VARIANT_DRIFT_TOLERANCE = policy.get("guards.variant_drift")
 DEFAULT_TOLERANCES: Dict[str, float] = {
-    "stuffing": 0.0,
-    "verb_entropy": 0.35,
-    "mtld": 0.10,
-    "duplication": 0.15,
+    "stuffing": policy.get("guards.stuffing"),
+    "verb_entropy": policy.get("guards.verb_entropy"),
+    "mtld": policy.get("guards.mtld"),
+    "duplication": policy.get("guards.duplication"),
     "variant_drift": VARIANT_DRIFT_TOLERANCE,
 }
 # +1: a larger value is worse. -1: a smaller value is worse.
@@ -98,6 +99,9 @@ class Context:
     # Negative pins (#198): terms a hard preference says must never render, in
     # any bullet or item name, cited or not.
     negative_terms: Set[str] = field(default_factory=set)
+    # The negative terms that are skills (#254): a pin on `skill:<name>` also matches the skill's
+    # aliases, the way the knowledge graph links the skill to text. A subset of `negative_terms`.
+    negative_skill_terms: Set[str] = field(default_factory=set)
     # Citations (#198): each item's KG source bullets (a verbatim source bullet
     # cites itself), and `cite -> None | "unresolved" | "tombstoned"`. With no
     # checker the citation gate is off (a context built outside the executor).
@@ -154,7 +158,7 @@ def preference_violations(content: Dict, ctx: Context) -> List[str]:
     skills = {str(s.get("name", "")).strip().lower()
               for s in content.get("skills_ranked") or []}
     out += [f"suppressed:skill:{s}" for s in sorted(skills & ctx.suppressed_skills)]
-    out += negative_pin_violations(content, ctx.negative_terms)
+    out += negative_pin_violations(content, ctx.negative_terms, ctx.negative_skill_terms)
     if ctx.pin_checker is not None:
         # Jev only adds: a reworded mention the term match cannot see. One mention, one violation.
         out += [v for v in pin_finding_violations(ctx.pin_checker(content)) if v not in out]
@@ -172,19 +176,21 @@ def _page_items(content: Dict):
             yield key_fn(item), item
 
 
-def negative_pin_violations(content: Dict, terms: Iterable[str]) -> List[str]:
+def negative_pin_violations(content: Dict, terms: Iterable[str],
+                            skill_terms: Iterable[str] = ()) -> List[str]:
     """A negative pin (#198) is a fact that must never render: any bullet,
     title, company, project name or description containing the term, whatever
-    it cites."""
+    it cites. A term in `skill_terms` (a pin on a skill, #254) matches its aliases too."""
+    skills = {t.strip().lower() for t in skill_terms if t and t.strip()}
     out = []
     for term in sorted({t.strip().lower() for t in terms if t and t.strip()}):
-        pat = term_pattern(term)
+        mentions = term_matcher(term, term in skills)
         for key, item in _page_items(content):
             for field_ in ("title", "company", "name", "description"):
-                if pat.search(str(item.get(field_) or "").lower()):
+                if mentions(str(item.get(field_) or "")):
                     out.append(f"negative_pin:{term}@{key} :: {field_}")
             for b in item.get("bullets") or []:
-                if b and pat.search(b.lower()):
+                if b and mentions(b):
                     out.append(f'negative_pin:{term}@{key} :: "{_short(b)}"')
     return out
 

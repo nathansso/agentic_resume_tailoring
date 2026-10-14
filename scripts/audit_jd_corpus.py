@@ -52,9 +52,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from agents.ats_scorer import _detect_level  # noqa: E402
+from agents.seniority import UNKNOWN, is_above_entry_title  # noqa: E402
 from job_descriptions import MAX_TEXT  # noqa: E402
 from scrape_job_descriptions import (  # noqa: E402
-    SENIOR_TITLE,
     classify_family,
     classify_level,
 )
@@ -82,8 +82,11 @@ MIN_DESCRIPTION = 600
 SHORT_DESCRIPTION = 1200
 
 # Seniority tier a JD may state, given #177 restricted the corpus to
-# intern/entry. `_detect_level` returns the highest tier matched anywhere, and
-# `role_level` (weight 0.10) scores the résumé's tier against it.
+# intern/entry. `role_level` (weight 0.10) scores the résumé's tier against the
+# tier `agents/seniority.py` reads from the posting. Before #181 that reader
+# returned the highest tier matched anywhere as a bare substring and 124 of 150
+# postings failed this check; a posting that states no tier now reads `unknown`
+# and is reported separately as `level_unstated`.
 EXPECTED_JD_LEVELS = {"intern": ("intern",), "entry": ("intern", "junior")}
 
 _TAG_RE = re.compile(r"</?[a-zA-Z][^>\n]{0,80}>")
@@ -236,7 +239,14 @@ def check_content(task: Dict, path: Path) -> Iterable[Issue]:
 
     declared = task.get("level")
     detected = _detect_level(text)
-    if declared in EXPECTED_JD_LEVELS and detected not in EXPECTED_JD_LEVELS[declared]:
+    if detected == UNKNOWN:
+        # The posting states no tier. `role_level` scores that neutrally (#181),
+        # so it is not a mislabel — but it is a posting the component cannot
+        # use, which the audit keeps visible rather than counting as a pass.
+        yield Issue(tid, "level_unstated", "warn",
+                    f"filed as {declared}, ats_scorer finds no stated tier — "
+                    "role_level scores it neutrally")
+    elif declared in EXPECTED_JD_LEVELS and detected not in EXPECTED_JD_LEVELS[declared]:
         yield Issue(tid, "level_mismatch", "warn",
                     f"filed as {declared}, ats_scorer reads the posting as "
                     f"{detected} — role_level scores against the detected tier, "
@@ -259,7 +269,7 @@ def check_domain(task: Dict, path: Path) -> Iterable[Issue]:
     title = task.get("title") or ""
     description = task.get("description") or ""
 
-    if SENIOR_TITLE.search(title):
+    if is_above_entry_title(title):
         yield Issue(tid, "out_of_domain", "error",
                     f"seniority marker in title: {title!r}")
 

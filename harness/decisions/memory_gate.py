@@ -69,6 +69,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from typing import Any, Collection, Dict, List, Optional, Sequence, Tuple
+from harness import policy
 
 from harness.decisions.questions import Answer, Choice, Noul, Score, canonical
 
@@ -85,8 +86,8 @@ AUTO_MAX_STRENGTH = PIN_STRENGTH - 1
 # The code rules, each of which only ever removes a write. Thresholds are fitted as if they did not exist
 # (`eval/fit_memory_gate_threshold.py`): they are defence in depth, never grounds for a looser threshold.
 CODE_RULES = ("hard", "section", "backstop", "named")
-HI_FLOOR = 0.5              # a write needs Jev to call the message more likely than not a lasting preference
-HARD_MASS = 0.25            # a safety margin, not a fit: this much probability on level 5 is enough to ask the user
+HI_FLOOR = policy.get("memory_gate.hi_floor")              # a write needs Jev to call the message more likely than not a lasting preference
+HARD_MASS = policy.get("memory_gate.hard_mass")            # a safety margin, not a fit: this much probability on level 5 is enough to ask the user
 MAX_CHARS = 1200            # a longer message is pasted material, not a statement
 MAX_AUTO_TEXT = 300         # a longer message is not stored verbatim as the preference text
 MAX_CATALOG = 254           # a choice takes at most 255 options, one of them no_match
@@ -111,9 +112,9 @@ _ROUND = 4
 #   TAU_LO 0.25: 0 of the 57 true preferences Jev is asked about are dropped (the lowest is
 #     js_rivermount, 0.31) and 0 non-preferences land between TAU_LO and TAU_HI (the highest
 #     non-preference scores 0.17).
-TAU_LO = 0.25
-TAU_HI = 0.65
-TAU_TARGET = 0.75
+TAU_LO = policy.get("memory_gate.v1.tau_lo")
+TAU_HI = policy.get("memory_gate.v1.tau_hi")
+TAU_TARGET = policy.get("memory_gate.v1.tau_target")
 
 # memory_gate@v2 (#244): fitted on eval/memory_gate_labels/context/ (40 messages, 33 standing preferences),
 # v2's own answers, by the same rules as above (`python eval/fit_memory_gate_context.py analyze`), TAU_HI
@@ -129,10 +130,10 @@ TAU_TARGET = 0.75
 #     nothing bounds it from below); pinned to v1's 0.75. The five wrong bindings in the set are all items
 #     the message does not name; the name check owns them.
 #   TAU_LO_V2 0.20: 0 of the 33 true preferences are dropped (the lowest is cx_looker_stop, 0.32).
-V1_WOULD_BE_WRITES = 29     # #202's writes at its thresholds with the code rules off (REPORT.md: 29)
-TAU_LO_V2 = 0.20
-TAU_HI_V2 = 0.65
-TAU_TARGET_V2 = 0.75
+V1_WOULD_BE_WRITES = policy.get("memory_gate.v1_would_be_writes")     # #202's writes at its thresholds with the code rules off (REPORT.md: 29)
+TAU_LO_V2 = policy.get("memory_gate.v2.tau_lo")
+TAU_HI_V2 = policy.get("memory_gate.v2.tau_hi")
+TAU_TARGET_V2 = policy.get("memory_gate.v2.tau_target")
 
 
 def thresholds(version: str = VERSION) -> Tuple[float, float, float]:

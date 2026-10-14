@@ -5,8 +5,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uvx --from git+https://github.com/nathansso/agentic_resume_tailoring art hook user-prompt",
-            "timeout": 30
+            "timeout": 30,
+            "command": "uvx --offline --from \"art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl\" art hook user-prompt; exit 0"
           }
         ]
       }
@@ -17,8 +17,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uvx --from git+https://github.com/nathansso/agentic_resume_tailoring art hook session-start",
-            "timeout": 30
+            "timeout": 30,
+            "command": "uvx --offline --from \"art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl\" art hook session-start; exit 0"
           }
         ]
       }

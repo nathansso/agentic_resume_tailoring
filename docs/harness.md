@@ -188,8 +188,9 @@ And pooling hid real results: the per-stratum spread in #172 vanished when poole
 
 A stuffing edit fails the target test (unsupported terms weigh zero) or the stuffing guard.
 A preference-driven delete passes, and relevance density usually rises. Tolerances today are
-hand-set, provisional constants (`DEFAULT_TOLERANCES`, hand-picked and conservative); #127 fits them
-per guard on the human anchor set and #241 ships them in the policy artifact. Nothing
+hand-set, provisional values (`DEFAULT_TOLERANCES`, hand-picked and conservative) held in the policy
+artifact, `harness/policy.json` (#241); #127 fits them per guard on the human anchor set and writes
+the result into the same file. Nothing
 combines metrics into one number.
 
 **Literal and semantic coverage (#126).** `coverage` is what an ATS filter sees: substring
@@ -320,7 +321,10 @@ metric vector and the rule, and `harness/executor.py` runs it. The details:
   - A revise or replace whose bullets mention it is refused, even when cited.
   - A pinned term already on the page (from KG text) fails finalize with a "revise …"
     hint.
-  - A suppression keyed `skill:` still only drops the skill.
+  - A suppression keyed `skill:` is one too (#254): the skill is dropped from the skills line, and its name
+    or an alias ("torch" for PyTorch) in any bullet or item field is refused, by the term match and the Jev
+    check alike. `negative_pins.pin_target` is the one definition of what a negative pin is; the
+    executor enforces through it and `record_preference`, `art_pins` and the briefing report through it.
   - **Reworded mentions (#232).** The term match is literal, so a changed bullet or item
     field that mentions a pinned topic in other words ("message broker" pinned, "Kafka"
     written) also gets a Jev yes/no per pin. A confident yes reverts the node as a
@@ -517,8 +521,8 @@ negation cases separately (`eval/memory_gate_labels/REPORT.md`).
   to import the user's existing standing preferences and negative pins through
   `record_preference`. There is no import path of its own.
 
-Thresholds are constants in `memory_gate.py`, with a drift test, like the other Jev points. τ_hi is fitted as if the code rules above did not exist and is floored at 0.5: a write needs Jev to call the message more likely than not a preference. v2 has its own three (`TAU_*_V2`), fitted on its own answers by the same rules and then **pinned: a context variant's write thresholds are never looser than v1's evidence-backed ones while its own would-be write set is thinner than v1's** (`TAU_HI_V2` = max(fit, `TAU_HI`), `TAU_TARGET_V2` = max(fit, `TAU_TARGET`)). A threshold fitted on three would-be writes sits where the rule leaves it, which is not evidence that a looser cut is safe. The values are 0.20, 0.65 and 0.75 (the fit alone gives 0.20, 0.50 and 0.40).
-Consolidating every fitted threshold into one policy artifact is open (#241).
+Thresholds are values in the policy artifact (`harness/policy.json`), read into `memory_gate.py`, with a drift test, like the other Jev points. τ_hi is fitted as if the code rules above did not exist and is floored at 0.5: a write needs Jev to call the message more likely than not a preference. v2 has its own three (`TAU_*_V2`), fitted on its own answers by the same rules and then **pinned: a context variant's write thresholds are never looser than v1's evidence-backed ones while its own would-be write set is thinner than v1's** (`TAU_HI_V2` = max(fit, `TAU_HI`), `TAU_TARGET_V2` = max(fit, `TAU_TARGET`)). A threshold fitted on three would-be writes sits where the rule leaves it, which is not evidence that a looser cut is safe. The values are 0.20, 0.65 and 0.75 (the fit alone gives 0.20, 0.50 and 0.40).
+Every fitted threshold, with the fit it came from, lives in one versioned file, the policy artifact (#241): `harness/policy.json`, read through `harness/policy.py`, with its drift tests in `tests/test_policy.py`.
 
 ## 11. Tailoring history as a tree (#196)
 
@@ -527,7 +531,7 @@ runs (`source=host`) and editor edits (`source=editor`). Revert moves HEAD, and 
 are pinned nodes (`TrackBaseline`, #229): a job's first node records the baseline it was
 copied from in its provenance. Two siblings share a context, so each sibling pair is a preference label
 for #174. Provenance on every node covers the host, host version, model ID if reported,
-ART version, policy artifact version, and the briefing hash. Existing `UserJobResult` rows
+ART version, policy artifact version (`policy_version`, stamped by `tree.commit_node`; older nodes lack it), and the briefing hash. Existing `UserJobResult` rows
 migrate as a linear chain.
 
 ## 12. What's stored locally
@@ -817,7 +821,7 @@ install is what the harness imports: `mcp`, `sqlmodel`, `pydantic`, `numpy`, `ne
 (the JSON CLI, plus `art ui`). INSTALL.md has the commands; a checkout still works as before:
 
 ```bash
-claude mcp add art -- uvx --from git+https://github.com/nathansso/agentic_resume_tailoring art-mcp
+claude mcp add art -- uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl" art mcp
 claude mcp add art -- <repo>/.venv/Scripts/python.exe <repo>/harness/mcp_server.py   # checkout
 art --list                                   # or python -m harness.cli --list
 art kg_search --args '{"query": "python"}'
@@ -885,7 +889,7 @@ The windows are the plan and have not moved. Status is as of 2026-10-05, from th
 |---|---|---|---|---|---|
 | H0 · Decide & Spike | Sep 28 – Oct 4 | #188, #189, #209 | | One real tailoring in Claude Code with read-only tools; gap list recorded | Done |
 | H1 · Core & Jev | Oct 5 – Oct 18 | #190, #191, #192, #193, #194, #195, #210, #237, #249 | | Contract tests on both legs; `uvx art-mcp` without torch; every Jev point replays from cache | Done |
-| H2 · Executor & Library | Oct 19 – Nov 8 | #113, #123, #126, #196, #197, #198, #199, #200, #229, #230, #232, #233 | #117, #127, #151, #163, #185, #241, #252 | Scripted-host benchmark replays byte-identically; stuffing rejected, preference delete kept | Mostly shipped; what is open is tuning and the policy artifact |
+| H2 · Executor & Library | Oct 19 – Nov 8 | #113, #123, #126, #196, #197, #198, #199, #200, #229, #230, #232, #233, #241 | #117, #127, #151, #163, #185, #252 | Scripted-host benchmark replays byte-identically; stuffing rejected, preference delete kept | Mostly shipped; what is open is tuning |
 | H3 · Plugin & Memory | Nov 9 – Nov 22 | #201, #202, #203, #244 | | Gate recall measured on a labelled set (negation separate); pins survive compaction | Done |
 | H3b · Editor | Nov 23 – Dec 6 | #204 | #205, #87, #82, #84, #136, #147 | Editor drag reaches the host's next turn; host commit reaches the editor without reload | The local editor and change feed shipped; the chat panel and the UI issues are open |
 | H4 · Host Evaluation | Dec 7 – Dec 27 | | #206, #172 (chunks 1–6 of 7 shipped), #173, #178, #181 | Written result, B vs A first; go/no-go on H5 | Not started |
@@ -900,7 +904,7 @@ compaction) while their windows still run to Nov 22. Nothing was re-dated.
 What is left in H2, and why:
 
 - **#127** fits the guard tolerances on the anchor set, which waits on #172's last chunk, and
-  **#241** gives them and every fitted Jev threshold one versioned home.
+  writes them into the policy artifact (`harness/policy.json`, #241).
 - **#117** (keep-biased suggestions, an edit-distance guard against the parent) and **#163**
   (keyword insertion by importance × supportability) are not started.
 - **#151** splits required from preferred coverage into separate targets.

@@ -191,7 +191,8 @@ class RecordPreferenceOutput(_Output):
     strength: Optional[int] = None
     pinned: bool = Field(False, description="Strength 5: a hard gate, restored word for word "
                                             "after compaction.")
-    negative_pin: bool = Field(False, description="A strength-5 suppression.")
+    negative_pin: bool = Field(False, description="A strength-5 suppression the executor enforces: what it names "
+                                                  "(a topic, a skill, an experience or a project) never renders.")
     supersedes: Optional[str] = Field(None, description="The earlier preference this replaced.")
     suggestions: List[str] = Field(default_factory=list,
                                    description="Catalog keys the target may have meant.")

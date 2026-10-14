@@ -154,7 +154,9 @@ def test_art_ui_without_the_ui_extra_says_how_to_install_it(monkeypatch, capsys)
 
     monkeypatch.setattr(builtins, "__import__", no_fastapi)
     assert entry.main(["ui"]) == 2
-    assert "[ui]" in capsys.readouterr().err
+    from harness.hooks import SOURCE
+    err = capsys.readouterr().err
+    assert "[ui]" in err and SOURCE in err                # the command that works (#255)
 
 
 @pytest.mark.skipif(sys.version_info < (3, 11), reason="tomllib")

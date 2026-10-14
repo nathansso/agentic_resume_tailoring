@@ -24,7 +24,7 @@ The same plugin works in Codex:
 ```bash
 codex plugin marketplace add nathansso/agentic_resume_tailoring
 codex plugin add art@art
-uvx --from git+https://github.com/nathansso/agentic_resume_tailoring art hooks codex --write
+uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl" art hooks codex --write
 ```
 
 Codex plugins can't carry hooks, which is why the last command is needed. Trust the
@@ -34,29 +34,78 @@ hooks with `/hooks` in Codex. See [`integrations/codex/README.md`](integrations/
 
 The package is `art-mcp`. Its default install is model-free and light (no torch, no LLM
 clients); extras add `[embed]` (sentence-transformers), `[pdf]` (docling, pypdf,
-python-docx), `[ui]` (`art ui`, the local editor) and `[postgres]`. It is not on PyPI yet,
-so install it from the repository:
+python-docx), `[ui]` (`art ui`, the local editor) and `[postgres]`. It is not on PyPI yet.
+Each release attaches its wheel, with the editor built in, to a GitHub Release, and the
+plugin pins that exact URL (`v<version>` is `ART_VERSION` in `harness/__init__.py`):
 
 ```bash
 # Register the MCP server with Claude Code
-claude mcp add art -- uvx --from git+https://github.com/nathansso/agentic_resume_tailoring art-mcp
+claude mcp add art -- uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl" art mcp
 
 # The same tools as a JSON CLI
-uvx --from git+https://github.com/nathansso/agentic_resume_tailoring art --list
+uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl" art --list
 ```
 
+`art mcp` and `art-mcp` run the same server; the plugin uses `art mcp` so it needs only the
+`art` entry point (a machine's Application Control policy may block one executable and not
+the other).
+
 On first start it creates `~/.art/art.db` (or `$ART_DATA_DIR/art.db`) and a default
-profile. A git install has no built editor, since `web/static` is not committed. For
-`art ui`, build a wheel from a checkout:
+profile.
+
+### The editor: `art ui` (#255)
+
+The release wheel has the built editor in it, so no checkout, Node or `npm` is needed:
+
+```bash
+uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl" art ui --job <job_id>
+```
+
+It opens http://127.0.0.1:8765/. The plugin's `/art:open` prints this command for the
+job you name. It needs the `[ui]` extra, which the pinned spec already has. An install
+straight from the repository (`uvx --from git+https://github.com/nathansso/agentic_resume_tailoring ...`)
+has no editor, because `web/static` is not committed; `art ui` says so and prints the
+command above.
+
+From a checkout, build the editor and run it from source or from a wheel you build:
 
 ```bash
 npm --prefix web/frontend ci && npm --prefix web/frontend run build
+python -m web.local_ui                     # from source
 uv build                                   # dist/art_mcp-<version>-py3-none-any.whl
 uvx --from "dist/art_mcp-0.1.0-py3-none-any.whl[ui]" art ui
 ```
 
 CI builds that wheel, installs it with no extras into an empty venv, and drives `art-mcp`
 over stdio (`scripts/smoke_art_mcp.py`).
+
+### Offline starts, and Windows
+
+uvx downloads the pinned wheel once and keeps it, and the environment it built, in uv's
+cache. The hooks run `uvx --offline` and end in `; exit 0`: they use only what the MCP
+server's start cached, never wait on the network, and exit 0 and say nothing when uvx or
+the cache is missing, so a hook can't block your message.
+
+The MCP server start is different: uvx resolves its requirements on every start, and uv
+re-checks a cached answer once it is older than a few minutes (the wheel's URL, and PyPI's
+index for the dependencies). With the network on that costs a second or two. With it off,
+a start after the cache has aged fails once uv gives up retrying (about 15 s). Two fixes,
+both from the same cache:
+
+- `UV_OFFLINE=1` in the environment Claude Code or Codex starts from. uv then never
+  touches the network and uses the cache as it is (after one earlier online start).
+- `uv tool install "art-mcp[ui] @ <the pinned URL>"` once. uvx runs an installed tool
+  without re-resolving it. Upgrade it by installing the next pin.
+
+On Windows, a deep default uv cache path can break the install (long paths). Point uv at a short
+one before starting Claude Code or Codex, in PowerShell:
+
+```powershell
+[Environment]::SetEnvironmentVariable("UV_CACHE_DIR", "C:\uvc", "User")
+```
+
+`UV_CACHE_DIR` takes effect in newly started programs. If Application Control blocks
+`art-mcp.exe`, the plugin is unaffected, since it runs `art mcp`.
 
 ### Jev (optional)
 

@@ -1,0 +1,114 @@
+name: release
+
+# Builds the `art-mcp` wheel with the editor inside it and attaches it to a GitHub
+# Release (issues #256, #255). The Claude Code plugin pins that exact wheel URL:
+#
+#   https://github.com/<repo>/releases/download/v<ART_VERSION>/art_mcp-<ART_VERSION>-py3-none-any.whl
+#
+# To cut a release: bump ART_VERSION in harness/__init__.py and the pin in
+# plugin/ (tests/test_plugin.py fails until they agree), merge, then
+#
+#   git tag v<ART_VERSION> && git push origin v<ART_VERSION>
+#
+# `workflow_dispatch` is a dry run: it builds and checks the wheel and uploads it
+# as a workflow artifact, and creates no release.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build the wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: The tag matches ART_VERSION
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(sed -n 's/^ART_VERSION = "\(.*\)"$/\1/p' harness/__init__.py)
+          test -n "$version" || { echo "no ART_VERSION in harness/__init__.py"; exit 1; }
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "tag $GITHUB_REF_NAME does not match ART_VERSION $version"
+            exit 1
+          fi
+          grep -q "releases/download/$GITHUB_REF_NAME/" plugin/.mcp.json || {
+            echo "plugin/.mcp.json does not pin $GITHUB_REF_NAME"
+            exit 1
+          }
+
+      # The lockfile is hand-merged so that `npm ci` accepts it on both npm 11.6
+      # and 11.19; do not regenerate it.
+      - name: Build the editor
+        run: |
+          npm --prefix web/frontend ci
+          npm --prefix web/frontend run build
+
+      - name: Build the wheel and sdist
+        run: uv build
+
+      - name: The wheel ships the editor and the plugin can pin it
+        run: |
+          python3 - <<'EOF'
+          import glob, re, zipfile
+          wheels = glob.glob("dist/*.whl")
+          assert len(wheels) == 1, wheels
+          names = zipfile.ZipFile(wheels[0]).namelist()
+          assert "web/static/index.html" in names, "editor not shipped"
+          assert not [n for n in names if n.startswith("web/frontend/")], "frontend sources shipped"
+          assert not [n for n in names if n.startswith(("tests/", "eval/"))], "tests shipped"
+          version = re.search(r'ART_VERSION = "([^"]+)"', open("harness/__init__.py").read()).group(1)
+          expected = f"art_mcp-{version}-py3-none-any.whl"
+          assert wheels[0].endswith(expected), (wheels[0], expected)
+          print(wheels[0], len(names), "files")
+          EOF
+
+      - name: Clean install, no extras, driven over MCP
+        run: |
+          uv venv /tmp/clean --python 3.12
+          uv pip install --python /tmp/clean/bin/python dist/*.whl
+          cd /tmp
+          /tmp/clean/bin/python "$GITHUB_WORKSPACE/scripts/smoke_art_mcp.py"
+          /tmp/clean/bin/art mcp --help > /dev/null
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: attach to the GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "ART $GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag

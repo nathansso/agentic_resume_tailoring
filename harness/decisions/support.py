@@ -46,6 +46,7 @@ import re
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from agents.checks import exp_key, proj_key
+from harness import policy
 from harness.decisions.questions import Choice, canonical
 
 QUESTION = Choice(
@@ -72,8 +73,8 @@ BLOCKING = {"contradicts": "contradicts", "adds_unsupported": "unsupported"}
 #     leaves 0.03 of headroom.
 #   TAU_REVIEW 0.35: the band [0.35, 0.85) holds 4 pairs (3 should-block, 1 supported); no
 #     should-block pair passes silently. Nothing labelled scores between 0.34 and 0.76.
-TAU_BLOCK = 0.85
-TAU_REVIEW = 0.35
+TAU_BLOCK = policy.get("support.tau_block")
+TAU_REVIEW = policy.get("support.tau_review")
 
 _ROUND = 4
 ORIGINAL_MIN_OVERLAP = 0.25

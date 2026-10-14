@@ -11,8 +11,9 @@ same way the harness entry points pin it (`harness.runtime`): local SQLite
 `--allow-writes`. That pinning must happen before anything imports `config`,
 `database` or `web.app`, so every such import below is deferred.
 
-Installed, this is `art ui` (`harness/entry.py`, #194); the wheel ships the built
-editor. From a checkout, build it once with the command in `BUILD_HINT`.
+Installed, this is `art ui` (`harness/entry.py`, #194); the release wheel ships the built
+editor (#255), and any other install is told to use it. From a checkout, build the editor
+once with the command in `BUILD_HINT`.
 """
 
 from __future__ import annotations
@@ -26,17 +27,36 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
 DEFAULT_PORT = 8765
 HOST = "127.0.0.1"
 BUILD_HINT = "npm --prefix web/frontend ci && npm --prefix web/frontend run build"
 
 
-def missing_static(static_dir: Path = STATIC_DIR) -> Optional[str]:
-    """None when the built SPA is present, else the message to exit with."""
+def in_checkout(frontend_dir: Path = FRONTEND_DIR) -> bool:
+    """Whether this code runs from a source checkout. The wheel excludes `web/frontend`."""
+    return (frontend_dir / "package.json").is_file()
+
+
+def release_command() -> str:
+    """The command that runs `art ui` from the pinned release wheel, editor included (#255)."""
+    from harness.hooks import SOURCE
+    return f'uvx --from "{SOURCE}" art ui'
+
+
+def missing_static(static_dir: Path = STATIC_DIR, checkout: Optional[bool] = None) -> Optional[str]:
+    """None when the built SPA is present, else the message to exit with. A checkout is told
+    to build the editor; any other install (a git install has no `web/static` either) is told
+    to use the release wheel, since there is no `web/frontend` to build from."""
     if (static_dir / "index.html").is_file():
         return None
-    return (f"art ui: the editor has not been built ({static_dir / 'index.html'} is missing).\n"
-            f"Build it once with:\n    {BUILD_HINT}")
+    head = f"art ui: the editor has not been built ({static_dir / 'index.html'} is missing)."
+    if checkout is None:
+        checkout = in_checkout()
+    if checkout:
+        return f"{head}\nBuild it once with:\n    {BUILD_HINT}"
+    return (f"{head}\nThis install has no editor to build. The release wheel includes it:\n"
+            f"    {release_command()}")
 
 
 def editor_url(port: int, job_id: Optional[str] = None) -> str:

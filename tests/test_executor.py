@@ -172,11 +172,35 @@ def test_a_first_plan_builds_on_the_kg_and_commits_a_host_node(isolated_engine, 
     assert node["program"]["nodes"][0]["id"] == "k"
     assert node["provenance"]["host"] == "claude-code"
     assert node["provenance"]["program_id"] == out["program_id"]
+    from harness import policy
+    assert node["provenance"]["policy_version"] == policy.version() != policy.UNVERSIONED   # #241
     with Session(isolated_engine) as s:     # materialized for the web app / art ui
         result = s.exec(select(UserJobResult).where(
             UserJobResult.job_id == UUID(node["job_id"]))).one()
         assert result.tailored_resume_content == node["content"]
         assert {e["title"] for e in node["content"]["experiences"]} >= {"Machine Learning Engineer"}
+
+
+def test_a_project_without_blurbs_renders_its_description_minus_a_restating_lead_in(env):
+    """#260: a tagline folded into the description is not said twice on the page; a project
+    with blurbs renders those, unchanged."""
+    from harness.executor import _KG
+    from harness.ingest import upsert_items
+
+    uid, _, _ = env
+    upsert_items(uid, [
+        {"kind": "project", "data": {
+            "name": "semantic-search",
+            "description": "Semantic search library. Open-source semantic search library "
+                           "using sentence-transformers."}},
+        {"kind": "project", "data": {
+            "name": "notes-index", "description": "Notes index. Notes index over markdown.",
+            "blurbs": ["Indexed 40k markdown notes."]}}])
+    kg = _KG(uid)
+    assert kg.source_bullets["proj:semantic-search"] == [
+        "Open-source semantic search library using sentence-transformers."]
+    assert kg.source_bullets["proj:notes-index"] == ["Indexed 40k markdown notes."]
+    assert kg.item("proj:semantic-search")["bullets"] == kg.source_bullets["proj:semantic-search"]
 
 
 def test_refused_nodes_never_execute_and_say_why(isolated_engine, env):
