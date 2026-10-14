@@ -75,6 +75,11 @@ log = logging.getLogger(__name__)
 MEASURER: Optional[Callable[[Sequence[str]], List[int]]] = None
 
 
+# `execute_plan`'s `reason` when the plan would leave its parent's page unchanged (#257).
+NO_CHANGE = ("no_change: the plan leaves the page identical to its parent, so nothing was "
+             "committed; see nodes[] for why each node was reverted, refused or kept")
+
+
 class PlanError(Exception):
     def __init__(self, code: str, message: str, suggestions: Sequence[str] = ()):
         super().__init__(message)
@@ -655,6 +660,9 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
 
     head = tree.get_head(user_id, job_id)["head"]
     head_id = head["node_id"] if head else None
+    # What the parent held before job rules touch `base` (it is `head["content"]`, edited in
+    # place): the no-change check below compares the would-be version to this (#257).
+    parent_content = copy.deepcopy(head["content"]) if head else None
     parent = (prog["parent"] or None)
     if parent != head_id:
         raise PlanError("stale_parent",
@@ -785,7 +793,17 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     semantic = coverage_summary(ctx.coverage_checker(working), working) if ctx.coverage_checker else None
     if semantic:
         out["semantic_coverage"] = semantic
-    if violations or dry_run:
+    if violations:
+        return out
+    if head is not None and working == parent_content:
+        # Every node reverted, refused or kept, and nothing else moved the page (skills,
+        # section order, job rules): the version would equal its parent, so it is not history
+        # and not an editor event (#257). The first version of a job always commits (the
+        # track baseline copy), so only a plan with a parent can land here. A plan that
+        # re-ranks skills or applies a job rule changes `working` and commits.
+        out["reason"] = NO_CHANGE
+        return out
+    if dry_run:
         return out
 
     breakdown = ATSScoringEngine.score_tailored(

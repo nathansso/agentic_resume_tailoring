@@ -1075,6 +1075,10 @@ legacy readers keep working.
    page line budget. Any violation means nothing commits, and the host gets the violations with
    trade hints.
 4. **Commit** writes a node with the metric vector and provenance, or `dry_run` stops short.
+   A plan with a parent whose final page equals the parent's content (every node reverted,
+   refused or kept; no skills, section-order or job-rule change) is not a version: it returns
+   `committed: false`, `reason: no_change` (`executor.NO_CHANGE`), and writes no node and no
+   `TreeEvent`. A job's first plan always commits, even `nodes: []`.
 
 The vector's roles (`metric_vector`):
 

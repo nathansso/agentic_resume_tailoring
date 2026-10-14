@@ -36,6 +36,25 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 - **A skill pin and a same-named topic pin keep the skill's alias matching.** Both can exist for one name ("kafka"); the term map holds one entry per name, and the skill-keyed one wins so its aliases are not lost.
 - **A page that already says the skill now fails finalize.** As with any negative pin (#198), a base bullet that names a skill the user has pinned blocks the commit until it is revised or its item is cut. This is the intended reach of the pin, but it will show up on profiles where the pinned skill is in existing bullets.
 
+## Issue 257 — `execute_plan` no longer commits a version identical to its parent
+**Status:** complete | **Tests:** 2438 pass on SQLite (7 new), 24 skipped, 0 fail. The full run found 3 failures from the new rule, all fixed in the same change and re-run singly (100 pass across their three files); the full suite was not repeated after the fix. The Postgres leg was not run locally
+
+When every node of a plan was reverted or refused, `execute_plan` still reported `committed: true` and wrote a tree node whose `diff_nodes` against its parent was empty. That added a history entry and an editor change-feed event for nothing. A plan with a parent whose final page equals the parent's content now commits nothing.
+
+### What shipped
+
+- **`harness/executor.py`:** `_execute` snapshots the parent's content before job rules touch it (`base` is `head["content"]`, edited in place), and after finalize compares the whole would-be page with that snapshot. Equal means `committed: false`, `node_id: null`, `reason: "no_change: ..."` (`executor.NO_CHANGE`), no `TailorNode`, no `TreeEvent`, HEAD and `UserJobResult` untouched. `nodes[]` still carries every reverted, refused and kept node with its reason. The comparison is on the full content dict, so a plan that only re-ranks skills (`skills`), sets `section_order`, drops hard-suppressed skills, or applies a newly answered job rule still commits. Violations are checked first and win over `no_change`. `dry_run` reports the same `reason`.
+- **A job's first plan always commits** (no parent, so the check never runs), including `parent: null, nodes: []`, which the `art-tailor` skill uses to save the track baseline copy before `get_head`.
+- **`harness/contract.py`:** `ExecuteOutput.reason` (absent otherwise) and the `execute_plan` tool description. `patch_plan` shares the output model.
+- **Docs:** `docs/harness.md` (§ 7 step 5), `docs/architecture.md` (§ 8.2 step 4) and one bullet in `plugin/skills/art-tailor/SKILL.md` telling the host `no_change` is not an error.
+- **Tests:** in `tests/test_executor.py`, all-reverted/refused/kept (nothing written, HEAD and feed unchanged, per-node reasons kept), an empty plan and a dry run on a parent, the empty first plan still committing the baseline, a skills re-rank still committing, a real node still committing, and a no-op leaving a hand-edited `.tex` HEAD alone; in `tests/test_host_ingest.py`, a newly answered job rule alone still committing. Three existing tests that relied on a keep-only plan committing now use a real change (`test_citations`, `test_consistency_gate`) or assert `no_change` (`test_jev_library`'s replay re-run, which re-submits the same plan on its own HEAD).
+
+### Deviations from spec
+
+- **Only content and layout overrides are compared, not `edited_tex`.** A plan commit carries the parent's layout overrides but never its hand-edited `.tex`, so committing over a hand-edited HEAD silently dropped the `.tex`. Treating a no-op plan as "no change" there leaves the user's version as HEAD instead. Whether a changing plan should carry `edited_tex` forward is a separate question and not changed here.
+- **Skills compare as stored.** A parent whose content lacks `skills_ranked` entirely (not written by the executor or the pipeline) differs from a plan result that sets it to `[]`, and commits once.
+- The `art-tailor` skill edit is one bullet in a file PR #253 also changes.
+
 ## Issue 249 — Hermetic test suite: no `.env` secrets, no outbound network outside `--integration`
 **Status:** complete | **Tests:** 2430 pass on SQLite (19 new), 24 skipped, 0 fail, on main at e280a87 (after #244) with sqlmodel 0.0.47. The full run was made with the developer's real `.env` (a production `DATABASE_URL`, `SUPABASE_URL`, Anthropic and TypeSafe keys) reachable and `PYTHON_DOTENV_DISABLED` unset, and the guard blocked 0 attempts; an earlier run with the variable set gave the same result. The Postgres leg was not run
 

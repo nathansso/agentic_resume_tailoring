@@ -275,7 +275,12 @@ Execution:
 3. **Finalize** checks page, line budget, sections and skills cap. On any violation
    nothing commits, and the host gets the violations with trade hints.
 4. **Patch** edits the saved program by JSON pointer.
-5. **Commit** writes a tree node with its metric vector and provenance.
+5. **Commit** writes a tree node with its metric vector and provenance. A plan that builds
+   on a parent and would leave the page identical to it (every node reverted, refused or kept,
+   and no skills, section-order or job-rule change) commits nothing: `committed: false` with
+   `reason: no_change`, no node and no change-feed event, and the per-node reasons stay in
+   `nodes`. A job's first plan always commits, so `parent: null, nodes: []` still saves the
+   track baseline copy.
 
 Stable IDs do the faithfulness work. The host names item keys, variant IDs and evidence
 IDs, and ART resolves them without parsing display text.

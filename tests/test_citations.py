@@ -12,7 +12,7 @@ from sqlmodel import Session, select
 
 from database.models import Project, UserPreference
 from harness.acceptance import Context, citation_violations, negative_pin_violations
-from test_executor import EXP, EXP2, _run, env  # noqa: F401  (fixture)
+from test_executor import EXP, EXP2, PROJ, _run, env  # noqa: F401  (fixture)
 
 STREAM = "proj:streamboard"
 
@@ -102,7 +102,9 @@ def test_verbatim_source_bullets_count_as_cited_and_editor_bullets_never_block(e
     exp.pop("cites", None)
     node = tree.commit_node(uid, job_id, content=content, source="editor")
     out = _run(uid, {"job_id": job_id, "parent": node["node_id"],
-                     "nodes": [{"id": "k", "op": "keep", "item_key": EXP}]})
+                     "nodes": [{"id": "k", "op": "keep", "item_key": EXP},
+                               {"id": "d", "op": "delete", "item_key": PROJ,   # a real change (#257)
+                                "because": "user:less games"}]})
     assert out["committed"], out["violations"]
     assert any("uncited" in v for v in out["metrics"]["base"]["gates"]["citations"])
 

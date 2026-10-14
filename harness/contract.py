@@ -692,6 +692,11 @@ class ExecuteOutput(_Output):
     dry_run: bool = False
     committed: bool = False
     node_id: Optional[str] = None
+    reason: Optional[str] = Field(
+        None, description="Why nothing was committed when no violation says so: no_change means "
+                          "the plan left the page identical to its parent (every node reverted, "
+                          "refused or kept, no skills or job-rule change), so no version was made. "
+                          "Absent otherwise; see nodes for the per-node reasons.")
     nodes: List[NodeResult] = Field(default_factory=list)
     skills: Dict[str, List[str]] = Field(default_factory=dict)
     metrics: Dict[str, Any] = Field(
@@ -1059,7 +1064,8 @@ TOOLS: List[ToolSpec] = [
         "execute_plan",
         "Run a whole tailoring plan as one program: arbitration, each node under the "
         "per-metric acceptance rule, then finalize (preferences, sections, skills cap, line "
-        "budget). Commits one version unless a check fails or dry_run is set. Writes.",
+        "budget). Commits one version unless a check fails, dry_run is set, or the result would "
+        "be identical to its parent (committed false, reason no_change). Writes.",
         ExecuteInput, ExecuteOutput,
         lambda uid, program, dry_run=False:
             _executor().execute_plan(uid, program, dry_run=dry_run),
