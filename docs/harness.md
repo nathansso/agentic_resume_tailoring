@@ -38,7 +38,7 @@ section below names the issues that deliver it.
 ```mermaid
 flowchart LR
     subgraph Today
-        B[Browser<br/>React SPA + editor] -->|HTTPS /api| F[FastAPI on Railway]
+        B[Browser<br/>React SPA + editor] -->|HTTPS /api| F[FastAPI on Railway<br/>frozen, currently down]
         F --> AG[agents/ + llm.py]
         AG -->|ART pays| MP[Model provider]
         AG --> SB[(Supabase)]
@@ -740,7 +740,9 @@ Codex CLI (0.149) was checked against its docs and live runs.
     Docs: [Claude Code hooks](https://code.claude.com/docs/en/hooks), Codex's hooks page
     (developers.openai.com/codex/hooks).
   - **Plugins can't carry hooks** (`plugin_hooks` was removed). `art hooks codex --write`
-    merges them into `$CODEX_HOME/hooks.json`, and the user trusts them with `/hooks`.
+    merges them into `$CODEX_HOME/hooks.json`, and the user trusts them with `/hooks`. A rerun
+    replaces ART's own entries from earlier installs and leaves the user's alone (#283). Codex's
+    current hooks docs say plugins can bundle hooks, which contradicts this; #290 is checking it.
   - A project's `.codex/hooks.json` loads only in a trusted project. In live runs a
     user-level hook fired in `codex exec`, and the project file in an untrusted directory
     did not.
@@ -761,7 +763,7 @@ Codex CLI (0.149) was checked against its docs and live runs.
 so `/plugin marketplace add nathansso/agentic_resume_tailoring` then `/plugin install
 art@art` installs it.
 
-- **Server.** `.mcp.json` runs `art-mcp` through `uvx --from git+…`.
+- **Server.** `.mcp.json` runs `art mcp` through `uvx --from` one pinned release wheel (#256), which has the built editor in it (#255).
 - **Skills.**
   - `art-tailor`: briefing → `open_job` (with requirements and rule answers) → read the
     graph → a plan program **shown for approval** → `execute_plan` / `patch_plan` →
@@ -884,6 +886,7 @@ harness/
   export_import.py                   # art export / art import (#195)
   decisions/                         # Jev client, cache, engine, recordings, one module per point
 web/                                 # art ui (local mode, SSE); the SDK chat panel is planned (#205)
+site/                                # the public landing site (#271): Astro, on Vercel, apart from the harness
 plugin/                              # Claude Code plugin: skills, commands, hooks
 integrations/codex/
 eval/hosts/                          # planned (#206): taskground-style host runner
@@ -893,17 +896,17 @@ pyproject.toml                       # art, art-mcp · extras [embed] [pdf] [ui]
 
 ## 18. Roadmap
 
-The windows are the plan and have not moved. Status is as of 2026-10-05, from the board and
+The windows are the plan and have not moved. Status is as of 2026-10-14, from the board and
 `CHANGELOG.md`.
 
 | Phase | Window | Shipped | Open | Exit test | Status |
 |---|---|---|---|---|---|
 | H0 · Decide & Spike | Sep 28 – Oct 4 | #188, #189, #209 | | One real tailoring in Claude Code with read-only tools; gap list recorded | Done |
-| H1 · Core & Jev | Oct 5 – Oct 18 | #190, #191, #192, #193, #194, #195, #210, #237, #249 | | Contract tests on both legs; `uvx art-mcp` without torch; every Jev point replays from cache | Done |
-| H2 · Executor & Library | Oct 19 – Nov 8 | #113, #123, #126, #196, #197, #198, #199, #200, #229, #230, #232, #233, #241 | #117, #127, #151, #163, #185, #252 | Scripted-host benchmark replays byte-identically; stuffing rejected, preference delete kept | Mostly shipped; what is open is tuning |
-| H3 · Plugin & Memory | Nov 9 – Nov 22 | #201, #202, #203, #244 | | Gate recall measured on a labelled set (negation separate); pins survive compaction | Done |
-| H3b · Editor | Nov 23 – Dec 6 | #204 | #205, #87, #82, #84, #136, #147 | Editor drag reaches the host's next turn; host commit reaches the editor without reload | The local editor and change feed shipped; the chat panel and the UI issues are open |
-| H4 · Host Evaluation | Dec 7 – Dec 27 | | #206, #172 (chunks 1–6 of 7 shipped), #173, #178, #181 | Written result, B vs A first; go/no-go on H5 | Not started |
+| H1 · Core & Jev | Oct 5 – Oct 18 | #190, #191, #192, #193, #194, #195, #210, #237, #249, #255, #256 | | Contract tests on both legs; `uvx art-mcp` without torch; every Jev point replays from cache | Done |
+| H2 · Executor & Library | Oct 19 – Nov 8 | #113, #123, #126, #185, #196, #197, #198, #199, #200, #229, #230, #232, #233, #241, #254, #257, #258, #259, #260, #279 | #117, #127, #151, #163, #252, #289, #291 | Scripted-host benchmark replays byte-identically; stuffing rejected, preference delete kept | Mostly shipped; what is open is tuning |
+| H3 · Plugin & Memory | Nov 9 – Nov 22 | #201, #202, #203, #244, #283 | | Gate recall measured on a labelled set (negation separate); pins survive compaction | Done |
+| H3b · Editor | Nov 23 – Dec 6 | #204 | #205, #87, #82, #84, #136, #147, #276, #277, #278, #288 | Editor drag reaches the host's next turn; host commit reaches the editor without reload | The local editor and change feed shipped; the chat panel and the UI issues are open |
+| H4 · Host Evaluation | Dec 7 – Dec 27 | #181 | #206, #172 (chunks 1–6 of 7 shipped), #173, #178 | Written result, B vs A first; go/no-go on H5 | Not started |
 | H5 · Offline Policy | From Dec 28 | | #174, #152, #157, #119, #51, #114 | Arm C beats B on anchor-agreed quality on ≥ 2 hosts | Not started; runs only if H4 says go |
 
 **H1 through H3 largely shipped ahead of the calendar.** Their exit tests are met by the
@@ -919,7 +922,7 @@ What is left in H2, and why:
 - **#117** (keep-biased suggestions, an edit-distance guard against the parent) and **#163**
   (keyword insertion by importance × supportability) are not started.
 - **#151** splits required from preferred coverage into separate targets.
-- **#185** bounds the fallback skills floor by the cap.
+- **#289** and **#291** are executor defects found after the fact: a `cut_bullet` hint sent as a `revise` is reverted by the guards, and a hard preference scoped to a role family is not enforced by `execute_plan`.
 - **#252** tracks what is planned and not built: four Jev points (§ 4) and the tools `check_draft` and `record_feedback` (§ 9).
 
 ## 19. Evaluation (#206)
