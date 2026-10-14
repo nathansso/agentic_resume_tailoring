@@ -14,6 +14,24 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 282 — Editor change-feed tests no longer depend on timers or GC timing
+**Status:** complete | **Tests:** 2622 pass (2 new), 24 skipped, on SQLite; `tests/test_local_ui.py` passed 20 of 20 repeated runs; the Postgres leg was not run locally (CI runs it)
+
+`test_a_fresh_stream_starts_at_now_and_sees_a_commit_made_while_open` ordered "the stream read now" before "a commit happened" with a 0.3 s `threading.Timer`, so a long garbage collection inside the request (seen on the Postgres CI leg, #241) let the commit land first. #241 papered over it with a `gc.collect()`. The ordering is now established by events, and the tests prove it by stalling every read.
+
+### What shipped
+
+- **`feed_probe` fixture in `tests/test_local_ui.py`.** It wraps the router's `_feed_tail` (the read of the starting cursor) and `_feed` (each poll). `opened` is set the moment the stream has its cursor, so the test's committer thread waits on it instead of a timer. `stop_after_delivery` ends the stream as soon as it has yielded an event, so the response closes on that, not on a deadline; `EVENTS_MAX_SECONDS` is only a 60 s backstop.
+- **`pause` injection.** The probe can run `gc.collect()` and sleep 1.5 s at every read the stream makes. The while-open test and the since-cursor test are both parametrized over no pause and a 1.5 s pause, which is the acceptance criterion's simulated mid-request stall.
+- **The `gc.collect()` workaround from #241 is gone.** No change-feed test uses a fixed sleep or timer for ordering; the other feed tests commit before the request and rely only on the stream's first poll.
+- A committer-thread failure is captured and re-raised from the test thread instead of being lost.
+
+### Deviations from spec
+
+- No product code changed: the `: connected` comment carries no cursor, but `_feed_tail` runs before the response starts and is a stable seam to observe, so no new signal was added to the endpoint.
+- The optional route-warming fixture was skipped. Nothing now depends on the first request being fast, so it would only hide cost.
+- `TestClient` buffers the whole response, so the stream cannot be read incrementally from the test; the hooks on the router's module-level functions stand in for "read the first event".
+
 ## Issue 283 — `art hooks codex --write` replaces ART's hooks from earlier installs
 **Status:** complete | **Tests:** 2625 pass on SQLite (5 new), 24 skipped, 0 fail. The Postgres leg was not run locally; CI runs it
 

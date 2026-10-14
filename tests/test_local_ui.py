@@ -1,7 +1,9 @@
 """`art ui` (issue #204): local mode, its guards, the SSE change feed, the launcher."""
 
+import gc
 import json
 import threading
+import time
 
 import pytest
 from sqlmodel import Session
@@ -83,6 +85,48 @@ def short_stream(monkeypatch):
     return jr
 
 
+class _FeedProbe:
+    """Hooks on the change feed so a test orders things by what the stream has done, not by
+    how long anything took (#282). `opened` is set once the stream has read its starting
+    cursor, so a commit made after it is guaranteed to be after "now". `pause` simulates a
+    stall (a long garbage collection, a slow runner) at every read the stream makes; a
+    correct test passes with any value. `stop_after_delivery` ends the stream as soon as it
+    has yielded an event, so the test never waits on a clock to close the response."""
+
+    def __init__(self):
+        self.opened = threading.Event()
+        self.pause = 0.0
+        self.stop_after_delivery = False
+
+    def stall(self):
+        if self.pause:
+            gc.collect()
+            time.sleep(self.pause)
+
+
+@pytest.fixture()
+def feed_probe(short_stream, monkeypatch):
+    probe = _FeedProbe()
+    real_tail, real_feed = short_stream._feed_tail, short_stream._feed
+
+    def tail(*args):
+        cursor = real_tail(*args)
+        probe.opened.set()
+        probe.stall()
+        return cursor
+
+    def feed(*args):
+        probe.stall()
+        events = real_feed(*args)
+        if events and probe.stop_after_delivery:
+            short_stream.EVENTS_MAX_SECONDS = 0       # the stream returns at its next check
+        return events
+
+    monkeypatch.setattr(short_stream, "_feed_tail", tail)
+    monkeypatch.setattr(short_stream, "_feed", feed)
+    return probe
+
+
 # ── local mode auth ──────────────────────────────────────────────────────────
 
 def test_a_cookieless_request_gets_the_local_user_only_in_local_mode(
@@ -150,9 +194,11 @@ def test_origin_rule_is_pure():
 
 # ── the change feed ──────────────────────────────────────────────────────────
 
+@pytest.mark.parametrize("pause", [0, 1.5], ids=["no_pause", "paused"])
 def test_the_feed_yields_a_host_commit_made_after_the_cursor(
-        job, isolated_engine, local_client, short_stream):
+        job, isolated_engine, local_client, feed_probe, pause):
     from harness import tree
+    feed_probe.pause = pause
     uid, jid, rid = job
     first = _host_commit(isolated_engine, uid, jid, rid, "Built a tuned ensemble")
     cursor = tree.get_head(uid, jid)["cursor"]
@@ -177,28 +223,34 @@ def test_the_feed_resumes_from_last_event_id(job, isolated_engine, local_client,
     assert len(resumed) == 1 and resumed[0]["id"] > everything[-1]["id"]
 
 
+@pytest.mark.parametrize("pause", [0, 1.5], ids=["no_pause", "paused"])
 def test_a_fresh_stream_starts_at_now_and_sees_a_commit_made_while_open(
-        job, isolated_engine, local_client, short_stream, monkeypatch):
-    import gc
+        job, isolated_engine, local_client, feed_probe, short_stream, pause):
+    """The commit waits for the stream to report that it has read "now" (no timer), and the
+    stream closes once it has delivered it (no deadline to race), so the outcome does not
+    depend on how long anything takes; `paused` proves it by stalling every read."""
     uid, jid, rid = job
     _host_commit(isolated_engine, uid, jid, rid, "before the editor opened")
-    # The commit below fires 0.3 s after the timer starts and must land after the stream reads
-    # "now". A full garbage collection of a suite-sized heap (about 2M objects, over a second
-    # on a CI runner) that happens to fall inside the request stalls the stream past that
-    # point, so collect first: the next one is then far off. (Surfaced by #241, whose few
-    # extra allocations moved when the collection fell; nothing in the feed was wrong.)
-    gc.collect()
-    monkeypatch.setattr(short_stream, "EVENTS_MAX_SECONDS", 2.0)
-    committed = {}
-    timer = threading.Timer(0.3, lambda: committed.update(
-        _host_commit(isolated_engine, uid, jid, rid, "while the editor is open")))
-    timer.start()
+    feed_probe.pause = pause
+    feed_probe.stop_after_delivery = True
+    short_stream.EVENTS_MAX_SECONDS = 60.0            # a backstop only; the probe ends the stream
+    committed, failure = {}, []
+
+    def commit_once_open():
+        try:
+            assert feed_probe.opened.wait(30), "the stream never reported its cursor"
+            committed.update(_host_commit(isolated_engine, uid, jid, rid, "while the editor is open"))
+        except BaseException as e:                    # surfaced below, from the test thread
+            failure.append(e)
+
+    committer = threading.Thread(target=commit_once_open, daemon=True)
+    committer.start()
     try:
         body = local_client(uid).get(f"/api/jobs/{jid}/events").text
     finally:
-        timer.join()
-    events = _events(body)
-    assert [e["node_id"] for e in events] == [committed["node_id"]]
+        committer.join(30)
+    assert not failure, failure
+    assert [e["node_id"] for e in _events(body)] == [committed["node_id"]]
 
 
 def test_the_feed_is_scoped_to_the_owner(job, isolated_engine, local_client, short_stream):
