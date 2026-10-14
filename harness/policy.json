@@ -1,0 +1,286 @@
+{
+  "_comment": "The policy artifact (#241). Every fitted or provisional threshold the harness decides with, and the guard tolerances, with the fit each came from. Read by harness/policy.py; tests/test_policy.py pins it to the fit scripts' output on the committed recordings. Changing a value means a new `version` and `digest`.",
+  "version": 1,
+  "digest": "e2fb4f5790ee9102",
+  "fit_date_basis": "the recordings' export date",
+  "fits": {
+    "support": {
+      "decision": "support@v1",
+      "script": "eval/fit_support_threshold.py",
+      "model": "jev-1.13.0",
+      "fit_date": "2026-09-29",
+      "source_issue": 237,
+      "labels": [
+        {
+          "path": "eval/support_labels/pairs.json",
+          "sha256": "bdc3b3b426001b90e091577834d4aac743c0ac35a2e0c0aed5002d9ffabe06b6"
+        }
+      ],
+      "recordings": [
+        {
+          "path": "eval/support_labels/recordings.json",
+          "sha256": "b82947832da4f2e3784800a93768122a24f793082e62367c5c2e43e71357aa11"
+        }
+      ]
+    },
+    "negative_pin": {
+      "decision": "negative_pin@v1",
+      "script": "eval/fit_negative_pin_threshold.py",
+      "model": "jev-1.13.0",
+      "fit_date": "2026-09-30",
+      "source_issue": 232,
+      "labels": [
+        {
+          "path": "eval/negative_pin_labels/pairs.json",
+          "sha256": "e8bb16420d9ec1226e1651708c5eed23ab761ee141335f9ca54f9fcc0fdc9de7"
+        }
+      ],
+      "recordings": [
+        {
+          "path": "eval/negative_pin_labels/recordings.json",
+          "sha256": "ee8d4debceee2f436b04f41a68d155cd6c4df1ad5227be14489306d6f04dd5b9"
+        }
+      ]
+    },
+    "coverage": {
+      "decision": "requirement_covered@v2 + education_covered@v1",
+      "script": "eval/fit_coverage_threshold.py",
+      "model": "jev-1.13.0",
+      "fit_date": "2026-09-30",
+      "source_issue": 126,
+      "labels": [
+        {
+          "path": "eval/coverage_labels/pairs.json",
+          "sha256": "cd823aeaf13544bf7bb278ba0701110b120bcfb7beacadd2c2c15d1b3676c2ac"
+        }
+      ],
+      "recordings": [
+        {
+          "path": "eval/coverage_labels/recordings.json",
+          "sha256": "e85d8a9a6cd1cb3faf1ccee6a4204c723592c626f8761508bd7aead14359ee78"
+        }
+      ]
+    },
+    "memory_gate_v1": {
+      "decision": "memory_gate@v1",
+      "script": "eval/fit_memory_gate_threshold.py",
+      "model": "jev-1.13.0",
+      "fit_date": "2026-10-01",
+      "source_issue": 202,
+      "labels": [
+        {
+          "path": "eval/memory_gate_labels/pairs.json",
+          "sha256": "158068245139f9935906acf4df1573065934eade4daaa3c6681a91af49c85ac2"
+        }
+      ],
+      "recordings": [
+        {
+          "path": "eval/memory_gate_labels/recordings.json",
+          "sha256": "d8f3453f61f011f3926a00cab673ff8aa5102131672af74804daa954097a8c5a"
+        }
+      ]
+    },
+    "memory_gate_v2": {
+      "decision": "memory_gate@v2",
+      "script": "eval/fit_memory_gate_context.py",
+      "model": "jev-1.13.0",
+      "fit_date": "2026-10-05",
+      "source_issue": 244,
+      "labels": [
+        {
+          "path": "eval/memory_gate_labels/context/pairs.json",
+          "sha256": "d3f1d6e90ee86a887ee84f921a7a8da60d69858ee321f68eb11f55b89ad853d4"
+        }
+      ],
+      "recordings": [
+        {
+          "path": "eval/memory_gate_labels/context/recordings.json",
+          "sha256": "30ae350cac9b7c69899a38d0bdeceaf418a6b4ba5c6c489e56b7f920ca988216"
+        },
+        {
+          "path": "eval/memory_gate_labels/recordings.json",
+          "sha256": "d8f3453f61f011f3926a00cab673ff8aa5102131672af74804daa954097a8c5a"
+        }
+      ]
+    },
+    "library": {
+      "decision": "variant_choice@v1 + track_baseline@v1",
+      "script": "eval/fit_library_thresholds.py",
+      "model": "jev-1.13.0",
+      "fit_date": "2026-10-01",
+      "source_issue": 199,
+      "labels": [
+        {
+          "path": "eval/library_labels/variants.json",
+          "sha256": "b8514b47f3bfd4180bd81c3b3397603833a5b4b49fd4335c4052e2060eba1c8a"
+        },
+        {
+          "path": "eval/library_labels/baselines.json",
+          "sha256": "36a9dcf4b7644ad977f93b5da48eb9c93d982dfa80b9deb3fd82f0aa5c93bc4c"
+        }
+      ],
+      "recordings": [
+        {
+          "path": "eval/library_labels/recordings.json",
+          "sha256": "6e180e5df274d9e9d39a32742a722c8100bb093e20939b97daacdb4c52082a10"
+        }
+      ]
+    }
+  },
+  "values": {
+    "support.tau_block": {
+      "value": 0.85,
+      "kind": "fitted",
+      "fit": "support",
+      "source_issue": 237
+    },
+    "support.tau_review": {
+      "value": 0.35,
+      "kind": "fitted",
+      "fit": "support",
+      "source_issue": 237
+    },
+    "negative_pin.tau_block": {
+      "value": 0.85,
+      "kind": "fitted",
+      "fit": "negative_pin",
+      "source_issue": 232
+    },
+    "negative_pin.tau_review": {
+      "value": 0.15,
+      "kind": "fitted",
+      "fit": "negative_pin",
+      "source_issue": 232
+    },
+    "coverage.tau_cover": {
+      "value": 0.65,
+      "kind": "fitted",
+      "fit": "coverage",
+      "source_issue": 126
+    },
+    "memory_gate.v1.tau_lo": {
+      "value": 0.25,
+      "kind": "fitted",
+      "fit": "memory_gate_v1",
+      "source_issue": 202
+    },
+    "memory_gate.v1.tau_hi": {
+      "value": 0.65,
+      "kind": "fitted",
+      "fit": "memory_gate_v1",
+      "source_issue": 202
+    },
+    "memory_gate.v1.tau_target": {
+      "value": 0.75,
+      "kind": "fitted",
+      "fit": "memory_gate_v1",
+      "source_issue": 202
+    },
+    "memory_gate.v2.tau_lo": {
+      "value": 0.2,
+      "kind": "fitted",
+      "fit": "memory_gate_v2",
+      "source_issue": 244
+    },
+    "memory_gate.v2.tau_hi": {
+      "value": 0.65,
+      "kind": "pinned",
+      "fit": "memory_gate_v2",
+      "source_issue": 244,
+      "fit_alone": 0.5,
+      "pinned_to": "memory_gate.v1.tau_hi"
+    },
+    "memory_gate.v2.tau_target": {
+      "value": 0.75,
+      "kind": "pinned",
+      "fit": "memory_gate_v2",
+      "source_issue": 244,
+      "fit_alone": 0.4,
+      "pinned_to": "memory_gate.v1.tau_target"
+    },
+    "memory_gate.hi_floor": {
+      "value": 0.5,
+      "kind": "rule",
+      "fit": null,
+      "source_issue": 202,
+      "note": "floor of the tau_hi fit: a write needs Jev to call the message more likely than not a preference"
+    },
+    "memory_gate.hard_mass": {
+      "value": 0.25,
+      "kind": "rule",
+      "fit": null,
+      "source_issue": 202,
+      "note": "safety margin, not a fit: this much probability on strength 5 asks the user"
+    },
+    "memory_gate.v1_would_be_writes": {
+      "value": 29,
+      "kind": "rule",
+      "fit": null,
+      "source_issue": 244,
+      "note": "v1's would-be writes with the code rules off (REPORT.md); the pin rule lets go at this many"
+    },
+    "library.tau_variant": {
+      "value": 0.5,
+      "kind": "fitted",
+      "fit": "library",
+      "source_issue": 199,
+      "note": "at the floor: a decision, not a separation (#199)"
+    },
+    "library.tau_baseline": {
+      "value": 0.5,
+      "kind": "fitted",
+      "fit": "library",
+      "source_issue": 199,
+      "note": "at the floor: a decision, not a separation (#199)"
+    },
+    "library.tau_floor": {
+      "value": 0.5,
+      "kind": "rule",
+      "fit": null,
+      "source_issue": 199,
+      "note": "floor of both library fits: a pick needs Jev to call it more likely than not"
+    },
+    "library.variant_match_floor": {
+      "value": 0.1,
+      "kind": "provisional",
+      "fit": null,
+      "source_issue": 229,
+      "note": "Jev-free fallback floor of suggest_actions; reasoned, not fitted; refit once real library use exists"
+    },
+    "guards.stuffing": {
+      "value": 0.0,
+      "kind": "provisional",
+      "fit": null,
+      "source_issue": 197,
+      "note": "stuffed-term count; #127 fits per guard"
+    },
+    "guards.verb_entropy": {
+      "value": 0.35,
+      "kind": "provisional",
+      "fit": null,
+      "source_issue": 197,
+      "note": "bits; #127 fits per guard"
+    },
+    "guards.mtld": {
+      "value": 0.1,
+      "kind": "provisional",
+      "fit": null,
+      "source_issue": 197,
+      "note": "a fraction of MTLD; #127 fits per guard"
+    },
+    "guards.duplication": {
+      "value": 0.15,
+      "kind": "provisional",
+      "fit": null,
+      "source_issue": 197,
+      "note": "max pairwise token Jaccard; #127 fits per guard"
+    },
+    "guards.variant_drift": {
+      "value": 0.35,
+      "kind": "provisional",
+      "fit": null,
+      "source_issue": 229,
+      "note": "normalized token edit distance to the named approved variant; refit once real library use exists"
+    }
+  }
+}

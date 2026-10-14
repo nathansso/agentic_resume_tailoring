@@ -35,10 +35,19 @@ Read them yourself. ART does not read files.
   - **Experience:** title, company, dates and bullets **verbatim**, one bullet per line
     of the source.
   - **Education:** `end_date` is the graduation date.
-  - **Project:** name, description, repo_url. For a local repo, describe what the code
-    shows, and check any claim against the files.
+  - **Project:** name, a short `description` (what it is, one or two sentences; no
+    tagline pasted in front of it), repo_url, and, separately, `blurbs`: one-line resume
+    bullets, each saying what it does and the result or tech. The description renders
+    verbatim as the project's only bullet when there are no blurbs, so write blurbs for
+    anything meant to reach the page. For a local repo, describe what the code shows,
+    and check any claim against the files. `get_item` marks a project with no blurbs and
+    a description that is not one short sentence as `incomplete` (`missing: ["blurbs"]`):
+    offer to write its bullets and store them with `upsert_items`.
   - **Skill:** name, category and a 1–5 proficiency from the evidence. Only skills the
-    sources show.
+    sources show. Always fill `category`, one of `Languages & Libraries`,
+    `AI & Machine Learning`, `Data Engineering`, `Tools` or `Cloud`: the resume groups
+    skills by it, and a skill without one lands under "Other". ART infers a missing
+    category for common skills but not for the rest, and never replaces one you set.
 - Call `upsert_items({records, source})` with `source` set to where the records came
   from (`resume.pdf`, `github:<repo>`, `linkedin`). Records are
   `{"kind": ..., "data": {...}}`.

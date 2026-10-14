@@ -102,6 +102,61 @@ def normalize_skill_name(name: str) -> str:
     return SKILL_ALIASES.get(key, stripped)
 
 
+# Category buckets the formatter groups on (`ResumeFormatterAgent._normalize_category`
+# maps each of these to itself). Used to fill a missing category (#259).
+LANGS = "Languages & Libraries"
+AIML = "AI & Machine Learning"
+DATA = "Data Engineering"
+TOOLS = "Tools"
+CLOUD = "Cloud"
+
+# Canonical skill name (lowercase, after the alias map) -> category. Curated and
+# explicit: a skill that is not listed stays uncategorized rather than guessed.
+SKILL_CATEGORIES = {
+    **dict.fromkeys([
+        "python", "sql", "r", "java", "javascript", "typescript", "c++", "c#", "go",
+        "rust", "scala", "kotlin", "swift", "php", "ruby", "matlab", "bash",
+        "html", "css", "numpy", "pandas", "scipy", "matplotlib", "seaborn", "plotly",
+        "networkx", "statsmodels", "geopandas", "beautifulsoup", "sqlalchemy", "sqlmodel",
+        "pydantic", "flask", "django", "fastapi", "react", "node.js", "next.js", "vue",
+        "angular", "tailwind css", "jquery", "spring boot", "pytest",
+    ], LANGS),
+    **dict.fromkeys([
+        "scikit-learn", "pytorch", "tensorflow", "keras", "xgboost", "lightgbm", "jax",
+        "hugging face", "transformers", "langchain", "langgraph", "openai api", "llm",
+        "llms", "nlp", "natural language processing", "computer vision", "opencv", "nltk",
+        "spacy", "machine learning", "deep learning", "reinforcement learning",
+        "time series analysis", "time series forecasting", "a/b testing", "rag",
+        "recommender systems", "graph neural networks", "neural networks",
+        "statistical modeling", "feature engineering", "generative ai", "mlflow",
+    ], AIML),
+    **dict.fromkeys([
+        "postgresql", "mysql", "sqlite", "mongodb", "redis", "supabase", "pgvector",
+        "elasticsearch", "dynamodb", "cassandra", "spark", "pyspark", "hadoop", "airflow",
+        "kafka", "dbt", "snowflake", "bigquery", "databricks", "etl", "data pipelines",
+        "data modeling", "data warehousing", "pyarrow", "duckdb",
+    ], DATA),
+    **dict.fromkeys([
+        "aws", "gcp", "azure", "s3", "ec2", "lambda", "amazon web services",
+        "google cloud", "google cloud platform", "cloudflare", "heroku", "railway",
+        "vercel", "sagemaker", "aws lambda", "ecs", "eks",
+    ], CLOUD),
+    **dict.fromkeys([
+        "docker", "kubernetes", "git", "github", "gitlab", "github actions", "linux",
+        "unix", "ci/cd", "terraform", "ansible", "jenkins", "jupyter", "tableau",
+        "power bi", "excel", "latex", "jira", "vs code", "postman", "nginx",
+        "streamlit", "gradio", "weights & biases", "langsmith",
+    ], TOOLS),
+}
+
+
+def infer_skill_category(name: str) -> Optional[str]:
+    """The category for a skill name from the curated map, or None when unknown."""
+    stripped = (name or "").strip()
+    return (SKILL_CATEGORIES.get(normalize_skill_name(stripped).lower())
+            or SKILL_CATEGORIES.get(stripped.lower()))
+
+
 def should_reject_skill(name: str) -> bool:
     """Check if a skill name should be filtered out."""
     stripped = name.strip()
@@ -158,7 +213,9 @@ def postprocess_skills(skills: List[Dict]) -> List[Dict]:
         else:
             seen[key] = {
                 "name": canonical,
-                "category": skill.get("category", "Other"),
+                # A missing category is inferred when the name is known (#259),
+                # else left empty; the renderers show an empty one as "Other".
+                "category": skill.get("category") or infer_skill_category(canonical),
                 "proficiency": skill.get("proficiency", 1),
             }
 

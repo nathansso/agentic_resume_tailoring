@@ -31,7 +31,7 @@ from sqlalchemy import func
 from sqlmodel import Session, select
 
 import database.db as _db
-from harness import ART_VERSION
+from harness import ART_VERSION, policy
 from agents.checks import exp_key, proj_key
 from database.clock import utc_now
 from database.models import JobDescription, JobHead, TailorNode, TreeEvent, UserJobResult
@@ -155,6 +155,9 @@ def commit_node(user_id, job_id, *, content: Dict, source: str,
     `materialize`: also write the node into the job's current result (creating
     one if the job has none). Hooks that commit *after* writing the result leave
     it off; the executor (#197), which writes nothing else, turns it on.
+
+    Every node's provenance records `policy_version` (#241), the version of the policy
+    artifact (`harness/policy.json`) in force; the caller's provenance may override it.
     """
     if source not in SOURCES:
         raise ValueError(f"unknown source {source!r}")
@@ -174,7 +177,9 @@ def commit_node(user_id, job_id, *, content: Dict, source: str,
             user_id=user_id, job_id=job_id, parent_id=head_id,
             seq=0 if highest is None else highest + 1, source=source,
             content=content or {}, score_breakdown=score_breakdown or {},
-            program=program, metrics=metrics or {}, provenance=provenance or {},
+            program=program, metrics=metrics or {},
+            # The policy the node ran under (#241); a node from before it simply lacks the key.
+            provenance={"policy_version": policy.version(), **(provenance or {})},
             edited_tex=edited_tex, layout_overrides=layout_overrides,
             result_id=_uuid(result_id) if result_id else None, note=note)
         session.add(node)
