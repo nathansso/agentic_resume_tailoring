@@ -539,3 +539,111 @@ def test_a_no_change_plan_leaves_the_parents_hand_edits_alone(isolated_engine, e
     out = _run(uid, {"job_id": job_id, "parent": edit["node_id"]})
     assert not out["committed"] and out["reason"].startswith("no_change")
     assert _head(isolated_engine, job_id) == edit["node_id"] != first["node_id"]
+
+
+# ── a requested delete is not vetoed by a guard (#279) ───────────────────────
+
+def _mtld_down(vector, by=0.30):
+    """`vector` with MTLD lower by a fraction, as any delete lowers it."""
+    out = copy.deepcopy(vector)
+    out["guards"]["mtld"] = round(out["guards"]["mtld"] * (1 - by), 4)
+    return out
+
+
+def test_a_requested_delete_that_only_regresses_mtld_is_accepted_and_reports_it():
+    from harness.acceptance import Context, accept, metric_vector
+
+    ctx = Context(jd_text="retail demand forecasting")
+    before = metric_vector(_content(BASE), ctx)
+    before["guards"]["mtld"] = 80.0                  # a short fixture has none (None)
+    after = _mtld_down(before)
+    assert not accept(before, after, improves=["coverage"])["accepted"]       # an edit is still vetoed
+    verdict = accept(before, after, requested=True)
+    assert verdict["accepted"] and verdict["gate_violations"] == {}
+    assert verdict["guard_regressions"] == verdict["waived"] and set(verdict["waived"]) == {"mtld"}
+    assert verdict["reason"].startswith("guard_waived") and "mtld" in verdict["reason"]
+    assert accept(before, copy.deepcopy(before), requested=True)["waived"] == {}   # nothing to waive
+
+
+def test_a_requested_delete_that_breaks_a_hard_gate_is_still_refused():
+    from harness.acceptance import Context, accept, metric_vector
+
+    ctx = Context(jd_text="retail demand forecasting", hard_emphasize={"exp:engineer|acme"})
+    before = metric_vector(_content(BASE), ctx)
+    emptied = _content(BASE)
+    emptied["experiences"] = []
+    after = metric_vector(emptied, ctx)
+    before["guards"]["mtld"] = 80.0                     # a short fixture has none (None)
+    after["guards"]["mtld"] = 40.0                      # and a guard regresses too
+    verdict = accept(before, after, requested=True)
+    assert not verdict["accepted"] and verdict["reason"].startswith("hard_gate: preferences")
+    assert verdict["waived"] == {}                      # nothing is waived on a refused node
+
+
+def _spread_profile():
+    """The benchmark profile cut to two bullets an item (the floor `cut_hints` respects), plus
+    five projects of varied wording: every `cut_hints` entry is a `drop_item`, and cutting a
+    varied project lowers the page's MTLD by more than the 10% tolerance."""
+    from eval.profile_fixture import load_profile
+    from eval.tailoring_benchmark import PROFILES_DIR
+
+    words = ("alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike "
+             "november oscar papa quebec romeo sierra tango uniform victor whiskey xray yankee "
+             "zulu amber basil cedar dune ember fjord glade harbor iris jade koala lotus maple "
+             "nectar olive pearl quartz ridge sable tundra umber velvet willow yarrow zephyr").split()
+
+    def varied(i, j):
+        return "Built " + " ".join(words[(i * 7 + j * 5 + k * 3) % len(words)] for k in range(9)) + " service"
+
+    profile = load_profile(PROFILES_DIR / BENCH_PROFILE)
+    for item in (*profile.experiences, *profile.projects):
+        item["bullets"] = item["bullets"][:2]
+    profile.projects += [{"name": f"Tool {words[i]}", "description": None, "repo_url": None,
+                          "bullets": [varied(i, 0), varied(i, 1)]} for i in range(5)]
+    return profile
+
+
+def test_cut_hints_and_the_acceptance_rule_agree_end_to_end(isolated_engine, monkeypatch):
+    """The #279 run: an over-budget page, `cut_hints` recommending `drop_item`s, the host sending
+    them as requested deletes. Each used to come back `reverted` (`guard: mtld regressed`),
+    so the budget stayed violated and nothing committed."""
+    from eval.scripted_host import open_task_job, seed_profile
+    from eval.tailoring_benchmark import load_tasks
+    from harness import executor
+
+    monkeypatch.setattr(executor, "MEASURER", lambda texts: [2 for _ in texts])
+    uid = seed_profile(_spread_profile())
+    job_id = open_task_job(uid, load_tasks(limit=5)[3])
+    finalize = {"min_skills": 0}
+
+    over = _run(uid, {"job_id": job_id, "finalize": finalize}, dry_run=True)
+    assert not over["committed"] and over["line_budget"]["over_by"] > 0
+    drops = [h["item"] for h in over["cut_hints"]]
+    assert drops and {h["action"] for h in over["cut_hints"]} == {"drop_item"}
+
+    nodes = [{"id": f"d{i}", "op": "delete", "item_key": key, "because": "user:fewer projects"}
+             for i, key in enumerate(drops)]
+    out = _run(uid, {"job_id": job_id, "finalize": finalize, "nodes": nodes})
+    assert out.get("error") is None
+    assert [n["status"] for n in out["nodes"]] == ["accepted"] * len(drops), out["nodes"]
+    waived = [n for n in out["nodes"] if n.get("waived")]
+    assert any("mtld" in n["waived"] for n in waived), "the scenario must exercise the MTLD guard"
+    assert all(n["reason"].startswith("guard_waived") for n in waived)
+    assert out["violations"] == [] and out["line_budget"]["over_by"] <= 0 and out["committed"]
+    assert _head(isolated_engine, job_id) == out["node_id"]
+
+
+def test_a_requested_revise_that_stuffs_is_still_reverted(env):
+    """`because` waives guards for a delete only: an action that writes text faces every guard."""
+    from harness.executor import _KG
+
+    uid, job_id, _ = env
+    src = _KG(uid).source_bullets[EXP2]
+    bullets = [{"text": f"{b.rstrip('.')} using Kafka and Redis and Airflow", "cites": [f"{EXP2}#b{i}"]}
+               for i, b in enumerate(src)]
+    out = _run(uid, {"job_id": job_id, "nodes": [
+        {"id": "stuff", "op": "revise", "item_key": EXP2, "strategy": "keyword_weave",
+         "bullets": bullets, "because": "user:work in more of the posting"}]}, dry_run=True)
+    node = out["nodes"][0]
+    assert node["status"] == "reverted" and "waived" not in node, node
+    assert node["reason"].startswith(("guard:", "hard_gate:")), node
