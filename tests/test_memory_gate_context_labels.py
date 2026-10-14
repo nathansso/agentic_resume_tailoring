@@ -224,12 +224,10 @@ def test_a_target_only_the_previous_turn_names_is_never_written(replayed):
 
 # ── the numbers v2 ships with ────────────────────────────────────────────────
 
-def test_the_v2_constants_are_the_pinned_fit_and_v1s_are_unchanged(replayed):
+def test_the_v2_constants_are_ordered_and_the_fit_alone_is_looser_than_the_pin(replayed):
+    # that they equal the pinned fit: tests/test_policy.py (#241)
     rows, _, _ = replayed
     rec = ctx.recommend(rows)
-    assert (mg.TAU_LO_V2, mg.TAU_HI_V2, mg.TAU_TARGET_V2) == (rec["tau_lo"], rec["tau_hi"], rec["tau_target"])
-    assert (mg.TAU_LO_V2, mg.TAU_HI_V2, mg.TAU_TARGET_V2) == (0.20, 0.65, 0.75)
-    assert (mg.TAU_LO, mg.TAU_HI, mg.TAU_TARGET) == (0.25, 0.65, 0.75)               # #202's, unchanged
     assert mg.TAU_LO_V2 < mg.TAU_HI_V2 and 0 < mg.TAU_TARGET_V2 < 1
     # the fit alone, before the pin rule, is what #202's rules give on v2's answers
     assert rec["pinned"] and rec["raw"] == {"tau_hi": 0.50, "tau_target": 0.40, "tau_lo": 0.20}
