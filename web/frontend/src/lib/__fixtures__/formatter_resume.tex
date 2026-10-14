@@ -1,0 +1,151 @@
+%-------------------------
+% Resume in Latex
+% Based off of: https://github.com/jakegut/resume
+% License : MIT
+%------------------------
+
+\documentclass[letterpaper,11pt]{article}
+
+\usepackage{latexsym}
+\usepackage[empty]{fullpage}
+\usepackage{titlesec}
+\usepackage{marvosym}
+\usepackage[usenames,dvipsnames]{color}
+\usepackage{verbatim}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\usepackage[english]{babel}
+\usepackage{tabularx}
+\ifdefined\pdftexversion
+  \usepackage[utf8]{inputenc}
+  \input{glyphtounicode}
+\fi
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\addtolength{\oddsidemargin}{-0.5in}
+\addtolength{\evensidemargin}{-0.5in}
+\addtolength{\textwidth}{1in}
+\addtolength{\topmargin}{-.5in}
+\addtolength{\textheight}{1.0in}
+
+\urlstyle{same}
+
+\raggedbottom
+\raggedright
+\setlength{\tabcolsep}{0in}
+
+\titleformat{\section}{
+  \vspace{-4pt}\scshape\raggedright\large
+}{}{0em}{}[\color{black}\titlerule \vspace{-5pt}]
+
+\ifdefined\pdftexversion\pdfgentounicode=1\fi
+
+%-------------------------
+% Custom commands
+\newcommand{\resumeItem}[1]{
+  \item\small{
+    {#1 \vspace{-2pt}}
+  }
+}
+
+\newcommand{\resumeSubheading}[4]{
+  \vspace{-2pt}\item
+    \begin{tabular*}{0.97\textwidth}[t]{l@{\extracolsep{\fill}}r}
+      \textbf{#1} & #2 \\
+      \textit{\small#3} & \textit{\small #4} \\
+    \end{tabular*}\vspace{-7pt}
+}
+
+\newcommand{\resumeSubSubheading}[2]{
+    \item
+    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+      \textit{\small#1} & \textit{\small #2} \\
+    \end{tabular*}\vspace{-7pt}
+}
+
+\newcommand{\resumeProjectHeading}[2]{
+    \item
+    \begin{tabular*}{0.97\textwidth}{l@{\extracolsep{\fill}}r}
+      \small#1 & #2 \\
+    \end{tabular*}\vspace{-7pt}
+}
+
+\newcommand{\resumeSubItem}[1]{\resumeItem{#1}\vspace{-4pt}}
+
+\renewcommand\labelitemii{$\vcenter{\hbox{\tiny$\bullet$}}$}
+
+\newcommand{\resumeSubHeadingListStart}{\begin{itemize}[leftmargin=0.15in, label={}]}
+\newcommand{\resumeSubHeadingListEnd}{\end{itemize}}
+\newcommand{\resumeItemListStart}{\begin{itemize}}
+\newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
+
+\begin{document}
+
+%% ART-SECTION: header
+\begin{center}
+    \textbf{\Huge \scshape Test User} \\ \vspace{1pt}
+    \small \href{mailto:test@example.com}{\underline{test@example.com}}
+\end{center}
+
+%% ART-SECTION: education
+\section{Education}
+  \resumeSubHeadingListStart
+    \resumeSubheading
+      {City University}{}
+      {B.S. Computer Science}{2021}
+  \resumeSubHeadingListEnd
+
+%% ART-SECTION: experience
+\section{Experience}
+  \resumeSubHeadingListStart
+
+    \resumeSubheading
+      {R\&D Engineer}{2024-01 -- Present}
+      {Acme \& Co}{}
+      \resumeItemListStart
+        \resumeItem{Cut inference cost by 18\% with batching}
+        \resumeItem{Shipped a feature store on Postgres}
+        \resumeItem{Mentored two interns}
+      \resumeItemListEnd
+
+    \resumeSubheading
+      {Data Scientist}{2022-03 -- 2024-01}
+      {Nimbus}{}
+      \resumeItemListStart
+        \resumeItem{Built churn models in Python}
+        \resumeItem{Ran A/B tests for pricing}
+      \resumeItemListEnd
+
+  \resumeSubHeadingListEnd
+
+%% ART-SECTION: projects
+\section{Projects}
+    \resumeSubHeadingListStart
+      \resumeProjectHeading
+          {\textbf{C\# Tools} $|$ \emph{C\#, .NET} $|$ \href{https://example.com/r}{\underline{Repo}}}{}
+          \resumeItemListStart
+            \resumeItem{Wrote a CLI for build caching}
+            \resumeItem{Published to NuGet}
+          \resumeItemListEnd
+      \resumeProjectHeading
+          {\textbf{Pixel\_Adventure}}{}
+          \resumeItemListStart
+            \resumeItem{Built a 2D platformer in Unity}
+          \resumeItemListEnd
+    \resumeSubHeadingListEnd
+
+%% ART-SECTION: skills
+\section{Technical Skills}
+ \begin{itemize}[leftmargin=0.15in, label={}]
+    \small{\item{
+     \textbf{Languages \& Libraries}{: Python} \\
+    }}
+ \end{itemize}
+
+\end{document}
