@@ -46,7 +46,6 @@ import services
 from agents.arbitration import HARD_STRENGTH
 from agents.ats_scorer import ATSScoringEngine
 from agents.checks import bullet_line_violations, exp_key, expected_sections, proj_key
-from agents.preferences import preferences_in_scope
 from agents.jd_payload import iter_requirements
 from agents.skill_matching import match_requirement_terms, priority_skills
 from agents.skill_scorer import MAX_SKILLS, rank_and_select_skills, score_skills
@@ -65,7 +64,7 @@ from harness.decisions.negative_pins import (
 from harness.decisions.support import make_support_checker, reviews as support_reviews
 from harness.ingest import apply_job_rules, list_rules, resolve_rules
 from harness.program import Program, apply_patch, program_id
-from harness.tools import _records, edu_key, project_source_bullets, skill_key
+from harness.tools import _records, edu_key, preferences_for, project_source_bullets, skill_key
 
 log = logging.getLogger(__name__)
 
@@ -366,7 +365,7 @@ def _hard_preferences(user_id: UUID, job_id: UUID) -> Tuple[Dict[str, Dict], Dic
     The third dict is the negative terms (#198): a hard suppression by name, not by item key,
     names a fact that must never render, in bullets as well as skills. A skill-keyed pin is one
     (#254), and so is a topic bound to nothing. `negative_pins.pin_target` decides which."""
-    prefs = preferences_in_scope(services.load_preferences(user_id), job_id=str(job_id))
+    prefs, _ = preferences_for(user_id, str(job_id))     # the job's role family too (#291)
     suppress, emphasize, skills = {}, {}, {}
     for p in sorted(prefs, key=lambda p: str(p.get("preference_id"))):
         if (p.get("strength") or 0) < HARD_STRENGTH:
