@@ -14,7 +14,7 @@ import pytest
 from pydantic import ValidationError
 from sqlmodel import Session, select
 
-from database.models import JobHead, UserJobResult, UserPreference
+from database.models import JobDescription, JobHead, UserJobResult, UserPreference
 
 BENCH_PROFILE = "benchmark_profile.md"
 
@@ -177,6 +177,8 @@ def test_a_first_plan_builds_on_the_kg_and_commits_a_host_node(isolated_engine, 
             UserJobResult.job_id == UUID(node["job_id"]))).one()
         assert result.tailored_resume_content == node["content"]
         assert {e["title"] for e in node["content"]["experiences"]} >= {"Machine Learning Engineer"}
+        # ...and the job says it has a resume, so art ui shows the editor for it (#276).
+        assert s.get(JobDescription, UUID(job_id)).status == "tailored"
 
 
 def test_refused_nodes_never_execute_and_say_why(isolated_engine, env):

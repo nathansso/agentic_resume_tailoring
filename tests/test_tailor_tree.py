@@ -86,6 +86,48 @@ def test_unknown_source_is_refused(job):
         tree.commit_node(uid, jid, content={}, source="mystery")
 
 
+def _status(engine, job_id):
+    from database.models import JobDescription
+    with Session(engine) as s:
+        return s.get(JobDescription, job_id).status
+
+
+@pytest.mark.parametrize("before,after", [("created", "tailored"), ("analyzed", "tailored"),
+                                          ("tailored", "tailored"), ("exported", "exported")])
+def test_a_materialized_commit_marks_the_job_as_having_a_resume(isolated_engine, before, after):
+    """A host-built version must reach the editor, which renders only for a job whose
+    status says it has a resume (#276). An exported job is not moved back."""
+    from conftest import _seed_user_and_skill
+    from database.models import JobDescription
+    from harness import tree
+
+    user = _seed_user_and_skill(isolated_engine)
+    with Session(isolated_engine) as s:
+        j = JobDescription(user_id=user.user_id, title="ML Engineer", company="Acme",
+                           description="Build ML systems", status=before)
+        s.add(j)
+        s.commit()
+        jid = j.job_id
+
+    tree.commit_node(user.user_id, jid, content=_content("a"), source="host",
+                     expected_parent=None, materialize=True)
+    assert _status(isolated_engine, jid) == after
+
+
+def test_a_commit_that_does_not_materialize_leaves_the_status_alone(isolated_engine, job):
+    from database.models import JobDescription
+    from harness import tree
+
+    uid, jid, _ = job
+    with Session(isolated_engine) as s:
+        j = s.get(JobDescription, jid)
+        j.status = "analyzed"
+        s.add(j)
+        s.commit()
+    tree.commit_node(uid, jid, content=_content("a"), source="host")
+    assert _status(isolated_engine, jid) == "analyzed"
+
+
 # ── checkout, revert, siblings ───────────────────────────────────────────────
 
 def test_checkout_materializes_the_node_into_the_current_result(isolated_engine, job):

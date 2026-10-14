@@ -39,6 +39,8 @@ from database.models import JobDescription, JobHead, TailorNode, TreeEvent, User
 log = logging.getLogger(__name__)
 
 SOURCES = ("host", "pipeline", "editor", "revert", "backfill")
+# Job statuses that already say the job has a resume; materializing never moves them.
+_HAS_RESUME = ("tailored", "exported")
 _UNSET = object()
 
 
@@ -134,6 +136,13 @@ def _materialize(session, user_id: UUID, job_id: UUID, node: TailorNode,
     result.layout_overrides = node.layout_overrides
     result.updated_at = now
     session.add(result)
+    # The editor shows a job's resume only once its status says it has one, and
+    # only the web pipeline used to set it, so a host-built job stayed "created" (#276).
+    job = session.get(JobDescription, job_id)
+    if job is not None and job.user_id == user_id and job.status not in _HAS_RESUME:
+        job.status = "tailored"
+        job.updated_at = now
+        session.add(job)
     return result
 
 
