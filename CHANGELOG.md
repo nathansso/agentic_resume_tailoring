@@ -12,6 +12,35 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issues 276 & 277 — The editor round trip through MCP: host-tailored jobs reach `art ui`, and drags last
+**Status:** complete | **Tests:** 2445 pass on SQLite (7 new), 16 skipped; frontend 112 pass (6 new)
+
+A live MCP run against `art ui` found that a host-tailored job never showed its editor. It also found that a bullet drag made in the editor was lost on the host's next commit. Both work now, verified end to end over stdio MCP and the browser: `open_job` → `execute_plan` → the editor opens on the job. A drag saves its layout override (200, was 422), and the next `execute_plan` commit renders the dragged order.
+
+### What shipped
+
+- **#276: a materialized node marks its job tailored (`harness/tree.py::_materialize`).** `execute_plan` and `checkout` write the node into the job's current result, but only the web pipeline set `JobDescription.status`, so a host-built job stayed `created`. `JobWorkspace` renders the editor only for `tailored` / `exported`. `created` and `analyzed` now move to `tailored`; `tailored` and `exported` are left alone.
+- **#277: the editor reads the formatter's real headings (`web/frontend/src/lib/texStructure.ts`).**
+  - `headingLabel` matched `\resumeSubheading{…}` only on one line. `agents/formatter.py` puts the arguments on the next line, so no experience heading was read.
+  - It also matched the preamble's `\newcommand{\resumeProjectHeading}`, so every experience was labelled `"Project"` and `PUT /layout` refused the drag. Headings must now start the line, and a heading whose arguments are on the next line is read from that line.
+  - Labels are unescaped (`R\&D` → `R&D`, `C\#` → `C#`), because the server validates against the stored title or name.
+- **#277: `execute_plan` applies the user's layout override (`harness/executor.py::_apply_layout`).** The override was carried to the new node but never applied to its content, and a node renders from content, so the drag was lost anyway. Bullets, skills and section order are now permuted the way the pipeline does it (#118), after the plan's own `section_order`.
+- **A formatter-generated fixture for the editor tests (`web/frontend/src/lib/__fixtures__/formatter_resume.tex`).** `tests/test_layout_overrides.py` fails when the formatter's output drifts from it; regenerate it with `ART_REGEN_EDITOR_FIXTURE=1`. `texStructure.test.ts` and `layoutOverride.test.ts` run on it. Their old single-line samples stay, since hand-edited tex can look like that.
+- **Tests:**
+  - `test_tailor_tree.py`: status after a materialized commit, for four starting statuses; a commit that does not materialize leaves the status alone.
+  - `test_executor.py`: the first plan's job is `tailored`; a plan on top of a drag keeps the dragged bullets and section order in its content.
+  - `test_layout_overrides.py`: the fixture matches the formatter.
+  - vitest: labels on formatter output, single-line arguments, the preamble ignored, a bullet move, and `bulletGroupFromTex` items.
+
+### Deviations from spec
+
+- **#277 also needed a harness change.** The issue scoped the frontend parser only. Once drags saved, the live run showed `execute_plan` still rendered the plan's order, because the executor carried `layout_overrides` without applying them. Without `_apply_layout` the acceptance criterion "survives a host `execute_plan` commit" could not pass.
+- **The user's override outranks the plan's `section_order`.** The pipeline already ranks it above its own ranking. A host that wants a different order should ask the user, or reset the layout in the editor.
+- **Server-side label matching is unchanged.** `PUT /layout` still compares `.strip().lower()`, while the reconciler uses `_norm`. The frontend now sends the exact title, so the stricter check passes, and loosening it was out of scope.
+- **The Postgres leg was not run locally** (Docker was not running). CI runs it. `test_timezone_datetimes.py::test_no_source_file_reads_a_naive_utc_clock` fails locally only because it walks the untracked `personal/` and `tmp/` folders.
+
+---
+
 ## Issue 249 — Hermetic test suite: no `.env` secrets, no outbound network outside `--integration`
 **Status:** complete | **Tests:** 2430 pass on SQLite (19 new), 24 skipped, 0 fail, on main at e280a87 (after #244) with sqlmodel 0.0.47. The full run was made with the developer's real `.env` (a production `DATABASE_URL`, `SUPABASE_URL`, Anthropic and TypeSafe keys) reachable and `PYTHON_DOTENV_DISABLED` unset, and the guard blocked 0 attempts; an earlier run with the variable set gave the same result. The Postgres leg was not run
 
