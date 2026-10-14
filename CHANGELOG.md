@@ -14,6 +14,28 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 289 — Removing a bullet is a requested delete: `delete_bullet`, and `cut_hints` name it
+**Status:** complete | **Tests:** 2650 pass on SQLite (15 new), 24 skipped, 0 fail; the Postgres leg was not run locally (CI runs it)
+
+#279 stopped guards vetoing a requested `delete`, but `cut_hints` also recommends `cut_bullet`, and a host could only carry that out as a `revise` (the item with one bullet fewer). A `revise` faces every guard and removing a bullet lowers MTLD, so on an over-budget profile with more than two bullets per experience every `cut_bullet` came back `reverted` with `guard: mtld regressed` and nothing committed. Bullet removal now has its own plan op, treated as a requested delete, and `cut_hints` name the op that performs each cut.
+
+### What shipped
+
+- **`delete_bullet` plan op (`harness/program.py`).** A node with `op: "delete_bullet"`, an `item_key` and `cut_bullets`: bullet ids `<item key>#b<n>`, the same `bullet` value `cut_hints` give. It is structural-validated (needs `cut_bullets`; each id must belong to the node's own item; no `bullets`; `cut_bullets` is rejected on any other op). It is added to the plan's op set only (`PLAN_OPS`); the planner's `OPS` and `suggest_actions` are unchanged.
+- **Executor (`harness/executor.py`).** `delete_bullet` removes the named bullets by index from the parent version's item and touches nothing else: the survivors keep their text, order and cites (cites of removed text are dropped). With a `because` it is passed to `accept(..., requested=True)`, so hard gates apply in full and guard regressions are accepted and reported under `waived`, exactly as for `delete`. Arbitration refuses `unknown_bullet` (an id the item does not have, or a blank one) and `would_empty_item` (cutting every bullet; use `delete`), and a hard-suppressed item as for `keep`/`revise`. Without a `because` it is judged like any edit.
+- **`cut_hints` name the op (`agents/checks.py`).** Each hint gains `op`: `delete_bullet` for `cut_bullet`, `delete` for `drop_item`. Other fields are unchanged.
+- **Docs and tool text.** `execute_plan`, `patch_plan` and the `cut_hints` output field (`harness/contract.py`, shared by MCP and the CLI), `docs/harness.md` § 5 and § 7, `docs/architecture.md`, and the `art-tailor` skill say how to send a cut: one `delete_bullet` node per item with all its bullets, a `delete` for a dropped item (which replaces any bullet cut of the same item), `because` set, never a `revise`.
+- **Tests (15 new).** `tests/test_executor.py`: schema rejections (5); a host following the hints on an over-budget profile with four bullets per experience commits with the budget met, the surviving bullets verbatim and every hint kind (`cut_bullet` and `drop_item`) accepted; the same cuts sent as a `revise` are reverted by a guard and never waived; a `delete_bullet` that regresses MTLD is accepted with `waived`; a `revise` that removes a bullet and adds text is still reverted; `delete_bullet` removes only what it names and keeps cites in step; `unknown_bullet` and `would_empty_item` refusals (2); no `because`, no waiver; `patch_plan` adds the hinted nodes and commits. `tests/test_line_budget.py`: every hint carries the op that performs it.
+
+### Deviations from spec
+
+- **A dedicated op, not a `delete` with a bullet pointer, and not a revise recognised by diff.** `delete` means "drop the item" (section-empty and emphasize checks, ids by item key); overloading it would change those rules. Recognising a `revise` that only removes bullets would need a diff of arbitrary text and invites a revise carrying new text to borrow the waiver, which the issue rules out.
+- **Bullet identity is the page index, as `cut_hints` already give it** (`<item key>#b<n>`), relative to the parent version. A plan holds one node per item, so one `delete_bullet` carries all of an item's cuts and the indexes never shift mid-node.
+- **A hint-driven cut uses a host-supplied `because`** (`user:fit the one-page budget`), the same convention #279's `drop_item` run uses. The executor does not check that the user said so.
+- `cut_hints` do not emit ready-made plan nodes; they carry the `op` and the host groups cuts per item.
+
+---
+
 ## Issue 185 — `select_skills` no longer renders past the cap: the inferred floor is bounded by `max_k`
 **Status:** complete | **Tests:** 2624 pass (4 new), 24 skipped, on SQLite; the Postgres leg was not run (nothing here touches storage)
 

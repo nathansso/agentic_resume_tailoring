@@ -709,7 +709,15 @@ class ExecuteOutput(_Output):
                                           "report) for the base and the final version.")
     line_budget: Dict[str, Any] = Field(default_factory=dict)
     violations: List[Violation] = Field(default_factory=list)
-    cut_hints: List[Dict[str, Any]] = Field(default_factory=list)
+    cut_hints: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Cuts that would fit the page, in the order to apply them. Each names the plan "
+                    "op that carries it out (#289): a cut_bullet is op delete_bullet (item, "
+                    "bullet = the id to put in cut_bullets), a drop_item is op delete. Send them "
+                    "as those ops with a `because` (e.g. user:fit the one-page budget), one node "
+                    "per item with all of its cut bullets in cut_bullets; a drop_item replaces "
+                    "any cut_bullet of the same item. Not a revise: a revise faces every guard "
+                    "and MTLD reverts it.")
     rules_applied: List[Dict[str, Any]] = Field(
         default_factory=list, description="Job-scoped rule values written into the base.")
     baseline: Optional[Dict[str, Any]] = Field(
@@ -1070,15 +1078,19 @@ TOOLS: List[ToolSpec] = [
         "Run a whole tailoring plan as one program: arbitration, each node under the "
         "per-metric acceptance rule, then finalize (preferences, sections, skills cap, line "
         "budget). Commits one version unless a check fails, dry_run is set, or the result would "
-        "be identical to its parent (committed false, reason no_change). Writes.",
+        "be identical to its parent (committed false, reason no_change). To remove whole "
+        "bullets use op delete_bullet with cut_bullets (ids '<item key>#b<n>' on the parent "
+        "version) and a because; to drop an item use op delete with a because. A delete or "
+        "delete_bullet with a because faces the hard gates only: guard regressions are accepted "
+        "and reported under waived. A revise never gets that. Writes.",
         ExecuteInput, ExecuteOutput,
         lambda uid, program, dry_run=False:
             _executor().execute_plan(uid, program, dry_run=dry_run),
         read_only=False),
     ToolSpec(
         "patch_plan",
-        "Amend a saved program by JSON pointer and run it again (e.g. apply a cut hint, or "
-        "replace /parent to rebase on a new HEAD). Writes.",
+        "Amend a saved program by JSON pointer and run it again (e.g. add the delete_bullet or "
+        "delete node a cut hint names, or replace /parent to rebase on a new HEAD). Writes.",
         PatchInput, ExecuteOutput,
         lambda uid, program_id, edits, dry_run=False:
             _executor().patch_plan(uid, program_id, edits, dry_run=dry_run),

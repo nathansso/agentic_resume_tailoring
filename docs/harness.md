@@ -186,13 +186,17 @@ And pooling hid real results: the per-stratum spread in #172 vanished when poole
 3. It improves at least one target, or it is a delete or reorder that the user or a
    preference requested.
 
-**A requested delete is not vetoed by a guard (#279).** A delete carrying `because: "user:..."`
-or `"pref:..."` faces every hard gate and no guard. A delete cannot fabricate, and removing text
+**A requested delete is not vetoed by a guard (#279, #289).** A delete or a `delete_bullet`
+(§ 7) carrying `because: "user:..."` or `"pref:..."` faces every hard gate and no guard. A delete cannot fabricate, and removing text
 lowers MTLD (and can move the other diversity guards) almost by definition, so a guard
 regression there is expected, not a quality failure; the relative MTLD tolerance would
 otherwise revert the very `drop_item`s `cut_hints` recommend and leave the budget unmet. It
-mirrors the hard-preference override of a suppress delete. Only a delete gets the waiver: a
-`revise` or `replace` writes text and faces every guard, whatever its `because`. The regressions
+mirrors the hard-preference override of a suppress delete. Only the two delete ops get the
+waiver: a `revise` or `replace` writes text and faces every guard, whatever its `because`. That
+is why removing a bullet has an op of its own (#289): `cut_hints` recommend `cut_bullet`s, and a
+host that sent one as a `revise` (the item with a bullet fewer) was reverted by MTLD exactly as
+the `drop_item`s were before #279. A `revise` can also carry new text, so it cannot be
+recognised as "only removes bullets" and waived. The regressions
 are never hidden: the node is `accepted` with `reason: "guard_waived: requested delete; ..."`,
 `guard_regressions` and a `waived` map in its result, so the host can tell the user what the cut
 cost. No tolerance changes; a delete with no `because` is judged as before.
@@ -269,7 +273,10 @@ code or a cached Jev decision.
       "replacement_key": "proj:recsys gnn",
       "accept": { "improves": ["relevance_density"] } },
     { "id": "drop", "op": "delete", "item_key": "proj:coursework db",
-      "because": "pref:3f0a…" }
+      "because": "pref:3f0a…" },
+    { "id": "trim", "op": "delete_bullet", "item_key": "exp:data scientist|acme analytics",
+      "cut_bullets": ["exp:data scientist|acme analytics#b3"],
+      "because": "user:fit the one-page budget" }
   ],
   "skills": ["Python", "SQL", "PyTorch"],
   "finalize": { "line_budget": 60, "max_skills": 18, "min_skills": 8, "max_bullet_lines": 2 },
@@ -306,6 +313,18 @@ metric vector and the rule, and `harness/executor.py` runs it. The details:
   (§ 8), else from the whole KG with skills ranked (`kg_default_content`).
 - **Gates compare sets.** A node fails only if it *adds* a violation. Finalize is where
   what remains stops a commit.
+- **Removing bullets (#289).** `delete_bullet` removes whole bullets from one item and rewrites
+  nothing else. `cut_bullets` lists bullet ids `<item key>#b<n>`, the same id `cut_hints` give for
+  a `cut_bullet`; `n` is the 0-based index in the item's bullet list on the parent version, and a
+  plan holds one node per item, so all of an item's cuts go in one node. The remaining bullets
+  keep their text, order and cites. It is refused (`unknown_bullet`) when an id names a bullet the
+  item does not have, and (`would_empty_item`) when it would remove the last one; dropping the
+  item is `delete`. With a `because` it is a requested delete (§ 5): hard gates in full, guard
+  regressions accepted and reported under `waived`. Without one it is judged like any edit.
+  `delete_bullet` is a plan op only: the planner's own action space (`keep`, `revise`,
+  `replace`, `delete`) and `suggest_actions` are unchanged. `cut_hints` carry the op that
+  performs each cut: `cut_bullet` is `delete_bullet`, `drop_item` is `delete`; if an item has
+  both, send just the `delete`. Older stored programs have no `cut_bullets` and replay as before.
 - **Hard-preference deletes.** A delete that a hard preference requires is accepted even
   if a guard objects, since compliance is itself a hard gate.
 - **Citations (#198).**

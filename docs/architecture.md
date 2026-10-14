@@ -1067,9 +1067,10 @@ legacy readers keep working.
 2. **Each node, in section order**, is applied to a copy and judged by
    `harness/acceptance.py::accept` on the metric vectors before and after. The rule has three
    parts: no hard gate gains a violation, no guard regresses past its tolerance, and at least
-   one target improves (a delete the user or a preference requested is exempt from the third,
-   and from the second: a guard regression on one is accepted and reported under `waived`, #279;
-   hard gates still apply). A
+   one target improves (a delete the user or a preference requested, whether of a whole item
+   (`delete`) or of whole bullets (`delete_bullet`, #289), is exempt from the third, and from the
+   second: a guard regression on one is accepted and reported under `waived`, #279; hard gates
+   still apply). A
    node that fails is reverted and the independent ones continue. There is no scalar and no
    weight; the vectors are compared metric by metric.
 3. **Finalize** checks the whole page: the preferences (including the whole-page negative-pin
