@@ -52,7 +52,7 @@ from agents.layout import resolve_bullets, resolve_section_order, resolve_skills
 from agents.skill_matching import match_requirement_terms, priority_skills
 from agents.skill_scorer import MAX_SKILLS, rank_and_select_skills, score_skills
 from database.models import JDProfile, JobDescription, PlanProgram, UserJobResult
-from harness import ART_VERSION, library, tree
+from harness import ART_VERSION, library, texdiff, tree
 from harness.acceptance import (
     Context, accept, metric_vector, preference_violations,
 )
@@ -75,6 +75,15 @@ log = logging.getLogger(__name__)
 # inject a fake here so CI needs no TeX.
 MEASURER: Optional[Callable[[Sequence[str]], List[int]]] = None
 
+
+# The hint on a `discards_editor_edits` violation (#278): what the host can do about it.
+DISCARDS_HINT = (
+    "The parent version carries hand edits to its .tex (detail), and a committed version renders "
+    "from its content, so this plan would drop them. Either carry them over as plan nodes (a "
+    "`revise` with the user's text for each edited or added bullet, a `delete_bullet` or `delete` "
+    "for each removed one; they go through the same gates as any edit) and run again, or, after "
+    "asking the user, set discard_editor_edits: true to commit without them. Regions marked "
+    "unmapped (headings, header, skills, anything outside the bullets) cannot be carried over.")
 
 # `execute_plan`'s `reason` when the plan would leave its parent's page unchanged (#257).
 NO_CHANGE = ("no_change: the plan leaves the page identical to its parent, so nothing was "
@@ -828,9 +837,25 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     semantic = coverage_summary(ctx.coverage_checker(working), working) if ctx.coverage_checker else None
     if semantic:
         out["semantic_coverage"] = semantic
+    no_change = head is not None and working == parent_content
+    discarded = None
+    if head is not None and head.get("edited_tex") and not no_change:
+        # A committed version renders from its content, so it drops the parent's hand-edited
+        # .tex. The edits the plan carried over as content are not dropped; the rest are (#278).
+        left = texdiff.uncarried(
+            texdiff.node_edits(user_id, {**head, "content": parent_content,
+                                         "edited_tex": None}, head),
+            working, prog.get("section_order"))
+        if not texdiff.is_empty(left):
+            if prog.get("discard_editor_edits"):
+                discarded = texdiff.public(left)
+            else:
+                violations.append({
+                    "check": "discards_editor_edits", "detail": texdiff.public(left),
+                    "hint": DISCARDS_HINT})
     if violations:
         return out
-    if head is not None and working == parent_content:
+    if no_change:
         # Every node reverted, refused or kept, and nothing else moved the page (skills,
         # section order, job rules): the version would equal its parent, so it is not history
         # and not an editor event (#257). The first version of a job always commits (the
@@ -858,7 +883,10 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
             note=f"plan {pid}", expected_parent=parent, materialize=True)
     except tree.StaleParent as exc:
         raise PlanError("stale_parent", str(exc), [str(exc.head)] if exc.head else [])
-    return {**out, "committed": True, "node_id": node["node_id"]}
+    out = {**out, "committed": True, "node_id": node["node_id"]}
+    if discarded:
+        out["discarded_editor_edits"] = discarded
+    return out
 
 
 def _apply_layout(overrides: Optional[Dict], content: Dict) -> Dict:

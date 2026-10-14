@@ -584,6 +584,193 @@ def test_a_no_change_plan_leaves_the_parents_hand_edits_alone(isolated_engine, e
     assert _head(isolated_engine, job_id) == edit["node_id"] != first["node_id"]
 
 
+# ── a commit never drops the user's hand-edited .tex silently (#278) ─────────
+
+USER_TEXT = "Built and deployed ranking models serving 2M daily predictions with PyTorch."
+DROP_PROJ = {"id": "d", "op": "delete", "item_key": PROJ, "because": "user:less games"}
+
+
+def _hand_edit(engine, uid, job_id, change, layout=None):
+    """The editor saving a hand-edited .tex over HEAD (and a layout override with it, as a drag
+    does). Returns the editor node."""
+    from agents.formatter import _convert_inline
+    from harness import texdiff, tree
+
+    head = tree.get_head(uid, job_id)["head"]
+    tex = texdiff.node_tex(uid, {**head, "layout_overrides": layout or head["layout_overrides"]})
+    edited = change(tex, _convert_inline)
+    with Session(engine) as s:
+        r = s.exec(select(UserJobResult)).one()
+        r.edited_tex = edited
+        if layout:
+            r.layout_overrides = layout
+        s.add(r)
+        s.commit()
+    return tree.record_result(uid, job_id, source="editor", note="tex edit")
+
+
+@pytest.fixture()
+def edited(isolated_engine, env):
+    """A job whose HEAD is the user's hand edit of the first ML-engineer bullet."""
+    from harness import executor
+
+    uid, job_id, _ = env
+    first = _run(uid, {"job_id": job_id})
+    src = executor._KG(uid).source_bullets[EXP]
+    edit = _hand_edit(isolated_engine, uid, job_id, lambda tex, esc: tex.replace(
+        r"\resumeItem{" + esc(src[0]) + "}", r"\resumeItem{" + esc(USER_TEXT) + "}"))
+    return uid, job_id, first, edit, src
+
+
+def test_a_commit_over_a_tex_edit_is_refused_and_names_the_edited_bullets(isolated_engine, edited):
+    uid, job_id, first, edit, src = edited
+    nodes_before = _nodes(isolated_engine)
+    out = _run(uid, {"job_id": job_id, "parent": edit["node_id"], "nodes": [DROP_PROJ]})
+
+    assert out["committed"] is False and out["node_id"] is None
+    [v] = out["violations"]
+    assert v["check"] == "discards_editor_edits" and "discard_editor_edits" in v["hint"]
+    assert v["detail"]["bullets"] == [{
+        "item": EXP, "title": "Machine Learning Engineer @ Nimbus Analytics", "change": "revised",
+        "bullet": f"{EXP}#b0", "before": src[0], "after": USER_TEXT, "position": 0}]
+    assert _nodes(isolated_engine) == nodes_before and _head(isolated_engine, job_id) == edit["node_id"]
+    again = _run(uid, {"job_id": job_id, "parent": edit["node_id"], "nodes": [DROP_PROJ]}, dry_run=True)
+    assert [v["check"] for v in again["violations"]] == ["discards_editor_edits"]   # a dry run says so too
+
+
+def test_carrying_the_edit_over_as_a_node_lets_the_commit_through(isolated_engine, edited):
+    from harness import tree
+
+    uid, job_id, first, edit, src = edited
+    bullets = [{"text": USER_TEXT, "cites": [f"{EXP}#b0"]}] + [
+        {"text": t, "cites": [f"{EXP}#b{i}"]} for i, t in enumerate(src) if i]
+    out = _run(uid, {"job_id": job_id, "parent": edit["node_id"], "nodes": [
+        {"id": "user-edit", "op": "revise", "item_key": EXP, "bullets": bullets,
+         "accept": {"improves": []}}]})
+
+    assert out["nodes"][0]["status"] == "accepted", out["nodes"]
+    assert out["violations"] == [] and out["committed"] and "discarded_editor_edits" not in out
+    node = tree.get_node(uid, out["node_id"])
+    assert node["edited_tex"] is None
+    assert next(e for e in node["content"]["experiences"] if e["title"] == "Machine Learning Engineer"
+                )["bullets"][0] == USER_TEXT
+
+
+def test_a_partly_carried_edit_is_still_refused_for_the_rest(isolated_engine, env):
+    """Two edits: a reworded bullet and a removed one. Carrying the first leaves the second named;
+    a delete_bullet for it clears the refusal."""
+    from harness import executor
+
+    uid, job_id, _ = env
+    _run(uid, {"job_id": job_id})
+    src = executor._KG(uid).source_bullets[EXP]
+
+    def change(tex, esc):
+        tex = tex.replace(r"\resumeItem{" + esc(src[0]) + "}", r"\resumeItem{" + esc(USER_TEXT) + "}")
+        return tex.replace("        \\resumeItem{" + esc(src[1]) + "}\n", "")
+    edit = _hand_edit(isolated_engine, uid, job_id, change)
+    revise = {"id": "r", "op": "revise", "item_key": EXP, "accept": {"improves": []},
+              "bullets": [{"text": USER_TEXT, "cites": [f"{EXP}#b0"]}] + [
+                  {"text": t, "cites": [f"{EXP}#b{i}"]} for i, t in enumerate(src) if i]}
+    out = _run(uid, {"job_id": job_id, "parent": edit["node_id"], "nodes": [revise]})
+    [v] = out["violations"]
+    assert [(b["change"], b["bullet"]) for b in v["detail"]["bullets"]] == [("removed", f"{EXP}#b1")]
+
+    cut = {"id": "c", "op": "delete_bullet", "item_key": EXP, "cut_bullets": [f"{EXP}#b1"],
+           "because": "user:removed it in the editor"}
+    done = _run(uid, {"job_id": job_id, "parent": edit["node_id"], "nodes": [cut]})
+    [v] = done["violations"]                      # the reworded bullet is not carried by this plan
+    assert [(b["change"], b["bullet"]) for b in v["detail"]["bullets"]] == [("revised", f"{EXP}#b0")]
+
+
+def test_an_explicit_discard_commits_and_says_what_was_dropped(isolated_engine, edited):
+    from harness import tree
+
+    uid, job_id, first, edit, src = edited
+    out = _run(uid, {"job_id": job_id, "parent": edit["node_id"], "nodes": [DROP_PROJ],
+                     "discard_editor_edits": True})
+
+    assert out["committed"] and out["violations"] == []
+    [dropped] = out["discarded_editor_edits"]["bullets"]
+    assert (dropped["bullet"], dropped["before"], dropped["after"]) == (f"{EXP}#b0", src[0], USER_TEXT)
+    node = tree.get_node(uid, out["node_id"])
+    assert node["edited_tex"] is None and node["parent_id"] == edit["node_id"]
+    assert USER_TEXT not in str(node["content"])
+    with Session(isolated_engine) as s:
+        assert s.exec(select(UserJobResult)).one().edited_tex is None
+    # With nothing to discard the flag changes nothing and reports nothing.
+    plain = _run(uid, {"job_id": job_id, "parent": out["node_id"], "discard_editor_edits": True,
+                       "nodes": [{"id": "k", "op": "keep", "item_key": EXP2}]})
+    assert "discarded_editor_edits" not in plain
+
+
+def test_an_edit_outside_the_bullets_cannot_be_carried_only_discarded(isolated_engine, env):
+    uid, job_id, _ = env
+    _run(uid, {"job_id": job_id})
+    edit = _hand_edit(isolated_engine, uid, job_id, lambda tex, esc: tex.replace(
+        "\\begin{center}", "\\begin{center}\n    \\small Phone 555-0100", 1))
+    out = _run(uid, {"job_id": job_id, "parent": edit["node_id"], "nodes": [DROP_PROJ]})
+    [v] = out["violations"]
+    assert v["detail"]["bullets"] == [] and v["detail"]["unmapped"][0]["region"] == "header"
+    assert "Phone 555-0100" in v["detail"]["unmapped"][0]["diff"]
+    ok = _run(uid, {"job_id": job_id, "parent": edit["node_id"], "nodes": [DROP_PROJ],
+                    "discard_editor_edits": True})
+    assert ok["committed"] and ok["discarded_editor_edits"]["unmapped"][0]["region"] == "header"
+
+
+def test_a_whitespace_only_tex_save_is_not_an_edit_to_protect(isolated_engine, env):
+    uid, job_id, _ = env
+    _run(uid, {"job_id": job_id})
+    edit = _hand_edit(isolated_engine, uid, job_id, lambda tex, esc: tex + "\n\n")
+    out = _run(uid, {"job_id": job_id, "parent": edit["node_id"], "nodes": [DROP_PROJ]})
+    assert out["committed"] and out["violations"] == []
+
+
+def test_a_no_change_plan_over_a_tex_edit_is_not_refused(isolated_engine, edited):
+    uid, job_id, first, edit, src = edited
+    out = _run(uid, {"job_id": job_id, "parent": edit["node_id"]})
+    assert out["violations"] == [] and out["reason"].startswith("no_change")
+
+
+def test_a_commit_over_an_editor_drag_is_unaffected(isolated_engine, env):
+    """A drag saves the reordered .tex and a layout override together. The override is applied to
+    the new version, so nothing the drag did is dropped and nothing is refused."""
+    from harness import tree
+
+    uid, job_id, _ = env
+    first = _run(uid, {"job_id": job_id})
+    exp = next(e for e in _experiences(uid, first) if e["title"] == "Machine Learning Engineer")
+    dragged = list(reversed(exp["bullets"]))
+    layout = {"section_order": ["projects", "experience", "skills", "education"],
+              "bullets": [{"section": "experience", "item": "Machine Learning Engineer",
+                           "order": dragged}]}
+    drag = _hand_edit(isolated_engine, uid, job_id, lambda tex, esc: tex, layout=layout)
+    assert tree.get_node(uid, drag["node_id"])["edited_tex"]          # the tex came along
+
+    out = _run(uid, {"job_id": job_id, "parent": drag["node_id"], "nodes": [DROP_PROJ]})
+    assert out["committed"] and out["violations"] == [] and "discarded_editor_edits" not in out
+    content = tree.get_node(uid, out["node_id"])["content"]
+    assert next(e for e in content["experiences"]
+                if e["title"] == "Machine Learning Engineer")["bullets"] == dragged
+
+
+def test_a_hand_reorder_without_an_override_is_not_dropped_silently(isolated_engine, env):
+    """Moving bullets in the text alone leaves nothing for the new version to apply."""
+    from harness import executor
+
+    uid, job_id, _ = env
+    first = _run(uid, {"job_id": job_id})
+    src = executor._KG(uid).source_bullets[EXP]
+
+    def swap(tex, esc):
+        a, b = (f"        \\resumeItem{{{esc(src[i])}}}\n" for i in (0, 1))
+        return tex.replace(a + b, b + a)
+    edit = _hand_edit(isolated_engine, uid, job_id, swap)
+    out = _run(uid, {"job_id": job_id, "parent": edit["node_id"], "nodes": [DROP_PROJ]})
+    [v] = out["violations"]
+    assert [r["item"] for r in v["detail"]["reordered"]] == [EXP] and v["detail"]["bullets"] == []
+
+
 # ── a requested delete is not vetoed by a guard (#279) ───────────────────────
 
 def _mtld_down(vector, by=0.30):

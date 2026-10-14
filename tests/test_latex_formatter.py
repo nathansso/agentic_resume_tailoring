@@ -1012,3 +1012,36 @@ def test_display_form_does_not_alter_stored_values(isolated_engine, monkeypatch)
     with Session(isolated_engine) as s:
         row = s.exec(select(Education)).first()
         assert (row.start_date, row.end_date) == ("2025-09", "2027-06")
+
+
+# ── the editor's .tex is read back into bullets (#278) ───────────────────────
+
+@pytest.mark.parametrize("text", [
+    "Cut inference cost by 18% & more",
+    "Used C# with snake_case names, $5k budget and {braces}",
+    "**bold** and *italic* text",
+    "Read [the docs](https://x.org/a_b?c=1%20d) first",
+    "a ~ b ^ c \\ d",
+])
+def test_untex_inverts_what_the_formatter_writes(text):
+    from harness.texdiff import untex
+
+    assert untex(_convert_inline(text)) == text
+
+
+def test_the_parser_reads_the_formatters_headings_and_bullets():
+    """The committed fixture is the formatter's own output (see test_layout_overrides)."""
+    from pathlib import Path
+
+    from harness.texdiff import parse
+
+    tex = (Path(__file__).resolve().parents[1] / "web" / "frontend" / "src" / "lib"
+           / "__fixtures__" / "formatter_resume.tex").read_text(encoding="utf-8")
+    got = parse(tex)
+    assert got.sections == ["header", "education", "experience", "projects", "skills"]
+    assert got.items["exp:r&d engineer|acme & co"]["bullets"] == [
+        "Cut inference cost by 18% with batching", "Shipped a feature store on Postgres",
+        "Mentored two interns"]
+    assert got.items["proj:c# tools"]["bullets"] == [
+        "Wrote a CLI for build caching", "Published to NuGet"]
+    assert got.items["proj:pixel_adventure"]["title"] == "Pixel_Adventure"
