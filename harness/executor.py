@@ -448,7 +448,7 @@ def _refusal(node: Dict, content: Dict, kg: _KG, prefs: Dict, pref_ids: set) -> 
     loc = _locate(content, key)
     if loc is None:
         return f"not_on_page: {node['item_key']} is not in the parent version"
-    if op in ("keep", "revise") and key in prefs["suppress"]:
+    if op in ("keep", "revise", "delete_bullet") and key in prefs["suppress"]:
         return f"hard_preference: {prefs['suppress'][key].get('text')!r} suppresses {key}"
     if op in ("delete", "replace") and key in prefs["emphasize"]:
         return f"hard_preference: {prefs['emphasize'][key].get('text')!r} emphasizes {key}"
@@ -466,6 +466,10 @@ def _refusal(node: Dict, content: Dict, kg: _KG, prefs: Dict, pref_ids: set) -> 
         section, _ = loc
         if len(content.get(section) or []) <= 1:
             return f"would_empty_section: {section}"
+    if op == "delete_bullet":
+        reason = _bullet_cut_refusal(node, content, loc)
+        if reason:
+            return reason
     target = (node["replacement_key"] if op == "replace" else node["item_key"]).strip().lower()
     for i, bullet in enumerate(node.get("bullets") or []):
         named = (bullet.get("from_variant") or "").strip().lower()
@@ -499,12 +503,38 @@ def _refusal(node: Dict, content: Dict, kg: _KG, prefs: Dict, pref_ids: set) -> 
     return None
 
 
+def _cut_indexes(node: Dict) -> set:
+    """The bullet indexes a `delete_bullet` node names (the schema checked their shape)."""
+    return {int(ref.strip().lower().rpartition("#b")[2]) for ref in node["cut_bullets"]}
+
+
+def _bullet_cut_refusal(node: Dict, content: Dict, loc: Tuple[str, int]) -> Optional[str]:
+    """Why a `delete_bullet` names bullets the item does not have, or would leave it none."""
+    section, i = loc
+    bullets = content[section][i].get("bullets") or []
+    cut = _cut_indexes(node)
+    gone = sorted(n for n in cut if n >= len(bullets) or not (bullets[n] or "").strip())
+    if gone:
+        return (f"unknown_bullet: {node['item_key']} has no bullet "
+                f"{', '.join(f'#b{n}' for n in gone)} on the parent version")
+    if not [b for n, b in enumerate(bullets) if n not in cut and (b or "").strip()]:
+        return f"would_empty_item: cutting every bullet of {node['item_key']}; use delete to drop it"
+    return None
+
+
 def _apply(node: Dict, content: Dict, kg: _KG) -> Dict:
     out = copy.deepcopy(content)
     section, i = _locate(out, node["item_key"].strip().lower())
     items = out[section]
     if node["op"] == "delete":
         items.pop(i)
+    elif node["op"] == "delete_bullet":
+        # Whole bullets out, by index; the rest keep their text and order (#289).
+        cut = _cut_indexes(node)
+        kept = [b for n, b in enumerate(items[i].get("bullets") or []) if n not in cut]
+        items[i]["bullets"] = kept
+        if isinstance(items[i].get("cites"), dict):
+            items[i]["cites"] = {t: c for t, c in items[i]["cites"].items() if t in kept}
     elif node["op"] == "revise":
         items[i]["bullets"] = [b["text"] for b in node["bullets"]]
         items[i]["cites"] = _cites_of(node["bullets"])
@@ -728,7 +758,8 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
         ctx.variant_origin = {}
         verdict = accept(current, vector, improves=node["accept"]["improves"],
                          tolerances=node["accept"]["tolerances"],
-                         requested=node["op"] == "delete" and bool(node.get("because")))
+                         requested=node["op"] in ("delete", "delete_bullet")
+                         and bool(node.get("because")))
         key = node["item_key"].strip().lower()
         if (not verdict["accepted"] and node["op"] == "delete" and key in prefs["suppress"]
                 and not verdict["gate_violations"]):

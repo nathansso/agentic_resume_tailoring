@@ -14,6 +14,52 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 289 — Removing a bullet is a requested delete: `delete_bullet`, and `cut_hints` name it
+**Status:** complete | **Tests:** 2650 pass on SQLite (15 new), 24 skipped, 0 fail; the Postgres leg was not run locally (CI runs it)
+
+#279 stopped guards vetoing a requested `delete`, but `cut_hints` also recommends `cut_bullet`, and a host could only carry that out as a `revise` (the item with one bullet fewer). A `revise` faces every guard and removing a bullet lowers MTLD, so on an over-budget profile with more than two bullets per experience every `cut_bullet` came back `reverted` with `guard: mtld regressed` and nothing committed. Bullet removal now has its own plan op, treated as a requested delete, and `cut_hints` name the op that performs each cut.
+
+### What shipped
+
+- **`delete_bullet` plan op (`harness/program.py`).** A node with `op: "delete_bullet"`, an `item_key` and `cut_bullets`: bullet ids `<item key>#b<n>`, the same `bullet` value `cut_hints` give. It is structural-validated (needs `cut_bullets`; each id must belong to the node's own item; no `bullets`; `cut_bullets` is rejected on any other op). It is added to the plan's op set only (`PLAN_OPS`); the planner's `OPS` and `suggest_actions` are unchanged.
+- **Executor (`harness/executor.py`).** `delete_bullet` removes the named bullets by index from the parent version's item and touches nothing else: the survivors keep their text, order and cites (cites of removed text are dropped). With a `because` it is passed to `accept(..., requested=True)`, so hard gates apply in full and guard regressions are accepted and reported under `waived`, exactly as for `delete`. Arbitration refuses `unknown_bullet` (an id the item does not have, or a blank one) and `would_empty_item` (cutting every bullet; use `delete`), and a hard-suppressed item as for `keep`/`revise`. Without a `because` it is judged like any edit.
+- **`cut_hints` name the op (`agents/checks.py`).** Each hint gains `op`: `delete_bullet` for `cut_bullet`, `delete` for `drop_item`. Other fields are unchanged.
+- **Docs and tool text.** `execute_plan`, `patch_plan` and the `cut_hints` output field (`harness/contract.py`, shared by MCP and the CLI), `docs/harness.md` § 5 and § 7, `docs/architecture.md`, and the `art-tailor` skill say how to send a cut: one `delete_bullet` node per item with all its bullets, a `delete` for a dropped item (which replaces any bullet cut of the same item), `because` set, never a `revise`.
+- **Tests (15 new).** `tests/test_executor.py`: schema rejections (5); a host following the hints on an over-budget profile with four bullets per experience commits with the budget met, the surviving bullets verbatim and every hint kind (`cut_bullet` and `drop_item`) accepted; the same cuts sent as a `revise` are reverted by a guard and never waived; a `delete_bullet` that regresses MTLD is accepted with `waived`; a `revise` that removes a bullet and adds text is still reverted; `delete_bullet` removes only what it names and keeps cites in step; `unknown_bullet` and `would_empty_item` refusals (2); no `because`, no waiver; `patch_plan` adds the hinted nodes and commits. `tests/test_line_budget.py`: every hint carries the op that performs it.
+
+### Deviations from spec
+
+- **A dedicated op, not a `delete` with a bullet pointer, and not a revise recognised by diff.** `delete` means "drop the item" (section-empty and emphasize checks, ids by item key); overloading it would change those rules. Recognising a `revise` that only removes bullets would need a diff of arbitrary text and invites a revise carrying new text to borrow the waiver, which the issue rules out.
+- **Bullet identity is the page index, as `cut_hints` already give it** (`<item key>#b<n>`), relative to the parent version. A plan holds one node per item, so one `delete_bullet` carries all of an item's cuts and the indexes never shift mid-node.
+- **A hint-driven cut uses a host-supplied `because`** (`user:fit the one-page budget`), the same convention #279's `drop_item` run uses. The executor does not check that the user said so.
+- `cut_hints` do not emit ready-made plan nodes; they carry the `op` and the host groups cuts per item.
+
+## Issue 290 — Codex plugins carry hooks: ART's ride in the plugin, and `art hooks codex --write` no longer duplicates them
+**Status:** complete | **Tests:** 2640 pass on SQLite (5 new), 24 skipped, 0 fail. The Postgres leg was not run locally; CI runs it
+
+`docs/harness.md` § 15 and #203 said Codex plugins can't carry hooks, so every Codex user ran `art hooks codex --write`. That was a misreading: `plugin_hooks` was a feature flag, removed because plugin hooks became always-on. Checked against the Codex source and docs, and live on Codex 0.149, a plugin install already gets ART's hooks. What was left was making that explicit and stopping the two paths from both firing.
+
+### What shipped
+
+- **Verified, with sources (`openai/codex`).** #19705 added plugin hook discovery (`hooks/hooks.json` in the plugin root by default, or a `hooks` entry in `.codex-plugin/plugin.json`; a path, paths or inline hooks) behind `features.plugin_hooks`, in 0.126.0. #22549 enabled it by default, in 0.131.0. #22552 removed the flag, in 0.134.0. Docs: learn.chatgpt.com/docs/hooks, "Plugin-bundled hooks". Release membership was checked with the GitHub compare API on the merge commits. Live: with a throwaway `CODEX_HOME`, `codex plugin add art@art` made the app-server's `hooks/list` return the plugin's two hooks, `source: "plugin"`, `trustStatus: "untrusted"`.
+- **The plugin declares them.** `plugin/.codex-plugin/plugin.json` has `"hooks": "./hooks/hooks.json"`, the file Claude Code reads, so one file (generated from `harness/hooks.py`, pinned to the `ART_VERSION` release wheel) serves both hosts. Codex found that file by default already; the entry makes it explicit.
+- **No duplicates.** `art hooks codex --write` checks `$CODEX_HOME/config.toml` and the plugin's installed copy (`plugin_with_art_hooks`) for an enabled plugin whose `hooks/hooks.json` holds ART hooks. If there is one it adds nothing and removes ART's own entries from `hooks.json` (`remove_art_hooks`, built on `merge_hooks` and `is_art_hook`), keeps the user's hooks and their order, creates no file, and a second run changes nothing. This covers a user who ran `--write` before installing the plugin (run it once more). Printing says the plugin already carries the hooks.
+- **The file install still works.** With no plugin, a disabled one, another plugin that happens to be called `art`, or a Codex older than 0.131 (read from `codex --version`; 0.131 is when plugin hooks became default-on), `--write` installs as before. `--standalone` forces it.
+- **Docs.** `docs/harness.md` § 15 (the correction, version history and sources), `integrations/codex/README.md`, `INSTALL.md`, `docs/architecture.md` and the `harness/hooks.py` comments.
+- **Tests (`tests/test_plugin.py`, 5 new).** The Codex manifest names the Claude hooks file, which equals `hook_config()`, pins `WHEEL_URL` for `ART_VERSION`, and has only ART hook lines and no `commandWindows`. A file-installed hook plus the plugin ends with exactly one of each hook across both, user hooks intact and a second write byte-identical. `--write` with the plugin creates no file. The fallback cases above. Detection survives a missing or broken `config.toml` and a missing cache copy.
+
+### Deviations from spec
+
+- **`commandWindows` is not used.** In `codex-rs/hooks/src/engine/discovery.rs` it only replaces the command string on Windows (`command_windows.unwrap_or(command)`); `command_runner.rs` picks the shell separately (the session shell, `%COMSPEC%` only with none). It cannot choose between PowerShell and `cmd.exe`, so it doesn't answer #283's question, and a second line would have no way to be tested here.
+- **Trust is still one step.** Codex skips a plugin's hooks until the user trusts them in `/hooks`, so "no extra command" is true of installing, not of trusting. The docs say so.
+- **The dedupe runs only when `--write` does.** Installing the plugin cannot remove an earlier file install, so a user who has both is told to rerun `--write`. A hook that detected its own duplicate at run time was rejected as fragile.
+- **Detection reads Codex's on-disk layout** (`config.toml` `[plugins."name@market"]`, `plugins/cache/<market>/<name>/<version>/`), seen on 0.149 and in the Codex loader tests, not a documented interface. If it changes, detection finds nothing and `--write` installs as before, which can duplicate.
+- **Between 0.126 and 0.130** plugin hooks load only with `features.plugin_hooks = true`; `--write` treats those as old Codex and installs into the file. A user who set the flag too would get duplicates and can remove the file entries by hand.
+- **No hook was run end to end in Codex.** Discovery and trust status were verified live, and hook lines execute as in #283, but a prompt through a real Codex session needs the user's auth.
+- **The Postgres leg was not run locally** (CI runs it).
+
+---
+
 ## Issue 185 — `select_skills` no longer renders past the cap: the inferred floor is bounded by `max_k`
 **Status:** complete | **Tests:** 2624 pass (4 new), 24 skipped, on SQLite; the Postgres leg was not run (nothing here touches storage)
 

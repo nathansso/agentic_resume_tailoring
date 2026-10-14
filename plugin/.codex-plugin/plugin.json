@@ -10,5 +10,6 @@
   "repository": "https://github.com/nathansso/agentic_resume_tailoring",
   "keywords": ["resume", "tailoring", "mcp", "knowledge-graph"],
   "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
   "mcpServers": "./.mcp.json"
 }

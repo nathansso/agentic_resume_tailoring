@@ -186,13 +186,17 @@ And pooling hid real results: the per-stratum spread in #172 vanished when poole
 3. It improves at least one target, or it is a delete or reorder that the user or a
    preference requested.
 
-**A requested delete is not vetoed by a guard (#279).** A delete carrying `because: "user:..."`
-or `"pref:..."` faces every hard gate and no guard. A delete cannot fabricate, and removing text
+**A requested delete is not vetoed by a guard (#279, #289).** A delete or a `delete_bullet`
+(§ 7) carrying `because: "user:..."` or `"pref:..."` faces every hard gate and no guard. A delete cannot fabricate, and removing text
 lowers MTLD (and can move the other diversity guards) almost by definition, so a guard
 regression there is expected, not a quality failure; the relative MTLD tolerance would
 otherwise revert the very `drop_item`s `cut_hints` recommend and leave the budget unmet. It
-mirrors the hard-preference override of a suppress delete. Only a delete gets the waiver: a
-`revise` or `replace` writes text and faces every guard, whatever its `because`. The regressions
+mirrors the hard-preference override of a suppress delete. Only the two delete ops get the
+waiver: a `revise` or `replace` writes text and faces every guard, whatever its `because`. That
+is why removing a bullet has an op of its own (#289): `cut_hints` recommend `cut_bullet`s, and a
+host that sent one as a `revise` (the item with a bullet fewer) was reverted by MTLD exactly as
+the `drop_item`s were before #279. A `revise` can also carry new text, so it cannot be
+recognised as "only removes bullets" and waived. The regressions
 are never hidden: the node is `accepted` with `reason: "guard_waived: requested delete; ..."`,
 `guard_regressions` and a `waived` map in its result, so the host can tell the user what the cut
 cost. No tolerance changes; a delete with no `because` is judged as before.
@@ -269,7 +273,10 @@ code or a cached Jev decision.
       "replacement_key": "proj:recsys gnn",
       "accept": { "improves": ["relevance_density"] } },
     { "id": "drop", "op": "delete", "item_key": "proj:coursework db",
-      "because": "pref:3f0a…" }
+      "because": "pref:3f0a…" },
+    { "id": "trim", "op": "delete_bullet", "item_key": "exp:data scientist|acme analytics",
+      "cut_bullets": ["exp:data scientist|acme analytics#b3"],
+      "because": "user:fit the one-page budget" }
   ],
   "skills": ["Python", "SQL", "PyTorch"],
   "finalize": { "line_budget": 60, "max_skills": 18, "min_skills": 8, "max_bullet_lines": 2 },
@@ -306,6 +313,18 @@ metric vector and the rule, and `harness/executor.py` runs it. The details:
   (§ 8), else from the whole KG with skills ranked (`kg_default_content`).
 - **Gates compare sets.** A node fails only if it *adds* a violation. Finalize is where
   what remains stops a commit.
+- **Removing bullets (#289).** `delete_bullet` removes whole bullets from one item and rewrites
+  nothing else. `cut_bullets` lists bullet ids `<item key>#b<n>`, the same id `cut_hints` give for
+  a `cut_bullet`; `n` is the 0-based index in the item's bullet list on the parent version, and a
+  plan holds one node per item, so all of an item's cuts go in one node. The remaining bullets
+  keep their text, order and cites. It is refused (`unknown_bullet`) when an id names a bullet the
+  item does not have, and (`would_empty_item`) when it would remove the last one; dropping the
+  item is `delete`. With a `because` it is a requested delete (§ 5): hard gates in full, guard
+  regressions accepted and reported under `waived`. Without one it is judged like any edit.
+  `delete_bullet` is a plan op only: the planner's own action space (`keep`, `revise`,
+  `replace`, `delete`) and `suggest_actions` are unchanged. `cut_hints` carry the op that
+  performs each cut: `cut_bullet` is `delete_bullet`, `drop_item` is `delete`; if an item has
+  both, send just the `delete`. Older stored programs have no `cut_bullets` and replay as before.
 - **Hard-preference deletes.** A delete that a hard preference requires is accepted even
   if a guard objects, since compliance is itself a hard gate.
 - **Citations (#198).**
@@ -708,7 +727,7 @@ flowchart LR
 | Host | Tools via | Workflow via | Per-message hook | After compaction | Editor |
 |---|---|---|---|---|---|
 | Claude Code (#201) | MCP, stdio | Plugin skills, `/art:*` | `UserPromptSubmit` | `SessionStart`, source `compact` | Desktop browser pane or tab |
-| Codex (#203) | MCP, stdio | Plugin skills (`$art-tailor`) + `AGENTS.md` snippet | `UserPromptSubmit`, installed separately | `SessionStart`, source `compact`, installed separately | Browser tab |
+| Codex (#203) | MCP, stdio | Plugin skills (`$art-tailor`) + `AGENTS.md` snippet | `UserPromptSubmit`, in the plugin (`art hooks codex --write` before Codex 0.131) | `SessionStart`, source `compact`, same | Browser tab |
 | Cursor, others | MCP | Rules file | None | None | Browser tab |
 
 ART targets mainstream coding agents: Claude Code and Codex (decided 2026-09-25; pi and
@@ -739,10 +758,32 @@ Codex CLI (0.149) was checked against its docs and live runs.
     its source and was **not checked against a live run**, which the fallback makes safe.
     Docs: [Claude Code hooks](https://code.claude.com/docs/en/hooks), Codex's hooks page
     (developers.openai.com/codex/hooks).
-  - **Plugins can't carry hooks** (`plugin_hooks` was removed). `art hooks codex --write`
-    merges them into `$CODEX_HOME/hooks.json`, and the user trusts them with `/hooks`. A rerun
-    replaces ART's own entries from earlier installs and leaves the user's alone (#283). Codex's
-    current hooks docs say plugins can bundle hooks, which contradicts this; #290 is checking it.
+  - **Plugins carry hooks (#290).** The earlier note that they can't was a misreading of
+    `plugin_hooks`: that was a feature flag, removed because plugin hooks became always-on.
+    Sources (`openai/codex`): #19705 added discovery (default `hooks/hooks.json` in the plugin
+    root, or a `hooks` entry in `.codex-plugin/plugin.json`: a `./` path, an array of paths, or
+    inline hooks), behind `features.plugin_hooks`, in 0.126.0. #22549 turned it on by default,
+    in 0.131.0 (the first stable release holding it). #22552 removed the flag, in 0.134.0. The
+    hooks page: [learn.chatgpt.com/docs/hooks](https://learn.chatgpt.com/docs/hooks)
+    (developers.openai.com/codex/hooks redirects there), § "Plugin-bundled hooks". Installing a
+    plugin does not trust its hooks: Codex skips them until the user reviews them in `/hooks`.
+    Verified live on 0.149: after `codex plugin add art@art`, the app-server's `hooks/list`
+    returns `plugin/hooks/hooks.json`'s two hooks with `source: "plugin"`, `trustStatus:
+    "untrusted"`. So the Codex plugin names that one file in its manifest (`"hooks":
+    "./hooks/hooks.json"`), the file Claude Code reads, and installs need no extra command
+    beyond the trust step.
+  - **The file install is a fallback.** `art hooks codex --write` merges the hooks into
+    `$CODEX_HOME/hooks.json` for a Codex that does not load plugin hooks (before 0.131), or one
+    used without the plugin. It checks `$CODEX_HOME/config.toml` and the installed plugin copy
+    for an enabled plugin that bundles ART's hooks (`plugin_with_art_hooks`). With one, it adds
+    nothing and removes ART's own entries from the file (`is_art_hook`), so a user who ran
+    `--write` before installing the plugin stops getting each hook twice; it reads
+    `codex --version` first and installs anyway below 0.131. `--standalone` forces the install.
+  - **`commandWindows` is not used.** It is a Windows-only override of the hook's command
+    text (`command_windows.unwrap_or(command)` in `codex-rs/hooks/src/engine/discovery.rs`);
+    the shell is still chosen separately (`codex-rs/hooks/src/engine/command_runner.rs`: the
+    session shell, `%COMSPEC%` only with none). It cannot choose between PowerShell and
+    `cmd.exe`, so the one line stays the only line.
   - A project's `.codex/hooks.json` loads only in a trusted project. In live runs a
     user-level hook fired in `codex exec`, and the project file in an untrusted directory
     did not.
@@ -903,8 +944,8 @@ The windows are the plan and have not moved. Status is as of 2026-10-14, from th
 |---|---|---|---|---|---|
 | H0 · Decide & Spike | Sep 28 – Oct 4 | #188, #189, #209 | | One real tailoring in Claude Code with read-only tools; gap list recorded | Done |
 | H1 · Core & Jev | Oct 5 – Oct 18 | #190, #191, #192, #193, #194, #195, #210, #237, #249, #255, #256 | | Contract tests on both legs; `uvx art-mcp` without torch; every Jev point replays from cache | Done |
-| H2 · Executor & Library | Oct 19 – Nov 8 | #113, #123, #126, #185, #196, #197, #198, #199, #200, #229, #230, #232, #233, #241, #254, #257, #258, #259, #260, #279 | #117, #127, #151, #163, #252, #289, #291 | Scripted-host benchmark replays byte-identically; stuffing rejected, preference delete kept | Mostly shipped; what is open is tuning |
-| H3 · Plugin & Memory | Nov 9 – Nov 22 | #201, #202, #203, #244, #283 | | Gate recall measured on a labelled set (negation separate); pins survive compaction | Done |
+| H2 · Executor & Library | Oct 19 – Nov 8 | #113, #123, #126, #185, #196, #197, #198, #199, #200, #229, #230, #232, #233, #241, #254, #257, #258, #259, #260, #279, #289 | #117, #127, #151, #163, #252, #291 | Scripted-host benchmark replays byte-identically; stuffing rejected, preference delete kept | Mostly shipped; what is open is tuning |
+| H3 · Plugin & Memory | Nov 9 – Nov 22 | #201, #202, #203, #244, #283, #290 | | Gate recall measured on a labelled set (negation separate); pins survive compaction | Done |
 | H3b · Editor | Nov 23 – Dec 6 | #204 | #205, #87, #82, #84, #136, #147, #276, #277, #278, #288 | Editor drag reaches the host's next turn; host commit reaches the editor without reload | The local editor and change feed shipped; the chat panel and the UI issues are open |
 | H4 · Host Evaluation | Dec 7 – Dec 27 | #181 | #206, #172 (chunks 1–6 of 7 shipped), #173, #178 | Written result, B vs A first; go/no-go on H5 | Not started |
 | H5 · Offline Policy | From Dec 28 | | #174, #152, #157, #119, #51, #114 | Arm C beats B on anchor-agreed quality on ≥ 2 hosts | Not started; runs only if H4 says go |
@@ -922,7 +963,7 @@ What is left in H2, and why:
 - **#117** (keep-biased suggestions, an edit-distance guard against the parent) and **#163**
   (keyword insertion by importance × supportability) are not started.
 - **#151** splits required from preferred coverage into separate targets.
-- **#289** and **#291** are executor defects found after the fact: a `cut_bullet` hint sent as a `revise` is reverted by the guards, and a hard preference scoped to a role family is not enforced by `execute_plan`.
+- **#291** is an executor defect found after the fact: a hard preference scoped to a role family is not enforced by `execute_plan`, and `art_briefing` omits job-scoped ones.
 - **#252** tracks what is planned and not built: four Jev points (§ 4) and the tools `check_draft` and `record_feedback` (§ 9).
 
 ## 19. Evaluation (#206)

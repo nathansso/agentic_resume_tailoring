@@ -1071,7 +1071,8 @@ errors carried as an `error` field. It currently holds **27 tools**, in five gro
 `harness/mcp_server.py` serves the contract over stdio and `harness/cli.py` prints one JSON
 document per call; `tests/test_harness_contract.py` holds both to identical results. The `art`
 console script (`harness/entry.py`) adds what is not a tool: `art mcp` (the server, the
-command the plugin runs), `art hook` (the plugin hooks), `art hooks codex` (installs them for Codex), `art jev` (§8.3), `art export` and `art import`
+command the plugin runs), `art hook` (the plugin hooks),
+`art hooks codex` (installs them in Codex's `hooks.json`, the fallback for a Codex without plugin hooks), `art jev` (§8.3), `art export` and `art import`
 (§8.9), and `art ui`. A write tool returns `read_only` on a remote or Postgres store unless the
 process was started with `--allow-writes`; local SQLite is writable. `record_feedback` and
 `check_draft` are named in `harness.md` and are **not built** (#252).
@@ -1091,9 +1092,10 @@ legacy readers keep working.
 2. **Each node, in section order**, is applied to a copy and judged by
    `harness/acceptance.py::accept` on the metric vectors before and after. The rule has three
    parts: no hard gate gains a violation, no guard regresses past its tolerance, and at least
-   one target improves (a delete the user or a preference requested is exempt from the third,
-   and from the second: a guard regression on one is accepted and reported under `waived`, #279;
-   hard gates still apply). A
+   one target improves (a delete the user or a preference requested, whether of a whole item
+   (`delete`) or of whole bullets (`delete_bullet`, #289), is exempt from the third, and from the
+   second: a guard regression on one is accepted and reported under `waived`, #279; hard gates
+   still apply). A
    node that fails is reverted and the independent ones continue. There is no scalar and no
    weight; the vectors are compared metric by metric.
 3. **Finalize** checks the whole page: the preferences (including the whole-page negative-pin
@@ -1471,10 +1473,15 @@ that tag. `workflow_dispatch` is a dry run that creates nothing.
   uses only what the MCP server's start cached and exits 0 when uvx or the cache is missing. The server
   start itself is not offline-proof (uv re-resolves a few minutes after caching), which `INSTALL.md`
   documents with its two fixes.
-- **`art hooks codex --write` replaces rather than appends** (#283). `harness/hooks.py::is_art_hook`
-  recognises ART's own entries from any earlier source (a `git+` URL with or without a ref, or a
-  release wheel of any version); `merge_hooks` replaces them, leaves every other hook and its order
-  alone, and the command writes the file only when something changed.
+- **Codex gets the hooks from the plugin** (#290). Codex 0.131 and later load a plugin's
+  `hooks/hooks.json`, and `plugin/.codex-plugin/plugin.json` names the same file Claude Code reads, so a
+  plugin install needs only the user's trust step in `/hooks`.
+- **`art hooks codex --write` is the fallback, and neither appends nor duplicates** (#283, #290).
+  `harness/hooks.py::is_art_hook` recognises ART's own entries from any earlier source (a `git+` URL
+  with or without a ref, or a release wheel of any version); `merge_hooks` replaces them and leaves every
+  other hook and its order alone, and the command writes the file only when something changed. When an
+  enabled ART plugin already bundles the hooks (`plugin_with_art_hooks`) it adds nothing and removes
+  ART's entries from the file instead; on a Codex older than 0.131, or with `--standalone`, it installs.
 
 ### 8.12 Render and ingest details (issues #258, #259, #260)
 
@@ -1520,7 +1527,7 @@ sdist, and is **not** part of the web app or the harness. Its theme tokens are p
 ## In flight
 
 Open issues, specified but **not shipped**. Nothing below describes a capability the system
-has. The entries that use the present tense (#276 to #278, #288, #289, #291) report *defects* in
+has. The entries that use the present tense (#276 to #278, #288, #291) report *defects* in
 code that does exist, and are here because their fixes have not landed.
 
 **The harness pivot (epic #207, [`harness.md`](harness.md))** sequences all of it into phases
@@ -1539,9 +1546,8 @@ described in §8. What follows is what is left.
 - **#163** will rank keyword-insertion candidates by importance × supportability instead of the
   current TF-IDF. `agents/keyword_planner.py` is untouched, so its behaviour is the pre-#125 one.
 - **#152** will learn guard tolerances and ranker weights against the human anchor set.
-- **#289** reports that a `cut_bullet` hint sent as a `revise` node is reverted by the guards, because
-  only a `delete` is a requested delete (§8.2). **#291** reports that a hard preference scoped to a role
-  family is not enforced by `execute_plan`, and that `art_briefing` omits job-scoped ones.
+- **#291** reports that a hard preference scoped to a role family is not enforced by `execute_plan`,
+  and that `art_briefing` omits job-scoped ones.
 - **#252** tracks what is planned and not built. Jev points (§8.4): eligibility rules, an embedding or Jev
   reading of semantic duplicates, action ranking for `suggest_actions`, and a role family for JobCards;
   their fallbacks are what runs. Tools (§8.1): `record_feedback` and `check_draft`.
@@ -1563,8 +1569,7 @@ described in §8. What follows is what is left.
 
 **Landing site**
 - **#273**, **#274** and **#275** are the site's home page, install and usage docs (with a check that
-  the site's commands match `INSTALL.md`), and demo recording (§9). **#290** will verify whether Codex
-  plugins can carry hooks, and correct the docs either way.
+  the site's commands match `INSTALL.md`), and demo recording (§9).
 
 **Retrieval and infrastructure**
 - **#60** (the pgvector write path) is in the Icebox. The local default is SQLite with an FTS5/numpy

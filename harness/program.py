@@ -24,7 +24,10 @@ from agents.skill_scorer import MAX_SKILLS, MIN_SKILLS
 from agents.tailor_planner import OPS, REVISION_STRATEGIES
 from harness.acceptance import DEFAULT_TOLERANCES, GUARDS, TARGETS
 
-Op = Literal[OPS]  # type: ignore[valid-type]
+# `delete_bullet` (#289) is a plan op only: it removes whole bullets from one item. The planner's
+# own action space (`OPS`) is unchanged, so the planner and `suggest_actions` never propose it.
+PLAN_OPS = (*OPS, "delete_bullet")
+Op = Literal[PLAN_OPS]  # type: ignore[valid-type]
 Strategy = Literal[REVISION_STRATEGIES]  # type: ignore[valid-type]
 Target = Literal[TARGETS]  # type: ignore[valid-type]
 Guard = Literal[GUARDS]  # type: ignore[valid-type]
@@ -71,6 +74,12 @@ class ProgramNode(_M):
     bullets: Optional[List[PlanBullet]] = Field(
         None, description="The item's full bullet list after this node (revise; optional "
                           "for replace, which otherwise uses the replacement's source bullets).")
+    cut_bullets: List[str] = Field(
+        default_factory=list,
+        description="delete_bullet: the bullets to remove from item_key, as '<item key>#b<n>' "
+                    "(n = the bullet's 0-based index in the item's list on the parent version), "
+                    "exactly the `bullet` of cut_hints' cut_bullet entries (#289). The other "
+                    "bullets are kept verbatim.")
     replacement_key: Optional[str] = None
     use_variant: Optional[str] = None
     because: Optional[str] = Field(
@@ -91,8 +100,20 @@ class ProgramNode(_M):
                 raise ValueError(f"node {self.id}: replace swaps one project for another")
         elif self.replacement_key or self.use_variant:
             raise ValueError(f"node {self.id}: replacement_key/use_variant are for replace")
-        if op in ("keep", "delete") and self.bullets is not None:
+        if op in ("keep", "delete", "delete_bullet") and self.bullets is not None:
             raise ValueError(f"node {self.id}: {op} takes no bullets")
+        if op == "delete_bullet":
+            if not self.cut_bullets:
+                raise ValueError(f"node {self.id}: delete_bullet needs cut_bullets")
+            prefix = self.item_key.strip().lower() + "#b"
+            for ref in self.cut_bullets:
+                idx = ref.strip().lower()[len(prefix):]
+                if not ref.strip().lower().startswith(prefix) or not idx.isdigit():
+                    raise ValueError(
+                        f"node {self.id}: cut_bullets entry {ref!r} must be '{self.item_key}#b<n>' "
+                        "(a bullet of this node's item_key)")
+        elif self.cut_bullets:
+            raise ValueError(f"node {self.id}: cut_bullets is for delete_bullet")
         if self.from_variant:
             # A variant is one bullet, so a node-level name is only unambiguous for one bullet.
             if op != "revise" or not self.bullets or len(self.bullets) != 1:
