@@ -14,7 +14,7 @@ import pytest
 from pydantic import ValidationError
 from sqlmodel import Session, select
 
-from database.models import JobHead, UserJobResult, UserPreference
+from database.models import JobDescription, JobHead, UserJobResult, UserPreference
 
 BENCH_PROFILE = "benchmark_profile.md"
 
@@ -187,6 +187,8 @@ def test_a_first_plan_builds_on_the_kg_and_commits_a_host_node(isolated_engine, 
             UserJobResult.job_id == UUID(node["job_id"]))).one()
         assert result.tailored_resume_content == node["content"]
         assert {e["title"] for e in node["content"]["experiences"]} >= {"Machine Learning Engineer"}
+        # ...and the job says it has a resume, so art ui shows the editor for it (#276).
+        assert s.get(JobDescription, UUID(job_id)).status == "tailored"
 
 
 def test_a_project_without_blurbs_renders_its_description_minus_a_restating_lead_in(env):
@@ -338,6 +340,39 @@ def test_a_plan_keeps_the_users_layout_overrides(isolated_engine, env):
     assert tree.get_node(uid, out["node_id"])["layout_overrides"] == layout
     with Session(isolated_engine) as s:
         assert s.exec(select(UserJobResult)).one().layout_overrides == layout
+
+
+def test_a_plan_renders_the_users_dragged_order(isolated_engine, env):
+    """Carrying the override is not enough: the node is rendered from its content,
+    so the content must already be in the user's order (#277)."""
+    from harness import tree
+
+    uid, job_id, _ = env
+    first = _run(uid, {"job_id": job_id})
+    exp = next(e for e in _experiences(uid, first) if e["title"] == "Machine Learning Engineer")
+    dragged = list(reversed(exp["bullets"]))
+    layout = {"section_order": ["projects", "experience", "skills", "education"],
+              "bullets": [{"section": "experience", "item": "Machine Learning Engineer",
+                           "order": dragged}]}
+    with Session(isolated_engine) as s:
+        r = s.exec(select(UserJobResult)).one()
+        r.layout_overrides = layout
+        s.add(r)
+        s.commit()
+    drag = tree.record_result(uid, job_id, source="editor", note="layout")
+    out = _run(uid, {"job_id": job_id, "parent": drag["node_id"], "nodes": [
+        {"id": "d", "op": "delete", "item_key": PROJ, "because": "user:less games"}]})
+
+    assert out["committed"]
+    content = tree.get_node(uid, out["node_id"])["content"]
+    assert next(e for e in content["experiences"]
+                if e["title"] == "Machine Learning Engineer")["bullets"] == dragged
+    assert content["_section_order"][:3] == ["projects", "experience", "skills"]
+
+
+def _experiences(uid, out):
+    from harness import tree
+    return tree.get_node(uid, out["node_id"])["content"]["experiences"]
 
 
 def _woven(kg_bullets):

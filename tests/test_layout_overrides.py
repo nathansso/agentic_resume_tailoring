@@ -9,6 +9,8 @@ Two layers, tested separately because they fail differently:
   and never be written by the pipeline itself.
 """
 
+from pathlib import Path
+
 from sqlmodel import Session
 
 from agents.layout import (
@@ -412,3 +414,52 @@ def test_the_migration_is_registered():
 
     source = inspect.getsource(db_module)
     assert "ALTER TABLE userjobresult ADD COLUMN layout_overrides" in source
+
+
+# ── the editor's view of the formatter's tex (#277) ──────────────────────────
+
+# The frontend's heading parser (web/frontend/src/lib/texStructure.ts) is tested
+# against this file, so it must be what the formatter really emits: multi-line
+# headings, the preamble's \newcommand definitions, and escaped labels.
+EDITOR_FIXTURE = (Path(__file__).resolve().parent.parent
+                  / "web/frontend/src/lib/__fixtures__/formatter_resume.tex")
+EDITOR_FIXTURE_CONTENT = {
+    "experiences": [
+        {"title": "R&D Engineer", "company": "Acme & Co", "start_date": "2024-01",
+         "end_date": "Present", "bullets": ["Cut inference cost by 18% with batching",
+                                            "Shipped a feature store on Postgres",
+                                            "Mentored two interns"]},
+        {"title": "Data Scientist", "company": "Nimbus", "start_date": "2022-03",
+         "end_date": "2024-01", "bullets": ["Built churn models in Python",
+                                            "Ran A/B tests for pricing"]},
+    ],
+    "projects": [
+        {"name": "C# Tools", "tech_stack": "C#, .NET", "repo_url": "https://example.com/r",
+         "bullets": ["Wrote a CLI for build caching", "Published to NuGet"]},
+        {"name": "Pixel_Adventure", "bullets": ["Built a 2D platformer in Unity"]},
+    ],
+    "skills_ranked": [{"name": "Python", "category": "Language"}],
+}
+
+
+def test_the_editor_fixture_is_what_the_formatter_emits(isolated_engine):
+    """Regenerate with ART_REGEN_EDITOR_FIXTURE=1 after a formatter change."""
+    import os
+
+    from conftest import _seed_user_and_skill
+    from agents.formatter import ResumeFormatterAgent
+
+    user = _seed_user_and_skill(isolated_engine)
+    with Session(isolated_engine) as session:
+        session.add(Education(user_id=user.user_id, institution="City University",
+                              degree="B.S. Computer Science", end_date="2021"))
+        session.commit()
+    tex = ResumeFormatterAgent(user.user_id).format_tex(EDITOR_FIXTURE_CONTENT)
+
+    if os.environ.get("ART_REGEN_EDITOR_FIXTURE") == "1":
+        EDITOR_FIXTURE.parent.mkdir(parents=True, exist_ok=True)
+        EDITOR_FIXTURE.write_text(tex, encoding="utf-8", newline="\n")
+    # read_text's universal newlines also cover a Windows checkout's CRLF.
+    assert EDITOR_FIXTURE.read_text(encoding="utf-8") == tex, (
+        "the formatter's tex changed; rerun with ART_REGEN_EDITOR_FIXTURE=1 and check "
+        "the frontend tests still pass")

@@ -100,14 +100,49 @@ function displayText(line: string): string {
   return t.trim();
 }
 
-function headingLabel(line: string): string | null {
-  const sub = /\\resumeSubheading\{([^}]*)\}/.exec(line);
-  if (sub) return sub[1];
-  if (line.includes("\\resumeProjectHeading")) {
-    const name = /\\textbf\{([^}]*)\}/.exec(line);
-    return name ? name[1] : "Project";
+// A heading command used at the start of a line. Anchoring keeps the preamble's
+// `\newcommand{\resumeProjectHeading}` definition from reading as a heading (#277).
+const SUBHEADING = /^\s*\\resumeSubheading(?![A-Za-z])/;
+const PROJECT_HEADING = /^\s*\\resumeProjectHeading(?![A-Za-z])/;
+const TEX_ESCAPE = /\\textbackslash\{\}|\\textasciitilde\{\}|\\textasciicircum\{\}|\\([&%$#_{}])/g;
+const TEX_UNESCAPED: Record<string, string> = {
+  "\\textbackslash{}": "\\", "\\textasciitilde{}": "~", "\\textasciicircum{}": "^",
+};
+
+/** The inverse of the formatter's `_escape_tex`, so a label matches the stored
+ *  title or name the server validates against ("R\&D" → "R&D"). */
+function unescapeTex(s: string): string {
+  return s.replace(TEX_ESCAPE, (m, ch?: string) => ch ?? TEX_UNESCAPED[m]).trim();
+}
+
+/** The contents of the brace group opening at `open`, or null when unclosed. */
+function braceGroup(s: string, open: number): string | null {
+  let depth = 0;
+  for (let i = open; i < s.length; i++) {
+    if (s[i] === "\\") { i++; continue; } // \{ and \} are text, not grouping
+    if (s[i] === "{") depth++;
+    else if (s[i] === "}" && --depth === 0) return s.slice(open + 1, i);
   }
   return null;
+}
+
+/** The heading's label from its argument text: an experience's first argument
+ *  (the title), or a project's `\textbf{name}`. Null when the arguments are not
+ *  on this text, which is the formatter's layout: the command alone on its line
+ *  and the arguments on the next. */
+function labelFrom(kind: "sub" | "proj", args: string): string | null {
+  if (kind === "proj") {
+    const at = args.indexOf("\\textbf{");
+    if (at >= 0) {
+      const name = braceGroup(args, at + "\\textbf".length);
+      if (name !== null) return unescapeTex(name);
+    }
+  }
+  const open = args.indexOf("{");
+  if (open < 0) return null;
+  const first = braceGroup(args, open);
+  if (first === null) return null;
+  return unescapeTex(kind === "proj" ? displayText(first) : first);
 }
 
 /** All bullet lists in the buffer, grouped under their headings. */
@@ -116,13 +151,25 @@ export function parseBulletGroups(tex: string): BulletGroup[] {
   const groups: BulletGroup[] = [];
   let sectionKey = "";
   let label = "";
+  let pending: "sub" | "proj" | null = null;
   let current: BulletGroup | null = null;
 
   lines.forEach((ln, i) => {
     const mark = MARKER.exec(ln);
-    if (mark) { sectionKey = mark[1]; return; }
-    const heading = headingLabel(ln);
-    if (heading) { label = heading; return; }
+    if (mark) { sectionKey = mark[1]; label = ""; pending = null; return; }
+    const head = SUBHEADING.exec(ln) ?? PROJECT_HEADING.exec(ln);
+    if (head) {
+      const kind = SUBHEADING.test(ln) ? "sub" : "proj";
+      const found = labelFrom(kind, ln.slice(head[0].length));
+      label = found ?? "";
+      pending = found === null ? kind : null;
+      return;
+    }
+    if (pending && ln.trim()) {
+      label = labelFrom(pending, ln) ?? "";
+      pending = null;
+      if (!LIST_START.test(ln)) return;
+    }
     if (LIST_START.test(ln)) {
       current = { sectionKey, label: label || sectionKey, bullets: [] };
       return;
