@@ -432,7 +432,8 @@ def test_a_rerun_replays_both_decisions_from_the_cache_at_a_100_percent_hit_rate
     monkeypatch.setattr(engine, "get_client", lambda: pytest.fail("replay reached for a client"))
     engine.reset_stats()
     again = run_task(uid, load_tasks(limit=5)[2])
-    assert again["program"]["nodes"] == first["program"]["nodes"] and again["result"]["committed"]
+    assert again["program"]["nodes"] == first["program"]["nodes"]
+    assert again["result"]["reason"].startswith("no_change")      # the same plan on its own HEAD (#257)
     st = engine.stats()
     for point in (jl.VARIANT_POINT, jl.BASELINE_POINT):
         assert st[point]["hit_rate"] == 1.0 and st[point]["jev"] == 0 and st[point]["fallback"] == 0

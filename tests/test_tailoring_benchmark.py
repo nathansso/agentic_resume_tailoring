@@ -432,10 +432,8 @@ def test_committed_cassette_is_well_formed_and_covers_every_task():
     path = default_cassette_path(DEFAULT_PROFILE.stem, 3, None)
     if not path.exists():
         pytest.skip(
-            f"no cassette committed at {path.name}, and none is due yet: "
-            "recording is gated on #181 (_detect_level mislabels 128/150 "
-            "postings, and role_level is 0.10 of the composite on both sides of "
-            "every match). Once it lands, record with `python "
+            f"no cassette committed at {path.name}. #181 (the seniority "
+            "detector) has landed, so recording is unblocked: record with `python "
             "eval/tailoring_benchmark.py --mode product --record --tasks <id> "
             "<id> ...` — name the tasks rather than using --limit, which takes "
             "an alphabetical prefix of the corpus.")

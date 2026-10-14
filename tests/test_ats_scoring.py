@@ -108,15 +108,38 @@ def test_role_level_gap_penalty():
     assert result["resume_level"] == "junior"
 
 
-def test_role_level_defaults_to_mid():
+def test_role_level_unknown_scores_neutrally_not_as_mid():
+    """#181: no stated tier is `unknown`, not an assumed `mid` match."""
     result = ATSScoringEngine._role_level(
         resume_text="software engineer",
         jd_text="software engineer",
     )
-    # No level keywords → both default to "mid" → perfect match
-    assert result["score"] == 100.0
-    assert result["jd_level"] == "mid"
-    assert result["resume_level"] == "mid"
+    assert result["score"] == 75.0
+    assert result["jd_level"] == "unknown"
+    assert result["resume_level"] == "unknown"
+
+
+@pytest.mark.parametrize("jd_text,resume_text", [
+    ("Software Engineer Intern", "software engineer"),     # candidate unknown
+    ("Staff Software Engineer", "software engineer"),
+    ("software engineer", "Data Science Intern at Acme"),  # posting unknown
+    ("software engineer", "Senior Data Scientist at Acme"),
+])
+def test_role_level_neutral_score_does_not_depend_on_the_known_tier(jd_text, resume_text):
+    """One unknown side must score the same whatever tier the other side holds,
+    or the 'neutral' value would still be a hidden seniority penalty."""
+    result = ATSScoringEngine._role_level(resume_text=resume_text, jd_text=jd_text)
+    assert result["score"] == 75.0
+
+
+def test_role_level_a_known_pair_still_pays_the_gap():
+    result = ATSScoringEngine._role_level(
+        resume_text="Data Science Intern at Acme",
+        jd_text="Staff Software Engineer\nBuild platforms.",
+    )
+    assert result["jd_level"] == "lead"
+    assert result["resume_level"] == "intern"
+    assert result["score"] == pytest.approx(0.0)  # intern (0) vs lead (4) = 100 off
 
 
 # ── Unit tests: _section_presence ────────────────────────────────────────────
