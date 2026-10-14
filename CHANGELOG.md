@@ -14,6 +14,23 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 185 — `select_skills` no longer renders past the cap: the inferred floor is bounded by `max_k`
+**Status:** complete | **Tests:** 2624 pass (4 new), 24 skipped, on SQLite; the Postgres leg was not run (nothing here touches storage)
+
+`select_skills` applied the dynamic cap and then appended the fallback core floor (the `CORE_FLOOR_K` strongest skills by proficiency, used when nothing is pinned) unconditionally, so up to `MAX_SKILLS + CORE_FLOOR_K` = 22 skills rendered against a cap of 18. The harness inherited it: `kg_default_content` ranks through `rank_and_select_skills`, so a first plan that set no skills of its own could start at 22 and fail finalize with `skills_cap`. The inferred floor now only fills slots the cap left free.
+
+### What shipped
+
+- **`agents/skill_scorer.py::select_skills`.** After the drop-off cap, the inferred floor is added in proficiency order only while `len(selected) < max_k`. When the cap already reached `max_k` the floor adds nothing; when the selection is sparse (the cap stops at `min_k`, say) the floor still adds its full `core_floor_k`. Pinned skills (`UserSkill.is_core`, #54) are untouched and still render past the cap. Deterministic: the floor order is unchanged (proficiency, then score, over the already-sorted input) and the final sort is unchanged.
+- **Callers.** `rank_and_select_skills` (tailor, harness executor, eval) returns the same shape; only the upper bound tightens from `MAX_SKILLS + CORE_FLOOR_K` to `MAX_SKILLS`. `eval/metrics.py::within_cap_bounds` (`MIN_SKILLS <= n <= MAX_SKILLS`) can no longer fail on the overshoot.
+- **Tests (4 new).** `tests/test_skill_scorer.py`: unpinned with more than `MAX_SKILLS` relevant candidates returns exactly `MAX_SKILLS` and none of the irrelevant strong skills; the floor fills only the slots the cap left free (two of four, strongest first); a sparse selection still gets the full floor. `tests/test_skill_pinning.py`: three pins beyond a full cap all render (`MAX_SKILLS + 3`). The `<= MAX_SKILLS + CORE_FLOOR_K` bound in `test_cap_bounds_respected_for_large_skill_set` is now `<= MAX_SKILLS`.
+
+### Deviations from spec
+
+- **The floor fills free slots; it does not displace.** The issue allowed either displacing the lowest-scored selected skills or applying the floor before the cap. Displacement would swap JD-relevant skills (the ones that passed the drop-off) for low-relevance strong ones just to honour a floor whose purpose is to keep a sparse section from being noise, so a full selection is left as the cap chose it. The cost: when the cap is full, a high-proficiency skill outside it is not guaranteed a place.
+- **No benchmark run.** The issue's reproduction (a padded profile in the #172 benchmark) was not re-run; the cases are constructed as unit tests on `select_skills` directly, with no network. Benchmark skills figures from #172 that sat at 19 or 20 skills will now read at most 18.
+- `tests/test_tailoring_benchmark.py::test_llm_judge_scores_real_resume` is an integration test needing API keys and fails in a hermetic local run; it is excluded from `run_tests.py` and untouched.
+
 ## Issue 282 — Editor change-feed tests no longer depend on timers or GC timing
 **Status:** complete | **Tests:** 2622 pass (2 new), 24 skipped, on SQLite; `tests/test_local_ui.py` passed 20 of 20 repeated runs; the Postgres leg was not run locally (CI runs it)
 

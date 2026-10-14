@@ -33,6 +33,24 @@ def test_pinned_skill_always_selected_even_when_irrelevant():
     assert "PinnedNiche" in names
 
 
+def test_pinned_skills_render_past_the_cap():
+    # The #54 promise stays: more pinned skills than the cap all render, while the
+    # inferred floor (#185) is bounded by it. Equal scores keep the drop-off from
+    # trimming, so the cap selects exactly MAX_SKILLS before the pins are added.
+    from agents.skill_scorer import select_skills
+
+    def row(name, is_core):
+        return {"name": name, "category": "Other", "score": 0.9 if not is_core else 0.001,
+                "proficiency": 1, "is_core": is_core}
+
+    relevant = [row(f"Rel{i:02d}", False) for i in range(MAX_SKILLS + 4)]
+    pins = [row(f"Pin{i}", True) for i in range(3)]
+    selected = select_skills(sorted(relevant + pins, key=lambda s: -s["score"]))
+    names = {s["name"] for s in selected}
+    assert {"Pin0", "Pin1", "Pin2"} <= names
+    assert len(selected) == MAX_SKILLS + 3
+
+
 def test_pin_replaces_inferred_floor():
     # A low-proficiency, JD-irrelevant skill is excluded normally, but included
     # once pinned — demonstrating the pin overrides the inferred proficiency floor.
