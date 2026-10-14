@@ -10,6 +10,7 @@ from agents.skill_scorer import (
     compute_idf,
     rank_and_select_skills,
     score_skills,
+    select_skills,
 )
 from agents.formatter import ResumeFormatterAgent
 
@@ -64,12 +65,12 @@ def test_idf_down_weights_common_terms():
 # ── Selection: cap + floor ──────────────────────────────────────────────────────
 
 def test_cap_bounds_respected_for_large_skill_set():
-    # 30 skills, all weakly relevant; selection must stay within [MIN, MAX] (+floor).
+    # 30 skills, all weakly relevant; selection must stay within [MIN, MAX] (#185).
     skills = [_skill(f"Skill{i}", proficiency=1) for i in range(30)]
     jd = "Skill0 Skill1 Skill2 Skill3 Skill4 Skill5 Skill6 Skill7 Skill8 Skill9"
     selected = rank_and_select_skills(skills, jd, matched_skills={})
     assert selected is not None
-    assert MIN_SKILLS <= len(selected) <= MAX_SKILLS + CORE_FLOOR_K
+    assert MIN_SKILLS <= len(selected) <= MAX_SKILLS
 
 
 def test_core_floor_keeps_strong_skills_on_off_domain_jd():
@@ -80,6 +81,51 @@ def test_core_floor_keeps_strong_skills_on_off_domain_jd():
     selected = rank_and_select_skills(skills, jd, matched_skills={})
     assert selected is not None
     assert any(s["name"] == "Flagship" for s in selected)
+
+
+def _scored(name, score, proficiency=1, is_core=False):
+    return {"name": name, "category": "Other", "score": score,
+            "proficiency": proficiency, "is_core": is_core}
+
+
+def test_inferred_floor_never_exceeds_the_cap_when_nothing_is_pinned():
+    # More relevant candidates than the cap, all scoring alike so the drop-off
+    # never trims; four strong (proficiency 5) but irrelevant skills would be
+    # appended past the cap by the old floor (MAX_SKILLS + CORE_FLOOR_K, #185).
+    relevant = [_scored(f"Rel{i:02d}", 0.9, proficiency=2) for i in range(MAX_SKILLS + 6)]
+    strong = [_scored(f"Strong{i}", 0.01, proficiency=5) for i in range(CORE_FLOOR_K)]
+    scored = sorted(relevant + strong, key=lambda s: -s["score"])
+    selected = select_skills(scored)
+    assert len(selected) == MAX_SKILLS
+    assert not {s["name"] for s in selected} & {s["name"] for s in strong}
+
+
+def test_inferred_floor_fills_only_the_slots_the_cap_left_free():
+    # The cap lands on MAX_SKILLS - 2; the floor may take exactly the two free
+    # slots, strongest proficiency first, and no more.
+    relevant = [_scored(f"Rel{i:02d}", 0.9, proficiency=2) for i in range(MAX_SKILLS - 2)]
+    # A sharp drop-off stops the dynamic cap at the relevant block.
+    tail = [_scored(f"Tail{i:02d}", 0.01, proficiency=1) for i in range(6)]
+    strong = [_scored(f"Strong{i}", 0.005, proficiency=5 - i) for i in range(CORE_FLOOR_K)]
+    scored = sorted(relevant + tail + strong, key=lambda s: -s["score"])
+    selected = select_skills(scored)
+    assert len(selected) == MAX_SKILLS
+    names = {s["name"] for s in selected}
+    assert {"Strong0", "Strong1"} <= names
+    assert not names & {"Strong2", "Strong3"}
+
+
+def test_inferred_floor_still_fills_a_sparse_selection():
+    # Few relevant skills: the cap stops at MIN_SKILLS and the floor adds its
+    # full CORE_FLOOR_K strong skills, well under the cap (the designed behaviour).
+    relevant = [_scored(f"Rel{i:02d}", 0.9, proficiency=1) for i in range(MIN_SKILLS)]
+    strong = [_scored(f"Strong{i}", 0.001, proficiency=5) for i in range(CORE_FLOOR_K)]
+    filler = [_scored(f"Fill{i:02d}", 0.001, proficiency=1) for i in range(10)]
+    scored = sorted(relevant + strong + filler, key=lambda s: -s["score"])
+    selected = select_skills(scored)
+    names = {s["name"] for s in selected}
+    assert {s["name"] for s in strong} <= names
+    assert len(selected) == MIN_SKILLS + CORE_FLOOR_K <= MAX_SKILLS
 
 
 def test_short_skill_list_returned_whole():

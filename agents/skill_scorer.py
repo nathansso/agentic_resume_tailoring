@@ -290,7 +290,10 @@ def select_skills(
     The floor is the user's explicitly pinned skills (UserSkill.is_core, issue
     #54) when any exist — they are always rendered, bypassing the cap. When none
     are pinned, fall back to the inferred floor of the strongest skills by
-    proficiency, so the section is never just low-relevance noise.
+    proficiency, so the section is never just low-relevance noise. The inferred
+    floor respects the cap (#185): it only fills slots the dynamic cap left free
+    (in proficiency order) and never pushes the selection past `max_k`, so a
+    selection that already reached the cap is left as the cap chose it.
 
     Bounds default to the module constants; pass overrides for tuning sweeps.
     """
@@ -324,9 +327,13 @@ def select_skills(
     )[:core_floor_k]
     chosen = {s["name"] for s in selected}
     for c in floor:
-        if c["name"] not in chosen:
-            selected.append(c)
-            chosen.add(c["name"])
+        if c["name"] in chosen:
+            continue
+        # Pinned skills bypass the cap (#54); the inferred floor does not (#185).
+        if not pinned and len(selected) >= max_k:
+            break
+        selected.append(c)
+        chosen.add(c["name"])
 
     selected.sort(
         key=lambda x: (x["score"], (x["proficiency"] or 0), _neg_name(x["name"])),
