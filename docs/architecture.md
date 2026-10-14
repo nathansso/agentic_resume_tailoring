@@ -1047,7 +1047,7 @@ errors carried as an `error` field. It currently holds **27 tools**, in five gro
 `harness/mcp_server.py` serves the contract over stdio and `harness/cli.py` prints one JSON
 document per call; `tests/test_harness_contract.py` holds both to identical results. The `art`
 console script (`harness/entry.py`) adds what is not a tool: `art hook` (the plugin hooks),
-`art hooks codex` (installs them for Codex), `art jev` (§8.3), `art export` and `art import`
+`art hooks codex` (installs them in Codex's `hooks.json`, the fallback for a Codex without plugin hooks), `art jev` (§8.3), `art export` and `art import`
 (§8.9), and `art ui`. A write tool returns `read_only` on a remote or Postgres store unless the
 process was started with `--allow-writes`; local SQLite is writable. `record_feedback` and
 `check_draft` are named in `harness.md` and are **not built** (#252).
