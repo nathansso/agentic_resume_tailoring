@@ -16,15 +16,15 @@ borrowed, and each one separates the two populations it divides with a margin
 recorded in its comment.
 
 **On the legacy fixture.** `python eval/profile_checks.py --include-retired`
-fails `benchmark_profile.md` on `level` and on `evidence_density`, and both are
-real findings rather than bugs in this module. Its bullet "saving staff ten
-hours weekly" contains `staff`, which `agents/ats_scorer.py::_LEVELS` maps to
-the **lead** tier, and `_detect_level()` returns the *highest* tier matched
-anywhere in the text. So the original benchmark candidate has been scored as a
-lead-level résumé against entry-level postings on every run in this repo's
-history, costing `role_level` (weight 0.10) most of its range — filed as **#181**.
-The file is not edited — every historical figure was measured on it — it is
-marked `"retired": true` in its sidecar and excluded from the default suite. See
+fails `benchmark_profile.md` on `evidence_density`, a real finding rather than a
+bug in this module. It used to fail `level` too: its bullet "saving staff ten
+hours weekly" contained `staff`, which the old substring detector mapped to the
+**lead** tier, so the original benchmark candidate was scored as a lead-level
+résumé against entry-level postings on every run in this repo's history, costing
+`role_level` (weight 0.10) most of its range — filed as **#181** and fixed there
+(`agents/seniority.py`: the profile now reads as `unknown`, not `lead`). The
+file is not edited — every historical figure was measured on it — it is marked
+`"retired": true` in its sidecar and excluded from the default suite. See
 `eval/README.md`.
 """
 from __future__ import annotations
@@ -78,10 +78,11 @@ BEARING_MAX_MIN_NEW_INFORMATION = 0.35
 BEARING_MAX_LEADING_VERB_ENTROPY = 0.85
 
 # Seniority tiers a profile in an intern/entry corpus may detect as. `mid` and
-# above means a stray word (`senior`, `staff`, `principal`, `lead…`) has
-# promoted the résumé and `role_level` is scoring a candidate the fixture does
-# not describe.
-ALLOWED_LEVELS = ("intern", "junior")
+# above means the résumé states a role or experience the fixture does not
+# describe, so `role_level` is scoring a candidate it was not meant to. `unknown`
+# is allowed: a profile that names no role tier is not promoted, it is
+# unscored (#181), and the detector no longer guesses `mid` for it.
+ALLOWED_LEVELS = ("intern", "junior", "unknown")
 
 
 @dataclass(frozen=True)
@@ -120,7 +121,7 @@ def measure(path: Path) -> Dict:
             round(sum(1 for b in bullets if re.search(r"\d", b)) / len(bullets), 3)
             if bullets else 0.0),
         "skills": len(fixture.skills),
-        "detected_level": _detect_level(text),
+        "detected_level": _detect_level(text, kind="candidate"),
         "max_bullet_df": df["max_bullet_df"],
         "min_new_information": ni["min_new_information"],
         "mean_new_information": ni["mean_new_information"],

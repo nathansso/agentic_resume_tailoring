@@ -52,7 +52,7 @@ from agents.skill_postprocessor import normalize_skill_name, postprocess_skills
 from database.clock import utc_now
 from database.models import (
     Achievement, Education, Experience, JDProfile, JobDescription, JobHead, JobRule, Project,
-    Skill, UserSkill,
+    ProjectBlurb, Skill, UserSkill,
 )
 from harness import library
 from harness.tools import KINDS, _records, ach_key, edu_key, skill_key
@@ -109,10 +109,20 @@ class VariantItem(BaseModel):
     tags: Optional[VariantTags] = None
 
 
+class ProjectRecord(ProjectItem):
+    """One project. `description` says what it is; `blurbs` are the bullets for the page."""
+    description: Optional[str] = Field(None, description=(
+        "What the project is, in one or two sentences. Not a tagline plus a blurb. It renders "
+        "verbatim as the project's only bullet when it has no blurbs, so write blurbs instead."))
+    blurbs: List[str] = Field(default_factory=list, description=(
+        "One-line resume bullets for this project, each starting with what it does and ending "
+        "with the result or the tech. Stored beside the description and rendered in its place."))
+
+
 SCHEMAS: Dict[str, type] = {
     "experience": _strict(ExperienceItem),
     "education": _strict(EducationItem),
-    "project": _strict(ProjectItem),
+    "project": _strict(ProjectRecord),
     "skill": _strict(SkillItem),
     "achievement": _strict(AchievementItem),
     "requirement": _strict(JDRequirementItem),
@@ -128,8 +138,14 @@ _IDENTITY = {"experience": "company", "education": "institution", "project": "na
 _NOTES = {
     "experience": "One role. Bullets verbatim from the source. Dedup is by company plus title.",
     "education": "One degree. end_date is the graduation date. Dedup is by institution plus degree.",
-    "project": "One project. Dedup is by repo_url, else name.",
-    "skill": "One skill. Names are normalized and deduplicated against the stored skills.",
+    "project": "One project. Dedup is by repo_url, else name. Give a short description and, "
+               "separately, one-line blurbs (bullets). With no blurbs the description renders "
+               "verbatim as the project's bullet, so never fold a tagline into it.",
+    "skill": "One skill. Names are normalized and deduplicated against the stored skills. "
+             "Fill category: the resume groups skills by it, and a skill without one renders "
+             "under 'Other'. Use one of 'Languages & Libraries', 'AI & Machine Learning', "
+             "'Data Engineering', 'Tools', 'Cloud'. ART fills a missing category for common "
+             "skills (Python, SQL, PyTorch, AWS, Docker) and never replaces one you set.",
     "achievement": "One award or honor. Dedup is by title.",
     "requirement": "One atomic requirement from a posting, for open_job.",
     "rule": "A job-scoped rule. open_job asks for its answer per posting.",
@@ -233,6 +249,26 @@ def _correct(user_id: UUID, kind: str, data: Dict) -> Optional[Tuple[str, Dict, 
                 f"Set {', '.join(changed)}." if changed else None)
 
 
+def _add_blurbs(project_id: Any, blurbs: Sequence[str]) -> int:
+    """Store the host's bullets for a project beside its existing ones; how many were new.
+    Compared by words, so a re-sent bullet is not stored twice."""
+    wanted: Dict[str, str] = {}
+    for text in blurbs:
+        text = " ".join(str(text or "").split())
+        wanted.setdefault(_norm(text), text)
+    wanted.pop("", None)
+    if not wanted:
+        return 0
+    pid = UUID(str(project_id))
+    with Session(_db.engine) as session:
+        for row in session.exec(select(ProjectBlurb).where(ProjectBlurb.project_id == pid)).all():
+            wanted.pop(_norm(row.content), None)
+        for text in wanted.values():
+            session.add(ProjectBlurb(project_id=pid, style=DEFAULT_SOURCE, content=text))
+        session.commit()
+    return len(wanted)
+
+
 def _norm(name: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9+#]+", " ", (name or "").lower())).strip()
 
@@ -328,6 +364,7 @@ def upsert_items(user_id: UUID, records: Sequence[Dict], source: str = DEFAULT_S
         if kind == "variant":
             variants.append((idx, data))     # after the KG records, so one call can send both
             continue
+        blurbs = data.pop("blurbs", None) or [] if kind == "project" else []
         ident = _IDENTITY[kind]
         if not str(data.get(ident) or "").strip():
             out[idx] = {"status": "invalid", "key": None, "message": f"{ident} is required."}
@@ -336,8 +373,13 @@ def upsert_items(user_id: UUID, records: Sequence[Dict], source: str = DEFAULT_S
             done = _correct(user_id, kind, data)
             if done is not None:
                 status, row, message = done
+                if blurbs and status != "skipped_manual":
+                    added = _add_blurbs(row["project_id"], blurbs)
+                    status = "corrected" if added and status == "unchanged" else status
                 out[idx] = {"status": status, "key": _row_key(kind, row), "message": message}
                 continue
+        if blurbs:
+            data["blurbs"] = blurbs          # kept on the record for the loop below
         pending[kind].append((idx, data))
 
     store = _Store(user_id)
@@ -355,7 +397,10 @@ def upsert_items(user_id: UUID, records: Sequence[Dict], source: str = DEFAULT_S
             _save_skills(store, user_id, items, source, out)
             continue
         outcomes = savers[kind]([d for _, d in items]) or []
-        for (idx, _), (status, row) in zip(items, outcomes):
+        for (idx, sent), (status, row) in zip(items, outcomes):
+            if sent.get("blurbs") and row and status in ("created", "merged", "unchanged"):
+                added = _add_blurbs(row["project_id"], sent["blurbs"])
+                status = "merged" if added and status == "unchanged" else status
             message = {"skipped_manual": "The user edited this item by hand; it was left as is.",
                        "skipped_tombstone": "The user deleted this item; it was not re-added.",
                        "skipped_empty": "Not stored: no dates, description or bullets, and "

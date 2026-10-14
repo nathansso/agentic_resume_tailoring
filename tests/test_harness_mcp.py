@@ -174,3 +174,84 @@ def test_harness_imports_no_generative_client():
                                          "DATABASE_URL": "sqlite:///:memory:"})
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip() == "", f"harness pulled in: {out.stdout.strip()}"
+
+
+# ── projects without blurbs (#260) ───────────────────────────────────────────
+
+SEMANTIC = ("Semantic search library. Open-source semantic search library using "
+            "sentence-transformers and FAISS for retrieval.")
+
+
+@pytest.mark.parametrize("name, description, kept", [
+    # The #260 case: the lead-in's words all come right after it.
+    ("semantic-search", SEMANTIC, "Open-source semantic search library using "
+                                  "sentence-transformers and FAISS for retrieval."),
+    # It restates the name (plus a type word) and nothing follows to repeat it.
+    ("Pixel Adventure", "Pixel adventure game. Platformer with procedural levels.",
+     "Platformer with procedural levels."),
+])
+def test_a_lead_in_that_only_restates_the_project_is_dropped(name, description, kept):
+    from harness.tools import drop_redundant_lead_in
+
+    assert drop_redundant_lead_in(description, name) == kept
+
+
+@pytest.mark.parametrize("name, description", [
+    ("recsys", "Built a recommender. It serves ten thousand users daily."),     # words not repeated
+    ("recsys", "Cut latency 40%. Cut latency 40% with a Redis cache."),         # a number is a fact
+    ("search", "Kubernetes operator. Operator that scales batch jobs."),        # technology not repeated
+    ("search", "Won first place. Judges cited the clean API and the demo."),    # a result not repeated
+    ("search", "A deliberately long opening sentence that restates nothing at all today. "
+               "A deliberately long opening sentence that restates nothing at all today again."),
+    ("semantic-search", "Semantic search library"),                             # one sentence: keep it all
+    ("semantic-search", "Semantic search library."),                            # never the whole description
+    ("search", "Uses e.g. Redis. Uses e.g. Redis for caching."),                # an abbreviation, not a stop
+    ("search", "Python CLI. Command-line search over notes."),                  # Python never repeats
+    ("search", "Node.js app.\nServes the search API."),                          # restates nothing
+    ("", ""),
+])
+def test_a_lead_in_that_carries_anything_is_kept(name, description):
+    from harness.tools import drop_redundant_lead_in
+
+    assert drop_redundant_lead_in(description, name) == description.strip()
+
+
+def test_a_project_with_blurbs_renders_its_blurbs_unchanged():
+    from harness.tools import project_source_bullets
+
+    record = {"name": "semantic-search", "description": SEMANTIC,
+              "blurbs": [{"style": "host", "content": "Built semantic search over 40k docs."},
+                         {"style": "host", "content": ""}]}
+    assert project_source_bullets(record) == ["Built semantic search over 40k docs."]
+    assert project_source_bullets(dict(record, blurbs=[]))[0].startswith("Open-source semantic")
+
+
+def _put_project(uid, description, blurbs=None, name="semantic-search"):
+    from harness.ingest import upsert_items
+
+    data = {"name": name, "description": description, **({"blurbs": blurbs} if blurbs else {})}
+    out = upsert_items(uid, [{"kind": "project", "data": data}])
+    assert out["counts"] == {"created": 1}, out
+    return f"proj:{name}"
+
+
+def test_get_item_flags_a_project_whose_description_is_not_a_bullet(kg):
+    from harness import tools
+
+    key = _put_project(kg, SEMANTIC)
+    item = tools.get_item(kg, key)["record"]
+    assert (item["incomplete"], item["missing"]) == (True, ["blurbs"])
+    assert item["description"] == SEMANTIC                 # stored as written
+
+
+def test_get_item_does_not_flag_a_bullet_like_description_or_a_project_with_blurbs(kg):
+    from harness import tools
+
+    short = _put_project(kg, "Built semantic search over 40k documents with FAISS.", name="a")
+    blurbed = _put_project(kg, SEMANTIC, blurbs=["Built semantic search over 40k docs."], name="b")
+    empty = _put_project(kg, "", name="c")
+    assert tools.get_item(kg, short)["record"]["incomplete"] is False
+    assert tools.get_item(kg, blurbed)["record"]["incomplete"] is False
+    assert tools.get_item(kg, empty)["record"]["missing"] == ["blurbs"]
+    seeded = tools.get_item(kg, "proj:next-item recommendation")["record"]
+    assert (seeded["incomplete"], seeded["missing"]) == (False, [])
