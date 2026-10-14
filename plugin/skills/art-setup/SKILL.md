@@ -44,7 +44,10 @@ Read them yourself. ART does not read files.
     a description that is not one short sentence as `incomplete` (`missing: ["blurbs"]`):
     offer to write its bullets and store them with `upsert_items`.
   - **Skill:** name, category and a 1–5 proficiency from the evidence. Only skills the
-    sources show.
+    sources show. Always fill `category`, one of `Languages & Libraries`,
+    `AI & Machine Learning`, `Data Engineering`, `Tools` or `Cloud`: the resume groups
+    skills by it, and a skill without one lands under "Other". ART infers a missing
+    category for common skills but not for the rest, and never replaces one you set.
 - Call `upsert_items({records, source})` with `source` set to where the records came
   from (`resume.pdf`, `github:<repo>`, `linkedin`). Records are
   `{"kind": ..., "data": {...}}`.

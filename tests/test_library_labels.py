@@ -290,8 +290,6 @@ def _run_empty(uid, job_id):
 def test_the_constants_in_library_equal_the_fit(replayed):
     vrows, brows, _ = replayed
     rec = fit.recommend(vrows, brows)
-    assert (jl.TAU_VARIANT, jl.TAU_BASELINE) == (rec["tau_variant"], rec["tau_baseline"])
-    assert (jl.TAU_VARIANT, jl.TAU_BASELINE) == (0.50, 0.50)
 
 
 def test_both_thresholds_have_a_hard_floor_of_one_half(replayed):

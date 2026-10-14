@@ -378,3 +378,86 @@ def test_init_db_adds_the_new_columns_to_an_existing_database(isolated_engine):
     with Session(isolated_engine) as s:
         job = s.exec(select(JobDescription)).one()
         assert job.application_status == "drafting"
+
+
+# ── Skill category inference (#259) ──────────────────────────────────────────
+
+def _skill_category(engine, uid, name):
+    with Session(engine) as s:
+        return s.exec(select(Skill.category).join(UserSkill, UserSkill.skill_id == Skill.skill_id)
+                      .where(UserSkill.user_id == uid, Skill.name == name)).first()
+
+
+def test_common_skills_get_a_category_on_upsert_without_one(isolated_engine):
+    uid = _new_user(isolated_engine, "U")
+    _upsert(uid, *({"kind": "skill", "data": {"name": n}}
+                   for n in ("python", "SQL", "pytorch", "AWS", "Docker", "Basket Weaving")))
+    got = {n: _skill_category(isolated_engine, uid, n)
+           for n in ("Python", "SQL", "PyTorch", "AWS", "Docker", "Basket Weaving")}
+    assert got == {"Python": "Languages & Libraries", "SQL": "Languages & Libraries",
+                   "PyTorch": "AI & Machine Learning", "AWS": "Cloud", "Docker": "Tools",
+                   "Basket Weaving": None}
+
+
+def test_every_mapped_category_is_a_formatter_bucket():
+    from agents.formatter import ResumeFormatterAgent
+    from agents.skill_postprocessor import SKILL_CATEGORIES
+    for name, cat in SKILL_CATEGORIES.items():
+        assert ResumeFormatterAgent._normalize_category(cat) == cat, name
+        assert name == name.lower()
+
+
+def test_a_host_set_category_is_never_overwritten(isolated_engine):
+    uid = _new_user(isolated_engine, "U")
+    _upsert(uid, {"kind": "skill", "data": {"name": "Python", "category": "Scripting"}},
+            {"kind": "skill", "data": {"name": "Docker", "category": "Hobby"}})
+    # Omitting the category, or sending another, leaves the stored one alone.
+    _upsert(uid, {"kind": "skill", "data": {"name": "Python", "proficiency": 5}},
+            {"kind": "skill", "data": {"name": "Docker", "category": "Tools"}}, source="b.md")
+    assert _skill_category(isolated_engine, uid, "Python") == "Scripting"
+    assert _skill_category(isolated_engine, uid, "Docker") == "Hobby"
+
+
+def test_a_reupsert_fills_a_missing_or_default_category_on_a_stored_skill(isolated_engine):
+    uid = _new_user(isolated_engine, "U")
+    _upsert(uid, {"kind": "skill", "data": {"name": "Python"}},
+            {"kind": "skill", "data": {"name": "Docker"}},
+            {"kind": "skill", "data": {"name": "Zig"}})
+    with Session(isolated_engine) as s:
+        for name, cat in (("Python", None), ("Docker", "Other")):
+            row = s.exec(select(Skill).where(Skill.name == name)).one()
+            row.category = cat
+            s.add(row)
+        s.commit()
+    _upsert(uid, {"kind": "skill", "data": {"name": "Python"}},
+            {"kind": "skill", "data": {"name": "Docker"}},
+            {"kind": "skill", "data": {"name": "Zig", "category": "Languages & Libraries"}})
+    assert _skill_category(isolated_engine, uid, "Python") == "Languages & Libraries"
+    assert _skill_category(isolated_engine, uid, "Docker") == "Tools"
+    assert _skill_category(isolated_engine, uid, "Zig") == "Languages & Libraries"
+
+
+def test_ingest_schema_for_skill_asks_the_host_to_fill_category(isolated_engine):
+    uid = _new_user(isolated_engine, "U")
+    out = invoke("ingest_schema", uid, {"kind": "skill"})
+    assert "category" in out["json_schema"]["properties"]
+    assert "Fill category" in out["note"] and "Other" in out["note"]
+
+def test_a_newly_answered_job_rule_alone_still_commits(isolated_engine):
+    """#257: a plan with no accepted node commits when a job rule changes the page."""
+    from harness.executor import execute_plan
+
+    uid = _new_user(isolated_engine, "U")
+    _upsert(uid, {"kind": "education", "data": EDU})
+    rule_id = _upsert(uid, {"kind": "rule", "data": RULE})["results"][0]["key"].split(":", 1)[1]
+    job = _open(uid)
+    first = execute_plan(uid, {"job_id": job["job_id"]})
+    assert first["committed"]
+    same = execute_plan(uid, {"job_id": job["job_id"], "parent": first["node_id"]})
+    assert not same["committed"] and same["reason"].startswith("no_change")
+
+    invoke("open_job", uid, {"job_id": job["job_id"], "rule_answers": [
+        {"rule_id": rule_id, "answer": True, "quote": "must return to school"}]})
+    out = execute_plan(uid, {"job_id": job["job_id"], "parent": first["node_id"], "nodes": []})
+    assert out["committed"] and "reason" not in out
+    assert [r["to"] for r in out["rules_applied"]] == ["Dec 2027"]

@@ -141,7 +141,11 @@ _NOTES = {
     "project": "One project. Dedup is by repo_url, else name. Give a short description and, "
                "separately, one-line blurbs (bullets). With no blurbs the description renders "
                "verbatim as the project's bullet, so never fold a tagline into it.",
-    "skill": "One skill. Names are normalized and deduplicated against the stored skills.",
+    "skill": "One skill. Names are normalized and deduplicated against the stored skills. "
+             "Fill category: the resume groups skills by it, and a skill without one renders "
+             "under 'Other'. Use one of 'Languages & Libraries', 'AI & Machine Learning', "
+             "'Data Engineering', 'Tools', 'Cloud'. ART fills a missing category for common "
+             "skills (Python, SQL, PyTorch, AWS, Docker) and never replaces one you set.",
     "achievement": "One award or honor. Dedup is by title.",
     "requirement": "One atomic requirement from a posting, for open_job.",
     "rule": "A job-scoped rule. open_job asks for its answer per posting.",

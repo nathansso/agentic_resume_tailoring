@@ -34,6 +34,113 @@ In the October live run a project with no blurbs rendered its whole description 
 
 ---
 
+## Issue 259 — Infer missing skill categories so the skills section doesn't render as "Other"
+**Status:** complete | **Tests:** 2442 pass on SQLite (11 new), 24 skipped, 0 fail. The Postgres leg was not run locally
+
+In the October live run a host filled the skills through `upsert_items` without a `category`, and the section rendered as one long "Other:" line. Nothing on the harness path inferred a category, and `postprocess_skills` stored the literal string "Other" for a missing one, so even the stored rows looked categorized. A missing category is now filled deterministically from a curated map, and a page with no categorized skills renders without a label.
+
+### What shipped
+
+- **`agents/skill_postprocessor.py`:** `SKILL_CATEGORIES`, a small explicit map (145 skills) from the canonical lowercase name to one of the five buckets the formatter groups on (`Languages & Libraries`, `AI & Machine Learning`, `Data Engineering`, `Tools`, `Cloud`), and `infer_skill_category(name)`, which resolves aliases first (`pytorch`, `torch` and `PyTorch` agree). No model call and no embeddings. `postprocess_skills` now sets `category` to the given one, else the inferred one, else `None`. It used to default to "Other". The parser path and the host path both go through it, so they still store identical rows.
+- **`agents/kg_store.py::_save_skills`:** a stored skill whose category is empty or the old default "Other" gets the incoming category filled in. A category that is set is never replaced, and an update that omits `category` never clears one.
+- **Rendering (`agents/formatter.py::_ordered_skill_cats`):** when every skill falls in the one uncategorized group (empty, or "Other"), the group is returned with an empty label and the LaTeX, docx and markdown renderers emit the skills with no `Other:` label. The section is already headed "Technical Skills". When any skill is categorized, leftover skills keep a trailing "Other" group, and categorized output is byte-identical (a snapshot test pins the exact `.tex`).
+- **Host guidance:** `ingest_schema('skill')`'s note and `plugin/skills/art-setup/SKILL.md` ask the host to fill `category` with one of the five buckets and say what happens when it does not.
+
+### Deviations from spec
+
+- **No "Technical Skills:" label.** The spec suggested a neutral heading. The tex and docx section is already titled "Technical Skills", so a `Technical Skills:` line under it read as a stutter; the uncategorized line carries no label and the section heading is the neutral one. The markdown `_build_skills` uses its `label` argument the same way.
+- **`harness/render_cache.py` is unchanged.** It only counts skills lines from the number of distinct categories after the formatter's merge. A lone uncategorized group is one category either way, so the count is the same; a test pins it.
+- **"Other" is read as uncategorized.** `executor.py`, `tailor.py` and the scorers all default a missing category to "Other" before the formatter sees it, so the formatter cannot tell an unset category from a chosen "Other". Existing rows that are all "Other" now also render without the label, and a re-upsert fills them in. A page of one real custom category is unchanged.
+- **Unknown stays `None`, not "Other".** Stored rows for unlisted skills changed from the literal "Other" to empty. Every renderer already treated the two the same.
+- A re-upsert that only fills a category reports `unchanged`, not `merged`.
+
+## Issue 258 — Render ISO dates as "Mon YYYY" on the page
+**Status:** complete | **Tests:** 2461 pass on SQLite (30 new cases: 26 parametrised date cases plus 4 render tests), 24 skipped, 0 fail
+
+`ingest_schema` asks hosts for `YYYY-MM` dates and the formatter printed them raw ("2024-01 – Present") beside free-form dates like "June 2021". Every date that reaches the page now has one display form, "Mon YYYY" with a 3-letter English month. Render-only: stored values, the knowledge graph and the render cache are untouched.
+
+### What shipped
+
+- **`agents/dates.py`**, a pure model-free helper with two functions. `format_date` parses `YYYY-MM`, `YYYY-MM-DD`, `YYYY/MM`, `MM/YYYY` and month-name forms ("June 2021", "Sept 2021", "Sep. 2018", "jun 2021", "June 15, 2021") into "Mon YYYY"; a bare `YYYY`, "Present" and anything it cannot parse (including an out-of-range month such as `2024-13`) pass through verbatim; "Expected"/"Anticipated" keep their prefix and normalise the date after it ("Expected 2027-06" becomes "Expected Jun 2027"). `format_date_text` also splits a range string ("2024-01 - 2024-06", "June 2020 -- Present") and normalises each end, keeping the separator as written.
+- **`agents/formatter.py`** applies it on every path that prints a date: education (LaTeX, DOCX and the deprecated markdown, through `_education_date_line`), experience (LaTeX through `_clean_date`, DOCX, markdown), projects (LaTeX and DOCX), and the achievement `(issuer, date)` meta. `_clean_date` still blanks placeholder tokens first, then formats.
+- **Tests** in `tests/test_latex_formatter.py`: the helper table (ISO, free-form, Present, Expected, bare year, unparseable, empty), range handling, a LaTeX render mixing ISO and free-form dates across education, experience and projects, DOCX and markdown parity, and a check that neither the content dict nor the stored Education rows change. Two existing assertions that pinned "June 2020" now expect "Jun 2020".
+
+### Deviations from spec
+
+- No change under `harness/`. `render_cache.py` caches bullet lines only and `render.py` goes through `ResumeFormatterAgent`, so nothing there formats a date; the formatter is the single place.
+- The chat context line in `agents/chat.py` (`({start} – {end})`) is a prompt, not a page, so it is left raw.
+- ATS scoring (`agents/ats_scorer.py`) and `web/frontend` never read experience or education dates, so they are unaffected and unchanged.
+- Month-name parsing is English only, and a bare-year range end ("May 2018 to 2020") stays a bare year.
+
+---
+
+## Issue 241 — Policy artifact: one versioned home for fitted thresholds and guard tolerances
+**Status:** complete | **Tests:** 2452 pass on SQLite (21 new), 24 skipped, 0 fail
+
+Every fitted or provisional threshold the harness decides with, and the guard tolerances, now live in one file, `harness/policy.json`, with the fit each came from. The modules read it through `harness/policy.py` into the names they always had, so importers and tests are unchanged. This is a consolidation, not a refit: every value equals the constant it replaces, and a test pins that. Every committed tailoring-tree node records the artifact's `version` as `provenance.policy_version`, and a re-fit that changes a value fails its drift test until the artifact is updated.
+
+### What shipped
+
+- **`harness/policy.json`** (version 1) holds 23 values: `support` TAU_BLOCK 0.85 / TAU_REVIEW 0.35; `negative_pin` 0.85 / 0.15; `coverage` TAU_COVER 0.65; `memory_gate` v1 TAU_LO/HI/TARGET 0.25/0.65/0.75 and v2 0.20/0.65/0.75 (v2's write thresholds are `kind: pinned`, with `fit_alone` 0.50 / 0.40 and `pinned_to` v1's, per #244), plus HI_FLOOR 0.5, HARD_MASS 0.25 and V1_WOULD_BE_WRITES 29; `library` TAU_VARIANT 0.50, TAU_BASELINE 0.50, TAU_FLOOR 0.5 and VARIANT_MATCH_FLOOR 0.10; the five `DEFAULT_TOLERANCES` (stuffing 0.0, verb_entropy 0.35, mtld 0.10, duplication 0.15, variant_drift 0.35). Each value has a `kind` (`fitted`, `pinned`, `rule`, `provisional`), its source issue and, if fitted or pinned, a `fits` entry: decision point and question version, fit script, model, fit date (the recordings' export date), and the path and sha256 of the label set and recordings. Hashes normalise line endings, so a Windows and a Linux checkout agree.
+- **`harness/policy.py`** (stdlib only): `get(key)`, `version()`, `digest()`, `file_sha256()`. Its `_FALLBACK` table is today's constants and is what a module sees if the file is missing, unreadable or malformed; `version()` then reads `unversioned`. The only other edits in the decision modules (`support.py`, `negative_pins.py`, `coverage.py`, `memory_gate.py`, `decisions/library.py`, `library.py`, `acceptance.py`) swap the constant definitions for `policy.get(...)`; their fit comments stay.
+- **`policy_version` in provenance.** `tree.commit_node` stamps it, so the executor's host commits, the pipeline and editor hooks and every other writer are covered at one place; a caller's own `policy_version` wins (an import). Nodes from before it have no key and load unchanged.
+- **`tests/test_policy.py`** (21 tests): the artifact equals the shipped values, types included; the fallback table equals the artifact; the modules see the artifact's values and the same values with the file missing or broken; an AST check that each constant is assigned from `policy.get`; every value has a kind, issue and fit; `digest` covers the values; the file is in the wheel's `only-include`; each fit's label and recordings hashes match the committed files; and, for support, negative pins, coverage, memory gate v1, memory gate v2 (the pinned fit, `fit_alone`, and the 29 would-be writes) and the library, the artifact equals the fit script's recommendation computed offline from the committed recordings. Mutating a value in the file fails five of them.
+- **Existing drift tests folded in.** The "constant equals the fit" assertions (and their literal-value twins) are removed from the six `tests/test_*_labels.py` files and live only in `test_policy.py`; the rest of each fit's checks (headroom, categories, floors, report currency) stay where they were. `tests/test_executor.py` asserts the stamp on a host commit.
+- **Docs.** `docs/harness.md` and `docs/architecture.md` (§8.8) describe the artifact as shipped; the README and harness roadmap rows list #241 as shipped.
+
+### Deviations from spec
+
+- **Adversarial cases are deferred.** The issue's note to add adversarial poor-fit cases to the #199 variant set (the gap is thin: highest poor-fit 0.46 against 0.50) and soft-skill pairs to the #126 set applies "when refitting"; this is not a refit, no Jev call was made, and neither set changed. They remain the first additions at the next refit.
+- **A value change needs a new `version` and `digest`, enforced softly.** The file carries a `digest` of its values and a test fails until it matches, but nothing stops a contributor updating the digest without bumping `version`. A hash of the file in the stamp would close that; it was left out to keep the stamp readable.
+- **More than the issue's list moved.** The floors that bound the fits (`HI_FLOOR`, `TAU_FLOOR`), the safety margin `HARD_MASS`, the pin rule's `V1_WOULD_BE_WRITES` and the Jev-free `VARIANT_MATCH_FLOOR` are in the artifact as `rule` and `provisional` values, so no threshold-like number is left in a module. The text-overlap helpers (`support.ORIGINAL_MIN_OVERLAP`) and the other non-Jev heuristics (`agents/`, `eval/`) are not decision thresholds of the harness and stay where they are.
+- **Fit dates are the recordings' export dates,** not the day a fit was last read; the file says so (`fit_date_basis`).
+- **A timing test in `tests/test_local_ui.py` was hardened.** On the Postgres leg only, `test_a_fresh_stream_starts_at_now_and_sees_a_commit_made_while_open` failed on this branch three times in a row and passed on main and every other open PR. Instrumented runs showed a single full garbage collection of about 2.1M objects taking 1.1 s inside the request, which starved the test's 0.3 s timer thread so the commit landed before the stream read "now"; the heap was the same size on main, where the collection happened to fall outside the request. This branch's few extra allocations moved it. The test now calls `gc.collect()` before starting its timer. Nothing in the change feed was wrong, and no product code changed for it.
+- **#127 is untouched.** The guard tolerances are `provisional` with a note; #127 writes its fitted ones into the same file.
+
+---
+
+## Issue 254 — Skill-keyed negative pins are enforced in bullets and item fields
+**Status:** complete | **Tests:** 2440 pass on SQLite (10 new)
+
+"Never mention Kafka" resolves to `skill:kafka`. `record_preference`, `art_pins` and the briefing reported it as a negative pin, but the executor treated a `skill:`-keyed suppression as a skills-line filter only: a bullet "using Kafka" was accepted and committed, and the #232 Jev paraphrase check never ran for it. A skill-keyed strength-5 suppression is now a negative term like any other, and the `negative_pin` flag is computed by the function the executor enforces with.
+
+### What shipped
+
+- **`negative_pins.pin_target(pref)` is the one definition of a negative pin.** A strength-5 suppression is `("item", key)` for `exp:` / `proj:`, `("skill", name)` for `skill:`, `("term", term)` for a topic bound to nothing or to a key that cannot be enforced by key (`section:`, `edu:`), by its stored `target_term`, and not a pin otherwise (a lower strength, an emphasis, a key with no term). `is_negative_pin` is its boolean.
+  - `executor._hard_preferences` classifies with it, so what is enforced is what it returns.
+  - `record_preference` (`memory._summary`), `art_pins` and `art_briefing` (`tools._pins`) report `negative_pin` through `is_negative_pin`. Before, they said `polarity == "suppress"` at strength 5, whatever the target.
+- **A skill-keyed pin refuses a bullet that names the skill, and its aliases.** `negative_pins.term_matcher(term, skill=True)` matches with `agents/skill_matching.SkillMatcher`, the matcher that links skills to experiences, so "torch" is PyTorch and `R` is not `R&D`. A topic pin keeps the whole-word term match. It applies in all three places the term match ran: the per-node arbitration refusal (`negative_pin: bullet N mentions 'kafka'`), the `preferences` hard gate on every item field and bullet (`Context.negative_skill_terms`, a subset of `negative_terms`), and finalize.
+- **The #232 Jev check covers them.** The pin goes to `make_pin_checker` with `skill: True`, so a paraphrase is asked about (per changed text per node, and over the whole page at finalize) and a confident yes reverts the node or blocks the commit, in the term match's own `negative_pin:<term>@<key> :: …` format. Text the alias-aware term match already catches is not sent to Jev.
+- **The skills line is filtered as before** (`suppressed_skills`).
+- **Docs.** `docs/harness.md` § 7 (which said a `skill:` suppression "still only drops the skill") and `docs/architecture.md` are updated, as is the `negative_pin` field description in the contract. The #198 entry below carries a note that its "a `skill:`-keyed suppression is not a negative pin" was reversed here.
+- **Tests.** In `tests/test_citations.py`: the old test that pinned the bug is replaced by a refused cited bullet, a finalize block that clears when the item is cut, and the alias and short-name matching. In `tests/test_negative_pin_gate.py`: `record_preference("Never mention Kafka")` refused end to end, a paraphrase reverted through a scripted Jev answer, a base paraphrase blocking finalize, an alias skipping Jev, and `test_the_negative_pin_flag_is_what_the_executor_enforces`, which stores ten kinds of preference (through `record_preference`, and directly for an `edu:` key with and without a term) and checks the flag from `record_preference`, `art_pins` and `art_briefing` against what `_hard_preferences` enforces; `test_an_edu_keyed_pin_with_a_term_refuses_a_bullet_naming_the_term` covers the keyed-with-term case end to end.
+
+### Deviations from spec
+
+- **Executor enforcement, not a storage change.** The issue offered two options: enforce skill-keyed pins in the executor, or have `record_preference` store a skill-named pin as a topic pin. The second leaves every pin already in a user's database, stored as `skill:<x>`, unenforced. The first covers old and new rows with no migration, and `record_preference` stores exactly what it stored before.
+- **A key the executor cannot enforce by key is still enforced by its term, so it is still a negative pin.** `compile_preferences` stores `target_term` (the label) even when `target_key` resolves, and `_hard_preferences` on main enforced a `section:`- or `edu:`-keyed suppression through that term. `pin_target` keeps that (`("term", term)`); only a preference with neither an enforceable key nor a term is not a pin. The term for a `section:` key is the catalog label (`"section: achievements"`), which matches no bullet in practice; that is as before and not changed here.
+- **Jev answers in the tests are scripted, not recorded.** The new tests use the same `FakeTransport` the #232 tests use; no live Jev call was made and no recording file was added. The pin question is unchanged (`negative_pin@v1`), so the fitted thresholds (#232) stand.
+- **A skill pin and a same-named topic pin keep the skill's alias matching.** Both can exist for one name ("kafka"); the term map holds one entry per name, and the skill-keyed one wins so its aliases are not lost.
+- **A page that already says the skill now fails finalize.** As with any negative pin (#198), a base bullet that names a skill the user has pinned blocks the commit until it is revised or its item is cut. This is the intended reach of the pin, but it will show up on profiles where the pinned skill is in existing bullets.
+
+## Issue 257 — `execute_plan` no longer commits a version identical to its parent
+**Status:** complete | **Tests:** 2438 pass on SQLite (7 new), 24 skipped, 0 fail. The full run found 3 failures from the new rule, all fixed in the same change and re-run singly (100 pass across their three files); the full suite was not repeated after the fix. The Postgres leg was not run locally
+
+When every node of a plan was reverted or refused, `execute_plan` still reported `committed: true` and wrote a tree node whose `diff_nodes` against its parent was empty. That added a history entry and an editor change-feed event for nothing. A plan with a parent whose final page equals the parent's content now commits nothing.
+
+### What shipped
+
+- **`harness/executor.py`:** `_execute` snapshots the parent's content before job rules touch it (`base` is `head["content"]`, edited in place), and after finalize compares the whole would-be page with that snapshot. Equal means `committed: false`, `node_id: null`, `reason: "no_change: ..."` (`executor.NO_CHANGE`), no `TailorNode`, no `TreeEvent`, HEAD and `UserJobResult` untouched. `nodes[]` still carries every reverted, refused and kept node with its reason. The comparison is on the full content dict, so a plan that only re-ranks skills (`skills`), sets `section_order`, drops hard-suppressed skills, or applies a newly answered job rule still commits. Violations are checked first and win over `no_change`. `dry_run` reports the same `reason`.
+- **A job's first plan always commits** (no parent, so the check never runs), including `parent: null, nodes: []`, which the `art-tailor` skill uses to save the track baseline copy before `get_head`.
+- **`harness/contract.py`:** `ExecuteOutput.reason` (absent otherwise) and the `execute_plan` tool description. `patch_plan` shares the output model.
+- **Docs:** `docs/harness.md` (§ 7 step 5), `docs/architecture.md` (§ 8.2 step 4) and one bullet in `plugin/skills/art-tailor/SKILL.md` telling the host `no_change` is not an error.
+- **Tests:** in `tests/test_executor.py`, all-reverted/refused/kept (nothing written, HEAD and feed unchanged, per-node reasons kept), an empty plan and a dry run on a parent, the empty first plan still committing the baseline, a skills re-rank still committing, a real node still committing, and a no-op leaving a hand-edited `.tex` HEAD alone; in `tests/test_host_ingest.py`, a newly answered job rule alone still committing. Three existing tests that relied on a keep-only plan committing now use a real change (`test_citations`, `test_consistency_gate`) or assert `no_change` (`test_jev_library`'s replay re-run, which re-submits the same plan on its own HEAD).
+
+### Deviations from spec
+
+- **Only content and layout overrides are compared, not `edited_tex`.** A plan commit carries the parent's layout overrides but never its hand-edited `.tex`, so committing over a hand-edited HEAD silently dropped the `.tex`. Treating a no-op plan as "no change" there leaves the user's version as HEAD instead. Whether a changing plan should carry `edited_tex` forward is a separate question and not changed here.
+- **Skills compare as stored.** A parent whose content lacks `skills_ranked` entirely (not written by the executor or the pipeline) differs from a plan result that sets it to `[]`, and commits once.
+- The `art-tailor` skill edit is one bullet in a file PR #253 also changes.
 ## Issue 249 — Hermetic test suite: no `.env` secrets, no outbound network outside `--integration`
 **Status:** complete | **Tests:** 2430 pass on SQLite (19 new), 24 skipped, 0 fail, on main at e280a87 (after #244) with sqlmodel 0.0.47. The full run was made with the developer's real `.env` (a production `DATABASE_URL`, `SUPABASE_URL`, Anthropic and TypeSafe keys) reachable and `PYTHON_DOTENV_DISABLED` unset, and the guard blocked 0 attempts; an earlier run with the variable set gave the same result. The Postgres leg was not run
 
@@ -722,7 +829,7 @@ Every bullet on a host-built page now rests on live evidence, and a fact the use
   - Arbitration now refuses a node that cites a deleted item with `tombstoned_cite: … which the user deleted`, ahead of the generic unresolved reason.
   - A node that names a deleted item, or uses one as a replacement, is refused with `tombstoned: the user deleted …`.
 - **Negative pins:**
-  - A strength-5 suppression by `target_term` (not keyed `skill:`) is now also a fact that must never render (`_negative_terms`).
+  - A strength-5 suppression by `target_term` (not keyed `skill:`) is now also a fact that must never render (`_negative_terms`). *(#254 later made a `skill:`-keyed suppression one too, and replaced `_negative_terms` with `negative_pins.pin_target`.)*
   - `preference_violations` flags any bullet, title, company, project name or description containing the term, on word boundaries (`negative_pin:<term>@<key> :: …`).
   - Arbitration refuses a revise or replace whose bullets mention it, even when cited.
   - Finalize reports a pinned term already on the page with the hint "revise <key> so it no longer mentions '<term>'".
@@ -737,7 +844,7 @@ Every bullet on a host-built page now rests on live evidence, and a fact the use
   - a cited bullet mentioning a negative pin is refused;
   - a pinned fact already on the page blocks finalize with hints naming the items, and the same program with it cut commits;
   - negative pins match whole words only (Java, not JavaScript);
-  - a `skill:`-keyed suppression is not a negative pin.
+  - a `skill:`-keyed suppression is not a negative pin *(reversed by #254)*.
 
 ### Deviations from spec
 

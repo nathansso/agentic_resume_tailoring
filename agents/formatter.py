@@ -16,6 +16,7 @@ from sqlmodel import Session, select
 
 from database.db import engine
 from database.models import Education, Skill, User, UserSkill
+from agents.dates import format_date_text
 from agents.skill_postprocessor import normalize_skill_name, should_reject_skill
 
 logger = logging.getLogger(__name__)
@@ -326,9 +327,10 @@ _PLACEHOLDER_DATE_TOKENS = {
 
 
 def _clean_date(value) -> str:
-    """Blank out placeholder date strings; pass real dates through unchanged."""
+    """Blank out placeholder date strings and render real dates as 'Mon YYYY'
+    (#258). Display only; the stored value is never changed."""
     v = str(value or "").strip()
-    return "" if v.lower() in _PLACEHOLDER_DATE_TOKENS else v
+    return "" if v.lower() in _PLACEHOLDER_DATE_TOKENS else format_date_text(v)
 
 
 def sanitize_text(text: str) -> str:
@@ -375,7 +377,7 @@ class ResumeFormatterAgent:
         """Parenthetical '(issuer, date)' for an achievement, or '' when both are
         absent."""
         return ", ".join(x for x in (
-            (a.get("issuer") or "").strip(), (a.get("date") or "").strip()) if x)
+            (a.get("issuer") or "").strip(), format_date_text(a.get("date"))) if x)
 
     @staticmethod
     def _education_degree_line(entry: Education) -> str:
@@ -383,9 +385,10 @@ class ResumeFormatterAgent:
 
     @staticmethod
     def _education_date_line(entry: Education) -> str:
-        if entry.start_date and entry.end_date:
-            return f"{entry.start_date} -- {entry.end_date}"
-        return entry.end_date or entry.start_date or ""
+        start, end = format_date_text(entry.start_date), format_date_text(entry.end_date)
+        if start and end:
+            return f"{start} -- {end}"
+        return end or start
 
     def _build_known_labels(self) -> frozenset:
         labels: set = set()
@@ -606,7 +609,7 @@ class ResumeFormatterAgent:
                 for exp in exps:
                     _subheading(
                         exp.get("title", ""),
-                        f"{exp.get('start_date','')} -- {exp.get('end_date','')}".strip(" --"),
+                        f"{format_date_text(exp.get('start_date'))} -- {format_date_text(exp.get('end_date'))}".strip(" --"),
                         exp.get("company", ""),
                         exp.get("location", ""),
                     )
@@ -621,7 +624,7 @@ class ResumeFormatterAgent:
                 for proj in projs:
                     name  = proj.get("name", "")
                     techs = proj.get("tech_stack", proj.get("technologies", ""))
-                    dates = proj.get("date_range", proj.get("dates", ""))
+                    dates = format_date_text(proj.get("date_range", proj.get("dates", "")))
                     heading = f"{name} | {techs}" if techs else name
                     links = [u for u in (proj.get("repo_url"), proj.get("demo_url")) if u]
                     if links:
@@ -640,9 +643,10 @@ class ResumeFormatterAgent:
                 p.paragraph_format.space_before = Pt(2)
                 p.paragraph_format.space_after  = Pt(2)
                 for cat, skills in self._ordered_skill_cats(cats, ranked):
-                    r_bold = p.add_run(cat + ": ")
-                    r_bold.bold = True
-                    r_bold.font.size = Pt(10)
+                    if cat:
+                        r_bold = p.add_run(cat + ": ")
+                        r_bold.bold = True
+                        r_bold.font.size = Pt(10)
                     r_text = p.add_run(", ".join(skills) + "    ")
                     r_text.font.size = Pt(10)
 
@@ -905,6 +909,9 @@ class ResumeFormatterAgent:
         skill_lines = []
         for cat, skills in self._ordered_skill_cats(cats, ranked):
             skills_str = _escape_tex(", ".join(skills))
+            if not cat:
+                skill_lines.append(rf"     {skills_str} \\")
+                continue
             skill_lines.append(
                 rf"     \textbf{{{_escape_tex(cat)}}}{{: {skills_str}}} \\"
             )
@@ -919,6 +926,9 @@ class ResumeFormatterAgent:
         ])
 
     # Static fallback category order, used only when no JD-ranked list is given.
+    # What a skill with no category groups under.
+    UNCATEGORIZED = "Other"
+
     _STATIC_CAT_ORDER = [
         "Languages & Libraries", "AI & Machine Learning",
         "Data Engineering", "Tools", "Cloud", "Other",
@@ -975,16 +985,25 @@ class ResumeFormatterAgent:
         Ranked input is already relevance-ordered (categories by first
         appearance, skills by score), so it is rendered as-is. The untailored
         fallback uses the static category order with skills sorted A→Z.
+
+        When no skill is categorized, the lone "Other" group is returned with an
+        empty label: the section is already headed "Technical Skills", and a
+        bare "Other:" there reads as a failure to categorize (#259). The
+        renderers drop the label for an empty one. With any categorized skill,
+        leftovers keep their "Other" group.
         """
         if ranked:
-            return list(cats.items())
-        cats = dict(cats)
-        pairs: List[tuple] = []
-        for cat in self._STATIC_CAT_ORDER:
-            if cat in cats:
-                pairs.append((cat, sorted(cats.pop(cat))))
-        for cat, skills in cats.items():
-            pairs.append((cat, sorted(skills)))
+            pairs = list(cats.items())
+        else:
+            cats = dict(cats)
+            pairs = []
+            for cat in self._STATIC_CAT_ORDER:
+                if cat in cats:
+                    pairs.append((cat, sorted(cats.pop(cat))))
+            for cat, skills in cats.items():
+                pairs.append((cat, sorted(skills)))
+        if len(pairs) == 1 and pairs[0][0] == self.UNCATEGORIZED:
+            return [("", pairs[0][1])]
         return pairs
 
     # ── Deprecated: Markdown ──────────────────────────────────────────────────
@@ -1114,8 +1133,8 @@ class ResumeFormatterAgent:
         for exp in experiences:
             title   = exp.get("title", "")
             company = exp.get("company", "")
-            start   = exp.get("start_date", "")
-            end     = exp.get("end_date", "")
+            start   = format_date_text(exp.get("start_date"))
+            end     = format_date_text(exp.get("end_date"))
             lines.append(f"**{title},** {company}\t{f'{start} - {end}' if start else ''}")
             for b in exp.get("bullets", []):
                 lines.append(f"{bullet_prefix}{self._format_bullet(b)}")
@@ -1128,7 +1147,7 @@ class ResumeFormatterAgent:
             return ""
         lines = [label]
         for cat, skills in self._ordered_skill_cats(cats, ranked):
-            lines.append(f"**{cat}:** {', '.join(skills)}")
+            lines.append(f"**{cat}:** {', '.join(skills)}" if cat else ", ".join(skills))
         return "\n".join(lines)
 
     @staticmethod
