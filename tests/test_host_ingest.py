@@ -411,3 +411,22 @@ def test_ingest_schema_for_skill_asks_the_host_to_fill_category(isolated_engine)
     out = invoke("ingest_schema", uid, {"kind": "skill"})
     assert "category" in out["json_schema"]["properties"]
     assert "Fill category" in out["note"] and "Other" in out["note"]
+
+def test_a_newly_answered_job_rule_alone_still_commits(isolated_engine):
+    """#257: a plan with no accepted node commits when a job rule changes the page."""
+    from harness.executor import execute_plan
+
+    uid = _new_user(isolated_engine, "U")
+    _upsert(uid, {"kind": "education", "data": EDU})
+    rule_id = _upsert(uid, {"kind": "rule", "data": RULE})["results"][0]["key"].split(":", 1)[1]
+    job = _open(uid)
+    first = execute_plan(uid, {"job_id": job["job_id"]})
+    assert first["committed"]
+    same = execute_plan(uid, {"job_id": job["job_id"], "parent": first["node_id"]})
+    assert not same["committed"] and same["reason"].startswith("no_change")
+
+    invoke("open_job", uid, {"job_id": job["job_id"], "rule_answers": [
+        {"rule_id": rule_id, "answer": True, "quote": "must return to school"}]})
+    out = execute_plan(uid, {"job_id": job["job_id"], "parent": first["node_id"], "nodes": []})
+    assert out["committed"] and "reason" not in out
+    assert [r["to"] for r in out["rules_applied"]] == ["Dec 2027"]

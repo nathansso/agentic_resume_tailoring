@@ -12,7 +12,7 @@ import pytest
 from agents.checks import consistency_check, extract_claims, unsupported_tokens
 from harness.acceptance import Context, accept, consistency_violations, metric_vector
 from test_citations import _cited, _revise, _src, base_content  # noqa: F401
-from test_executor import EXP, EXP2, _run, env  # noqa: F401  (fixture)
+from test_executor import EXP, EXP2, PROJ, _run, env  # noqa: F401  (fixture)
 
 
 def _keys(text, generous=False):
@@ -279,7 +279,9 @@ def test_user_authored_uncited_text_never_blocks_a_plan(env):
     exp.pop("cites", None)
     node = tree.commit_node(uid, job_id, content=content, source="editor")
     out = _run(uid, {"job_id": job_id, "parent": node["node_id"],
-                     "nodes": [{"id": "k", "op": "keep", "item_key": EXP}]})
+                     "nodes": [{"id": "k", "op": "keep", "item_key": EXP},
+                               {"id": "d", "op": "delete", "item_key": PROJ,   # a real change (#257)
+                                "because": "user:less games"}]})
     assert out["committed"], out["violations"]
     assert out["metrics"]["base"]["gates"]["consistency"] == []
 

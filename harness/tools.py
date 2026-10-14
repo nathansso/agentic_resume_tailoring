@@ -42,6 +42,7 @@ from agents.job_card import render_cards, select_cards
 from agents.preferences import preferences_in_scope
 from database.vector_search import fts_search
 from database.models import Achievement, Project, ProjectBlurb, User
+from harness.decisions.negative_pins import is_negative_pin
 
 KINDS = ("skill", "experience", "project", "education", "achievement")
 _PREFIX = {"skill": "skill", "experience": "exp", "project": "proj",
@@ -182,12 +183,13 @@ def _attach_links(user_id: UUID, items: List[Dict]) -> None:
 
 def _pins(prefs: Sequence[Dict]) -> List[Dict[str, Any]]:
     """The strength-5 preferences among `prefs`, verbatim: the hard rules. A strength-5
-    suppression is a negative pin (#198): what it names can never reach the page."""
+    suppression the executor enforces is a negative pin (#198, #254): what it names can never
+    reach the page."""
     return [
         {"text": p["text"], "polarity": p.get("polarity"), "target_key": p.get("target_key"),
          "target_term": p.get("target_term"), "scope": p.get("scope_type"),
          "scope_value": p.get("scope_value"),
-         "negative_pin": p.get("polarity") == "suppress"}
+         "negative_pin": is_negative_pin(p)}
         for p in prefs if (p.get("strength") or 0) >= PIN_STRENGTH
     ]
 

@@ -296,11 +296,8 @@ def test_a_wrong_write_is_a_non_preference_or_a_wrong_direction_target_scope_or_
 
 # ── the numbers the gate ships with ──────────────────────────────────────────
 
-def test_the_constants_in_memory_gate_equal_the_fit(replayed):
-    rows = replayed[0]
-    rec = fit.recommend(rows)
-    assert (mg.TAU_LO, mg.TAU_HI, mg.TAU_TARGET) == (rec["tau_lo"], rec["tau_hi"], rec["tau_target"])
-    assert (mg.TAU_LO, mg.TAU_HI, mg.TAU_TARGET) == (0.25, 0.65, 0.75)
+def test_the_memory_gate_thresholds_are_ordered(replayed):
+    # that they equal the fit: tests/test_policy.py (#241)
     assert mg.TAU_LO < mg.TAU_HI and 0 < mg.TAU_TARGET < 1
 
 
