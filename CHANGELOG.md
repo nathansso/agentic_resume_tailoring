@@ -48,6 +48,55 @@ Phase 3 of 7 of the preference-anchoring plan (#295–#300). A hand-labelled set
 
 ---
 
+## Issue 274 — Landing site install and usage docs
+**Status:** complete | **Tests:** 2681 pass on SQLite (18 new), 24 skipped, 0 fail; the Postgres leg was not run (nothing here touches storage)
+
+The Install and Usage pages of the landing site (#271), replacing #272's stubs. Install is written for a student who has never used MCP or a terminal coding agent; Usage is a first-session walkthrough that names only commands and tools that exist today. Every command the pages show is rendered from one data file and held to INSTALL.md by a test.
+
+### What shipped
+
+- **`/install`.** Prerequisites (Claude Code or Codex, `uv`, tectonic or `pdflatex`, each linked to its official page, with Windows and macOS/Linux notes); the Claude Code plugin; Codex (the plugin carries the hooks, per #290, plus `/hooks` trust; the `art hooks codex --write` file install for Codex older than 0.131 or without the plugin); manual MCP registration for Claude Code, Codex and other stdio clients; how to check it worked (`/mcp`, asking the agent for ART's tools, `/art:prefs`, `art --list`); optional extras, `art ui` and the TypeSafe Jev key (what it does, what is sent, that everything works without one); troubleshooting (slow first start, offline starts with `UV_OFFLINE=1` or `uv tool install`, the Windows `UV_CACHE_DIR` long path, Application Control, the Codex `cmd.exe` hook shell, no PDF).
+- **`/usage`.** Ingest (`/art:setup`, `$art-setup`), review the graph, tailor (`/art:tailor`, `$art-tailor`, with the approve-the-plan step), approve bullets and set preferences, render the PDF, optionally open `art ui`, and a table of all six `/art:*` commands. Steps without a command of their own say what to ask the agent and name the tool it calls.
+- **Shared parts** under `site/src/components/docs/` and `site/src/layouts/Docs.astro` (which wraps `Base.astro`): `CommandBlock` (copy button with a `navigator.clipboard` path, an `execCommand` fallback and a select-the-text last resort, announced through a live region), `DocSection`, `Callout`, a table of contents (collapsible on phones, sticky with the current section marked on desktop), and prose styles on the theme tokens. Long lines scroll inside their block, never the page. Checked at 375px in light and dark in a headless browser: no horizontal scroll.
+- **Single-sourcing.** `components/docs/commands.json` holds every command (with `{SOURCE}` and `{URL}` placeholders for the pinned wheel); `commands.ts` expands it and the pages render from it.
+- **`tests/test_site_docs.py` (18 new, no network, no npm).** Each command is a whole line, or a whole inline-code span, of its source (INSTALL.md, `plugin/README.md`, `integrations/codex/README.md`; a prefix such as `art@art2` does not pass); the site's wheel URL equals `harness.hooks.WHEEL_URL` and every wheel URL in the docs and on the site, so a version bump in either place fails; each `art` subcommand shown exists in `harness/entry.py`; every `/art:*` the site names is in `plugin/commands/` and every plugin command is documented; every tool in a `<code>` tag exists in the contract; nothing #252 lists as planned (`check_draft`, `record_feedback`, semantic duplicates, eligibility rules, action ranking) is named, with the planned set also read from `docs/harness.md`; every command block comes from the data file and none is dead; table of contents and anchors resolve; copy-button, overflow and theme-token guards. Mutation-checked against nine edits (an INSTALL.md command edit, a pin bump on one side only, an unknown or planned tool, an unknown slash command, a section typo, a dangling anchor).
+
+### Deviations from spec
+
+- **GitHub is "give your agent the folders of your cloned repositories", not an ingest.** The harness has no GitHub tool: `/art:setup` reads a resume, a LinkedIn export and local project folders. The page says ARTie does not connect to a GitHub account.
+- **Left off the site:** `[postgres]` and the one-time web-app migration (`art import --from-supabase`), `art export` / `art import` backups, the `keyring` store for the Jev key, `art jev export` / `import`, and the checkout-only editor build. They serve the frozen hosted app or developers, not a first install. The Jev page says what is sent in prose and links INSTALL.md for the full table.
+- **Some check steps are not in INSTALL.md.** It gives only `art --list`. `/mcp` and "ask the agent to list ART's tools" are the agent's own built-ins, so they sit outside the drift check; `/art:prefs` and `art --list` are checked.
+- **The Codex section follows #290,** merged while this was in progress: the plugin carries the hooks, and `art hooks codex --write` is the fallback.
+- **The `uv tool install` line is shown with the real wheel URL**, where INSTALL.md writes `<the pinned URL>`; the test requires the two to differ by exactly that substitution.
+- **`/art:*` examples in the Usage page's copy blocks keep the README's placeholders** (`[files]`, `<posting or URL>`), so a copied block needs editing.
+- **Not done:** the live Vercel deploy and the clean-machine acceptance run ("a clean machine can follow the Install page") were not performed; the commands were checked against the docs and the code, not run on a fresh machine.
+
+---
+
+## Issue 273 — Landing site home page content
+**Status:** complete | **Tests:** 2666 pass (30 new), 24 skipped, on SQLite; the Postgres leg was not run (nothing here touches storage)
+
+Second child of the landing-site epic (#271): the real home page for students applying to internships and new-grad roles, replacing #272's placeholder. The install and usage pages are #274.
+
+### What shipped
+
+- **`site/src/pages/index.astro`**, seven sections: the hero (headline "Land your first role with ARTie", a primary "Install in Claude Code" button to `/install`, a "How it works" button to `#how-it-works`, no account of any kind); three student pain points ported from `LandingPage.tsx` (first resume, no idea what recruiters want, one resume for fifty postings); "How ARTie tailors a resume" in five steps for the harness model (your agent reads you, reads the posting, tailors from approved bullets and preferences, ART's gates check it, a LaTeX PDF is rendered); "It never invents experience you don't have" with the changes/never-changes card; who it's for and what you need (Claude Code or Codex, `uv`, tectonic or pdflatex); a `<details>` FAQ; and a closing install band.
+- **A privacy note under "How it works".** ARTie runs locally and stores data on your machine; the only things that leave are what your own agent sends to its model provider; and the optional TypeSafe Jev key, when set, sends excerpts of resume bullets, the posting's requirements and title, and your messages when the memory gate runs. With no key or `ART_JEV_MODE=off`, nothing is sent. Worded from `docs/harness.md` section 4, "Privacy".
+- **The ATS answer.** The FAQ says ARTie reports an ATS-style score but never optimizes for it or promises one, and why: the composite only rises as text is added (`docs/harness.md` section 5).
+- **`site/src/components/home/Icon.astro`**, a small inline-SVG icon set (Lucide shapes, ISC) so the page needs no icon dependency.
+- **`tests/test_site_home.py`** (no npm, no network): one h1, the CTA targets, the `#how-it-works` anchor, every internal link going to `/install` or an anchor, banned phrases (open source, sign up, hosted, guarantee, "beat the ATS", an ATS percentage), no statistics, no mention of planned tools (`record_feedback`, `check_draft`), the five harness steps, the accuracy of the privacy and Jev wording, the FAQ questions, and the aria wiring.
+- Checked at 375px in light and dark: no horizontal scroll, and nothing outside the clipped hero glows is wider than the viewport.
+
+### Deviations from spec
+
+- **"GitHub" is not named as a source.** The issue lists resume, GitHub and LinkedIn, but `docs/harness.md` and `plugin/README.md` say the host reads the resume, the LinkedIn export and local project folders (repos). The page says exactly that.
+- **The "one page" gate.** The docs file page count under "Finalize" (nothing commits on a violation), not under the hard gates, and the two-line bullet limit is a hard gate. The page says "the result has to fit on one page, at two lines per bullet or fewer" rather than calling both hard gates.
+- **No license claim.** `pyproject.toml` says Proprietary. The page says "free to use" and "the code is public on GitHub", and never "open source". The epic's "free, open-source" wording is untouched; settling the license is still open.
+- **Lighthouse was not run.** The accessibility score (95 or higher) needs a Lighthouse run against the deployed preview. Semantics were checked by hand: one h1, labelled sections, decorative icons aria-hidden, native `<details>`.
+- **Not described, because planned (#252):** `record_feedback`, `check_draft`, and the Jev points for eligibility rules, semantic duplicates, action ranking and role family.
+
+---
+
 ## Issue 295 — Preference anchor resolver: a preference binds to what its subject denotes, or stays pending, or is a document subject
 **Status:** complete | **Tests:** 2766 pass on SQLite (59 new), 24 skipped
 

@@ -5,7 +5,7 @@ ART is a resume-tailoring platform that ingests resume, GitHub, and LinkedIn dat
 
 **Direction: the harness pivot (epic #207, [`docs/harness.md`](docs/harness.md)).** ART is becoming a local, model-free package that the user's own coding agent (Claude Code, Codex) drives through tools: MCP and the CLI's `--json` mode. Other harnesses (e.g. pi) are out of scope. The host's model does the open-ended reading and writing. ART keeps the knowledge graph, an approved-bullet library, preferences, the gates that enforce them, and the tailoring history, and it makes bounded judgment calls through TypeSafe's Jev. `docs/harness.md` is the target architecture; `docs/architecture.md` describes what is merged today.
 
-**Web app (frozen, becoming `art ui`):** the hosted deploy at https://web-production-2ead7.up.railway.app/ gets no new hosted features. The React editor and its routers become `art ui`, a local companion editor in local mode (SQLite, no login), under #204 and #205. Until then the web app still runs as before: React + TypeScript served by FastAPI, Supabase Postgres via `DATABASE_URL` with a SQLite fallback, and Supabase Auth with a local signed-cookie fallback.
+**Web app (frozen, becoming `art ui`):** the hosted deploy at https://web-production-2ead7.up.railway.app/ gets no new hosted features, and is currently down (the Railway trial lapsed). The React editor and its routers become `art ui`, a local companion editor in local mode (SQLite, no login), under #204 and #205. Until then the web app still runs as before: React + TypeScript served by FastAPI, Supabase Postgres via `DATABASE_URL` with a SQLite fallback, and Supabase Auth with a local signed-cookie fallback.
 
 A `cli.py` command surface mirrors the core ingestion/tailoring pipeline for scripting and tests, and becomes one of the harness adapters (#191). A Textual TUI existed previously and was removed; its shared service layer now lives in `services.py`.
 
@@ -15,13 +15,15 @@ A `cli.py` command surface mirrors the core ingestion/tailoring pipeline for scr
 - Database: SQLModel ORM — Supabase Postgres in production (via the `DATABASE_URL` secret); falls back to SQLite locally when `DATABASE_URL` is unset
 - Auth: Supabase Auth (JWT) with local `itsdangerous` cookie fallback
 - AI: LangGraph, LangChain, OpenAI / Anthropic on the legacy web/CLI path; harness path: no generative calls, TypeSafe Jev for classification only
+- Landing site: Astro + Tailwind static site in `site/`, standalone (not part of the web app or the `art-mcp` package); https://artie-sand.vercel.app
 
 **Entry points:**
 - `uvicorn web.app:app --port 8000` — web server (production uses the Railway Docker deploy)
 - `npm run dev` (in `web/frontend/`) — Vite dev server on port 5173, proxies `/api` to port 8000
 - `python cli.py <command>` — CLI surface
+- `npm --prefix site run dev` — landing site dev server on port 4321 (`site/README.md`)
 
-**Deploy:** `railway up` from repo root — builds the Docker image (Node 24 → Python 3.12), pushes to Railway. The hosted app is frozen under the harness pivot; the target distribution is `uvx art-mcp` (#194).
+**Deploy:** the hosted web app (`railway up`, Docker, Node 24 → Python 3.12) is frozen and currently down, so don't treat it as a live deploy path. The target distribution is the `art-mcp` release wheel, run with `uvx` (#194, #256). The landing site deploys through Vercel's Git integration from `site/` (`main` is production, each PR gets a preview); see `site/README.md`.
 
 **Environment:**
 ```bash

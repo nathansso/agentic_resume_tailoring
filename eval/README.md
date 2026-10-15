@@ -34,7 +34,7 @@ asked for; an ability whose row stays `none` after its issue ships did not ship.
 | `skill_selection_tasks/` | 2 | skill-selection tuning | Carries a labelled `relevant` answer key; unused by the tailoring benchmark |
 | distractor pool (`distractors.py`) | 31 admitted of 56 proposed | tailoring benchmark, via `--distractors N` | Audited against every posting: no shared keyword, and below the matcher's own semantic threshold. Injected as `UserSkill` rows post-ingest, never written into the résumé, so one profile runs with and without |
 | implicitness pairs (`implicitness.py`) | 31 | — | `explicit` / `implicit` / `unrelated` `(requirement, bullet)` pairs; the calibration set, not a task set |
-| `cassettes/` | 0 | replay mode | **None committed.** #182 deleted the #158 recording rather than refresh it: its three task ids came from the corpus #177 replaced and its profile was retired by #172. **Not due yet either:** recording is gated on #181 — `_detect_level` mislabels 128/150 postings and `role_level` is 0.10 of the composite on both sides of every match, so recording first would bake a known-wrong component into a paid artifact. Once it lands: `python eval/tailoring_benchmark.py --mode product --record --tasks <id> <id> …`, naming the tasks rather than using `--limit`, which takes an alphabetical prefix of the corpus. Both replay tests skip while the directory is empty, and say so |
+| `cassettes/` | 0 | replay mode | **None committed.** #182 deleted the #158 recording rather than refresh it: its three task ids came from the corpus #177 replaced and its profile was retired by #172. Recording is no longer gated on #181, which has landed (`agents/seniority.py` replaced the detector). To record one: `python eval/tailoring_benchmark.py --mode product --record --tasks <id> <id> …`, naming the tasks rather than using `--limit`, which takes an alphabetical prefix of the corpus. Both replay tests skip while the directory is empty, and say so |
 | `tests/memory_evals/` | 5 YAML | chat-memory eval | Recall across compression; not bound to any profile |
 
 **No dataset is bound to a profile except the tailoring benchmark's own.** That is why
@@ -255,7 +255,7 @@ reads as `lead` because one bullet says "saving staff ten hours weekly". So
 `role_level` (weight 0.10) has been comparing two mostly-wrong tiers for the
 whole life of this benchmark. #181 replaced the detector with
 `agents/seniority.py`, shared with `scrape_job_descriptions.py::classify_level`:
-the audit's `level_mismatch` fell from 124 to 7 postings (plus 18 that state no
+the audit's `level_mismatch` fell from 124 to 6 postings (plus 18 that state no
 tier and now read `unknown`), and the retired benchmark profile reads `unknown`
 instead of `lead`. Every `role_level` and composite figure recorded before #181
 is not comparable with one recorded after. The corpus labels were always sound;
