@@ -1082,6 +1082,10 @@ legacy readers keep working.
    refused or kept; no skills, section-order or job-rule change) is not a version: it returns
    `committed: false`, `reason: no_change` (`executor.NO_CHANGE`), and writes no node and no
    `TreeEvent`. A job's first plan always commits, even `nodes: []`.
+   A parent that carries a hand-edited `.tex` (`edited_tex`) the plan does not hold is refused
+   as a finalize violation, `discards_editor_edits` (#278, `harness/texdiff.py`), unless the plan
+   carried the edits over as nodes or sets `discard_editor_edits` (then
+   `discarded_editor_edits` records them). See `docs/harness.md` § 13.
 
 The vector's roles (`metric_vector`):
 

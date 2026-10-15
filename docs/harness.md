@@ -698,6 +698,30 @@ python -m web.local_ui --job <job_id>        # from a checkout
   asks before reloading.
 - **Edits reach the host.** Every `.tex` save and drag commits an `editor` node, so the
   host's next `get_head(since_event=...)` lists it under `editor_edits`.
+- **A `.tex` edit says which bullets it changed (#278).** The node keeps the user's text
+  as `edited_tex` next to a `content` that still holds the pre-edit bullets (the raw text
+  is never folded back into `content`: it would render without the support check).
+  `diff_nodes` therefore reads the source back, with `harness/texdiff.py` (a parser, no
+  model): the `%% ART-SECTION` markers and the formatter's headings give the item, and
+  `tex_edits` lists per item the bullets **revised** (id `<item key>#b<n>` on the earlier
+  version, text before and after), **added** and **removed**, the items whose bullets only
+  **moved**, and sections that moved. A region it cannot read as bullets (a heading, the
+  header, skills, the preamble, a deleted marker) comes back as a unified diff under
+  `unmapped`: a tex change is never reported as nothing. `get_head`'s `editor_edits` and
+  the prompt hook carry the same list, shortened, for the whole run of saves since the last
+  version that was not an editor edit.
+- **A commit never drops a `.tex` edit silently.** A committed version renders from its
+  `content`, so `execute_plan` on a parent whose `edited_tex` says more than its content
+  (after the parent's layout override is laid over it) refuses with the violation
+  `discards_editor_edits` and lists the edited bullets. The host either **carries the
+  edits over** as plan nodes (a `revise` with the user's text, a `delete_bullet` for a
+  removed bullet; they face the same gates as any edit, then the check is satisfied) or,
+  **after asking the user**, sets `discard_editor_edits: true`: the commit goes ahead and
+  the response records `discarded_editor_edits`. Unmapped regions and edits to an item a
+  plan cannot address (achievements) cannot be carried, so they need the flag. A drag
+  (a layout override) is not an edit to protect: the override is applied to the new
+  version (#277). A plan that changes nothing (`no_change`) commits nothing and refuses
+  nothing.
 
 ## 14. Learning offline
 

@@ -461,3 +461,84 @@ def test_a_newly_answered_job_rule_alone_still_commits(isolated_engine):
     out = execute_plan(uid, {"job_id": job["job_id"], "parent": first["node_id"], "nodes": []})
     assert out["committed"] and "reason" not in out
     assert [r["to"] for r in out["rules_applied"]] == ["Dec 2027"]
+
+
+# ── the editor shows the page the job renders (#278) ─────────────────────────
+
+ML_EXP = "exp:machine learning engineer|nimbus analytics"
+USER_TEXT = "Built and deployed ranking models serving 2M daily predictions with PyTorch."
+
+
+@pytest.fixture()
+def rule_job(isolated_engine, monkeypatch):
+    """The benchmark profile and a job with an answered graduation-date rule, committed once by the
+    host. Returns (user, TestClient, job_id, first node id)."""
+    import agents.formatter as fmt_module
+    import database.db as db_module
+    import web.auth as web_auth_module
+    import web.routers.jobs_router as jobs_router_module
+    from eval.profile_fixture import load_profile
+    from eval.scripted_host import open_task_job, seed_profile
+    from eval.tailoring_benchmark import PROFILES_DIR, load_tasks
+    from fastapi.testclient import TestClient
+    from harness import executor
+    from harness.tools import edu_key
+    from web.app import create_app
+
+    monkeypatch.setattr(db_module, "engine", isolated_engine)
+    monkeypatch.setattr(jobs_router_module, "engine", isolated_engine)
+    monkeypatch.setattr(fmt_module, "engine", isolated_engine)
+    monkeypatch.setattr(executor, "MEASURER", lambda texts: [1 for _ in texts])
+    uid = seed_profile(load_profile(PROFILES_DIR / "benchmark_profile.md"))
+    job_id = open_task_job(uid, load_tasks(limit=5)[3])
+    with Session(isolated_engine) as s:
+        edu = s.exec(select(Education).where(Education.user_id == uid)).one()
+        key = edu_key({"institution": edu.institution, "degree": edu.degree})
+    rule = dict(RULE, item_key=key)
+    rule_id = _upsert(uid, {"kind": "rule", "data": rule})["results"][0]["key"].split(":", 1)[1]
+    invoke("open_job", uid, {"job_id": job_id, "rule_answers": [
+        {"rule_id": rule_id, "answer": True, "quote": "must return to school"}]})
+    first = executor.execute_plan(uid, {"job_id": job_id})
+    assert first["committed"] and [r["to"] for r in first["rules_applied"]] == ["Dec 2027"]
+    with Session(isolated_engine) as s:
+        user = s.get(User, uid)
+    app = create_app()
+    app.dependency_overrides[web_auth_module.get_current_user] = lambda: user
+    return uid, TestClient(app, raise_server_exceptions=True), job_id, first["node_id"]
+
+
+def test_the_editor_seeds_its_tex_with_the_jobs_rule_overrides(rule_job):
+    uid, client, job_id, _ = rule_job
+    tex = client.get(f"/api/jobs/{job_id}/tex").json()["tex"]
+    assert "{B.S. Computer Science}{Dec 2027}" in tex and "{B.S. Computer Science}{2021}" not in tex
+    exported = client.get(f"/api/jobs/{job_id}/export", params={"format": "tex"})
+    assert exported.status_code == 200 and "{B.S. Computer Science}{Dec 2027}" in exported.text
+
+
+def test_an_editor_save_of_one_bullet_reports_that_bullet_and_nothing_for_education(rule_job):
+    """The tex the editor saves is the one it was seeded with, so only the typed change shows, and a
+    host plan that carries the bullet over commits without the discard flag."""
+    from harness import executor, tree
+
+    uid, client, job_id, first = rule_job
+    src = executor._KG(uid).source_bullets[ML_EXP]
+    tex = client.get(f"/api/jobs/{job_id}/tex").json()["tex"]
+    assert client.put(f"/api/jobs/{job_id}/tex", json={
+        "tex": tex.replace(src[0], USER_TEXT)}).status_code == 200
+    edit = tree.get_head(uid, job_id)["head"]
+    assert edit["node_id"] != first
+
+    out = invoke("diff_nodes", uid, {"from_node": first, "to_node": edit["node_id"]})
+    edits = out["tex_edits"]
+    assert [(b["change"], b["bullet"], b["before"], b["after"]) for b in edits["bullets"]] == [
+        ("revised", f"{ML_EXP}#b0", src[0], USER_TEXT)]
+    assert edits["unmapped"] == [] and edits["reordered"] == []
+
+    bullets = [{"text": USER_TEXT, "cites": [f"{ML_EXP}#b0"]}] + [
+        {"text": t, "cites": [f"{ML_EXP}#b{i}"]} for i, t in enumerate(src) if i]
+    done = executor.execute_plan(uid, {"job_id": job_id, "parent": edit["node_id"], "nodes": [{
+        "id": "user-edit", "op": "revise", "item_key": ML_EXP, "accept": {"improves": []},
+        "bullets": bullets}]})
+    assert done["nodes"][0]["status"] == "accepted", done["nodes"][0]["reason"]
+    assert done["violations"] == [] and done["committed"]
+    assert "discarded_editor_edits" not in done

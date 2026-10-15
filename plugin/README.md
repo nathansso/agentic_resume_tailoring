@@ -38,8 +38,10 @@ when you ask Claude to tailor a resume or update your experience.
 ## Hooks
 
 - **Before every message:** if you edited a resume in the editor since your last
-  message, Claude is told what you changed, so it builds on your edits instead of
-  overwriting them.
+  message, Claude is told what you changed (the bullets you reworded, added or
+  removed), so it builds on your edits. If a later tailoring run would drop a hand edit
+  to the `.tex`, ART refuses it and Claude has to either carry your edit over or ask you
+  before discarding it.
 - **Also before every message:** ART's memory gate reads your message. If it may state a
   lasting preference ("never mention Kafka"), Claude is asked to confirm it with you and
   record it. A clear, low-stakes one ("lead with Python") ART saves itself and Claude

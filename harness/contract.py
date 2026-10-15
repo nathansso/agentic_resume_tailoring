@@ -389,6 +389,66 @@ class TreeEventOut(_Model):
     created_at: str
 
 
+class ItemChange(_Model):
+    key: str
+    change: Literal["added", "removed", "revised"]
+    title: str
+    bullets_added: List[str] = Field(default_factory=list)
+    bullets_removed: List[str] = Field(default_factory=list)
+    reordered: bool = False
+
+
+class BulletEdit(_Model):
+    item: str = Field(description="The item key (exp:... or proj:...), or a section name for "
+                                  "bullets outside any item (achievements).")
+    title: str = ""
+    change: Literal["revised", "added", "removed"]
+    bullet: Optional[str] = Field(
+        None, description="'<item key>#b<n>': the bullet on the earlier version (revised, "
+                          "removed); absent for added.")
+    before: Optional[str] = None
+    after: Optional[str] = None
+    position: Optional[int] = Field(None, description="Index of the bullet in the edited source.")
+
+
+class ReorderedItem(_Model):
+    item: str
+    title: str = ""
+
+
+class UnmappedRegion(_Model):
+    region: str = Field(description="The ART-SECTION key (header, education, skills, ...), "
+                                    "'preamble' or 'document'.")
+    reason: str
+    diff: str = Field("", description="Unified diff of the region's lines outside the bullets.")
+
+
+class TexEdits(_Model):
+    bullets: List[BulletEdit] = Field(default_factory=list)
+    reordered: List[ReorderedItem] = Field(
+        default_factory=list, description="Items whose bullets only moved.")
+    section_order: Optional[Dict[str, List[str]]] = Field(
+        None, description="{before, after} when sections moved.")
+    unmapped: List[UnmappedRegion] = Field(
+        default_factory=list, description="Regions that cannot be read as bullets, as a "
+                                          "unified diff. A plan cannot carry these over.")
+    truncated: int = Field(0, description="Bullet edits left out of a short summary.")
+
+
+class EditChanges(_Model):
+    since_node: str = Field(description="The last version that was not an editor edit.")
+    items: List[ItemChange] = Field(default_factory=list)
+    skills_added: List[str] = Field(default_factory=list)
+    skills_removed: List[str] = Field(default_factory=list)
+    tex_changed: bool = False
+    layout_changed: bool = False
+    tex_edits: Optional[TexEdits] = None
+
+
+class EditorEdit(NodeSummary):
+    changes: Optional[EditChanges] = None
+
+
 class GetHeadInput(_Model):
     job_id: str
     since_event: Optional[int] = Field(
@@ -399,8 +459,10 @@ class GetHeadOutput(_Output):
     job_id: Optional[str] = None
     head: Optional[Node] = None
     events: List[TreeEventOut] = Field(default_factory=list)
-    editor_edits: List[NodeSummary] = Field(
-        default_factory=list, description="Edits the user made in the editor since the cursor.")
+    editor_edits: List[EditorEdit] = Field(
+        default_factory=list, description="Edits the user made in the editor since the cursor. "
+                                          "The last node of each run of editor edits carries "
+                                          "`changes`, what the run changed (#278).")
     cursor: int = 0
 
 
@@ -417,15 +479,6 @@ class DiffInput(_Model):
     to_node: str
 
 
-class ItemChange(_Model):
-    key: str
-    change: Literal["added", "removed", "revised"]
-    title: str
-    bullets_added: List[str] = Field(default_factory=list)
-    bullets_removed: List[str] = Field(default_factory=list)
-    reordered: bool = False
-
-
 class DiffOutput(_Output):
     from_node: Optional[str] = None
     to_node: Optional[str] = None
@@ -434,6 +487,10 @@ class DiffOutput(_Output):
     skills_removed: List[str] = Field(default_factory=list)
     tex_changed: bool = False
     layout_changed: bool = False
+    tex_edits: Optional[TexEdits] = Field(
+        None, description="When the hand-edited .tex differs: the bullets it revised, added or "
+                          "removed (with the '<item key>#b<n>' id on the earlier version), items "
+                          "whose bullets only moved, and unmapped regions as a unified diff (#278).")
 
 
 class CheckoutInput(_Model):
@@ -702,6 +759,10 @@ class ExecuteOutput(_Output):
                           "the plan left the page identical to its parent (every node reverted, "
                           "refused or kept, no skills or job-rule change), so no version was made. "
                           "Absent otherwise; see nodes for the per-node reasons.")
+    discarded_editor_edits: Optional[TexEdits] = Field(
+        None, description="Present when the commit went ahead with discard_editor_edits: the "
+                          "parent's hand edits to its .tex that this version does not hold "
+                          "(#278). Tell the user what was dropped.")
     nodes: List[NodeResult] = Field(default_factory=list)
     skills: Dict[str, List[str]] = Field(default_factory=dict)
     metrics: Dict[str, Any] = Field(
@@ -1019,7 +1080,9 @@ TOOLS: List[ToolSpec] = [
     ToolSpec(
         "get_head",
         "A job's current resume version, plus what changed after a cursor — including "
-        "edits the user made in the editor. Call before building on a version.",
+        "edits the user made in the editor. An editor edit to the .tex says which bullets it "
+        "revised, added or removed (editor_edits[].changes.tex_edits, kept short; diff_nodes has "
+        "all of it). Call before building on a version.",
         GetHeadInput, GetHeadOutput,
         _tree_call(lambda t, uid, job_id, since_event=None: t.get_head(uid, job_id, since_event))),
     ToolSpec(
@@ -1029,7 +1092,11 @@ TOOLS: List[ToolSpec] = [
         _tree_call(lambda t, uid, job_id: {"nodes": t.history(uid, job_id)})),
     ToolSpec(
         "diff_nodes",
-        "What changed between two versions, by item and bullet.",
+        "What changed between two versions, by item and bullet. When the user's hand-edited "
+        ".tex differs, tex_edits reads it back: per item the bullets it revised, added or "
+        "removed (with the '<item key>#b<n>' id, the text before and after), items whose "
+        "bullets only moved, and any region it cannot map to a bullet (heading, header, "
+        "skills) as a unified diff marked unmapped.",
         DiffInput, DiffOutput,
         _tree_call(lambda t, uid, from_node, to_node: {
             **{k: v for k, v in t.diff_nodes(uid, from_node, to_node).items()
@@ -1082,7 +1149,11 @@ TOOLS: List[ToolSpec] = [
         "bullets use op delete_bullet with cut_bullets (ids '<item key>#b<n>' on the parent "
         "version) and a because; to drop an item use op delete with a because. A delete or "
         "delete_bullet with a because faces the hard gates only: guard regressions are accepted "
-        "and reported under waived. A revise never gets that. Writes.",
+        "and reported under waived. A revise never gets that. When the parent carries hand "
+        "edits to its .tex that the plan does not hold, nothing commits: the violation "
+        "discards_editor_edits lists the edited bullets. Carry them over as nodes (a revise "
+        "with the user's text, a delete_bullet for a removed bullet) or, after asking the "
+        "user, set discard_editor_edits true. Writes.",
         ExecuteInput, ExecuteOutput,
         lambda uid, program, dry_run=False:
             _executor().execute_plan(uid, program, dry_run=dry_run),
