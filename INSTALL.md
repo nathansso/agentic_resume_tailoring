@@ -117,16 +117,19 @@ one before starting Claude Code or Codex, in PowerShell:
 `UV_CACHE_DIR` takes effect in newly started programs. If Application Control blocks
 `art-mcp.exe`, the plugin is unaffected, since it runs `art mcp`.
 
-### Jev (optional)
+### Jev (optional): strengthen the checks
 
-ART can ask [TypeSafe's Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev) a few narrow classification questions: does a
-revised bullet say more than its evidence, does a bullet reword a topic you banned, does a bullet
-show a requirement, is a message a standing preference, which of your saved bullets or tracks fits a
-job. Jev never writes resume text. It needs a TypeSafe API key, and **everything works without
-one**: with no key, every decision point runs its own deterministic fallback (word overlap, the
-literal term match, the host asking you) and no gate is skipped.
+ART works fully without Jev, so you can skip this section. If you have a TypeSafe API key, ART can
+use it, from your machine with no ART server in between, to strengthen some checks by asking
+[TypeSafe's Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev) a few narrow classification questions that plain rules answer less well: does a
+revised bullet say more than its cited evidence, does a bullet reword a topic you banned, does a
+bullet show a requirement, is a message a standing preference, which of your saved bullets or tracks
+fits a job. Jev never writes resume text. With no key, every decision point runs its own
+deterministic fallback (a check of the bullet's wording against its cited source, the literal term
+match, word overlap, the host asking you), and the hard gates still run on those rules; Jev adds
+the reworded cases they miss.
 
-**Set the key** in one of these places, checked in this order:
+**To turn it on, set the key** in one of these places, checked in this order:
 
 ```bash
 # 1. The environment ART is started from (the usual way: Claude Code and Codex start the

@@ -15,6 +15,7 @@ const S = {
   manual: { id: "other-clients", title: "Other MCP clients" },
   verify: { id: "check-it-worked", title: "Check that it worked" },
   optional: { id: "optional", title: "Optional extras" },
+  jev: { id: "jev", title: "Optional: strengthen the checks with Jev" },
   trouble: { id: "troubleshooting", title: "Troubleshooting" },
 };
 const toc = Object.values(S);
@@ -206,18 +207,29 @@ const toc = Object.values(S);
       there comes back to your agent on your next message.
     </p>
 
-    <h3>TypeSafe Jev key</h3>
+  </DocSection>
+
+  <DocSection section={S.jev}>
     <p>
-      ARTie can ask <a href="https://typesafe.ai/blog/introducing-system-one-models-and-jev" rel="noopener">TypeSafe's
-      Jev</a> a few narrow yes/no and multiple-choice questions: does a reworded bullet say more
-      than its evidence supports, does a bullet touch a topic you banned, which of your saved
-      bullets fits a job. Jev never writes resume text.
+      ARTie works fully without this, so skip it if you like. If you have a TypeSafe API key,
+      ARTie can use it, from your computer with no ARTie server in between, to ask <a href="https://typesafe.ai/blog/introducing-system-one-models-and-jev" rel="noopener">TypeSafe's
+      Jev</a> a few narrow yes/no and multiple-choice questions that plain rules answer less
+      well:
+    </p>
+    <ul>
+      <li>Does a reworded bullet say more than its cited source supports?</li>
+      <li>Does a bullet mention a topic you banned, in other words?</li>
+      <li>Which of your saved bullets fits a job best?</li>
+    </ul>
+    <p>
+      Jev never writes resume text. Without a key, each question falls back to a plain rule
+      (a check of the bullet's wording against its cited source, a literal term match, word
+      overlap, or your agent asking you), and those rules still gate your resume. Jev adds the
+      reworded cases they miss.
     </p>
     <p>
-      It needs a TypeSafe API key, and <strong>everything works without one</strong>. With no
-      key, each question falls back to a plain rule (word overlap, a literal term match, or your
-      agent asking you), and no safety check is skipped. To use a key, set it in the environment
-      Claude Code or Codex starts from, for example in your shell profile:
+      To turn it on, set the key in the environment Claude Code or Codex starts from, for
+      example in your shell profile:
     </p>
     <CommandBlock label="Shell profile (macOS, Linux, Git Bash)" lines={block("typesafe-key")} />
     <p>

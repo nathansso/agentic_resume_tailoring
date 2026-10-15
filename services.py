@@ -793,6 +793,133 @@ def delete_project(user_id: Optional[UUID], project_id: str) -> bool:
     return True
 
 
+# ── Dismissing a skill claim that nothing proves (issue #321) ────────────────
+# A skill no bullet cites came from a source the user does not control (a LinkedIn
+# skill list, a GitHub language). Dismissing it deletes the user's `UserSkill` rows
+# and writes a `DeletedEntry` tombstone that snapshots them, so a restore puts back
+# exactly what was there and a re-ingest (`agents/kg_store._save_skills`) skips it.
+
+_SKILL_ROW_FIELDS = ("evidence_source", "evidence_detail", "proficiency", "confidence_score",
+                     "is_core", "source_context", "created_at", "updated_at")
+
+
+def _skill_tombstones(session, user_id: UUID) -> list:
+    return list(session.exec(select(DeletedEntry).where(
+        DeletedEntry.user_id == user_id, DeletedEntry.entity_type == "skill")).all())
+
+
+def _clear_skill_tombstones(session, user_id: UUID, name: str) -> None:
+    """Forget a dismissal of `name`: the user is adding it again on purpose (#321). The
+    caller commits."""
+    from agents.skill_matching import skill_fold
+
+    folded = skill_fold(name)
+    for tomb in _skill_tombstones(session, user_id):
+        if folded and skill_fold(tomb.key_a) == folded:
+            session.delete(tomb)
+
+
+def dismiss_skill(user_id: Optional[UUID], skill_id: str) -> dict:
+    """Dismiss one of the user's skills that no bullet cites (issue #321).
+
+    Deletes every `UserSkill` row of the user for it and tombstones the skill. Raises
+    `LookupError` when the user has no such skill and `ValueError(message)` when a bullet
+    cites it (that is fixed by editing the bullet). The global `Skill` row stays.
+    """
+    from agents.skill_matching import canonical_key
+    from knowledge_graph.evidence_view import cited_skill_keys
+
+    sid = _as_uuid(skill_id)
+    if user_id is None or sid is None:
+        raise LookupError("Skill not found")
+    with Session(engine) as session:
+        owned = session.exec(select(UserSkill).where(
+            UserSkill.user_id == user_id, UserSkill.skill_id == sid)).first()
+        skill = session.get(Skill, sid) if owned else None
+    if skill is None:
+        raise LookupError("Skill not found")
+    # The same evidence computation as the map, so what the panel offers and what is allowed agree.
+    if f"skill/{sid}" in cited_skill_keys(user_id):
+        raise ValueError(f"A bullet cites {skill.name}. Edit the bullet to change that; "
+                         "only a skill nothing proves can be dismissed.")
+    with Session(engine) as session:
+        rows = session.exec(select(UserSkill).where(
+            UserSkill.user_id == user_id, UserSkill.skill_id == sid)).all()
+        if not rows:
+            raise LookupError("Skill not found")
+        snapshot = [{f: (getattr(r, f).isoformat() if hasattr(getattr(r, f), "isoformat")
+                         else getattr(r, f)) for f in _SKILL_ROW_FIELDS} for r in rows]
+        _clear_skill_tombstones(session, user_id, skill.name)
+        session.add(DeletedEntry(
+            user_id=user_id, entity_type="skill", key_a=canonical_key(skill.name), key_b=None,
+            payload={"skill_id": str(sid), "name": skill.name, "category": skill.category,
+                     "rows": snapshot}))
+        for r in rows:
+            session.delete(r)
+        session.commit()
+    return {"skill_id": str(sid), "name": skill.name}
+
+
+def list_dismissed_skills(user_id: Optional[UUID]) -> list[dict]:
+    """The skills the user dismissed, A to Z: `{skill_id, name, dismissed_at, sources}`."""
+    from knowledge_graph.evidence_view import skill_source_kind
+
+    if user_id is None:
+        return []
+    with Session(engine) as session:
+        tombs = _skill_tombstones(session, user_id)
+    out = []
+    for t in tombs:
+        payload = t.payload or {}
+        if not payload.get("skill_id"):
+            continue
+        out.append({
+            "skill_id": payload["skill_id"], "name": payload.get("name") or t.key_a,
+            "dismissed_at": as_utc(t.created_at).isoformat(),
+            "sources": sorted({skill_source_kind(r.get("evidence_source"))
+                               for r in payload.get("rows") or []}),
+        })
+    return sorted(out, key=lambda d: (d["name"].lower(), d["name"]))
+
+
+def restore_skill(user_id: Optional[UUID], skill_id: str) -> Optional[dict]:
+    """Put a dismissed skill back exactly as it was and drop its tombstone. None when the
+    user has not dismissed it."""
+    from datetime import datetime
+
+    sid = _as_uuid(skill_id)
+    if user_id is None or sid is None:
+        return None
+    with Session(engine) as session:
+        tomb = next((t for t in _skill_tombstones(session, user_id)
+                     if (t.payload or {}).get("skill_id") == str(sid)), None)
+        if tomb is None:
+            return None
+        payload = tomb.payload
+        skill = session.get(Skill, sid)
+        if skill is None:       # the global row was removed meanwhile: bring it back under its id
+            skill = Skill(skill_id=sid, name=payload.get("name") or tomb.key_a,
+                          category=payload.get("category"))
+            session.add(skill)
+            session.flush()
+        for snap in payload.get("rows") or []:
+            fields = dict(snap)
+            for stamp in ("created_at", "updated_at"):
+                raw = fields.get(stamp)
+                if isinstance(raw, str):
+                    try:
+                        fields[stamp] = datetime.fromisoformat(raw)
+                    except ValueError:
+                        fields.pop(stamp)
+                elif raw is None:
+                    fields.pop(stamp, None)
+            session.add(UserSkill(user_id=user_id, skill_id=sid, **fields))
+        name = skill.name
+        session.delete(tomb)
+        session.commit()
+    return {"skill_id": str(sid), "name": name}
+
+
 def get_jobs() -> list[dict]:
     with Session(engine) as session:
         jobs = session.exec(select(JobDescription)).all()
@@ -1019,6 +1146,7 @@ def add_skill_to_profile(user_id: UUID, skill_name: str, target: Optional[str] =
             ).first()
             if existing:
                 return f"'{skill_name}' is already in your profile."
+            _clear_skill_tombstones(session, user_id, skill.name)    # asking for it is not a re-ingest (#321)
             evidence = f"manual:{target}" if target else "manual"
             user_skill = UserSkill(
                 user_id=user_id,
@@ -1094,6 +1222,7 @@ def create_artifact_from_chat(
                 if existing:
                     return f"'{name}' is already in your profile."
                 proficiency = data.get("proficiency")
+                _clear_skill_tombstones(session, user_id, skill.name)    # asking for it is not a re-ingest (#321)
                 session.add(UserSkill(
                     user_id=user_id,
                     skill_id=skill.skill_id,

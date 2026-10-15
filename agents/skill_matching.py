@@ -75,6 +75,12 @@ def canonical_key(name: str) -> str:
     return canonical_name(name).lower()
 
 
+def skill_fold(name: str) -> str:
+    """`canonical_key` with punctuation and spacing folded, so "Time-Series Analysis" and
+    "time series analysis" are one identity. What a skill tombstone is matched on (#321)."""
+    return re.sub(r"[^a-z0-9+#]+", " ", canonical_key(name)).strip()
+
+
 def skill_forms(name: str) -> Tuple[Set[str], Set[str]]:
     """Every spelling that names this skill, as `(long, short)`.
 

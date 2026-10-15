@@ -129,6 +129,33 @@ def set_skill_core(body: SkillCoreUpdate, user: User = Depends(get_current_user)
     return {"result": services.set_skill_core(user.user_id, body.name, body.is_core)}
 
 
+@router.get("/skills/dismissed")
+def get_dismissed_skills(user: User = Depends(get_current_user)):
+    """Skills the user dismissed from the evidence map, restorable (issue #321)."""
+    return services.list_dismissed_skills(user.user_id)
+
+
+@router.post("/skills/{skill_id}/dismiss")
+def dismiss_skill(skill_id: str, user: User = Depends(get_current_user)):
+    """Drop a skill no bullet cites and keep it dropped on re-import (issue #321). A skill a
+    bullet cites is refused (409): edit the bullet instead."""
+    try:
+        return services.dismiss_skill(user.user_id, skill_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.post("/skills/{skill_id}/restore")
+def restore_skill(skill_id: str, user: User = Depends(get_current_user)):
+    """Bring a dismissed skill back exactly as it was (issue #321)."""
+    row = services.restore_skill(user.user_id, skill_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="No dismissed skill with that id")
+    return row
+
+
 @router.get("/experiences")
 def get_experiences(user: User = Depends(get_current_user)):
     return services.get_experiences(user.user_id)

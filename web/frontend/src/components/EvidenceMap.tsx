@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Search } from "lucide-react";
 import { listJobs } from "../api/jobs";
-import { getEvidenceView } from "../api/profile";
-import type { EvidenceItem, EvidenceKind, EvidenceView, JobListItem, JobSkillRow } from "../types";
+import { getDismissedSkills, getEvidenceView } from "../api/profile";
+import type {
+  DismissedSkill, EvidenceItem, EvidenceKind, EvidenceView, JobListItem, JobSkillRow,
+} from "../types";
 import {
-  areaFoldKey, dateRange, estimateTextWidth, firstMatch, fitText, ghostBlock, jobOverlay, layoutMap,
-  neighborhood, sourceArcs, type JobOverlay, type MapLayout, type PlacedArea, type PlacedRow,
+  DISMISSED_KEY, areaFoldKey, dateRange, estimateTextWidth, firstMatch, fitText, ghostBlock, isPanelKey,
+  jobOverlay, layoutMap, neighborhood, sourceArcs, type JobOverlay, type MapLayout, type PlacedArea, type PlacedRow,
 } from "../lib/evidenceMap";
 import { cn } from "../lib/utils";
 import { useJobSkills } from "../hooks/useJobSkills";
@@ -61,6 +63,7 @@ function Pips({ value, x }: { value: number; x: number }) {
 
 export function EvidenceMap({ defaultJobId = null, onChanged }: { defaultJobId?: string | null; onChanged?: () => void }) {
   const [view, setView] = useState<EvidenceView | null>(null);
+  const [dismissed, setDismissed] = useState<DismissedSkill[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
@@ -78,7 +81,9 @@ export function EvidenceMap({ defaultJobId = null, onChanged }: { defaultJobId?:
 
   const reload = useCallback(async () => {
     try {
-      setView(await getEvidenceView());
+      const [next, gone] = await Promise.all([getEvidenceView(), getDismissedSkills()]);
+      setView(next);
+      setDismissed(gone);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load the evidence map");
@@ -121,13 +126,15 @@ export function EvidenceMap({ defaultJobId = null, onChanged }: { defaultJobId?:
   const known = useMemo(() => new Set([
     ...(view?.items ?? []).map((i) => i.key), ...(view?.skills ?? []).map((s) => s.key),
   ]), [view]);
-  const current = selected && (known.has(selected) || selected.startsWith("ghost:")) ? selected : null;
+  const current = selected && (
+    known.has(selected) || selected.startsWith("ghost:") || (selected === DISMISSED_KEY && dismissed.length > 0)
+  ) ? selected : null;
 
   // What stays lit: the hovered or selected node and what it links; else the search hits and theirs.
   const lit = useMemo(() => {
     if (!view || !layout) return null;
     const active = hover ?? current;
-    if (active && !active.startsWith("ghost:")) return neighborhood(view, active);
+    if (active && !isPanelKey(active)) return neighborhood(view, active);
     if (!active && layout.matches) {
       const out = new Set<string>();
       layout.matches.forEach((k) => neighborhood(view, k).forEach((n) => out.add(n)));
@@ -148,7 +155,7 @@ export function EvidenceMap({ defaultJobId = null, onChanged }: { defaultJobId?:
 
   if (error) return <p className="p-4 text-sm text-destructive">{error}</p>;
   if (!view || !layout) return <p className="p-4 text-sm text-muted-foreground">Loading…</p>;
-  if (view.items.length === 0 && view.skills.length === 0) {
+  if (view.items.length === 0 && view.skills.length === 0 && dismissed.length === 0) {
     return (
       <p className="p-4 text-sm text-muted-foreground">
         Nothing to map yet. Ingest a resume or GitHub profile and the map will show which of your
@@ -164,6 +171,7 @@ export function EvidenceMap({ defaultJobId = null, onChanged }: { defaultJobId?:
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <Toolbar
           view={view} query={query} setQuery={setQuery}
+          dismissedCount={dismissed.length} onOpenDismissed={() => setSelected(DISMISSED_KEY)}
           onEnter={() => { const k = firstMatch(layout); if (k) setSelected(k); }}
           jobOn={jobOn} setJobOn={setJobOn} jobs={jobs} jobId={jobId} setJobId={setJobId}
           jobSkills={jobSkills} jobError={jobError} overlay={overlay}
@@ -189,7 +197,7 @@ export function EvidenceMap({ defaultJobId = null, onChanged }: { defaultJobId?:
         </div>
       </div>
       <EvidencePanel
-        view={view} selected={current} overlay={overlay} jobOn={jobOn}
+        view={view} selected={current} overlay={overlay} jobOn={jobOn} dismissed={dismissed}
         onSelect={setSelected} onSaved={async () => { await reload(); onChanged?.(); }}
       />
     </div>
@@ -217,6 +225,7 @@ function Count({ n, label, tone }: { n: number; label: string; tone?: "proven" |
 
 function Toolbar(props: {
   view: EvidenceView;
+  dismissedCount: number; onOpenDismissed: () => void;
   query: string; setQuery: (q: string) => void; onEnter: () => void;
   jobOn: boolean; setJobOn: (on: boolean) => void;
   jobs: JobListItem[] | null; jobId: string | null; setJobId: (id: string) => void;
@@ -232,6 +241,14 @@ function Toolbar(props: {
         <Count n={stats.unevidenced} label="with no evidence" />
         <Count n={stats.github_only} label="GitHub only" />
         <Count n={stats.needs_text} label={stats.needs_text === 1 ? "item needs a description" : "items need a description"} tone="gap" />
+        {props.dismissedCount > 0 && (
+          <button
+            type="button" onClick={props.onOpenDismissed}
+            className="rounded-md border border-border px-2 py-0.5 text-[12px] transition-colors hover:bg-muted hover:text-foreground"
+          >
+            Dismissed · <span className="font-mono tabular-nums">{props.dismissedCount}</span>
+          </button>
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <label className="relative inline-flex">
