@@ -26,7 +26,7 @@ from database.db import engine, ordered_blurbs
 from database.models import (
     Achievement, Education, Experience, Project, ProjectBlurb, Skill, UserSkill,
 )
-from knowledge_graph.areas import skill_area
+from knowledge_graph.areas import skill_areas
 from knowledge_graph.builder import SkillGraphBuilder, repo_slug
 
 EMPTY_VIEW: Dict[str, Any] = {
@@ -181,6 +181,7 @@ def build_evidence_view(user_id: Optional[UUID]) -> Dict[str, Any]:
         m["sources"].add(skill_source_kind(us.evidence_source))
         m["is_core"] = m["is_core"] or bool(us.is_core)
 
+    areas = skill_areas((n, skill_nodes[n].get("category")) for n in skill_nodes)   # one cache read
     skills: List[Dict[str, Any]] = []
     skill_key_by_name: Dict[str, str] = {}
     for name in sorted(skill_nodes, key=lambda n: (n.lower(), n)):
@@ -190,7 +191,7 @@ def build_evidence_view(user_id: Optional[UUID]) -> Dict[str, Any]:
         skill_key_by_name[name] = key
         skills.append({
             "key": key, "name": name, "category": node.get("category") or "",
-            "area": skill_area(name, node.get("category")),
+            "area": areas[(name, node.get("category"))],
             "proficiency": m["proficiency"], "sources": sorted(m["sources"]),
             "is_core": m["is_core"],
         })

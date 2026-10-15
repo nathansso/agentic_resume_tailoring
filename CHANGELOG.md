@@ -43,10 +43,36 @@ Phase 5 of 7 of the preference-anchoring plan (#295–#300). A preference about 
 - **Soft means never a gate.** A soft section exclusion, section order and skills limit are defaults a plan may override; a soft page, bullet-lines or bullets-per-item limit is only measured. The exception: a soft `pages` or `max_skills` that *widens* a built-in default (two pages where one is built in) moves the default, because there is no tighter number to measure against. Hard rules are the only gates.
 - **`Finalize` fields are optional, so `program_id` changes for every program** (#278 did the same). Saved programs load, but their stored numbers count as set: patching an old saved program with `max_skills: 18` under a hard `max_skills: 5` rule is refused, naming the rule.
 - **Limit param names.** `max_skills` is the count (the issue's `skills` would collide with `skills: 0`, the section); `max_bullet_lines` is added because it is a `Finalize` default, and `bullets_per_item` is new on `Finalize`. `pages` is 1 to 3.
+- **Negated and non-suppress phrasings are never read as an exclusion** (found in review of #340). `infer_limit` first returned `{'projects': 0}` for "don't skip the projects section", and an `emphasize` preference "never drop my experience section" would have become a hard rule removing the section. A drop verb with a negator before it in the same clause ("don't", "do not", "never", "no need to") now returns None, so does any section drop when the polarity is `emphasize` or `reframe`, and a negated drop vetoes a `section:` target too. "I don't want a projects section" is still a drop. Page counts are unaffected by polarity ("Keep it to one page", reframe, is still one page).
 - **`bullets_per_item` cuts nothing by itself.** A page over it is a violation with a `delete_bullet` hint; the executor does not choose which bullets to drop.
 - **A style note at strength 5 is still advice.** The result says so (`enforcement`); a rule about tone cannot be checked by code.
 - **Not in scope, as asked:** migrating `section:` rows (#300), any UI (#331), the briefing push after compaction (`hooks`, #299). The reminder block is #299's.
 - **Postgres leg not run locally** (the Docker daemon was not running); `ResumeRule` uses the same JSON columns as `UserPreference`. CI runs it. `test_timezone_datetimes.py::test_no_source_file_reads_a_naive_utc_clock` is the known local-only failure (untracked folders).
+
+---
+
+## Issue 318 — Skill areas via keyword table and cached Jev
+**Status:** complete | **Tests:** 2991 pass on SQLite (16 new), 24 skipped, 0 fail; the Postgres leg was not run locally (the Docker daemon was not running), CI's required Postgres leg covers it
+
+A skill the #136 keyword table cannot place used to land in "Other" for good. It is now asked of Jev once, when it is ingested, and the answer is cached, so the evidence map, its job overlay and the coming area map group it reliably. Listing a profile's skills still never makes a call: the read path only reads the cache.
+
+### What shipped
+
+- **`harness/decisions/skill_area.py`** (`skill_area@v1`): one `Choice` per skill over the seven areas plus `Other`, the option descriptions being `areas.AREA_DESCRIPTIONS` (defined once, next to `AREAS`). `classify` is the write path (`engine.decide`: cache, one batched request for the misses, fallback on no key, mode `off` or an API error); `cached` is the read path.
+- **`engine.lookup`**: a cache-only read of Jev answers, in any mode, that never calls the API and never raises on a miss. The read path uses it, so `ART_JEV_MODE=off` still shows areas Jev already decided.
+- **`knowledge_graph/areas.py`**: `keyword_area` is the old rule path unchanged; `skill_area(name, category)` (signature kept) and the new batch `skill_areas(pairs)` run it first and consult the cache only for `Other`. `evidence_view` now makes one batch call for all of a profile's skills; its output is identical.
+- **Write time**: `KGStoreMixin._save_skills` classifies the skills it touched that the table leaves in `Other`, in one request, after the save. It cannot fail or roll back an ingest (any error is swallowed), and with no key or Jev off it does nothing.
+- **Backfill**: `knowledge_graph.areas.classify_unplaced_skills(user_id)` and `python scripts/classify_unplaced_skills.py --user-id <uuid> [--dry-run]`. It asks only for skills with no cached answer, so a second run makes no call.
+- **Tests (16 new, `tests/test_skill_area.py`)**: keyword path makes no Jev work; one request carries every unplaced skill of an ingest and the table's skills are not asked; the view returns the cached area with Jev off and no live client requested; a read miss is `Other` with no network; no key, an API 401 and a crash in the classifier each leave the ingest succeeding with `Other`; an `Other` answer is cached; a version bump invalidates; the backfill (dry run, scope to one user, once only, no key); `engine.lookup` modes and point check; the question text.
+
+### Deviations from spec
+
+- **The skill is in the question, not the state.** The plan said state = `{name, category}`, but `engine.decide` sends one state per request, so that would be one request per skill. The state is a constant and each question names its skill, so one request carries an ingest's unplaced skills and each skill still has its own cache row (the key hashes the question). The name is not case-folded; "Figma" and "figma" are separate rows.
+- **No confidence threshold.** The area is Jev's own choice. A wrong area costs a drag in the map, not a wrong resume, and there is no labelled set to fit one on; `Answer.p` is available if misfilings show up.
+- **The read path ignores `ART_JEV_MODE`** (plan: `mode_override="replay"` and catch the miss). `engine.lookup` is a plain cache read instead, which also avoids losing every hit in a batch to the first miss. Mode `off` still stops any request.
+- **Backfill is a `scripts/` entry point, not an `art` verb.** No existing CLI verb or harness tool fits a one-off per-user maintenance run cleanly. It takes `--user-id` explicitly because `DATABASE_URL` may point at production.
+- **`services.get_job_skills` is untouched** (parallel work on #319); it calls `skill_area` per skill, so it makes one cache query per skill the table cannot place.
+- **Not done:** the Postgres leg (Docker daemon not running); a live run against TypeSafe (tests use a fake transport). Skills ingested by `agents/job_analyzer.py` and `agents/chat.py` (which write `Skill` rows without `_save_skills`) are classified by the backfill or the next ingest that touches them, not at their own write.
 
 ---
 

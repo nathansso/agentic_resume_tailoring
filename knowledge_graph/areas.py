@@ -1,21 +1,29 @@
-"""Skill areas for the evidence map (issue #136).
+"""Skill areas for the evidence map (issue #136, #318).
 
 `Skill.category` is free text ("Programming Language", "Languages & Libraries",
 "Technique", ...), far too many values to group a skills column by. This maps a
-skill to one of a fixed, small set of areas with a keyword table. It is a pure
-function of `(name, category)`: no model call, no storage, the same answer on
-every request. #318 replaces the keyword table with a cached Jev call; callers
-only ever see `skill_area`, so that swap stays inside this module.
+skill to one of a fixed, small set of areas, in two steps:
 
-Order of evidence, most specific first:
-1. the skill's name, against explicit name tables (a language is a language
-   whatever category an ingest gave it);
-2. the curated name -> bucket map in `agents.skill_postprocessor`;
-3. the free-text category, tokenized so "ai" does not match "email";
-4. "Other".
+1. **The keyword table** (`keyword_area`), a pure function of `(name, category)`: no
+   model call, no storage, the same answer on every request. Most specific first:
+   the skill's name against explicit name tables (a language is a language whatever
+   category an ingest gave it); the curated name -> bucket map in
+   `agents.skill_postprocessor`; the free-text category, tokenized so "ai" does not
+   match "email".
+2. **Cached Jev** (#318), only for a skill the table leaves in "Other".
+   `harness/decisions/skill_area.py` asks once per skill, when the skill is written
+   (`KGStoreMixin._save_skills`) or by `classify_unplaced_skills` for a profile that
+   already exists, and the answer lives in the Jev decision cache. `skill_area` and
+   `skill_areas` only *read* that cache: they never make a call, so a request that
+   lists a profile's skills stays offline and fast, and a skill nobody has classified
+   yet reads as "Other".
+
+Callers only ever see `skill_area` / `skill_areas`. A misfiled skill is fixed here (a
+name table) or in the Jev label set (`AREA_DESCRIPTIONS`, with a version bump), never
+per user.
 """
 import re
-from typing import Optional
+from typing import Dict, Iterable, Optional, Tuple
 
 from agents.skill_postprocessor import (
     AIML, CLOUD, DATA, LANGS, SKILL_CATEGORIES, TOOLS, normalize_skill_name,
@@ -32,6 +40,20 @@ OTHER = "Other"
 
 # The fixed set, in the order the UI falls back to for ties.
 AREAS = (LANGUAGES, ML_AI, DATA_AREA, INFRA, WEB, TOOLS_AREA, PRACTICES, OTHER)
+
+# What each area holds, in words: the option descriptions of the Jev question (#318).
+# Rewording one means bumping `harness.decisions.skill_area.VERSION`.
+AREA_DESCRIPTIONS = {
+    LANGUAGES: "Programming, query and markup languages, such as Python, SQL, C++ or HTML.",
+    ML_AI: "Machine learning, deep learning, NLP, LLMs and the libraries and methods behind them.",
+    DATA_AREA: "Data analysis, statistics, databases, ETL, data libraries and visualization.",
+    INFRA: "Cloud platforms, deployment, containers, networking, DevOps and hosting.",
+    WEB: "Web and mobile development: frameworks, front end, back end and APIs.",
+    TOOLS_AREA: "Software tools and platforms used day to day, such as editors, design and "
+                "project tools, version control or office software.",
+    PRACTICES: "Methods and working practices: testing, agile, system design and soft skills "
+               "such as communication or leadership.",
+}
 
 _LANGUAGE_NAMES = frozenset((
     "python", "sql", "r", "java", "javascript", "typescript", "c", "c++", "c#", "go",
@@ -120,6 +142,76 @@ def _area_from_category(category: Optional[str]) -> Optional[str]:
     return None
 
 
+def keyword_area(name: str, category: Optional[str] = None) -> str:
+    """The keyword table's area for a skill: one of `AREAS`, `OTHER` when it cannot place it."""
+    return _area_from_name(name) or _area_from_category(category) or OTHER
+
+
+def skill_areas(pairs: Iterable[Tuple[str, Optional[str]]]) -> Dict[Tuple[str, Optional[str]], str]:
+    """`{(name, category): area}` for every pair: the keyword table, then the Jev decision
+    cache for the pairs the table leaves in `OTHER` (one query for all of them). Cache only,
+    never a live call; a pair the cache does not hold stays `OTHER`."""
+    pairs = list(pairs)
+    out = {pair: keyword_area(*pair) for pair in pairs}
+    unplaced = [pair for pair, area in out.items() if area == OTHER]
+    if unplaced:
+        from harness.decisions import skill_area as jev_area
+
+        for pair, area in jev_area.cached(unplaced).items():
+            out[pair] = area if area in AREAS else OTHER
+    return out
+
+
 def skill_area(name: str, category: Optional[str] = None) -> str:
     """The area a skill is listed under in the evidence map. Always one of `AREAS`."""
-    return _area_from_name(name) or _area_from_category(category) or OTHER
+    area = keyword_area(name, category)
+    return area if area != OTHER else skill_areas([(name, category)])[(name, category)]
+
+
+def classify_unplaced_skills(user_id, *, client=None, dry_run: bool = False) -> Dict[str, int]:
+    """Classify, with Jev, a user's skills that the keyword table leaves in `OTHER`.
+
+    The write path for skills that were ingested before #318, or while Jev was off or had no
+    key: `_save_skills` does the same for new ones. A skill already decided (including a
+    decision of "Other") is read from the cache, so a second run makes no call. Returns
+    `{skills, unplaced, classified, asked, fallback}`: the user's skills, those left in
+    `OTHER`, those now placed in an area, how many answers Jev gave (not the cache), and
+    how many fell back (no key, mode `off`, an API error). `dry_run` counts and asks nothing.
+    """
+    from sqlmodel import Session, select
+
+    import database.db as _db
+    from database.models import Skill, UserSkill
+
+    with Session(_db.engine) as session:
+        rows = session.exec(select(Skill).join(UserSkill, UserSkill.skill_id == Skill.skill_id)
+                            .where(UserSkill.user_id == user_id)).all()
+        pairs = sorted({(r.name, r.category) for r in rows}, key=lambda p: (p[0].lower(), p[0], p[1] or ""))
+    unplaced = [p for p in pairs if keyword_area(*p) == OTHER]
+    stats = {"skills": len(pairs), "unplaced": len(unplaced), "classified": 0, "asked": 0,
+             "fallback": 0}
+    if dry_run or not unplaced:
+        return stats
+    from harness.decisions import skill_area as jev_area
+
+    for area, source in jev_area.classify(unplaced, client=client).values():
+        stats["classified"] += 1 if area and area != OTHER else 0
+        stats["asked"] += 1 if source == "jev" else 0
+        stats["fallback"] += 1 if source == "fallback" else 0
+    return stats
+
+
+def classify_skills_at_write(skills: Iterable[Tuple[str, Optional[str]]], *, client=None) -> int:
+    """Classify freshly written skills the keyword table cannot place; returns how many Jev
+    answered. Best effort by contract: it never raises, so an ingest cannot fail or stall on
+    it, and with no key, mode `off` or an API error it quietly places nothing."""
+    try:
+        unplaced = [p for p in skills if keyword_area(*p) == OTHER]
+        if not unplaced:
+            return 0
+        from harness.decisions import skill_area as jev_area
+
+        return sum(1 for _, source in jev_area.classify(unplaced, client=client).values()
+                   if source == "jev")
+    except Exception:
+        return 0

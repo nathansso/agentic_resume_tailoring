@@ -143,6 +143,12 @@ _SECTION_WORD = re.compile(
     r"\s+section\b", re.IGNORECASE)
 _NEGATED = re.compile(r"\b(?:don['’]?t|do\s+not|doesn['’]?t|isn['’]?t|aren['’]?t|no\s+need|"
                       r"not\s+required|not\s+necessary)\b", re.IGNORECASE)
+# A negator within two words before a drop verb: "don't skip", "never drop my", "do not remove the".
+_NEGATED_DROP = re.compile(
+    r"\b(?:don\W?t|do\s+not|doesn\W?t|never|not|won\W?t|shouldn\W?t|can\W?t|cannot|"
+    r"no\s+need\s+to)\s+(?:\w+\s+){0,2}?"
+    r"(?:skip|drop|omit|remove|exclude|hide|delete|leave\s+(?:off|out))\b",
+    re.IGNORECASE)
 _SECTION_OF = {"project": "projects", "projects": "projects", "experience": "experience",
                "experiences": "experience", "education": "education", "skill": "skills",
                "skills": "skills", "achievement": "achievements", "achievements": "achievements",
@@ -162,15 +168,21 @@ def infer_limit(text: str, target: Optional[str] = None,
     target = " ".join((target or "").split())
     found: List[Dict[str, Any]] = []
 
+    # A section is left off only when the user said to drop it. A negated drop ("don't skip the
+    # projects section", "never drop my experience section") says the opposite, and an `emphasize`
+    # or `reframe` preference is never an exclusion: either way the host is asked for params.
+    drops = polarity in (None, "suppress") and not _NEGATED_DROP.search(text)
     m = re.match(r"^section\s*:\s*(\w+)$", target, re.IGNORECASE)
-    if m and polarity == "suppress" and m.group(1).lower() in SECTION_NAMES:
+    if m and polarity == "suppress" and drops and m.group(1).lower() in SECTION_NAMES:
         found.append({m.group(1).lower(): 0})
-    elif not m:
+    elif not m and drops:
         for hit in _SECTION_WORD.finditer(text):
             before = text[:hit.start()]
             name = _SECTION_OF.get(re.sub(r"^work\s+", "", hit.group("name").lower()))
             if name and _DROP.search(before + " " + hit.group(0)):
                 found.append({name: 0})
+    elif not m and _SECTION_WORD.search(text):
+        return None                    # a section is named, and the words do not drop it
     pages = {_NUMBER[p.group("n").lower()] for p in _PAGES.finditer(text)}
     if pages and _NEGATED.search(text):
         return None                    # "don't keep it to one page" is not a limit

@@ -77,6 +77,23 @@ def test_invalid_params_are_refused_with_the_shape(kind, params):
     ("Don't keep it to one page", None, None, None),              # negated
     ("Skip the projects I did in school", None, None, None),      # not the section
     ("Lead with projects", "section:projects", "emphasize", None),
+    # a negated drop says the opposite, and an emphasize is never an exclusion (review of #340)
+    ("don't skip the projects section", None, None, None),
+    ("Don't skip the projects section", None, "suppress", None),
+    ("never drop my experience section", None, None, None),
+    ("do not remove the education section", None, None, None),
+    ("no need to hide the skills section", None, None, None),
+    ("Never drop my experience section", "section:experience", "suppress", None),
+    ("never drop my experience section", None, "emphasize", None),
+    ("skip the projects section", None, "emphasize", None),
+    ("skip the projects section", None, "reframe", None),
+    # the plain drops still read
+    ("no projects section", None, None, {"projects": 0}),
+    ("skip the projects section", None, None, {"projects": 0}),
+    ("skip the projects section", None, "suppress", {"projects": 0}),
+    ("I don't want a projects section", None, None, {"projects": 0}),
+    ("Please remove the education section", None, "suppress", {"education": 0}),
+    ("Keep it to one page", None, "reframe", {"pages": 1}),
 ])
 def test_only_the_obvious_limits_are_read_from_words(text, target, polarity, expected):
     assert R.infer_limit(text, target, polarity) == expected
@@ -625,3 +642,15 @@ def test_a_soft_page_limit_that_widens_the_built_in_default_moves_it(env):
     [soft] = [s for s in out["soft_preferences"] if s["param"] == "pages"]
     assert soft["status"] == "applied"
     assert [a["param"] for a in out["rules"]["applied"]] == ["pages"]
+
+
+def test_a_negated_drop_stores_no_rule_through_record_preference(env):
+    from harness import memory
+
+    uid, _, _ = env
+    for polarity, target in (("emphasize", "section: experience"), ("suppress", "section: experience"),
+                             ("emphasize", "experience section")):
+        out = memory.record_preference(uid, "Never drop my experience section", polarity, target, 5)
+        assert out["status"] == "refused" and out["route"]["tool"] == "record_rule", out
+    assert services.load_resume_rules(uid, include_inactive=True) == []
+    assert services.load_preferences(uid) == []
