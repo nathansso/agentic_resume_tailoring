@@ -1,0 +1,19 @@
+---
+// A short aside: a tip, a warning, or the plain-words explanation of a term.
+interface Props {
+  title: string;
+  tone?: "note" | "warn";
+}
+
+const { title, tone = "note" } = Astro.props;
+---
+
+<aside
+  class:list={[
+    "callout my-5 min-w-0 rounded-lg border px-4 py-3 text-sm",
+    tone === "warn" ? "border-warning/50 bg-warning/10" : "border-border bg-card",
+  ]}
+>
+  <p class="font-semibold">{title}</p>
+  <div class="callout-body mt-1 text-muted-foreground"><slot /></div>
+</aside>

@@ -1,0 +1,92 @@
+---
+// One block of commands with a copy button. Long lines scroll inside the block
+// (never the page), and the button sits in a header bar so it stays put while
+// the code scrolls.
+interface Props {
+  lines: string[];
+  /** Where to run it: "In Claude Code", "In a terminal", "PowerShell"... */
+  label: string;
+}
+
+const { lines, label } = Astro.props;
+---
+
+<figure class="cmd my-4 min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card">
+  <figcaption class="flex items-center justify-between gap-3 border-b border-border px-3 py-1.5 text-xs text-muted-foreground">
+    <span>{label}</span>
+    <button
+      type="button"
+      data-copy
+      class="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 font-medium text-foreground transition-colors hover:bg-secondary"
+    >
+      <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="9" y="9" width="11" height="11" rx="2"></rect>
+        <path d="M5 15V6a2 2 0 0 1 2-2h9"></path>
+      </svg>
+      <span data-copy-label>Copy</span>
+    </button>
+  </figcaption>
+  <pre
+    class="overflow-x-auto px-3 py-3 font-mono text-[13px] leading-relaxed"
+    tabindex="0"
+    aria-label={`${label}: commands`}><code data-copy-source>{lines.join("\n")}</code></pre>
+  <span class="sr-only" role="status" aria-live="polite" data-copy-status></span>
+</figure>
+
+<script>
+  // Copy through the async clipboard API where the page is allowed to use it,
+  // and through a hidden textarea + execCommand where it isn't (http, older
+  // browsers, an embedded webview). Either way the button says what happened.
+  async function copyText(text: string): Promise<boolean> {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {
+      // Permission denied or no focus: fall through to the textarea route.
+    }
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.top = "0";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    try {
+      return document.execCommand("copy");
+    } catch {
+      return false;
+    } finally {
+      area.remove();
+    }
+  }
+
+  document.querySelectorAll<HTMLButtonElement>("button[data-copy]").forEach((button) => {
+    const figure = button.closest("figure");
+    const label = button.querySelector<HTMLElement>("[data-copy-label]");
+    const status = figure?.querySelector<HTMLElement>("[data-copy-status]");
+    const code = figure?.querySelector<HTMLElement>("[data-copy-source]");
+    if (!code || !label) return;
+
+    let timer: number | undefined;
+    button.addEventListener("click", async () => {
+      const ok = await copyText(code.textContent ?? "");
+      label.textContent = ok ? "Copied" : "Press Ctrl+C";
+      if (status) status.textContent = ok ? "Copied to clipboard" : "Copy failed: select the text and copy it";
+      if (!ok) {
+        // Last resort: select the commands so the keyboard shortcut works.
+        const range = document.createRange();
+        range.selectNodeContents(code);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      }
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        label.textContent = "Copy";
+      }, 2000);
+    });
+  });
+</script>

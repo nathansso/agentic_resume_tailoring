@@ -555,7 +555,8 @@ negation cases separately (`eval/memory_gate_labels/REPORT.md`).
   below fails: the `user-prompt` hook adds one line asking the host to confirm with the user
   and call `record_preference`, with the gate's guess. At or above τ_hi, ART writes when the
   direction is emphasize or suppress, the target is an item (not a whole section), resolved (p ≥ 0.75) and named, the
-  negation agrees, the strength is 4 or less, the message is one statement of at most 300
+  anchor resolver finds the same one item in the message (#295: a message that names two items, or
+  none it can bind, goes to the host), the negation agrees, the strength is 4 or less, the message is one statement of at most 300
   characters, and a job-scoped message has a known job (the session's current job from hook
   state). The hook then tells the host what it saved.
 - **Never written by the gate:** a strength-5 preference or a negative pin (they become
@@ -566,7 +567,14 @@ negation cases separately (`eval/memory_gate_labels/REPORT.md`).
   every candidate to the host, nothing written.
 - **`record_preference`** is the confirmation path and writes anything valid, strength 5
   included; a changed strength or polarity for the same subject and scope supersedes the old
-  row, which stays.
+  row, which stays. Its `target` goes through the anchor resolver (`harness/anchors.py`, #295),
+  which decides, with no model, what the preference attaches to: one item by its key, label,
+  name or (for a skill) alias (`bound`); a name that fits several items at one step is refused
+  with the candidates (`ambiguous`); a nameable thing the graph does not hold is stored by its
+  term (`pending`); a `section:` or a subject about the page is a `document` subject; several
+  subjects ("Kafka or Spark") are refused (`multiple`). A substring never binds ("Kafka" is not
+  "Kafka Streams", "R" is not "React"). `edu:` and `ach:` keys resolve here; the gate's catalog
+  does not hold them.
 - **One-time import.** The gate captures only new statements, so `art-setup` tells the host
   to import the user's existing standing preferences and negative pins through
   `record_preference`. There is no import path of its own.

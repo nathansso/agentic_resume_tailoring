@@ -14,6 +14,86 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 274 — Landing site install and usage docs
+**Status:** complete | **Tests:** 2681 pass on SQLite (18 new), 24 skipped, 0 fail; the Postgres leg was not run (nothing here touches storage)
+
+The Install and Usage pages of the landing site (#271), replacing #272's stubs. Install is written for a student who has never used MCP or a terminal coding agent; Usage is a first-session walkthrough that names only commands and tools that exist today. Every command the pages show is rendered from one data file and held to INSTALL.md by a test.
+
+### What shipped
+
+- **`/install`.** Prerequisites (Claude Code or Codex, `uv`, tectonic or `pdflatex`, each linked to its official page, with Windows and macOS/Linux notes); the Claude Code plugin; Codex (the plugin carries the hooks, per #290, plus `/hooks` trust; the `art hooks codex --write` file install for Codex older than 0.131 or without the plugin); manual MCP registration for Claude Code, Codex and other stdio clients; how to check it worked (`/mcp`, asking the agent for ART's tools, `/art:prefs`, `art --list`); optional extras, `art ui` and the TypeSafe Jev key (what it does, what is sent, that everything works without one); troubleshooting (slow first start, offline starts with `UV_OFFLINE=1` or `uv tool install`, the Windows `UV_CACHE_DIR` long path, Application Control, the Codex `cmd.exe` hook shell, no PDF).
+- **`/usage`.** Ingest (`/art:setup`, `$art-setup`), review the graph, tailor (`/art:tailor`, `$art-tailor`, with the approve-the-plan step), approve bullets and set preferences, render the PDF, optionally open `art ui`, and a table of all six `/art:*` commands. Steps without a command of their own say what to ask the agent and name the tool it calls.
+- **Shared parts** under `site/src/components/docs/` and `site/src/layouts/Docs.astro` (which wraps `Base.astro`): `CommandBlock` (copy button with a `navigator.clipboard` path, an `execCommand` fallback and a select-the-text last resort, announced through a live region), `DocSection`, `Callout`, a table of contents (collapsible on phones, sticky with the current section marked on desktop), and prose styles on the theme tokens. Long lines scroll inside their block, never the page. Checked at 375px in light and dark in a headless browser: no horizontal scroll.
+- **Single-sourcing.** `components/docs/commands.json` holds every command (with `{SOURCE}` and `{URL}` placeholders for the pinned wheel); `commands.ts` expands it and the pages render from it.
+- **`tests/test_site_docs.py` (18 new, no network, no npm).** Each command is a whole line, or a whole inline-code span, of its source (INSTALL.md, `plugin/README.md`, `integrations/codex/README.md`; a prefix such as `art@art2` does not pass); the site's wheel URL equals `harness.hooks.WHEEL_URL` and every wheel URL in the docs and on the site, so a version bump in either place fails; each `art` subcommand shown exists in `harness/entry.py`; every `/art:*` the site names is in `plugin/commands/` and every plugin command is documented; every tool in a `<code>` tag exists in the contract; nothing #252 lists as planned (`check_draft`, `record_feedback`, semantic duplicates, eligibility rules, action ranking) is named, with the planned set also read from `docs/harness.md`; every command block comes from the data file and none is dead; table of contents and anchors resolve; copy-button, overflow and theme-token guards. Mutation-checked against nine edits (an INSTALL.md command edit, a pin bump on one side only, an unknown or planned tool, an unknown slash command, a section typo, a dangling anchor).
+
+### Deviations from spec
+
+- **GitHub is "give your agent the folders of your cloned repositories", not an ingest.** The harness has no GitHub tool: `/art:setup` reads a resume, a LinkedIn export and local project folders. The page says ARTie does not connect to a GitHub account.
+- **Left off the site:** `[postgres]` and the one-time web-app migration (`art import --from-supabase`), `art export` / `art import` backups, the `keyring` store for the Jev key, `art jev export` / `import`, and the checkout-only editor build. They serve the frozen hosted app or developers, not a first install. The Jev page says what is sent in prose and links INSTALL.md for the full table.
+- **Some check steps are not in INSTALL.md.** It gives only `art --list`. `/mcp` and "ask the agent to list ART's tools" are the agent's own built-ins, so they sit outside the drift check; `/art:prefs` and `art --list` are checked.
+- **The Codex section follows #290,** merged while this was in progress: the plugin carries the hooks, and `art hooks codex --write` is the fallback.
+- **The `uv tool install` line is shown with the real wheel URL**, where INSTALL.md writes `<the pinned URL>`; the test requires the two to differ by exactly that substitution.
+- **`/art:*` examples in the Usage page's copy blocks keep the README's placeholders** (`[files]`, `<posting or URL>`), so a copied block needs editing.
+- **Not done:** the live Vercel deploy and the clean-machine acceptance run ("a clean machine can follow the Install page") were not performed; the commands were checked against the docs and the code, not run on a fresh machine.
+
+---
+
+## Issue 273 — Landing site home page content
+**Status:** complete | **Tests:** 2666 pass (30 new), 24 skipped, on SQLite; the Postgres leg was not run (nothing here touches storage)
+
+Second child of the landing-site epic (#271): the real home page for students applying to internships and new-grad roles, replacing #272's placeholder. The install and usage pages are #274.
+
+### What shipped
+
+- **`site/src/pages/index.astro`**, seven sections: the hero (headline "Land your first role with ARTie", a primary "Install in Claude Code" button to `/install`, a "How it works" button to `#how-it-works`, no account of any kind); three student pain points ported from `LandingPage.tsx` (first resume, no idea what recruiters want, one resume for fifty postings); "How ARTie tailors a resume" in five steps for the harness model (your agent reads you, reads the posting, tailors from approved bullets and preferences, ART's gates check it, a LaTeX PDF is rendered); "It never invents experience you don't have" with the changes/never-changes card; who it's for and what you need (Claude Code or Codex, `uv`, tectonic or pdflatex); a `<details>` FAQ; and a closing install band.
+- **A privacy note under "How it works".** ARTie runs locally and stores data on your machine; the only things that leave are what your own agent sends to its model provider; and the optional TypeSafe Jev key, when set, sends excerpts of resume bullets, the posting's requirements and title, and your messages when the memory gate runs. With no key or `ART_JEV_MODE=off`, nothing is sent. Worded from `docs/harness.md` section 4, "Privacy".
+- **The ATS answer.** The FAQ says ARTie reports an ATS-style score but never optimizes for it or promises one, and why: the composite only rises as text is added (`docs/harness.md` section 5).
+- **`site/src/components/home/Icon.astro`**, a small inline-SVG icon set (Lucide shapes, ISC) so the page needs no icon dependency.
+- **`tests/test_site_home.py`** (no npm, no network): one h1, the CTA targets, the `#how-it-works` anchor, every internal link going to `/install` or an anchor, banned phrases (open source, sign up, hosted, guarantee, "beat the ATS", an ATS percentage), no statistics, no mention of planned tools (`record_feedback`, `check_draft`), the five harness steps, the accuracy of the privacy and Jev wording, the FAQ questions, and the aria wiring.
+- Checked at 375px in light and dark: no horizontal scroll, and nothing outside the clipped hero glows is wider than the viewport.
+
+### Deviations from spec
+
+- **"GitHub" is not named as a source.** The issue lists resume, GitHub and LinkedIn, but `docs/harness.md` and `plugin/README.md` say the host reads the resume, the LinkedIn export and local project folders (repos). The page says exactly that.
+- **The "one page" gate.** The docs file page count under "Finalize" (nothing commits on a violation), not under the hard gates, and the two-line bullet limit is a hard gate. The page says "the result has to fit on one page, at two lines per bullet or fewer" rather than calling both hard gates.
+- **No license claim.** `pyproject.toml` says Proprietary. The page says "free to use" and "the code is public on GitHub", and never "open source". The epic's "free, open-source" wording is untouched; settling the license is still open.
+- **Lighthouse was not run.** The accessibility score (95 or higher) needs a Lighthouse run against the deployed preview. Semantics were checked by hand: one h1, labelled sections, decorative icons aria-hidden, native `<details>`.
+- **Not described, because planned (#252):** `record_feedback`, `check_draft`, and the Jev points for eligibility rules, semantic duplicates, action ranking and role family.
+
+---
+
+## Issue 295 — Preference anchor resolver: a preference binds to what its subject denotes, or stays pending, or is a document subject
+**Status:** complete | **Tests:** 2766 pass on SQLite (59 new), 24 skipped
+
+`record_preference` resolved its target through `_find_target`, which matched a key, a label or `title @ company`, so "torch" never reached `skill:pytorch`, a subject that fit two items was silently given the first, and `edu:` / `ach:` keys could not be named at all. This is phase 2 of 7 of the preference-anchoring plan (#295–#300): one deterministic resolver decides where a preference attaches.
+
+### What shipped
+- **`harness/anchors.py`: `resolve(user_id | items, subject)`**, model-free. It returns `{status, subject, key?, step?, candidates?, subjects?}` with one of five statuses:
+  - `bound`: exactly one item matched, trying in order the exact key, the label, the bare name, then (skills only) an alias. The first step that matches anything decides; a step with several matches is `ambiguous` and names its candidates, never one of them.
+  - `pending`: a nameable thing the graph does not hold. It is stored with `target_key` NULL and `target_term` set, as before.
+  - `document`: a `section:` prefix, a bare section name, or a subject about the page (`page`, `length`, `order`, `tone`, `wording`, `summary`, `layout`, `format`, `style`, ...). A section subject carries its `section:<name>` key.
+  - `multiple`: "Kafka or Spark", "Kafka, Spark", "Kafka & Spark", "Kafka / Spark", "Python + SQL". `&`, `/` and `+` separate only with spaces around them, so `R&D`, `C/C++`, `C++` and `Q&A` are one name each. `and` separates only when every piece around it is known on its own (an item, a section or a document subject): "Kafka and PyTorch" with both held is two, "Research and Development" absent from the graph is one pending subject.
+- **A substring never binds.** Every step compares the whole subject: "Kafka" is not "Kafka Streams", "R" is not "React", "Go" is not "Google". A name of at most two characters (R, C, Go) binds only by its own name, never through an alias, the rule `skill_forms` already applies to text (so "tf" does not reach TensorFlow: it is also a fragment of TF-IDF).
+- **Aliases** are `normalize_skill_name` / `canonical_key` on both sides ("torch" and a skill stored as "PyTorch" reduce to one name, whichever way round), plus the spellings `skill_forms` knows, with hyphen and space interchangeable ("scikit learn").
+- **`record_preference` uses it** in place of `_find_target`, which is gone. The refusal style and the `suggestions` output for an unbound subject are unchanged. A new `anchor` field reports `{status, key?, step?, candidates?}` on every result; an `ambiguous` target is refused with `candidates`, a `multiple` one with `subjects`, and nothing is stored in either case. `edu:` and `ach:` keys, labels and names now resolve. The tool contract (`RecordPreferenceOutput`, the `target` description) carries the new fields.
+- **`_auto_write` needs the resolver to agree.** The gate's automatic write now also requires `anchors.mentions(user, message)`, the same decision run on the whole message (a skill by `SkillMatcher`, a project, degree or award by its whole name, a role by its title, company or company's first word), to bind exactly the key Jev picked. A message that names two items, or none that binds, goes to the host with reason `anchor_disagrees` and nothing is written.
+- **Docs.** `docs/harness.md` (the routing and `record_preference` paragraphs).
+- **Tests.** `tests/test_preference_anchors.py` (59): the steps and their order, aliases both ways, the Kafka / Kafka Streams, R / React, Go / Google, Java / JavaScript, C / C++ and Spark / PySpark contrasts, short names, ambiguous with candidates, pending, document, multiple, a message; `record_preference` binding an alias, refusing an ambiguous and a multiple subject, storing pending, reporting document, resolving `edu:` and `ach:` and keeping them enforceable; the gate writing when Jev and the resolver agree and not when they differ (two skills in the message, and a forced disagreement). `tests/test_memory_gate.py`, `test_preferences.py`, `test_negative_pin_gate.py` and `test_memory_gate_labels.py` pass unchanged; no Jev answer was re-recorded.
+
+### Deviations from spec
+- **A company alone is not a role's name.** "IDX Exchange" stays pending (a term pin) instead of binding the one role held there. A term pin refuses every mention of the company; an `exp:` item pin removes only that role and would leave "built at IDX Exchange" in a project bullet. A role binds by `title @ company` (as before) or by its title, which is ambiguous when two roles share it. #297 can revisit this once items carry their preferences.
+- **An education or an award is stored with `target_type` `topic` and its `target_term` is the user's own words.** `PreferenceTargetType` has no education or achievement member and adding one changes the structured-output schema the legacy extraction path sends to a model; the key is still set. The words are kept as the term because `pin_target` enforces `edu:` / `ach:` keys by term (#254), so a ban that was a text pin before ("1st Place Overall") is the same text pin now, with a key on it. The label `education: ...` would match nothing on the page.
+- **"The resolver, run on the message's target" is run on the message.** Jev's target is already a catalog key, so resolving its label would agree with itself. `anchors.mentions` instead reads the message text, so the check is independent of the key Jev chose. It is conservative on purpose: "Put Python before SQL" names two skills, and a name inside a longer one ("Kafka" in "Kafka Streams") is named by both, so both go to the host. A `section:` key Jev picks is never bound by it (the gate already routes those to the host).
+- **`document` subjects keep today's storage.** A section binds its `section:` key and any other document subject is stored by its term, with `anchor.status` reporting `document`. #298 moves them to `ResumeRule`.
+- **A document vocabulary of 19 words decides the page subjects**, and runs only after the item steps, so a project named "Order Management System" still binds. It will misfire on a nameable thing that contains one of the words and is not an item ("my order-routing startup"): the result is `document` and a term, which is what the row would have been stored as anyway. #296's labelled set is where its precision is measured, and where the Jev-for-document question in the plan is settled.
+- **"and" is a conditional separator, and `+` needs spaces.** The first version split on every `and` and on a bare `+`, which refused single names: "C++ and Python" became `['C', 'Python']` and "Research and Development" became two subjects (found in review, by the planning session). `or`, `and/or`, commas, semicolons and spaced `/`, `&`, `+` separate unconditionally; `and` only when each piece resolves on its own. The cost: "Kafka and Spark" with Spark absent is one pending subject (a term pin of the whole phrase) and not a refusal, so a user who writes two absent things with "and" gets one odd term. A pending term is what that phrase would have been stored as before this change, so nothing regresses; #296's labelled set (multi-subject rows) is where the rule's recall is measured.
+- **`k8s` is not an alias.** The plan's examples name it, but `SKILL_ALIASES` does not hold it and adding it changes how every ingested skill is normalized. "k8s" resolves to `pending`; #296 will show whether it should be added to the map.
+- **The branch name** is `claude/issue-295-anchor-resolver-18d42a` (the worktree's), not `issue-295-anchor-resolver`.
+- **The Postgres leg was not run locally.** Nothing here touches storage.
+
+---
+
 ## Issue 306 — The user's own editor edit, carried over verbatim, is not vetoed by a guard
 **Status:** complete | **Tests:** 2704 pass on SQLite (14 new), 24 skipped, 0 fail. The Postgres leg was not run locally; CI runs it
 
