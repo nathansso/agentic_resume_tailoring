@@ -404,11 +404,10 @@ async def get_tex(job_id: str, user: User = Depends(get_current_user)):
         tailored_content = latest.tailored_resume_content
 
     def _generate():
-        from agents.formatter import ResumeFormatterAgent
-        agent = ResumeFormatterAgent(user.user_id)
-        return agent.format_tex(
-            tailored_content, section_order=tailored_content.get("_section_order")
-        )
+        # The same rendering the harness compares edits against (#278): the version's own
+        # education fields (a job-rule graduation date, #192) laid over the store's rows.
+        from harness.render import generated_tex
+        return generated_tex(user.user_id, tailored_content)
 
     tex = await asyncio.to_thread(_generate)
     return {"tex": tex, "source": "generated", "updated_at": None}
@@ -744,7 +743,8 @@ async def export_job(job_id: str, format: str = "pdf", user: User = Depends(get_
         if format == "pdf":
             return agent.format_pdf(tailored_content, job_title=job.title, section_order=section_order)
         if format == "tex":
-            return agent.format_tex(tailored_content, job_title=job.title, section_order=section_order)
+            from harness.render import generated_tex
+            return generated_tex(user.user_id, tailored_content)
         return agent.format_docx(tailored_content, job_title=job.title, section_order=section_order)
 
     try:

@@ -44,6 +44,7 @@ log = logging.getLogger(__name__)
 
 MAX_ITEMS = 6
 MAX_BULLETS = 3
+MAX_TEX_BULLETS = 6
 
 
 # ── per-session state ────────────────────────────────────────────────────────
@@ -92,13 +93,27 @@ def _job_label(user_id: UUID, job_id: str) -> str:
 
 # ── user-prompt ──────────────────────────────────────────────────────────────
 
-def _describe(user_id: UUID, node: Dict) -> List[str]:
-    """What an editor node changed against its parent, in a few lines."""
+def _base_of(user_id: UUID, node: Dict) -> Optional[str]:
+    """The node an editor run started from: the nearest ancestor that is not itself an editor edit."""
     from harness import tree
 
-    if not node.get("parent_id"):
+    base, hops = node.get("parent_id"), 0
+    while base and hops < 200:
+        parent = tree.get_node(user_id, base)
+        if parent.get("source") != "editor":
+            break
+        base, hops = parent.get("parent_id"), hops + 1
+    return base
+
+
+def _describe(user_id: UUID, node: Dict) -> List[str]:
+    """What an editor run changed since the version it started from, in a few lines."""
+    from harness import tree
+
+    base = _base_of(user_id, node)
+    if not base:
         return ["a first version"]
-    diff = tree.diff_nodes(user_id, node["parent_id"], node["node_id"])
+    diff = tree.diff_nodes(user_id, base, node["node_id"])
     lines = []
     for item in diff.get("items", [])[:MAX_ITEMS]:
         parts = [f"{item['change']} {item['title'] or item['key']}"]
@@ -112,10 +127,36 @@ def _describe(user_id: UUID, node: Dict) -> List[str]:
     if diff.get("skills_added") or diff.get("skills_removed"):
         lines.append(f"skills +{diff.get('skills_added', [])} -{diff.get('skills_removed', [])}")
     if diff.get("tex_changed"):
-        lines.append("edited the LaTeX source directly")
+        lines += _describe_tex(diff.get("tex_edits"))
     if diff.get("layout_changed"):
         lines.append("changed the section or bullet order")
     return lines or ["no content change"]
+
+
+def _describe_tex(edits: Optional[Dict]) -> List[str]:
+    """The user's edits to the LaTeX source, a bullet per line (#278)."""
+    from harness import texdiff
+
+    if texdiff.is_empty(edits):
+        return ["edited the LaTeX source directly (no change to the text)"]
+    out = ["edited the LaTeX source directly:"]
+    clip = texdiff.brief(edits, MAX_TEX_BULLETS, 120, 6)
+    for e in clip["bullets"]:
+        where = e["title"] or e["item"]
+        if e["change"] == "revised":
+            out.append(f'  - {where}: "{e["before"]}" became "{e["after"]}"')
+        elif e["change"] == "added":
+            out.append(f'  - {where}: added "{e["after"]}"')
+        else:
+            out.append(f'  - {where}: removed "{e["before"]}"')
+    if clip.get("truncated"):
+        out.append(f"  - ... and {clip['truncated']} more bullet edits")
+    for r in clip["reordered"]:
+        out.append(f"  - {r['title'] or r['item']}: bullets reordered")
+    for r in clip["unmapped"]:
+        out.append(f"  - unmapped change in {r['region']} (not a bullet):\n" +
+                   "\n".join("      " + ln for ln in r["diff"].splitlines()))
+    return out
 
 
 def _editor_edits(user_id: UUID, session_id: str) -> Optional[str]:
@@ -147,9 +188,16 @@ def _editor_edits(user_id: UUID, session_id: str) -> Optional[str]:
 
     out = ["ART: since your last message the user edited their resume in the editor."]
     for job_id, node in edits.items():
-        out.append(f"- {_job_label(user_id, job_id)} (job {job_id}): HEAD is now "
-                   f"{node['node_id']}. " + "; ".join(_describe(user_id, node)) + ".")
-    out.append("Build on that HEAD (get_head) and keep these edits; do not overwrite them.")
+        described = _describe(user_id, node)
+        head = f"- {_job_label(user_id, job_id)} (job {job_id}): HEAD is now {node['node_id']}. "
+        if any("\n" in ln or ln.startswith("  ") for ln in described):
+            out.append(head + "\n".join(["Changes:"] + ["  " + ln if not ln.startswith("  ") else ln
+                                                        for ln in described]))
+        else:
+            out.append(head + "; ".join(described) + ".")
+    out.append("Build on that HEAD (get_head) and keep these edits; do not overwrite them. "
+               "A plan that leaves out an edited bullet is refused (discards_editor_edits); "
+               "diff_nodes lists every edit.")
     return "\n".join(out)
 
 
