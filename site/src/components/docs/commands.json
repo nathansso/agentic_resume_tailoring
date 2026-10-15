@@ -1,0 +1,141 @@
+{
+  "_comment": "Every command the install and usage pages show. tests/test_site_docs.py checks each line against its `source` file (INSTALL.md, plugin/README.md or integrations/codex/README.md), so a command here cannot drift from the docs. {SOURCE} and {URL} are expanded by commands.ts; bump the version in `vars` when INSTALL.md bumps the pin.",
+  "vars": {
+    "URL": "https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl",
+    "SOURCE": "art-mcp[ui] @ {URL}"
+  },
+  "blocks": {
+    "claude-plugin": {
+      "source": "INSTALL.md",
+      "also": ["plugin/README.md"],
+      "lines": [
+        "/plugin marketplace add nathansso/agentic_resume_tailoring",
+        "/plugin install art@art"
+      ]
+    },
+    "codex-plugin": {
+      "source": "INSTALL.md",
+      "also": ["integrations/codex/README.md"],
+      "lines": [
+        "codex plugin marketplace add nathansso/agentic_resume_tailoring",
+        "codex plugin add art@art"
+      ]
+    },
+    "codex-hooks": {
+      "source": "INSTALL.md",
+      "also": ["integrations/codex/README.md"],
+      "lines": [
+        "uvx --from \"{SOURCE}\" art hooks codex --write"
+      ]
+    },
+    "claude-mcp-add": {
+      "source": "INSTALL.md",
+      "lines": [
+        "claude mcp add art -- uvx --from \"{SOURCE}\" art mcp"
+      ]
+    },
+    "codex-mcp-add": {
+      "source": "integrations/codex/README.md",
+      "lines": [
+        "codex mcp add art -- uvx --from \"{SOURCE}\" art mcp"
+      ]
+    },
+    "list-tools": {
+      "source": "INSTALL.md",
+      "lines": [
+        "uvx --from \"{SOURCE}\" art --list"
+      ]
+    },
+    "art-ui": {
+      "source": "INSTALL.md",
+      "lines": [
+        "uvx --from \"{SOURCE}\" art ui --job <job_id>"
+      ]
+    },
+    "typesafe-key": {
+      "source": "INSTALL.md",
+      "lines": [
+        "export TYPESAFE_API_KEY='...'"
+      ]
+    },
+    "uv-tool-install": {
+      "source": "INSTALL.md",
+      "lines": [
+        {
+          "text": "uv tool install \"{SOURCE}\"",
+          "in_source": "uv tool install \"art-mcp[ui] @ <the pinned URL>\""
+        }
+      ]
+    },
+    "uv-offline": {
+      "source": "INSTALL.md",
+      "lines": [
+        "UV_OFFLINE=1"
+      ]
+    },
+    "uv-cache-dir": {
+      "source": "INSTALL.md",
+      "lines": [
+        "[Environment]::SetEnvironmentVariable(\"UV_CACHE_DIR\", \"C:\\uvc\", \"User\")"
+      ]
+    },
+    "art-setup": {
+      "source": "plugin/README.md",
+      "lines": [
+        "/art:setup [files]"
+      ]
+    },
+    "art-tailor": {
+      "source": "plugin/README.md",
+      "lines": [
+        "/art:tailor <posting or URL>"
+      ]
+    }
+  },
+  "slash": [
+    {
+      "command": "/art:setup [files]",
+      "source": "plugin/README.md",
+      "what": "Build your knowledge graph from your resume, LinkedIn export and project folders, and set your header."
+    },
+    {
+      "command": "/art:tailor <posting or URL>",
+      "source": "plugin/README.md",
+      "what": "Plan a tailored resume, wait for your approval, commit it and render the PDF."
+    },
+    {
+      "command": "/art:open [job]",
+      "source": "plugin/README.md",
+      "what": "Print the command that opens the local editor (art ui)."
+    },
+    {
+      "command": "/art:history [job]",
+      "source": "plugin/README.md",
+      "what": "List every version and what changed."
+    },
+    {
+      "command": "/art:revert <job> [version]",
+      "source": "plugin/README.md",
+      "what": "Make an earlier version current again."
+    },
+    {
+      "command": "/art:prefs",
+      "source": "plugin/README.md",
+      "what": "Show your pinned rules, preferences and job-scoped rules."
+    }
+  ],
+  "inline": {
+    "_comment": "Short commands and names the pages mention in running text. Each must appear verbatim in its source.",
+    "art jev status": "INSTALL.md",
+    "ART_JEV_MODE=off": "INSTALL.md",
+    "TYPESAFE_API_KEY": "INSTALL.md",
+    "~/.art/art.db": "INSTALL.md",
+    "/hooks": "INSTALL.md",
+    "$art-setup": "integrations/codex/README.md",
+    "$art-tailor": "integrations/codex/README.md",
+    "~/.art/applications/<Company>_<Role>/": "plugin/README.md",
+    "[embed]": "INSTALL.md",
+    "[pdf]": "INSTALL.md",
+    "[ui]": "INSTALL.md"
+  }
+}

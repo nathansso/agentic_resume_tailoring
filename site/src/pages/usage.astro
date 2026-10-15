@@ -1,24 +1,246 @@
 ---
-import Base from "../layouts/Base.astro";
+import Docs from "../layouts/Docs.astro";
+import DocSection from "../components/docs/DocSection.astro";
+import CommandBlock from "../components/docs/CommandBlock.astro";
+import Callout from "../components/docs/Callout.astro";
+import { block, slashCommands } from "../components/docs/commands";
+
+// One list drives both the table of contents and the section headings.
+const S = {
+  how: { id: "how-it-works", title: "How a session works" },
+  ingest: { id: "ingest", title: "1. Ingest your resume, GitHub and LinkedIn" },
+  review: { id: "review", title: "2. Review what ARTie learned" },
+  tailor: { id: "tailor", title: "3. Tailor to a job posting" },
+  approve: { id: "approve", title: "4. Approve bullets and set preferences" },
+  render: { id: "render", title: "5. Render the PDF" },
+  ui: { id: "editor", title: "6. Edit by hand in art ui (optional)" },
+  later: { id: "later", title: "Everything else you can run" },
+};
+const toc = Object.values(S);
 ---
 
-<Base
+<Docs
   title="Usage: ARTie"
-  description="How to use ARTie once it is installed. Full documentation is coming soon."
+  description="A first session with ARTie: add your resume, GitHub projects and LinkedIn, tailor to a job posting, approve bullets, set preferences, and render a PDF."
+  heading="Usage"
+  lede="A first session, start to finish. Install ARTie first if you haven't."
+  toc={toc}
 >
-  <div class="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-24">
-    <h1 class="text-4xl font-extrabold tracking-tight sm:text-5xl">Usage</h1>
-    <p class="mt-4 text-lg text-muted-foreground">
-      Full usage docs are coming soon. Until then, see INSTALL.md in the repository.
+  <DocSection section={S.how}>
+    <p>
+      You talk to your coding agent, as you always do. ARTie gives it a memory of your real
+      experience and a set of checks. The agent reads and writes; ARTie keeps your facts, your
+      preferences and every version, and checks each change before it is saved. <strong>Every
+      fact on your resume must come from something you gave it.</strong> If the agent needs one
+      that isn't there, it asks you.
     </p>
-    <p class="mt-8">
-      <a
-        href="https://github.com/nathansso/agentic_resume_tailoring/blob/main/INSTALL.md"
-        rel="noopener"
-        class="inline-flex items-center justify-center rounded-lg border border-border bg-card px-6 py-3 font-semibold transition-colors hover:bg-elevated"
-      >
-        Read INSTALL.md on GitHub
-      </a>
+    <p>
+      In Claude Code you run <code>/art:*</code> commands. Codex has two skills instead, <code>$art-setup</code> and <code>$art-tailor</code>,
+      and for everything else you ask in plain words. This page shows the Claude Code command
+      first, then the Codex equivalent.
     </p>
-  </div>
-</Base>
+    <p>
+      Where a step has no command of its own, the page says what to ask your agent and names the
+      ARTie tool it will call, in case you want to see what happened.
+    </p>
+  </DocSection>
+
+  <DocSection section={S.ingest}>
+    <p>Gather three kinds of source. You don't need all of them:</p>
+    <ul>
+      <li>Your current resume as a PDF, DOCX, Markdown or LaTeX file.</li>
+      <li>
+        Your LinkedIn data export (the archive you request from LinkedIn's own settings).
+      </li>
+      <li>
+        The folders of the projects you want considered. ARTie doesn't connect to your GitHub
+        account: clone the repositories you care about and hand your agent the folders.
+      </li>
+    </ul>
+    <p>Then run the setup command with the paths:</p>
+    <CommandBlock label="In Claude Code (replace the placeholder with your paths)" lines={block("art-setup")} />
+    <p>
+      In Codex, run <code>$art-setup</code> and tell it where the files are. If you give no
+      paths, the agent asks.
+    </p>
+    <p>What happens next:</p>
+    <ul>
+      <li>
+        The agent reads your files itself (ARTie never opens them) and fills ARTie's record
+        formats with <code>ingest_schema</code>, then stores them with <code>upsert_items</code>.
+        Titles, companies, dates and bullets are kept verbatim. For a repository, it describes
+        what the code shows and checks each claim against the files.
+      </li>
+      <li>
+        Anything you edited by hand is never overwritten, and anything you deleted is not added
+        back unless you ask.
+      </li>
+      <li>
+        It asks where each project was done: for a job, for a degree, or on your own. Work
+        counts as stronger evidence than coursework, so answer each one
+        (<code>suggest_project_contexts</code>, then <code>set_project_context</code>).
+      </li>
+      <li>
+        It sets your resume header (name, email, links) with <code>update_profile</code>.
+      </li>
+      <li>
+        If a fact depends on the posting, tell it. For example: "my graduation date is June
+        2027, but December 2027 when a role needs me enrolled after the internship." ARTie then
+        asks that question of every posting.
+      </li>
+    </ul>
+  </DocSection>
+
+  <DocSection section={S.review}>
+    <p>
+      The setup ends with a summary of what is stored. There is no separate command for
+      reviewing, so ask your agent in plain words:
+    </p>
+    <CommandBlock
+      label="Say this to your agent"
+      lines={["Show me everything ARTie has stored about me, grouped by kind, and point out anything duplicated or thin."]}
+    />
+    <p>
+      It will call <code>list_items</code> and, for details, <code>get_item</code> and <code>get_profile</code>.
+      Look for wrong dates, duplicate entries, and projects with no short bullets of their own.
+      To search, ask something like "what do I have that shows Python?"
+      (<code>kg_search</code>).
+    </p>
+    <p>
+      To fix a fact, tell the agent the correction. It re-sends that record to <code>upsert_items</code> marked
+      as a correction. Nothing is invented to fill a gap: if the graph holds nothing for a
+      requirement, the agent says so.
+    </p>
+  </DocSection>
+
+  <DocSection section={S.tailor}>
+    <p>Paste the posting, or give a link, to the tailor command:</p>
+    <CommandBlock label="In Claude Code (replace the placeholder with the posting)" lines={block("art-tailor")} />
+    <p>In Codex, run <code>$art-tailor</code> and paste the posting.</p>
+    <p>The agent works through these steps, and you can watch each one:</p>
+    <ol class="steps">
+      <li>
+        <strong>Reads your brief.</strong> <code>art_briefing</code> returns your pinned rules,
+        your preferences, and any yes/no questions to ask about the posting (such as whether it
+        requires enrollment after the internship). It answers them from the posting's own words,
+        or asks you.
+      </li>
+      <li>
+        <strong>Opens the job.</strong> <code>open_job</code> stores the posting and its
+        requirements, and picks your saved starting point for that kind of role if you have one.
+      </li>
+      <li>
+        <strong>Reads your experience</strong> and asks <code>suggest_actions</code> which of
+        your approved bullets fit this posting.
+      </li>
+      <li>
+        <strong>Shows you a plan and waits.</strong> The plan says which items lead, what each
+        revised bullet will say, what is cut and why, and the skills line. <em>Nothing is
+        changed until you approve it.</em>
+      </li>
+      <li>
+        <strong>Runs it.</strong> After you approve, <code>execute_plan</code> applies the plan.
+        ARTie checks each change and refuses or reverts one that claims more than its source
+        supports, mentions a topic you banned, or breaks a rule you set. The agent tells you
+        about every one rather than quietly resubmitting it.
+      </li>
+    </ol>
+    <Callout title="You are the editor">
+      <p>
+        Reply to the plan in plain words: "lead with the recommender project", "cut the second
+        internship's last bullet", "approved." The agent revises the plan and shows it again.
+      </p>
+    </Callout>
+  </DocSection>
+
+  <DocSection section={S.approve}>
+    <h3>Bullets</h3>
+    <p>
+      When a bullet reads the way you want, ask your agent to keep it: "Add that bullet to my
+      library." It becomes a draft (<code>promote_bullet</code>). It joins your approved library
+      only when you say yes (<code>approve_variant</code>); the agent never approves one on its
+      own. Next time, <code>suggest_actions</code> offers your approved wording first, and a
+      bullet that strays too far from it is reverted.
+    </p>
+    <p>
+      To make a whole version the starting point for a kind of role, say so and name the role,
+      for example "save this as my data science baseline" (<code>save_baseline</code>). A new
+      job for that kind of role then starts as a copy of it.
+    </p>
+
+    <h3>Preferences</h3>
+    <p>
+      State a lasting rule as you would to a person: "never mention Kafka", "always lead with
+      Python". When a message looks like a lasting rule (ARTie's hook flags it in Claude Code;
+      on a host without the hook, your agent checks it with <code>observe</code>) the agent asks
+      you to confirm how it read it: what it is about, whether to feature it or leave it out,
+      how firm, and whether it is for every resume or only this job. Only after you say yes does
+      it save the rule (<code>record_preference</code>).
+    </p>
+    <p>
+      A rule you call absolute ("never") becomes a pin: what it names can never reach the page,
+      even in other words. ARTie never saves one without your confirmation. To see what ARTie
+      holds, run <code>/art:prefs</code> in Claude Code, or ask your agent to show your
+      preferences (<code>art_briefing</code>; <code>art_pins</code> returns the pins word for
+      word).
+    </p>
+  </DocSection>
+
+  <DocSection section={S.render}>
+    <p>
+      The tailor command ends by rendering, so the PDF comes with the plan you approved. To
+      render again after a change, ask your agent to "render the resume" (the <code>render</code> tool).
+      It writes <code>resume.tex</code> and <code>resume.pdf</code> to <code>~/.art/applications/&lt;Company&gt;_&lt;Role&gt;/</code>,
+      and the agent tells you the path.
+    </p>
+    <ul>
+      <li>
+        The page is one page. If the draft runs over, ARTie reports where to cut and the agent
+        cuts and renders again. Nothing is trimmed silently.
+      </li>
+      <li>
+        With no LaTeX engine installed, you get the <code>.tex</code> file and a hint on how to
+        get a PDF. See <a href="/install#prerequisites">Install</a>.
+      </li>
+    </ul>
+  </DocSection>
+
+  <DocSection section={S.ui}>
+    <p>
+      To adjust the layout or the LaTeX yourself, open the local editor. In Claude Code, run <code>/art:open</code> and
+      name the job. It prints the command below with the job's id filled in. Run it yourself in
+      a terminal; the agent does not start it.
+    </p>
+    <CommandBlock label="In a terminal (replace the job id)" lines={block("art-ui")} />
+    <p>
+      The editor opens at <code>http://127.0.0.1:8765/</code> and runs only on your machine.
+      Anything you save or drag there comes back to the agent on your next message, and it
+      builds on your edits instead of overwriting them. In Codex, ask the agent for the <code>art
+      ui</code> command for your job.
+    </p>
+  </DocSection>
+
+  <DocSection section={S.later}>
+    <p>The Claude Code commands, all in one place:</p>
+    <table>
+      <thead>
+        <tr><th>Command</th><th>What it does</th></tr>
+      </thead>
+      <tbody>
+        {slashCommands.map((item) => (
+          <tr>
+            <td><code>{item.command}</code></td>
+            <td>{item.what}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+    <p>
+      The two skills behind <code>/art:setup</code> and <code>/art:tailor</code> also start on
+      their own when you ask your agent to tailor a resume or update your experience. In Codex,
+      ask for history in plain words; the agent uses <code>history</code> and <code>diff_nodes</code> to
+      show versions and <code>checkout</code> to go back, after it shows you the difference and
+      you confirm.
+    </p>
+  </DocSection>
+</Docs>

@@ -1,0 +1,15 @@
+---
+// One titled section of a docs page. The page lists its sections once (id and
+// title) and passes the same object here and to the layout's table of contents,
+// so the two cannot disagree.
+interface Props {
+  section: { id: string; title: string };
+}
+
+const { section } = Astro.props;
+---
+
+<section aria-labelledby={section.id} class="doc-section">
+  <h2 id={section.id}>{section.title}</h2>
+  <slot />
+</section>
