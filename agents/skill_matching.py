@@ -155,6 +155,31 @@ class SkillMatcher:
                 return True
         return False
 
+    def spans(self, text: Optional[str]) -> List[Tuple[int, int]]:
+        """Where `text` names the skill, as sorted, non-overlapping `(start, end)` offsets.
+
+        The same rule as `mentions`, for showing the reader which words matched
+        (the evidence map highlights them). `mentions(t)` is true exactly when
+        `spans(t)` is not empty.
+        """
+        if not text:
+            return []
+        found: List[Tuple[int, int]] = []
+        if self._long is not None:
+            found.extend(m.span() for m in self._long.finditer(text))
+        if self._short is not None:
+            for m in self._short.finditer(text):
+                if m.group(0).lower() in _ENGLISH_WORDS and _SENTENCE_END.search(text[:m.start()]):
+                    continue
+                found.append(m.span())
+        merged: List[Tuple[int, int]] = []
+        for start, end in sorted(found):
+            if merged and start <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
+            else:
+                merged.append((start, end))
+        return merged
+
 
 # ── requirement terms -> skills ──────────────────────────────────────────────
 

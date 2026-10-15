@@ -244,7 +244,7 @@ def test_a_github_only_link_is_an_edge_without_a_citation(isolated_engine):
 
     edge = _edge(view, "RollAway", "PyTorch")
     assert edge == {"item_key": _item(view, "RollAway")["key"],
-                    "skill_key": _by_name(view)["PyTorch"]["key"], "cites": [], "github": True}
+                    "skill_key": _by_name(view)["PyTorch"]["key"], "cites": [], "github": True, "marks": []}
     assert _edge(view, "Other", "PyTorch") is None
     assert view["stats"]["github_only"] == 1 and view["stats"]["evidenced"] == 0
 
@@ -344,6 +344,36 @@ def test_a_project_without_blurbs_uses_its_description_as_bullet_zero(isolated_e
     named = _item(view, "Nameless Python thing")
     assert named["text_source"] == "none" and named["text"] == []
     assert _edge(view, "Nameless Python thing", "Python")["cites"] == []   # linked by name only
+
+
+def test_an_edge_says_which_words_of_each_cited_bullet_name_the_skill(isolated_engine):
+    uid = _user(isolated_engine)
+    _skill(isolated_engine, uid, "PyTorch", category="ML")
+    _skill(isolated_engine, uid, "Java")
+    text = "Trained a model with torch, then PyTorch Lightning."
+    _experience(isolated_engine, uid, "Engineer", "Acme",
+                ["Led a team", text, "Wrote JavaScript, not Java"])
+
+    view = services.get_evidence_view(uid)
+
+    torch = _edge(view, "Engineer", "PyTorch")
+    assert torch["cites"] == [1]
+    [spans] = torch["marks"]
+    assert [text[a:b] for a, b in spans] == ["torch", "PyTorch"]      # the alias is marked too
+    java = _edge(view, "Engineer", "Java")
+    assert java["cites"] == [2] and [("Wrote JavaScript, not Java"[a:b]) for a, b in java["marks"][0]] == ["Java"]
+
+
+def test_spans_agree_with_mentions():
+    from agents.skill_matching import SkillMatcher
+    cases = [("Java", "built a JavaScript app"), ("Java", "wrote Java and Java"),
+             ("Go", "Go is fast"), ("Go", "rewrote it in Go"), ("C++", "C++ kernels"),
+             ("R", "R&D and Research"), ("Node.js", "a Node.js service. Used Node.js")]
+    for name, text in cases:
+        m = SkillMatcher(name)
+        assert bool(m.spans(text)) is m.mentions(text), (name, text)
+    assert SkillMatcher("Java").spans("Java and Java") == [(0, 4), (9, 13)]
+    assert SkillMatcher("Java").spans("") == []
 
 
 # ── editing ───────────────────────────────────────────────────────────────────

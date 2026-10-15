@@ -20,6 +20,7 @@ from uuid import UUID
 from sqlmodel import Session, select
 
 from agents.checks import exp_key, proj_key
+from agents.skill_matching import SkillMatcher
 from database.db import engine, ordered_blurbs
 from database.models import (
     Achievement, Education, Experience, Project, ProjectBlurb, Skill, UserSkill,
@@ -151,6 +152,7 @@ def build_evidence_view(user_id: Optional[UUID]) -> Dict[str, Any]:
     items += [_education_item(e) for e in edus]
     items += [_project_item(p, blurbs.get(p.project_id, [])) for p in projs]
     by_id = {it["id"]: it for it in items}
+    by_key = {it["key"]: it for it in items}
     for p in projs:
         item = by_id[str(p.project_id)]
         parent = by_id.get(str(p.experience_id)) if p.experience_id else None
@@ -223,6 +225,17 @@ def build_evidence_view(user_id: Optional[UUID]) -> Dict[str, Any]:
                     edge["github"] = True
 
     edge_list = sorted(edges.values(), key=lambda e: (e["item_key"], e["skill_key"]))
+
+    # Which words of each citing bullet name the skill, so the panel can highlight them
+    # (an alias such as "torch" for PyTorch included). `marks[i]` belongs to `cites[i]`.
+    name_by_key = {s["key"]: s["name"] for s in skills}
+    matchers: Dict[str, SkillMatcher] = {}
+    for edge in edge_list:
+        item = by_key[edge["item_key"]]
+        by_ordinal = {t["index"]: t["text"] for t in item["text"] if t["index"] is not None}
+        matcher = matchers.setdefault(edge["skill_key"], SkillMatcher(name_by_key[edge["skill_key"]]))
+        edge["marks"] = [[list(span) for span in matcher.spans(by_ordinal.get(n, ""))]
+                         for n in edge["cites"]]
 
     # ── stats ────────────────────────────────────────────────────────────────
     cited = {e["skill_key"] for e in edge_list if e["cites"]}
