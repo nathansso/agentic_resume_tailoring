@@ -1,0 +1,39 @@
+name: gateway
+
+# The hosted LinkedIn gateway (issue #354). It deploys as its own Vercel project;
+# this job fails a PR that breaks it even without Vercel. Standard library plus
+# pytest only, and every test uses fakes for GitHub, Bright Data and the KV store.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "gateway/**"
+      - ".github/workflows/gateway.yml"
+  pull_request:
+    paths:
+      - "gateway/**"
+      - ".github/workflows/gateway.yml"
+
+concurrency:
+  group: gateway-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: gateway tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        working-directory: gateway
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Test
+        working-directory: gateway
+        run: python -m pytest -q
