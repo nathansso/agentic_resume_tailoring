@@ -11,7 +11,7 @@ the bullets that name the skill. These pin what the UI relies on:
 - a GitHub-only link is an edge with no citation;
 - editing a bullet moves the links without moving any bullet's number.
 """
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlmodel import Session, select
@@ -552,9 +552,9 @@ def test_job_skills_route_lists_what_a_job_asks_for_with_areas(isolated_engine, 
 
     assert r.status_code == 200
     assert r.json() == [
-        {"name": "Python", "required": True, "weight": 2.0, "area": "Languages"},
-        {"name": "PyTorch", "required": True, "weight": 1.0, "area": "ML & AI"},
-        {"name": "Docker", "required": False, "weight": 0.5, "area": "Tools"},
+        {"name": "Python", "required": True, "weight": 2.0, "area": "Languages", "terms": ["Python"]},
+        {"name": "PyTorch", "required": True, "weight": 1.0, "area": "ML & AI", "terms": ["PyTorch"]},
+        {"name": "Docker", "required": False, "weight": 0.5, "area": "Tools", "terms": ["Docker"]},
     ]
     assert client_for(alice).get(f"/api/jobs/{empty}/skills").json() == []
 
@@ -566,3 +566,88 @@ def test_job_skills_route_is_owner_only(isolated_engine, client_for):
     assert client_for(bob).get(f"/api/jobs/{jid}/skills").status_code == 404
     assert client_for(alice).get(f"/api/jobs/{uuid4()}/skills").status_code == 404
     assert client_for(alice).get("/api/jobs/not-a-uuid/skills").status_code == 404
+
+
+# ── a job opened through the harness keeps its requirements on the JDProfile (issue #319) ──
+
+def _profile_job(engine, uid, reqs, skills=()):
+    """A job with a `JDProfile` (what `open_job` writes) and, optionally, legacy `JobSkill` rows."""
+    jid = _job(engine, uid, list(skills))
+    from agents.extraction_schemas import JDProfileExtraction, JDRequirementItem
+    from agents.jd_payload import compile_profile_payload
+    from database.models import JDProfile
+    items = [JDRequirementItem(text=t, type=ty, criticality=c, terms=terms) for t, ty, c, terms in reqs]
+    payload = compile_profile_payload("MLE", "", JDProfileExtraction(requirements=items))
+    with Session(engine) as s:
+        s.add(JDProfile(job_id=UUID(jid), user_id=uid, payload=payload))
+        s.commit()
+    return jid
+
+
+def test_job_skills_read_the_jd_profile_requirements_with_their_terms(isolated_engine, client_for):
+    alice = _user(isolated_engine, "Alice")
+    jid = _profile_job(isolated_engine, alice, [
+        ("Containerised deploys", "preferred", 2, ["Docker", "Kubernetes"]),
+        ("Python for ML", "required", 5, ["Python", "PyTorch"]),
+        ("Ship fast", "required", 3, []),
+        ("Mentioned in passing", "incidental", 5, ["Excel"]),
+    ])
+
+    rows = client_for(alice).get(f"/api/jobs/{jid}/skills").json()
+
+    assert [r["name"] for r in rows] == ["python", "Ship fast", "docker"]
+    python = rows[0]
+    assert python == {"name": "python", "required": True, "weight": 1.0, "area": "Languages",
+                      "terms": ["python", "pytorch"]}
+    assert rows[1]["terms"] == ["Ship fast"] and rows[1]["weight"] == 0.6      # no terms: the text names it
+    assert rows[2] == {"name": "docker", "required": False, "weight": 0.4, "area": "Tools",
+                       "terms": ["docker", "kubernetes"]}                     # criticality / 5; incidental dropped
+
+
+def test_job_skills_prefer_the_profile_and_fall_back_to_job_skill_rows(isolated_engine, client_for):
+    alice = _user(isolated_engine, "Alice")
+    both = _profile_job(isolated_engine, alice, [("Go", "required", 4, ["go"])],
+                        skills=[("Python", True, 1.0)])
+    empty_profile = _profile_job(isolated_engine, alice, [("Mention", "incidental", 3, ["x"])],
+                                 skills=[("Python", True, 1.0)])
+
+    assert [r["name"] for r in client_for(alice).get(f"/api/jobs/{both}/skills").json()] == ["go"]
+    assert [r["name"] for r in client_for(alice).get(f"/api/jobs/{empty_profile}/skills").json()] == ["Python"]
+
+
+def test_job_skills_merge_requirements_that_share_a_primary_term(isolated_engine, client_for):
+    alice = _user(isolated_engine, "Alice")
+    jid = _profile_job(isolated_engine, alice, [
+        ("Nice to know AWS", "preferred", 5, ["AWS", "S3"]),
+        ("Must run on AWS", "required", 2, ["aws", "EC2"]),
+    ])
+
+    assert client_for(alice).get(f"/api/jobs/{jid}/skills").json() == [
+        {"name": "aws", "required": True, "weight": 1.0, "area": "Infrastructure & Cloud",
+         "terms": ["aws", "s3", "ec2"]}]
+
+
+def test_a_job_opened_through_the_harness_returns_its_requirements(isolated_engine, client_for):
+    from harness.contract import invoke
+    alice = _user(isolated_engine, "Alice")
+    out = invoke("open_job", alice, {
+        "jd_text": "We need Python and Docker.",
+        "requirements": [
+            {"text": "Strong Python", "type": "required", "criticality": 5, "terms": ["python"]},
+            {"text": "Docker is a plus", "type": "preferred", "criticality": 2, "terms": ["docker"]}],
+        "metadata": {"title": "MLE", "company": "Co"}})
+    assert out.get("error") is None, out
+
+    rows = client_for(alice).get(f"/api/jobs/{out['job_id']}/skills").json()
+
+    assert [(r["name"], r["required"], r["weight"]) for r in rows] == [
+        ("python", True, 1.0), ("docker", False, 0.4)]
+    with Session(isolated_engine) as s:
+        assert s.exec(select(JobSkill).where(JobSkill.job_id == UUID(out["job_id"]))).all() == []
+
+
+def test_job_skills_from_a_profile_are_still_owner_only(isolated_engine, client_for):
+    alice, bob = _user(isolated_engine, "Alice"), _user(isolated_engine, "Bob")
+    jid = _profile_job(isolated_engine, alice, [("Python", "required", 3, ["python"])])
+
+    assert client_for(bob).get(f"/api/jobs/{jid}/skills").status_code == 404

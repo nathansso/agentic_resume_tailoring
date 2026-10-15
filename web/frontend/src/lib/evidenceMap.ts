@@ -133,11 +133,11 @@ export function dateKey(raw: string | null | undefined): number | null {
   return y * 12 + (month >= 0 ? month : 6);
 }
 
-const endKey = (i: EvidenceItem): number => dateKey(i.end) ?? dateKey(i.start) ?? -1;
+export const endKey = (i: EvidenceItem): number => dateKey(i.end) ?? dateKey(i.start) ?? -1;
 const startKey = (i: EvidenceItem): number => dateKey(i.start) ?? -1;
 
 /** Most recent first; a total order, so the same items always list the same way. */
-function byRecency(a: EvidenceItem, b: EvidenceItem): number {
+export function byRecency(a: EvidenceItem, b: EvidenceItem): number {
   return cmpNum(endKey(b), endKey(a)) || cmpNum(startKey(b), startKey(a))
     || cmpStr(a.title, b.title) || cmpStr(a.key, b.key);
 }
@@ -543,43 +543,76 @@ export interface JobOverlay {
   areaRequired: Map<string, { total: number; evidenced: number }>;
 }
 
+/** One requirement of a job, with the profile skills it resolves to (none when the profile lacks it). */
+export interface JobMatch {
+  /** Stable id (`skillMatchKey` of the requirement's name), the key coverage is tracked by. */
+  id: string;
+  row: JobSkillRow;
+  /** Profile skills any of the requirement's terms names, in skill-key order. */
+  skills: EvidenceSkill[];
+}
+
+/**
+ * The job's requirements, required first then by name, each resolved to the profile
+ * skills it names. A requirement matches a skill when its name or any of its `terms`
+ * does (`skillMatchKey`), so a harness-opened job's "docker, kubernetes" requirement
+ * finds either. A name the job lists twice counts once (required wins: sorted first).
+ */
+export function matchJobSkills(view: EvidenceView, jobSkills: readonly JobSkillRow[]): JobMatch[] {
+  const byKey = new Map<string, EvidenceSkill[]>();
+  for (const s of [...view.skills].sort((a, b) => cmpStr(a.key, b.key))) {
+    const k = skillMatchKey(s.name);
+    byKey.set(k, [...(byKey.get(k) ?? []), s]);
+  }
+  const rows = [...jobSkills].sort((a, b) => Number(b.required) - Number(a.required) || cmpStr(a.name, b.name));
+  const seen = new Set<string>();
+  const out: JobMatch[] = [];
+  for (const row of rows) {
+    const id = skillMatchKey(row.name);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const skills = new Map<string, EvidenceSkill>();
+    for (const term of [row.name, ...(row.terms ?? [])]) {
+      for (const s of byKey.get(skillMatchKey(term)) ?? []) skills.set(s.key, s);
+    }
+    out.push({ id, row, skills: [...skills.values()].sort((a, b) => cmpStr(a.key, b.key)) });
+  }
+  return out;
+}
+
 export function jobOverlay(view: EvidenceView, jobSkills: readonly JobSkillRow[]): JobOverlay {
   const stats = skillStats(view);
-  const byName = new Map<string, EvidenceSkill>();
-  for (const s of [...view.skills].sort((a, b) => cmpStr(a.key, b.key))) {
-    if (!byName.has(skillMatchKey(s.name))) byName.set(skillMatchKey(s.name), s);
-  }
   const classBySkill = new Map<string, JobClass>();
   const weightBySkill = new Map<string, number>();
   const missing: JobSkillRow[] = [];
   const required: JobCounts = { total: 0, evidenced: 0, claimed: 0, missing: 0 };
   const preferred: JobCounts = { total: 0, evidenced: 0, claimed: 0, missing: 0 };
   const areaRequired = new Map<string, { total: number; evidenced: number }>();
-  const seen = new Set<string>();
-  const rows = [...jobSkills].sort((a, b) => Number(b.required) - Number(a.required) || cmpStr(a.name, b.name));
-  for (const js of rows) {
-    const k = skillMatchKey(js.name);
-    if (seen.has(k)) continue;        // a name the job lists twice counts once (required wins: sorted first)
-    seen.add(k);
+  const isCited = (s: EvidenceSkill): boolean => (stats.get(s.key) as SkillStat).cited;
+  for (const { row: js, skills } of matchJobSkills(view, jobSkills)) {
     const counts = js.required ? required : preferred;
-    const skill = byName.get(k);
     counts.total += 1;
-    const area = skill?.area ?? js.area;
+    // The area of the profile skill it resolves to (a cited one first), else the job's own.
+    const lead = skills.find(isCited) ?? skills[0];
+    const area = lead?.area ?? js.area;
     if (js.required) {
       const a = areaRequired.get(area) ?? { total: 0, evidenced: 0 };
       a.total += 1;
       areaRequired.set(area, a);
     }
-    if (!skill) {
+    if (skills.length === 0) {
       counts.missing += 1;
       if (js.required) missing.push(js);
       continue;
     }
-    const cited = (stats.get(skill.key) as SkillStat).cited;
+    const cited = skills.some(isCited);          // one requirement counts once, however many skills name it
     counts[cited ? "evidenced" : "claimed"] += 1;
     if (js.required && cited) (areaRequired.get(area) as { total: number; evidenced: number }).evidenced += 1;
-    classBySkill.set(skill.key, `${js.required ? "required" : "preferred"}-${cited ? "evidenced" : "claimed"}` as JobClass);
-    weightBySkill.set(skill.key, js.weight);
+    for (const skill of skills) {
+      if (classBySkill.has(skill.key)) continue;   // the first requirement to name a skill (required sorts first) classes it
+      classBySkill.set(skill.key, `${js.required ? "required" : "preferred"}-${isCited(skill) ? "evidenced" : "claimed"}` as JobClass);
+      weightBySkill.set(skill.key, js.weight);
+    }
   }
   return { classBySkill, weightBySkill, missing, required, preferred, areaRequired };
 }
