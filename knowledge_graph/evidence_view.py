@@ -102,6 +102,8 @@ def _project_item(p: Project, blurbs: List[ProjectBlurb]) -> Dict[str, Any]:
         "text": entries, "text_source": source,
         "cite_key": proj_key({"name": p.name}),
         "parent_key": None, "achievements": [], "repo_url": p.repo_url or "",
+        # unreviewed | linked | personal (#322): the map hints at a project nobody has placed.
+        "context_status": p.context_status or "unreviewed",
         "fields": {"name": p.name, "description": p.description or "",
                    "repo_url": p.repo_url or "", "start_date": p.start_date or "",
                    "end_date": p.end_date or ""},

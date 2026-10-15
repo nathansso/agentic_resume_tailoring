@@ -648,6 +648,105 @@ def get_evidence_view(user_id: Optional[UUID]) -> dict:
     return build_evidence_view(user_id)
 
 
+# ── Where a project was done, from the evidence panel (issue #322) ───────────────
+# The panel speaks the evidence view's item keys (`exp/<uuid>`, `edu/<uuid>`); the one write
+# path stays `agents.project_context.set_project_context`, which speaks `exp:`/`edu:` keys.
+
+def _context_rows(user_id: UUID):
+    from agents import project_context as pc
+
+    with Session(engine) as session:
+        exps, edus, projs = pc._user_rows(session, user_id)
+        return list(exps), list(edus), list(projs)
+
+
+def get_project_contexts(user_id: Optional[UUID]) -> list[dict]:
+    """Per project: `{project_id, status, parent, candidates}`. `parent` is the view key of
+    the role or degree it is linked to; `candidates` are the rule-based suggestions
+    (`{key, title, reason}`, view keys), best first. Reads only; nothing is written."""
+    from agents import project_context as pc
+    from agents.checks import exp_key
+
+    if user_id is None:
+        return []
+    exps, edus, projs = _context_rows(user_id)
+    view_key: dict[str, str] = {}
+    for e in exps:
+        view_key.setdefault(exp_key({"title": e.title, "company": e.company}), f"exp/{e.experience_id}")
+    for e in edus:
+        view_key.setdefault(pc.edu_key({"institution": e.institution, "degree": e.degree}),
+                            f"edu/{e.education_id}")
+    exp_ids = {e.experience_id for e in exps}
+    edu_ids = {e.education_id for e in edus}
+    parent_of: dict[str, Optional[str]] = {}
+    for p in projs:
+        parent = None
+        if p.experience_id in exp_ids:
+            parent = f"exp/{p.experience_id}"
+        elif p.education_id in edu_ids:
+            parent = f"edu/{p.education_id}"
+        parent_of[str(p.project_id)] = parent
+
+    out = []
+    for entry in pc.suggest_for_user(engine, user_id, include_reviewed=True, with_ids=True):
+        out.append({
+            "project_id": entry["project_id"],
+            "status": entry["context_status"],
+            "parent": parent_of.get(entry["project_id"]),
+            "candidates": [{"key": view_key[c["context_key"]], "title": c["title"], "reason": c["reason"]}
+                           for c in entry["suggestions"] if c["context_key"] in view_key],
+        })
+    return out
+
+
+def set_project_context(user_id: Optional[UUID], project_id: str, context: str) -> dict:
+    """Record where one of the user's projects was done, from a click in the panel (#322).
+
+    `context` is `exp/<uuid>`, `edu/<uuid>` (the view's item keys), `personal` or
+    `unreviewed`. Raises `LookupError` for a project or a role or degree that is not the
+    caller's, and `ValueError` for an unknown context. Returns
+    `{project_id, status, parent}`.
+    """
+    from agents import project_context as pc
+    from agents.checks import exp_key
+
+    pid = _as_uuid(project_id)
+    if user_id is None or pid is None:
+        raise LookupError("Project not found")
+    exps, edus, projs = _context_rows(user_id)
+    if not any(p.project_id == pid for p in projs):
+        raise LookupError("Project not found")
+
+    ctx = (context or "").strip().lower()
+    context_id: Optional[UUID] = None
+    if ctx in (pc.PERSONAL, pc.UNREVIEWED):
+        target = ctx
+    elif ctx.startswith(("exp/", "edu/")):
+        kind, _, raw = ctx.partition("/")
+        rid = _as_uuid(raw)
+        if rid is None:
+            raise ValueError("context must be exp/<id>, edu/<id>, 'personal' or 'unreviewed'.")
+        if kind == "exp":
+            row = next((e for e in exps if e.experience_id == rid), None)
+            target = exp_key({"title": row.title, "company": row.company}) if row else None
+        else:
+            row = next((e for e in edus if e.education_id == rid), None)
+            target = pc.edu_key({"institution": row.institution, "degree": row.degree}) if row else None
+        if target is None:
+            raise LookupError("That experience or education was not found")
+        context_id = rid
+    else:
+        raise ValueError("context must be exp/<id>, edu/<id>, 'personal' or 'unreviewed'.")
+
+    result = pc.set_project_context(engine, user_id, str(pid), target, context_id=context_id)
+    if "error" in result:
+        code = result["error"]["code"]
+        message = result["error"]["message"]
+        raise (LookupError if code == "not_found" else ValueError)(message)
+    after = next(c for c in get_project_contexts(user_id) if c["project_id"] == str(pid))
+    return {"project_id": str(pid), "status": after["status"], "parent": after["parent"]}
+
+
 def _profile_job_skills(job_id: UUID) -> list[dict]:
     """The job's requirements from its `JDProfile`, shaped as skill rows (issue #319).
 
