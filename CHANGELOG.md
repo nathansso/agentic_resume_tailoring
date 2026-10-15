@@ -15,7 +15,7 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 ---
 
 ## Issue 353 — `art github login` and `list_github_repos`
-**Status:** complete | **Tests:** TESTCOUNT
+**Status:** complete | **Tests:** 3152 pass on SQLite (33 in `test_github.py`, plus 2 contract cases, 2 boundary tests and a packaging assertion), 24 skipped, 2 xfailed, 0 fail
 
 A student could only bring in repos already on disk. `art github login` signs the user in with GitHub's device flow, and `list_github_repos` lists their repos for the host to choose from. The same token will identify the user to the LinkedIn gateway (#354, client #355).
 
