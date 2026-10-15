@@ -50,6 +50,9 @@ class BriefingInput(_Model):
     role_family: Optional[str] = Field(
         None, description="Scope preferences and job cards to this role family "
                           "(e.g. data_science).")
+    job_id: Optional[str] = Field(
+        None, description="Also the preferences scoped to this job, and (unless role_family "
+                          "is given) its role family's: the scope execute_plan enforces.")
 
 
 class Pin(_Model):
@@ -85,6 +88,7 @@ class JobRuleRef(_Model):
 
 class BriefingOutput(_Output):
     role_family: Optional[str] = None
+    job_id: Optional[str] = None
     pins: List[Pin] = Field(default_factory=list,
                             description="Strength-5 preferences. Honour verbatim.")
     preferences: List[Preference] = Field(default_factory=list)
@@ -963,7 +967,7 @@ TOOLS: List[ToolSpec] = [
         "Pinned preferences (verbatim), scoped preferences, persona traits and prior-job "
         "cards for this candidate. Call before planning any resume.",
         BriefingInput, BriefingOutput,
-        lambda uid, role_family=None: _tools().art_briefing(uid, role_family)),
+        lambda uid, role_family=None, job_id=None: _tools().art_briefing(uid, role_family, job_id)),
     ToolSpec(
         "art_pins",
         "The candidate's pins word for word: strength-5 preferences, negative pins included. "

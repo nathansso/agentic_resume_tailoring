@@ -14,6 +14,29 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 291 — One preference scope for what the host sees and what the executor enforces
+**Status:** complete | **Tests:** 2651 pass on SQLite (3 new), 16 skipped
+
+Before this fix, a strength-5 pin scoped to a role family was shown in the briefing but never enforced. It was reproduced over MCP: "For ML roles, never include SemanticSearch-Lite" was kept on an ML job, while a global pin in the same plan was refused. Three readers each scoped preferences their own way:
+- `execute_plan` passed only the job id, so role-family pins never bound.
+- `art_briefing` passed only a role family, so a job's own preferences were never shown.
+- The post-compaction hook restored pins by job id alone.
+
+This is phase 1 of 7 of the preference-anchoring plan (#295–#300).
+
+### What shipped
+- **`harness/tools.py::preferences_for(user_id, job_id, role_family)`**, the one scope every reader now uses. Global preferences always apply, plus the job's own, plus its role family's. The role family is the one given, else the one `open_job` recorded for the job (`library.role_family_of`), which is deterministic and model-free.
+- **`execute_plan` / `_hard_preferences` use it**, so a role-family pin is refused on a job of that family, and only there. `suggest_actions` reads the same function.
+- **`art_briefing` takes an optional `job_id`** and echoes the `job_id` and `role_family` it used. `art_pins`, and the hook's restore through it, resolve the job's family the same way.
+- **The `art-tailor` skill** tells the host to call `art_briefing` with `job_id` once the job exists.
+- **Tests** (`tests/test_executor.py`):
+  - A role-family pin is refused, with a `preferences` violation, on a job of its family, and kept on a job of another family.
+  - The briefing and `art_pins` show the job's and its family's pins when given the job, and not otherwise.
+
+### Deviations from spec
+- **The helper lives in `harness/tools.py`, not on `services.resolve_role_family`.** The plan named the services function, but that function can call a model classifier on a new posting, and `harness/` must stay model-free. `library.role_family_of` reads the family `open_job` recorded, or the deterministic title map.
+- **No shared helper for persona traits or job cards.** They were already scoped by role family and now receive the resolved one; job-scoped persona traits remain out of scope.
+- **The Postgres leg was not run locally** (Docker was not running). CI runs it. `test_no_source_file_reads_a_naive_utc_clock` fails locally only because it walks untracked `personal/` and `tmp/` folders.
 ## Issue 278 — A host commit no longer drops the user's `.tex` edits, and `diff_nodes` says which bullets they changed
 **Status:** complete | **Tests:** 2690 pass on SQLite (27 new), 24 skipped, 0 fail. The Postgres leg was not run locally; CI runs it
 
