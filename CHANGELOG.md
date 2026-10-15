@@ -15,7 +15,7 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 ---
 
 ## Issue 298 — `ResumeRule`: what the user said about the page, enforced at finalize
-**Status:** complete | **Tests:** 3071 pass on SQLite (75 new, 69 of them in `test_resume_rules.py`), 24 skipped, 2 xfailed, 0 fail
+**Status:** complete | **Tests:** 3103 pass on SQLite (85 in `test_resume_rules.py`, after merging main), 24 skipped, 2 xfailed, 0 fail
 
 Phase 5 of 7 of the preference-anchoring plan (#295–#300). A preference about a resume item is a `UserPreference` bound to the item's key (or pending until it exists); a preference about the page as a whole (length, section order, tone) had nowhere to live, and a `section:` pin was enforced as the dead term "section: projects". It is now a `ResumeRule`: typed, global, scoped, and checked on every generated resume.
 
