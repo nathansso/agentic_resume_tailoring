@@ -14,6 +14,27 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 326 — diff_nodes handles skill objects
+**Status:** complete | **Tests:** 2923 pass on SQLite (4 new), 24 skipped, 0 fail; the Postgres leg was not run locally (Docker was not running), CI's required Postgres leg covers it
+
+`diff_nodes` raised a pydantic validation error whenever two versions' skill sets differed. A version's `skills_ranked` is a list of `{name, category, score}` objects (the executor, the pipeline and the layout resolver all write that shape), but `harness/tree.py` compared the entries whole and passed them into `DiffOutput.skills_added` / `skills_removed`, which are `List[str]`. `/art:history` and `/art:revert` both call `diff_nodes`, so both crashed on any pair of versions with different skills; the change feed's `get_head(...).editor_edits[].changes` swallowed the same error and fell back to an empty summary.
+
+### What shipped
+
+- **`harness/tree.py::_skill_names`.** `diff_nodes` now compares skills by name and returns the names, so the contract stays `List[str]` and the hook line (`harness/hooks.py`) and the commands' one-line summaries read as before. Names fold on case and spacing, so a skill that was only reordered, re-scored or re-cased is not reported as added and removed. A plain-string entry is read as the name, so a version from an older build or hand-written content diffs against an executor version, in either direction. Entries with no name are skipped.
+- **The change feed is fixed by the same change.** `tree._changes` (behind `get_head`'s `changes`) calls `diff_nodes`, so it now carries the skill names instead of the empty fallback.
+- **Other `DiffOutput` fields checked, none needed a change.** `items` (bullets are strings, `reordered` a bool), `tex_edits`, `tex_changed` and `layout_changed` already match the contract; `skills_added` / `skills_removed` were the only mismatch. `harness/contract.py` is untouched.
+- **Tests (4 new, `tests/test_executor.py`).** Two executor-built versions with different skill sets, called through the tool contract, name the right skills added and removed in both directions, and the stored skills are objects; a reordered and re-scored version reports none; an old string-skill version against an object one, both directions; the change feed carries the names. All four fail on `origin/main` with the `DiffOutput` validation error.
+
+### Deviations from spec
+
+- **No test through `scripts/build_site_demo.py`.** The regression test builds its two versions with the real executor (`execute_plan` with a `skills` list) on the benchmark profile instead, which needs no tectonic and reproduces the same validation error on `origin/main`. The demo script was not run.
+- **The executor does not accept a string-skill parent.** `metric_vector` reads `skills_ranked` entries with `.get`, so a plan on top of a version that stores plain strings fails in `ats_scorer`. Nothing in ART writes strings, so only `diff_nodes` was made tolerant; the string version in the mixed test is committed last with `commit_node`.
+- **Names are matched on case and whitespace only, not punctuation.** `agents.layout._norm` also drops punctuation, which would equate `C` and `C++`; the executor's own `held` set folds the same way as the new helper.
+- **A skill renamed to a differently cased spelling reports nothing.** The first-seen spelling is the one returned for an added or removed skill.
+
+---
+
 ## Issue 327 — Stable bullet citation keys
 **Status:** complete | **Tests:** 2919 pass on SQLite (9 new), 24 skipped, 0 fail; the Postgres leg was not run locally (Docker was not running), CI's required Postgres leg covers it
 
