@@ -54,6 +54,7 @@ def test_heavy_pieces_live_in_the_extras():
     assert "docling" in extras["pdf"]
     assert {"fastapi", "uvicorn"} <= extras["ui"]
     assert "psycopg2-binary" in extras["postgres"]
+    assert "keyring" in extras["keyring"]
 
 
 def test_pins_match_the_requirements_files():

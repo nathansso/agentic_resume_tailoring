@@ -87,6 +87,9 @@ CALLS = {
                {"job_id": "00000000-0000-0000-0000-000000000000"}],
     "update_profile": [{"fields": {"location": "San Diego, CA"}},
                        {"fields": {"nickname": "x"}}],
+    # GitHub (#353). Signed out here, so every adapter returns not_logged_in without a network
+    # call; the signed-in paths, on a fake GitHub, are in tests/test_github.py.
+    "list_github_repos": [{}, {"page": 2, "per_page": 5, "include_private": False}],
 }
 _DUMMY = {"$JOB": "00000000-0000-0000-0000-000000000001",
           "$N0": "00000000-0000-0000-0000-000000000002",
@@ -169,13 +172,22 @@ def test_get_profile_returns_header_fields_and_nothing_secret(kg):
     assert "password_hash" not in out and "github_access_token" not in out
 
 
-@pytest.mark.parametrize("name", sorted(CALLS))
+@pytest.mark.parametrize("name", sorted(n for n in CALLS if BY_NAME[n].needs_user))
 def test_no_user_is_the_same_result_on_every_adapter(isolated_engine, capsys, name):
     args = _fill(CALLS[name][0], _DUMMY)
     direct = invoke(name, None, args)
     assert direct["error"]["code"] == "no_user"
     assert _via_mcp(name, None, args) == direct
     assert _via_cli(name, None, args, capsys) == direct
+
+
+def test_a_tool_that_needs_no_profile_runs_without_one(isolated_engine, capsys):
+    """`list_github_repos` acts on the machine's GitHub login, not on a profile (#353)."""
+    assert [t.name for t in TOOLS if not t.needs_user] == ["list_github_repos"]
+    direct = invoke("list_github_repos", None, {})
+    assert direct["error"]["code"] == "not_logged_in"
+    assert _via_mcp("list_github_repos", None, {}) == direct
+    assert _via_cli("list_github_repos", None, {}, capsys) == direct
 
 
 def test_mcp_publishes_the_contract_schemas():
@@ -188,6 +200,7 @@ def test_mcp_publishes_the_contract_schemas():
         assert tool.input_schema.get("required") == want.get("required")
         assert tool.output_schema and "error" in tool.output_schema["properties"]
         assert tool.annotations.read_only_hint is spec.read_only
+        assert tool.annotations.open_world_hint is spec.network
 
 
 def test_cli_list_prints_the_whole_contract(capsys):
