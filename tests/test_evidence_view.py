@@ -258,6 +258,26 @@ def test_provenance_marks_an_edge_the_text_already_made(isolated_engine):
     assert edge["cites"] == [0] and edge["github"] is True
 
 
+def test_provenance_matches_a_whole_repo_not_a_longer_one_that_starts_with_its_slug(isolated_engine):
+    uid = _user(isolated_engine)
+    _skill(isolated_engine, uid, "Rust", source="github:me/app-server")
+    _skill(isolated_engine, uid, "Go", source="github:me/app")
+    _skill(isolated_engine, uid, "Zig", source="github:me/ap")
+    _skill(isolated_engine, uid, "Lua", source="github:me/app, github:me/app-server")
+    _project(isolated_engine, uid, "App", "a build", repo_url="https://github.com/me/app")
+    _project(isolated_engine, uid, "App Server", "a build", repo_url="https://github.com/me/app-server")
+
+    view = services.get_evidence_view(uid)
+
+    assert _edge(view, "App", "Rust") is None                 # another repo that begins with this one's name
+    assert _edge(view, "App Server", "Rust")["github"] is True
+    assert _edge(view, "App", "Go")["github"] is True
+    assert _edge(view, "App Server", "Go") is None
+    assert _edge(view, "App", "Zig") is None                  # a prefix of the slug is not the repo
+    assert _edge(view, "App Server", "Zig") is None
+    assert _edge(view, "App", "Lua")["github"] and _edge(view, "App Server", "Lua")["github"]
+
+
 def test_the_view_does_not_change_the_graph_the_tailoring_reads(isolated_engine):
     from knowledge_graph.builder import SkillGraphBuilder
     uid = _user(isolated_engine)

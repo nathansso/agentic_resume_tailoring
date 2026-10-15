@@ -14,6 +14,7 @@ project's blurbs are numbered over their non-empty entries, projects through
 that `index` (None for an empty entry, which has no ordinal) and its `raw_index`,
 its position in the stored list, which is what an editor writes back.
 """
+import re
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
@@ -33,6 +34,12 @@ EMPTY_VIEW: Dict[str, Any] = {
     "stats": {"items": 0, "skills": 0, "evidenced": 0, "unevidenced": 0,
               "github_only": 0, "needs_text": 0},
 }
+
+
+def _names_repo(haystack: str, slug: str) -> bool:
+    """Whether `haystack` names the repo `slug` as a whole `owner/repo`: not as the start or
+    end of a longer one (`owner/app` is not `owner/app-server`, `owner/ap` is not `owner/app`)."""
+    return re.search(r"(?<![\w.-])" + re.escape(slug) + r"(?![\w.-])", haystack) is not None
 
 
 def skill_source_kind(evidence_source: Optional[str]) -> str:
@@ -216,7 +223,7 @@ def build_evidence_view(user_id: Optional[UUID]) -> Dict[str, Any]:
             if skill_key is None or not haystack.strip():
                 continue
             for slug, matched in by_slug.items():
-                if slug not in haystack:
+                if not _names_repo(haystack, slug):
                     continue
                 for item in matched:
                     edge = edges.setdefault((item["key"], skill_key), {
