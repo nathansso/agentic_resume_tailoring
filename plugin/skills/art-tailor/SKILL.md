@@ -24,6 +24,12 @@ The tools named below are the ART MCP server's tools.
   `art_briefing` with `job_id` instead. It adds the job's own preferences and its recorded
   role family, which is exactly the set `execute_plan` enforces.
 - **Pins are hard rules.** Quote them to yourself and honour them verbatim.
+- **Page rules** (`rules` in the briefing) are what the user said about the page as a whole:
+  `hard` ones (a page count, a bullets-per-item or skills limit, a section left off, a section
+  order) are enforced, and `execute_plan` refuses a plan that loosens one; `soft` ones are
+  defaults you may override, and the result reports them applied or not; `notes` are style
+  notes (tone, wording): follow them, nothing blocks. A section a hard rule leaves off is
+  already off the page, so plan nothing for its items.
 - Note `job_rules`: yes/no questions about the posting, such as whether it requires
   enrollment after the internship. Answer each from the posting's own words, keeping
   the quote. If the posting doesn't say, ask the user.
@@ -143,8 +149,8 @@ Draft a plan program for `execute_plan`. Its input schema is published with the 
 - **skills**: an ordered list of skill names from the graph, with posting terms first.
 - Keep each bullet to two rendered lines and the whole page to one.
 - **Leave `finalize` out.** Its defaults are ART's calibrated one-page budget: 60 lines,
-  plus the skills cap and floor. Don't invent a smaller budget; cut content instead when
-  finalize reports `line_budget`.
+  plus the skills cap and floor, or the user's page rules when they set any. Don't invent a
+  smaller budget; cut content instead when finalize reports `line_budget`.
 
 **Show the user the plan before you execute it.** Show which items lead, what each
 revision says, what is cut and why, and the skills line. Then wait for approval.
@@ -275,6 +281,12 @@ that bullet") and a fact about their experience are not; facts go to `upsert_ite
     kind of role (`role_family`).
   - A different polarity or strength for the same item and scope replaces the old preference;
     the old one stays on record, superseded.
+  - A rule about the page as a whole ("keep it to one page", "no projects section", "skills
+    first", "formal tone") is not about an item: it is a document rule. `record_preference`
+    stores the plain limits itself; for anything else call `record_rule` with a `kind`
+    (`limit`, `section_order`, `style_note`) and `params`. A narrower rule can only tighten a
+    hard one: ART refuses it and names the rule, so ask the user before changing the broader
+    rule (`retract_rule`).
 - When a line says "ART saved a standing preference from this message", tell the user in
   your reply what was saved. If it is wrong, correct it with `record_preference`.
 - The hook may not exist on every host. Without it, call `observe` with the user's message

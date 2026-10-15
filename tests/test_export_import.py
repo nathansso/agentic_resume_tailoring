@@ -127,6 +127,12 @@ def seed(engine, uid=UID, email="ada@example.org", with_secrets=True):
                                text="Lead with forecasting", polarity="emphasize",
                                scope_type="role_family", scope_value="data_science",
                                supersedes_id=i("pref1"), created_at=T0, updated_at=T0))
+        s.add(m.ResumeRule(rule_id=i("rule-old"), user_id=uid, kind="limit", params={"pages": 2},
+                           text="Two pages is fine", strength=3, status="superseded",
+                           created_at=T0, updated_at=T0))
+        s.add(m.ResumeRule(rule_id=i("rule-new"), user_id=uid, kind="limit", params={"pages": 1},
+                           text="Keep it to one page", strength=5, supersedes_id=i("rule-old"),
+                           provenance={"source": "host"}, created_at=T0, updated_at=T0))
         s.add(m.PersonaTrait(trait_id=i("trait"), user_id=uid, group_key="suppress|topic|global",
                              label="Avoids coursework", leaf_ids=[str(i("pref1"))],
                              created_at=T0, updated_at=T0))

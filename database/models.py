@@ -560,6 +560,51 @@ class UserPreference(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=utc_now)
 
 
+class ResumeRule(SQLModel, table=True):
+    """One document-level preference: about the page as a whole, not an item on it (#298).
+
+    `UserPreference` holds what the user said *about* a resume item (bound to its graph key, or
+    pending until the item exists). This holds what they said about the page: its length, its
+    section order, its tone. The knowledge graph keeps only resume items, so these live apart and
+    apply to every generated resume in scope.
+
+    `kind` decides the enforcement point (`harness/rules.py`): `limit` and `section_order` set the
+    finalize defaults a plan may only tighten, `style_note` is pushed to the host and blocks
+    nothing. `params` is validated per kind; `text` is the user's own words. Strength 5 is a hard
+    rule, 1-4 a soft one (a default a plan may override, reported either way).
+
+    **Nothing is ever deleted**, the `UserPreference` contract (#129): a changed rule is
+    `superseded` by a new row (`supersedes_id` points back) and a withdrawn one is `retracted`.
+
+    A new table, so `SQLModel.metadata.create_all` picks it up and no ALTER is needed. No rows =>
+    today's behavior.
+    """
+    rule_id: UUID = Field(default_factory=uuid4, primary_key=True)
+    user_id: UUID = Field(foreign_key="user.user_id", index=True)
+
+    # limit | section_order | style_note
+    kind: str = Field(default="style_note", index=True)
+    params: Dict = Field(default={}, sa_column=Column(JSON))
+    # The rule in the user's own words, verbatim.
+    text: str = Field(default="")
+
+    # global | role_family | job, with the family/job id in scope_value (as UserPreference).
+    scope_type: str = Field(default="global")
+    scope_value: Optional[str] = Field(default=None)
+
+    # 1-5: 5 is hard (a gate, refused when loosened), 1-4 soft (a default, reported).
+    strength: int = Field(default=3)
+
+    # active | superseded | retracted
+    status: str = Field(default="active", index=True)
+    supersedes_id: Optional[UUID] = Field(default=None)
+    # {"source": ..., "quote": ..., "routed_from": ...}: where this came from.
+    provenance: Dict = Field(default={}, sa_column=Column(JSON))
+
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
 class PersonaTrait(SQLModel, table=True):
     """One deterministic group of `UserPreference` leaves (issue #133).
 

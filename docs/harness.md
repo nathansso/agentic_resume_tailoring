@@ -175,8 +175,9 @@ And pooling hid real results: the per-stratum spread in #172 vanished when poole
 | Supportable weighted coverage | Yes, but flat on unsupported terms | Target | `agents/keyword_weights.py` (#125) |
 | Semantic requirement coverage | Only in what a bullet evidences | Target | `harness/decisions/coverage.py`, Jev, #126 |
 | Relevance density | No | Target | promoted from `eval/metrics._keyword_relevance` |
-| Page count and line budget | Yes | Finalize | `agents/layout.py`, #200 |
-| Non-empty sections, skills cap | No | Finalize | `agents/tailor_planner.py` |
+| Page count and line budget | Yes | Finalize; the default is the user's `limit` rule when one exists (#298) | `agents/layout.py`, #200 |
+| Non-empty sections, skills cap | No | Finalize; a section a `limit` rule leaves off is not required (#298) | `agents/tailor_planner.py` |
+| Document rules: limits, section order | No | Finalize defaults a plan may only tighten; a hard rule it loosens is a `rules` violation (#298) | `harness/rules.py`, `harness/acceptance.py::rule_violations` |
 | ATS composite and components | Yes | **Report only** | `agents/ats_scorer.py` |
 
 **The acceptance rule (#113).** An action commits if and only if all of the following hold:
@@ -299,7 +300,7 @@ code or a cached Jev decision.
       "because": "user:fit the one-page budget" }
   ],
   "skills": ["Python", "SQL", "PyTorch"],
-  "finalize": { "line_budget": 60, "max_skills": 18, "min_skills": 8, "max_bullet_lines": 2 },
+  "finalize": { "max_skills": 12 },
   "host": { "name": "claude-code", "version": "2.1", "model": "claude-opus-5-5" }
 }
 ```
@@ -312,7 +313,10 @@ Execution:
    a tolerance, never loosen one. A failing node is reverted, and independent nodes
    continue.
 3. **Finalize** checks page, line budget, sections and skills cap. On any violation
-   nothing commits, and the host gets the violations with trade hints.
+   nothing commits, and the host gets the violations with trade hints. Every `finalize` field
+   is optional and unset takes its default: the built-in one (a page of 60 lines, 18 skills,
+   2 lines a bullet), or the user's document rule when one is in scope (§ 9, "Document
+   rules"). A plan may tighten a default and, for a hard rule, never loosen it.
 4. **Patch** edits the saved program by JSON pointer.
 5. **Commit** writes a tree node with its metric vector and provenance. A plan that builds
    on a parent and would leave the page identical to it (every node reverted, refused or kept,
@@ -478,7 +482,7 @@ construction.
 | Group | Tool | Takes → returns |
 |---|---|---|
 | Context | `art_briefing` | role family → pins, negative pins, persona traits, JobCards with rejections |
-| | `art_pins` | role family, job → strength-5 preferences and negative pins, verbatim; the set `art_briefing` pushes, plus a job's own (#202) |
+| | `art_pins` | role family, job → strength-5 preferences and negative pins, verbatim; the set `art_briefing` pushes, plus a job's own (#202); and the strength-5 document rules in scope (#298) |
 | Retrieval | `kg_search` | query, kinds → items with keys and evidence IDs |
 | | `list_items` | kind → every key and title, no query needed (#191); each item also carries its `preferences` and `job_rules` (#297) |
 | | `get_item` | key → record, evidence; an experience or project also lists its approved variants (id, text, tags, cites) (#229); its `preferences` (active, keyed to it, any scope) and `job_rules` (#297) |
@@ -503,9 +507,49 @@ construction.
 | | `history` | job → every version, oldest first |
 | Check & render | `check_draft` | **Planned, not built (#252).** node → metric vector by role (`execute_plan` already returns each node's vector) |
 | | `render` | job, optional node (HEAD by default), `pdf` or `tex` → `.tex` and PDF paths, whether the user's own edited `.tex` was rendered, page count, line budget (#201) |
+| Document rules (#298) | `record_rule` | text, kind (`limit`, `section_order`, `style_note`), params, strength, scope → the rule stored, superseded, already recorded, or refused (a bad shape, no plain limit in the words, or a narrower rule that would loosen a hard one, naming it) |
+| | `retract_rule` | rule id → retracted; the row stays |
 | Feedback & memory | `observe` | user text → gate decision: `drop`, `host` (confirm with the user, then `record_preference`) or `write` (#202) |
-| | `record_preference` | typed preference (text, polarity, target, strength, scope) → stored, superseded, already recorded, or refused with a reason; strength 5 and negative pins allowed here, because this is the confirmation (#202) |
+| | `record_preference` | typed preference (text, polarity, target, strength, scope) → stored, superseded, already recorded, or refused with a reason; strength 5 and negative pins allowed here, because this is the confirmation (#202). A target about the page is a document rule: "one page" or "no projects section" is stored as one, anything looser is refused with nothing stored and a pointer to `record_rule` (#298) |
 | | `record_feedback` | **Planned, not built (#252).** node, 1–5 score, edits → logged, JobCard rebuilt, promotion candidates |
+
+### Document rules (#298)
+
+A preference *about a resume item* is a `UserPreference` bound to the item's graph key, or
+pending until the item exists (#295, #297). A preference *about the page as a whole* (its length,
+its section order, its tone) is a `ResumeRule`, a separate table, because the knowledge graph
+holds only resume items. Rules apply to every generated resume in scope. Nothing is deleted: a
+changed rule is superseded and a withdrawn one is retracted.
+
+| Kind | Params | Enforced as |
+|---|---|---|
+| `limit` | `pages`, `bullets_per_item`, `max_skills`, `max_bullet_lines`, `<section>: 0` | The `finalize` defaults (`line_budget` = pages × 60, `max_skills`, `max_bullet_lines`), the `bullets_per_item` check, and the section left out of the content (and off the rendered page) |
+| `section_order` | `order`: section names, first to last | The default `section_order`; a plan that sets another one must begin with the rule's sections |
+| `style_note` | none | Pushed to the host in `art_briefing` and `execute_plan`'s `rules.style_notes`; never blocks, whatever its strength |
+
+**Strength.** 5 is hard: a plan that loosens it is refused at finalize (check `rules`, naming
+the rule), and a section it leaves off cannot be kept (`finalize.keep_sections` is a violation).
+1 to 4 is soft and never a gate. A soft section exclusion, section order and skills limit are
+defaults a plan may override (`finalize.keep_sections`, its own order, its own skills list); a soft
+page, bullet-lines or bullets-per-item limit is only measured against the finished page. Each is
+reported in `soft_preferences` as `applied` or `not_applied`. Strength 1 to 4 *preferences*
+(`UserPreference`) are reported there too, by whether what they name is on the page. (A soft limit
+that widens a built-in default, two pages where one is built in, does move the default.)
+
+**Scope precedence.** A narrower scope may only *tighten* a hard rule. Among hard rules the
+tightest value wins whatever its scope; one that would loosen a broader hard rule is refused when
+recorded (naming the broader rule) and listed under `rules.overridden` if it exists anyway. Among
+soft rules the narrower scope overrides the broader, and a soft rule never loosens a hard one. A
+narrower hard `section_order` may only extend a broader one.
+
+**The user's editor layout outranks a rule's section order.** A drag in `art ui` is laid over the
+plan's order after the rule's default and the plan's own order were settled (#277), and is never a
+violation. A plan's own `section_order` is still checked against a hard rule.
+
+A hard pin's term is also checked in the summary, education, achievements and skills text
+(`harness/acceptance.py::negative_pin_violations`, #298), not only in experience and project
+fields. No plan node edits those sections, so the hint names the knowledge-graph item to correct,
+or the `limit` rule that leaves the section off.
 
 ## 10. Memory and compaction (#202)
 

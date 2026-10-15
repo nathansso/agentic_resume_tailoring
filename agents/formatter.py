@@ -23,6 +23,13 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_SECTION_ORDER = ["education", "experience", "projects", "skills", "achievements"]
 
+
+def _excluded_sections(content: Dict) -> List[str]:
+    """Sections a document rule (`ResumeRule` kind `limit`, #298) leaves off the page. The
+    executor empties an excluded section's content, but education is read from the store, so the
+    node carries the names as `_excluded_sections` for the formatter to honour."""
+    return [str(s) for s in (content or {}).get("_excluded_sections") or []]
+
 # ── Jake's Resume preamble (exact match to https://github.com/jakegut/resume) ──
 
 _JAKE_PREAMBLE = r"""%-------------------------
@@ -590,7 +597,8 @@ class ResumeFormatterAgent:
 
         for key in sections_to_render:
             if key == "education":
-                edu_entries = self._get_education()
+                edu_entries = ([] if "education" in _excluded_sections(tailored_content)
+                               else self._get_education())
                 if not edu_entries:
                     continue
                 _section_heading(self._resolve_label("education"))
@@ -679,7 +687,8 @@ class ResumeFormatterAgent:
         order = section_order or style.get("section_order") or _DEFAULT_SECTION_ORDER
 
         builders = {
-            "education": self._build_tex_education,
+            "education": lambda: ("" if "education" in _excluded_sections(tailored_content)
+                                  else self._build_tex_education()),
             "experience": lambda: self._build_tex_experiences(
                 tailored_content.get("experiences", [])
             ),

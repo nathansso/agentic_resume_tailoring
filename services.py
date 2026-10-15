@@ -2183,6 +2183,119 @@ def retract_preference(user_id: UUID, preference_id: UUID) -> Optional[dict]:
         return None
 
 
+# ── Document rules (issue #298) ─────────────────────────────────────────────
+#
+# `ResumeRule` rows hold what the user said about the page as a whole. The same contract as
+# `UserPreference`: nothing is deleted, a changed rule is superseded and a withdrawn one is
+# retracted. Validation, scope and enforcement are `harness/rules.py`; these are the writes.
+
+def _rule_dict(row) -> dict:
+    provenance = row.provenance
+    if isinstance(provenance, str):
+        try:
+            provenance = json.loads(provenance)
+        except (ValueError, TypeError):
+            provenance = {}
+    params = row.params
+    if isinstance(params, str):
+        try:
+            params = json.loads(params)
+        except (ValueError, TypeError):
+            params = {}
+    return {
+        "rule_id": str(row.rule_id),
+        "kind": row.kind,
+        "params": params or {},
+        "text": row.text,
+        "scope_type": row.scope_type,
+        "scope_value": row.scope_value,
+        "strength": row.strength,
+        "status": row.status,
+        "supersedes_id": str(row.supersedes_id) if row.supersedes_id else None,
+        "provenance": provenance or {},
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+    }
+
+
+def load_resume_rules(user_id: UUID, include_inactive: bool = False) -> list[dict]:
+    """This user's document rules, oldest first. Read-only; [] on any failure, so an unreadable
+    table degrades to no rules rather than breaking a run."""
+    from datetime import datetime, timezone
+
+    from database.models import ResumeRule
+
+    try:
+        with Session(engine) as session:
+            rows = session.exec(select(ResumeRule).where(ResumeRule.user_id == user_id)).all()
+            out = [_rule_dict(r) for r in rows]
+    except Exception as exc:
+        logger.warning("load_resume_rules failed for user %s: %s", user_id, exc)
+        return []
+    if not include_inactive:
+        out = [r for r in out if r["status"] == "active"]
+    out.sort(key=lambda r: (as_utc(r["created_at"]) or datetime.min.replace(tzinfo=timezone.utc),
+                            r["rule_id"]))
+    return out
+
+
+def save_resume_rule(user_id: UUID, rule: dict, supersedes: Optional[list] = None) -> Optional[dict]:
+    """Store one validated rule (`harness/rules.normalize_params` has run) and mark each rule in
+    `supersedes` superseded, linking the new row to the first. Never deletes. Returns the stored
+    rule, or None when it could not be written."""
+    from database.models import ResumeRule
+
+    try:
+        with Session(engine) as session:
+            prior_ids = []
+            for raw in supersedes or []:
+                pid = _as_uuid(raw)
+                prior = session.get(ResumeRule, pid) if pid else None
+                if prior is not None and prior.user_id == user_id and prior.status == "active":
+                    prior.status = "superseded"
+                    prior.updated_at = utc_now()
+                    session.add(prior)
+                    prior_ids.append(prior.rule_id)
+            row = ResumeRule(
+                user_id=user_id, kind=rule["kind"], params=rule.get("params") or {},
+                text=rule["text"], scope_type=rule.get("scope_type") or "global",
+                scope_value=rule.get("scope_value") or None,
+                strength=int(rule.get("strength") or 3), status="active",
+                supersedes_id=prior_ids[0] if prior_ids else None,
+                provenance=rule.get("provenance") or {})
+            session.add(row)
+            session.flush()
+            stored = _rule_dict(row)
+            session.commit()
+        return stored
+    except Exception as exc:
+        logger.warning("save_resume_rule failed for user %s: %s", user_id, exc)
+        return None
+
+
+def retract_resume_rule(user_id: UUID, rule_id) -> Optional[dict]:
+    """Withdraw a rule: `status='retracted'`, the row kept (the history is the record of what the
+    user asked for and when). None when it does not exist or is not this user's."""
+    from database.models import ResumeRule
+
+    try:
+        with Session(engine) as session:
+            rid = _as_uuid(rule_id)
+            row = session.get(ResumeRule, rid) if rid else None
+            if row is None or row.user_id != user_id:
+                return None
+            if row.status == "active":
+                row.status = "retracted"
+                row.updated_at = utc_now()
+                session.add(row)
+                session.commit()
+                session.refresh(row)
+            return _rule_dict(row)
+    except Exception as exc:
+        logger.warning("retract_resume_rule failed for %s: %s", rule_id, exc)
+        return None
+
+
 # ── Persona semantic tier (issue #133) ──────────────────────────────────────
 #
 # **The write barrier applies here too, and harder.** The rule from #118 is that

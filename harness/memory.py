@@ -242,6 +242,42 @@ def _entry_for(anchor: Optional[Dict[str, Any]], catalog: List[Dict[str, str]],
     return entry
 
 
+def _document_rule(user_id: UUID, text: str, polarity: str, target: str, strength: int, scope: str,
+                   scope_value: Optional[str], quote: Optional[str],
+                   anchor: Dict[str, Any]) -> Dict[str, Any]:
+    """A preference about the page is a document rule, not an item preference (#298).
+
+    **Routed or refused, by one test:** when the words state exactly one plain limit ("one page",
+    "two pages", "no projects section", or a suppressed `section:<name>`), the rule is stored
+    here, as `record_rule` would store the same params. Anything else is *refused with nothing
+    stored*, and the result says to call `record_rule` with a kind and params. ART never invents
+    a number or a kind from loose words: a `style_note` for "formal tone" is one explicit call
+    away, and a refusal costs the host one round trip, where a guess would put a rule the user
+    did not state on every resume."""
+    from harness import rules as rules_mod, tools
+
+    view = _anchor_view(anchor)
+    params = rules_mod.infer_limit(text, target, polarity)
+    if params is None:
+        return _refuse(
+            f"'{target}' is about the page, not an item on it, so it is a document rule: call "
+            "record_rule with kind limit (pages, bullets_per_item, max_skills, max_bullet_lines, "
+            "or a section set to 0), section_order or style_note, and params (see shapes). "
+            "Nothing was stored.",
+            anchor=view, route={"tool": "record_rule", "kinds": list(rules_mod.KINDS),
+                                "shapes": rules_mod.SHAPES, "text": text, "strength": strength,
+                                "scope": scope, "scope_value": scope_value})
+    result = tools.record_rule(user_id, text, "limit", params, strength, scope, scope_value, quote,
+                               routed_from="record_preference")
+    out = {"status": result["status"], "reason": result.get("reason"), "text": text,
+           "polarity": polarity, "scope_type": scope, "scope_value": scope_value or None,
+           "strength": strength, "pinned": strength >= mg.PIN_STRENGTH, "anchor": view,
+           "rule": result.get("rule")}
+    if result.get("supersedes"):
+        out["supersedes"] = result["supersedes"]
+    return out
+
+
 def record_preference(user_id: UUID, text: str, polarity: str, target: Optional[str] = None,
                       strength: int = 3, scope: str = "global", scope_value: Optional[str] = None,
                       quote: Optional[str] = None) -> Dict[str, Any]:
@@ -254,10 +290,10 @@ def record_preference(user_id: UUID, text: str, polarity: str, target: Optional[
 
     `target` goes through the anchor resolver (`harness/anchors.py`, #295), whose status comes
     back as `anchor`: `bound` (a key, found by its key, label, name or alias), `pending` (a thing
-    the graph does not hold: stored with its term only), `document` (about the page: stored as
-    before, by its section key or its term, until the rule table of #298). `ambiguous` and
-    `multiple` are refused, with the candidates or the subjects, so nothing is stored under a
-    guess."""
+    the graph does not hold: stored with its term only), `document` (about the page: a document
+    rule, #298, stored by `_document_rule` when the words state one plain limit, else refused
+    with nothing stored and a pointer to `record_rule`). `ambiguous` and `multiple` are refused,
+    with the candidates or the subjects, so nothing is stored under a guess."""
     text = " ".join((text or "").split())
     if not text:
         return _refuse("text is empty: give the preference as a standalone instruction.")
@@ -294,6 +330,9 @@ def record_preference(user_id: UUID, text: str, polarity: str, target: Optional[
         return _refuse(f"'{target}' names several things: record one preference per subject, "
                        "so each can be changed or removed on its own.",
                        anchor=_anchor_view(anchor), subjects=anchor["subjects"])
+    if anchor and anchor["status"] == anchors.DOCUMENT:
+        return _document_rule(user_id, text, polarity, target, strength, scope, scope_value, quote,
+                              anchor)
     entry = _entry_for(anchor, catalog, target)
     suggestions = [] if entry or not target else _suggestions(target, catalog)
     term = None if entry else (re.sub(r"^[a-z]+:", "", target, flags=re.IGNORECASE).split("|")[0].strip()

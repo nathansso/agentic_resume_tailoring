@@ -92,6 +92,13 @@ class BriefingOutput(_Output):
     pins: List[Pin] = Field(default_factory=list,
                             description="Strength-5 preferences. Honour verbatim.")
     preferences: List[Preference] = Field(default_factory=list)
+    rules: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="The document rules in scope (#298): hard (strength 5; honour verbatim, "
+                    "a plan that loosens one is refused), soft (defaults a plan may override, "
+                    "reported applied or not_applied), notes (style notes: follow them, nothing "
+                    "blocks), overridden (rules that cannot take effect, and the rule that "
+                    "outranks each). Each carries rule_id, text, kind, param and value.")
     persona_traits: List[Dict[str, Any]] = Field(default_factory=list)
     job_cards: str = ""
     job_rules: List[JobRuleRef] = Field(
@@ -112,6 +119,11 @@ class PinsOutput(_Output):
     pins: List[Pin] = Field(default_factory=list,
                             description="Strength-5 preferences, word for word. Honour every one.")
     count: int = 0
+    rules: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Strength-5 document rules (#298) in scope, as the executor enforces them: "
+                    "limits (pages, bullets per item, skills, a section left off) and a section "
+                    "order. A plan that loosens one is refused.")
 
 
 # ── the memory gate (#202) ───────────────────────────────────────────────────
@@ -214,6 +226,16 @@ class RecordPreferenceOutput(_Output):
     subjects: List[str] = Field(
         default_factory=list, description="When the target named several things ('Kafka or Spark'): "
                                           "each one. Call once per subject.")
+    rule: Optional[Dict[str, Any]] = Field(
+        None, description="When the target was about the page (a document subject) and the words "
+                          "stated one plain limit ('one page', 'no projects section'): the document "
+                          "rule it was stored as (#298), instead of a preference. status says "
+                          "stored, superseded, already_recorded or refused (a narrower rule "
+                          "that would loosen a hard one).")
+    route: Optional[Dict[str, Any]] = Field(
+        None, description="When the target was about the page but the words do not state one plain "
+                          "limit: nothing was stored. Call record_rule with kind (limit, "
+                          "section_order or style_note) and params; shapes lists each.")
 
 
 # ── kg_search / list_items / get_item ────────────────────────────────────────
@@ -805,6 +827,8 @@ class Violation(_Model):
     check: str
     detail: Any = None
     hint: Optional[str] = None
+    rule_id: Optional[str] = Field(
+        None, description="For a rules violation: the document rule it is about (#298).")
 
 
 class ExecuteOutput(_Output):
@@ -840,6 +864,16 @@ class ExecuteOutput(_Output):
                     "and MTLD reverts it.")
     rules_applied: List[Dict[str, Any]] = Field(
         default_factory=list, description="Job-scoped rule values written into the base.")
+    rules: Optional[Dict[str, Any]] = Field(
+        None, description="The document rules in effect on this plan (#298): applied (each with "
+                          "rule_id, text, param, value), overridden (cannot take effect, and the "
+                          "rule that outranks it), style_notes (words to follow; nothing blocks) "
+                          "and excluded_sections. Absent when the user has none.")
+    soft_preferences: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Strength 1-4 preferences and soft document rules, each applied or "
+                    "not_applied on this page, with a reason when not (#298). Reported, never "
+                    "blocking: tell the user which they asked for and the page does not show.")
     baseline: Optional[Dict[str, Any]] = Field(
         None, description="The track baseline this job's first version was copied from "
                           "(track, node_id, role_family, family_source, source, p; source is host, "
@@ -976,6 +1010,58 @@ class SuggestActionsOutput(_Output):
     items: List[ItemSuggestion] = Field(default_factory=list)
 
 
+# ── document rules (#298) ────────────────────────────────────────────────────
+
+class RecordRuleInput(_Model):
+    text: str = Field(description="The rule in the user's own words, verbatim. Never softened or "
+                                  "inferred.")
+    kind: Literal["limit", "section_order", "style_note"] = Field(
+        description="limit: pages, bullets_per_item, max_skills, max_bullet_lines, or a "
+                    "<section> set to 0 to leave that section off. section_order: the sections "
+                    "first, in order. style_note: tone or wording, pushed to you and never "
+                    "blocks.")
+    params: Optional[Dict[str, Any]] = Field(
+        None, description="limit: {\"pages\": 1}, {\"bullets_per_item\": 3}, {\"max_skills\": 12}, "
+                          "{\"max_bullet_lines\": 1} or {\"projects\": 0} (education, experience, "
+                          "projects, skills or achievements). section_order: {\"order\": "
+                          "[\"skills\", \"experience\"]}. style_note: none. A limit with no params "
+                          "is read from the words only when they state exactly one plain thing "
+                          "(\"one page\", \"no projects section\"); otherwise it is refused.")
+    strength: int = Field(
+        3, ge=1, le=5, description="5 is hard: a plan that loosens it is refused, and a narrower "
+                                   "scope may only tighten it. 1-4 is a default a plan may "
+                                   "override, reported. Use 5 only for what the user insisted on.")
+    scope: Literal["global", "role_family", "job"] = Field(
+        "global", description="global: every resume. role_family or job: only that one. A "
+                              "narrower rule that would loosen a broader hard rule is refused.")
+    scope_value: Optional[str] = Field(
+        None, description="The role family (e.g. data_science) or the job id; required unless "
+                          "global.")
+    quote: Optional[str] = Field(None, description="The user's words this rests on.")
+
+
+class RecordRuleOutput(_Output):
+    status: Optional[Literal["stored", "superseded", "already_recorded", "refused"]] = None
+    reason: Optional[str] = Field(None, description="Why a rule was refused.")
+    rule: Optional[Dict[str, Any]] = Field(
+        None, description="The rule as stored: rule_id, kind, params, text, scope, strength, "
+                          "hard, and enforcement (how it is applied).")
+    supersedes: Optional[str] = Field(None, description="The earlier rule's words it replaced.")
+    blocked_by: Optional[Dict[str, Any]] = Field(
+        None, description="The broader hard rule a refused rule would have loosened.")
+    shape: Optional[str] = Field(None, description="The params shape the kind takes, on a refusal.")
+
+
+class RetractRuleInput(_Model):
+    rule_id: str = Field(description="From art_briefing's rules, or record_rule's result.")
+
+
+class RetractRuleOutput(_Output):
+    status: Optional[Literal["retracted", "already_inactive", "not_found"]] = None
+    reason: Optional[str] = None
+    rule: Optional[Dict[str, Any]] = None
+
+
 def _library():
     from harness import library
     return library
@@ -1050,12 +1136,35 @@ TOOLS: List[ToolSpec] = [
         "a skill's alias, never a part of one) and refuses a name that fits several items, "
         "returning the candidates. Keeps a replaced preference, superseded. Strength 5 makes it a hard gate "
         "restored word for word after compaction, and a 5 suppression a negative pin: only for "
-        "what the user insisted on. Only what the user said. Writes.",
+        "what the user insisted on. A target about the page (a section, length, order, tone) is "
+        "not an item: 'one page' or 'no projects section' is stored as a document rule, and "
+        "anything else is sent back to record_rule with nothing stored. Only what the user "
+        "said. Writes.",
         RecordPreferenceInput, RecordPreferenceOutput,
         lambda uid, text, polarity, target=None, strength=3, scope="global", scope_value=None,
                quote=None:
             _memory().record_preference(uid, text, polarity, target, strength, scope,
                                         scope_value, quote),
+        read_only=False),
+    ToolSpec(
+        "record_rule",
+        "Store one document-level rule the user stated or confirmed: about the page as a whole, "
+        "not an item on it. kind limit (pages, bullets per item, skills, bullet lines, or a "
+        "section left off), section_order, or style_note (tone and wording: shown to you, never "
+        "blocks). A hard rule (strength 5) refuses any plan that loosens it at finalize, and a "
+        "narrower scope may only tighten it. Soft rules (1-4) are defaults a plan may override, "
+        "reported. Keeps a replaced rule, superseded. Only what the user said. Writes.",
+        RecordRuleInput, RecordRuleOutput,
+        lambda uid, text, kind, params=None, strength=3, scope="global", scope_value=None,
+               quote=None:
+            _tools().record_rule(uid, text, kind, params, strength, scope, scope_value, quote),
+        read_only=False),
+    ToolSpec(
+        "retract_rule",
+        "Withdraw a document rule the user took back. It stops applying and stays on record. "
+        "Writes.",
+        RetractRuleInput, RetractRuleOutput,
+        lambda uid, rule_id: _tools().retract_rule(uid, rule_id),
         read_only=False),
     ToolSpec(
         "kg_search",

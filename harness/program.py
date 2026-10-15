@@ -20,9 +20,9 @@ from typing import Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from agents.checks import PAGE_LINE_BUDGET
-from agents.skill_scorer import MAX_SKILLS, MIN_SKILLS
 from agents.tailor_planner import OPS, REVISION_STRATEGIES
 from harness.acceptance import DEFAULT_TOLERANCES, GUARDS, TARGETS
+from harness.rules import MAX_PAGES
 
 # `delete_bullet` (#289) is a plan op only: it removes whole bullets from one item. The planner's
 # own action space (`OPS`) is unchanged, so the planner and `suggest_actions` never propose it.
@@ -31,6 +31,7 @@ Op = Literal[PLAN_OPS]  # type: ignore[valid-type]
 Strategy = Literal[REVISION_STRATEGIES]  # type: ignore[valid-type]
 Target = Literal[TARGETS]  # type: ignore[valid-type]
 Guard = Literal[GUARDS]  # type: ignore[valid-type]
+Section = Literal["education", "experience", "projects", "skills", "achievements"]
 
 
 class _M(BaseModel):
@@ -141,11 +142,24 @@ class ProgramNode(_M):
 
 
 class Finalize(_M):
-    line_budget: float = Field(PAGE_LINE_BUDGET, gt=0, le=PAGE_LINE_BUDGET,
-                               description="Page budget in bullet lines (#200).")
-    max_skills: int = Field(MAX_SKILLS, ge=1)
-    min_skills: int = Field(MIN_SKILLS, ge=0)
-    max_bullet_lines: int = Field(2, ge=1, le=2)
+    """What finalize checks. A field left unset takes its default, and the user's document rules
+    (#298, `harness/rules.py`) set the defaults: a plan may tighten one, never loosen it past a
+    hard rule. The built-in defaults are `line_budget` one page, `max_skills`/`min_skills` from
+    the skills scorer, `max_bullet_lines` 2."""
+    line_budget: Optional[float] = Field(
+        None, gt=0, le=MAX_PAGES * PAGE_LINE_BUDGET,
+        description="Page budget in bullet lines (#200). Unset: the rules' pages, else one page "
+                    f"({PAGE_LINE_BUDGET}).")
+    max_skills: Optional[int] = Field(None, ge=1)
+    min_skills: Optional[int] = Field(None, ge=0)
+    max_bullet_lines: Optional[int] = Field(None, ge=1, le=2)
+    bullets_per_item: Optional[int] = Field(
+        None, ge=1, description="Most bullets under one role or project (#298). Unset: the "
+                                "rules', else no limit.")
+    keep_sections: List[Section] = Field(
+        default_factory=list,
+        description="Sections to keep although a soft rule leaves them off (#298). Naming one a "
+                    "hard rule leaves off is a violation.")
 
 
 class HostInfo(_M):
@@ -178,7 +192,9 @@ class Program(_M):
         keys = [n.item_key.strip().lower() for n in self.nodes]
         if len(keys) != len(set(keys)):
             raise ValueError("one node per item_key")
-        if self.finalize.min_skills > self.finalize.max_skills:
+        fin = self.finalize
+        if (fin.min_skills is not None and fin.max_skills is not None
+                and fin.min_skills > fin.max_skills):
             raise ValueError("finalize.min_skills exceeds max_skills")
         return self
 

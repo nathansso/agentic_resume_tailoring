@@ -43,6 +43,7 @@ from agents.preferences import preferences_in_scope
 from database.db import ordered_blurbs
 from database.vector_search import fts_search
 from database.models import Achievement, Project, ProjectBlurb, User
+from harness import rules as rules_mod
 from harness.decisions.negative_pins import is_negative_pin
 
 KINDS = ("skill", "experience", "project", "education", "achievement")
@@ -274,6 +275,20 @@ def _pins(prefs: Sequence[Dict]) -> List[Dict[str, Any]]:
     ]
 
 
+def scope_family(user_id: UUID, job_id: Optional[str] = None,
+                 role_family: Optional[str] = None) -> Optional[str]:
+    """The role family a scope resolves to: the one given, else the one `open_job` recorded for
+    `job_id` (`library.role_family_of`, deterministic and model-free), else None. The one place
+    preferences (#291) and document rules (#298) get their family from."""
+    if job_id and not role_family:
+        from harness import library  # library imports this module
+        try:
+            role_family = library.role_family_of(user_id, UUID(str(job_id)))[0]
+        except ValueError:      # not a job id: scope by job alone
+            pass
+    return role_family
+
+
 def preferences_for(user_id: UUID, job_id: Optional[str] = None,
                     role_family: Optional[str] = None) -> Tuple[List[Dict], Optional[str]]:
     """The active preferences in scope, and the role family that scoped them (#291).
@@ -282,25 +297,33 @@ def preferences_for(user_id: UUID, job_id: Optional[str] = None,
     compaction and the executor — so what the host is shown is what `execute_plan` enforces.
     Global preferences always; a job's when `job_id` names it; a role family's when
     `role_family` names it, else the family `open_job` recorded for the job."""
-    if job_id and not role_family:
-        from harness import library  # library imports this module
-        try:
-            role_family = library.role_family_of(user_id, UUID(str(job_id)))[0]
-        except ValueError:      # not a job id: scope by job alone
-            pass
+    role_family = scope_family(user_id, job_id, role_family)
     prefs = preferences_in_scope(services.load_preferences(user_id),
                                  job_id=str(job_id) if job_id else None, role_family=role_family)
     return prefs, role_family
 
 
+def rules_for(user_id: UUID, job_id: Optional[str] = None,
+              role_family: Optional[str] = None) -> Tuple[List[Dict], Optional[str]]:
+    """The active document rules in scope (#298), and the role family that scoped them: the same
+    scope as `preferences_for`, so the briefing shows what `execute_plan` enforces."""
+    role_family = scope_family(user_id, job_id, role_family)
+    return rules_mod.in_scope(services.load_resume_rules(user_id), job_id, role_family), role_family
+
+
 def art_pins(user_id: UUID, role_family: Optional[str] = None,
              job_id: Optional[str] = None) -> Dict[str, Any]:
     """The pins alone, word for word: what a host must restore after compaction (#202).
-    The same set `art_briefing` pushes, scoped the same way (`preferences_for`)."""
+    The same set `art_briefing` pushes, scoped the same way (`preferences_for`). Strength-5
+    document rules come with them (#298), as the rules the executor enforces: a narrower rule
+    that cannot take effect is left out."""
     prefs, role_family = preferences_for(user_id, job_id, role_family)
     prefs = sorted(prefs, key=lambda p: str(p.get("preference_id")))
     pins = _pins(prefs)
-    return {"role_family": role_family, "job_id": job_id, "pins": pins, "count": len(pins)}
+    rules, _ = rules_for(user_id, job_id, role_family)
+    hard = rules_mod.active_view(rules_mod.resolve(rules))["hard"]
+    return {"role_family": role_family, "job_id": job_id, "pins": pins, "count": len(pins),
+            "rules": hard}
 
 
 def art_briefing(user_id: UUID, role_family: Optional[str] = None,
@@ -315,10 +338,13 @@ def art_briefing(user_id: UUID, role_family: Optional[str] = None,
         cards = select_cards(cards, role_family=role_family)
     from harness.ingest import list_rules  # harness/ingest imports this module
     rules = list_rules(user_id)
+    page_rules, _ = rules_for(user_id, job_id, role_family)
+    page = rules_mod.active_view(rules_mod.resolve(page_rules))
     return {
         "role_family": role_family,
         "job_id": job_id,
         "pins": pins,
+        "rules": page,
         "preferences": [
             {k: p.get(k) for k in ("preference_id", "text", "polarity", "target_key",
                                    "target_term", "scope_type", "scope_value", "strength")}
@@ -328,7 +354,7 @@ def art_briefing(user_id: UUID, role_family: Optional[str] = None,
         "job_cards": render_cards(cards),
         "job_rules": rules,
         "counts": {"pins": len(pins), "preferences": len(prefs), "job_cards": len(cards),
-                   "job_rules": len(rules)},
+                   "job_rules": len(rules), "page_rules": len(page_rules)},
     }
 
 
@@ -509,3 +535,113 @@ def update_profile(user_id: UUID, fields: Dict[str, Any]) -> Dict[str, Any]:
         session.add(user)
         session.commit()
     return get_profile(user_id)
+
+
+# ── document rules (#298) ────────────────────────────────────────────────────
+
+def _rule_view(rule: Dict[str, Any]) -> Dict[str, Any]:
+    """A stored rule as the host reads it back, with how it is enforced."""
+    kind, hard = rule["kind"], (rule.get("strength") or 0) >= PIN_STRENGTH
+    if kind == "style_note":
+        enforcement = ("pushed to the host verbatim in art_briefing and never blocks, whatever its "
+                       "strength: a style note is advice, not a check")
+    elif hard:
+        enforcement = ("hard: a plan that loosens it is refused at finalize, and a narrower scope "
+                       "may only tighten it")
+    else:
+        enforcement = ("soft: never a gate. A default a plan may override where one can be applied "
+                       "(a section left off, the section order, the skills list); otherwise "
+                       "measured. The finalize result reports it applied or not_applied")
+    return {"rule_id": rule["rule_id"], "kind": kind, "params": rule.get("params") or {},
+            "text": rule["text"], "scope_type": rule["scope_type"],
+            "scope_value": rule.get("scope_value"), "strength": rule["strength"],
+            "status": rule.get("status", "active"), "hard": hard and kind != "style_note",
+            "enforcement": enforcement}
+
+
+def record_rule(user_id: UUID, text: str, kind: str, params: Optional[Dict[str, Any]] = None,
+                strength: int = 3, scope: str = "global", scope_value: Optional[str] = None,
+                quote: Optional[str] = None, routed_from: Optional[str] = None) -> Dict[str, Any]:
+    """Store one document rule the user stated or confirmed, or refuse it with a reason (#298).
+
+    `kind` is `limit`, `section_order` or `style_note`; `params` is validated for the kind
+    (`harness/rules.py`). A `limit` given with no params is read from the words only when they
+    state exactly one plain thing ("one page", "no projects section"); otherwise it is refused
+    and the host sends the params. A rule of the same kind, scope and subject already held is
+    superseded, never deleted. A rule that would loosen a broader hard rule is refused, naming
+    that rule: a narrower scope may only tighten."""
+    def refuse(reason: str, **extra: Any) -> Dict[str, Any]:
+        return {"status": "refused", "reason": reason, **extra}
+
+    text = " ".join((text or "").split())
+    if not text:
+        return refuse("text is empty: give the rule in the user's own words.")
+    if kind not in rules_mod.KINDS:
+        return refuse(f"kind must be one of {', '.join(rules_mod.KINDS)}.")
+    if not isinstance(strength, int) or isinstance(strength, bool) or not 1 <= strength <= 5:
+        return refuse("strength must be 1 (a passing remark) to 5 (an absolute rule).")
+    if scope not in rules_mod.SCOPES:
+        return refuse(f"scope must be one of {', '.join(rules_mod.SCOPES)}.")
+    scope_value = (scope_value or "").strip() or None
+    family = None
+    if scope == "job":
+        try:
+            UUID(str(scope_value))
+        except ValueError:
+            return refuse("a job-scoped rule needs scope_value: the job id (see list_jobs).")
+        family = scope_family(user_id, scope_value)
+    elif scope == "role_family":
+        if not scope_value:
+            return refuse("a role_family rule needs scope_value: the role family, e.g. data_science.")
+        scope_value = scope_value.lower()
+    else:
+        scope_value = None
+
+    params = dict(params or {})
+    if kind == "limit" and not params:
+        params = rules_mod.infer_limit(text) or {}
+        if not params:
+            return refuse("the words do not state one plain limit, so say which: params for a "
+                          f"limit are {rules_mod.SHAPES['limit']}.", shape=rules_mod.SHAPES["limit"])
+    if kind == "section_order" and not params:
+        return refuse("a section_order rule needs params: " + rules_mod.SHAPES["section_order"] + ".",
+                      shape=rules_mod.SHAPES["section_order"])
+    try:
+        params = rules_mod.normalize_params(kind, params)
+    except rules_mod.RuleError as exc:
+        return refuse(str(exc), shape=rules_mod.SHAPES[kind])
+
+    provenance = {"source": "host", "quote": quote or text}
+    if routed_from:
+        provenance["routed_from"] = routed_from
+    candidate = {"kind": kind, "params": params, "text": text, "scope_type": scope,
+                 "scope_value": scope_value, "strength": strength, "provenance": provenance}
+    active = services.load_resume_rules(user_id)
+    blocker = rules_mod.loosens_hard(candidate, active, family)
+    if blocker is not None:
+        return refuse(
+            f"a {scope} rule may only tighten {rules_mod.describe(blocker)}, which is hard "
+            f"(strength 5) at {blocker['scope_type']} scope: the narrower rule would loosen it, so "
+            "it could never take effect. Ask the user whether to change the broader rule "
+            "(retract_rule, then record it again).",
+            blocked_by=_rule_view(blocker))
+
+    same = [r for r in active if rules_mod.identity(r) == rules_mod.identity(candidate)]
+    for r in same:
+        if (r["params"] == params and r["strength"] == strength
+                and " ".join(r["text"].split()) == text):
+            return {"status": "already_recorded", "rule": _rule_view(r)}
+    stored = services.save_resume_rule(user_id, candidate, supersedes=[r["rule_id"] for r in same])
+    if stored is None:
+        return refuse("the rule could not be stored.")
+    return {"status": "superseded" if same else "stored", "rule": _rule_view(stored),
+            "supersedes": same[0]["text"] if same else None}
+
+
+def retract_rule(user_id: UUID, rule_id: str) -> Dict[str, Any]:
+    """Withdraw a document rule: it stops applying and stays on record (#298)."""
+    row = services.retract_resume_rule(user_id, rule_id)
+    if row is None:
+        return {"status": "not_found", "reason": f"No rule {rule_id!r} of yours."}
+    status = "retracted" if row["status"] == "retracted" else "already_inactive"
+    return {"status": status, "rule": _rule_view(row)}

@@ -47,6 +47,7 @@ from agents.redundancy import (
 from harness.decisions.negative_pins import term_matcher, term_pattern, violations as pin_finding_violations
 from harness.decisions.support import violations as support_finding_violations
 from harness import policy
+from harness import rules as rules_mod
 
 TARGETS = ("coverage", "relevance_density", "semantic_coverage")
 OPTIONAL_TARGETS = ("semantic_coverage",)    # present only when Jev answered (#126)
@@ -181,11 +182,33 @@ def _page_items(content: Dict):
             yield key_fn(item), item
 
 
+def _page_text_fields(content: Dict):
+    """`(where, field, text)` for every piece of text on the page outside an experience's or a
+    project's own fields: the summary, education, achievements and skills (#298). `where` is the
+    section a violation names, as `negative_pin:<term>@<where> :: <field>`."""
+    summary = content.get("summary")
+    if isinstance(summary, str) and summary.strip():
+        yield "summary", "summary", summary
+    for edu in content.get("education") or []:
+        for field_ in ("institution", "degree", "location", "honors", "description"):
+            if edu.get(field_):
+                yield "education", field_, str(edu[field_])
+    for ach in content.get("achievements") or []:
+        for field_ in ("title", "description", "issuer"):
+            if ach.get(field_):
+                yield "achievements", field_, str(ach[field_])
+    for skill in content.get("skills_ranked") or []:
+        for field_ in ("name", "category"):
+            if skill.get(field_):
+                yield "skills", field_, str(skill[field_])
+
+
 def negative_pin_violations(content: Dict, terms: Iterable[str],
                             skill_terms: Iterable[str] = ()) -> List[str]:
     """A negative pin (#198) is a fact that must never render: any bullet,
     title, company, project name or description containing the term, whatever
-    it cites. A term in `skill_terms` (a pin on a skill, #254) matches its aliases too."""
+    it cites — and, since #298, the summary, education, achievements and skills
+    text too. A term in `skill_terms` (a pin on a skill, #254) matches its aliases too."""
     skills = {t.strip().lower() for t in skill_terms if t and t.strip()}
     out = []
     for term in sorted({t.strip().lower() for t in terms if t and t.strip()}):
@@ -197,6 +220,50 @@ def negative_pin_violations(content: Dict, terms: Iterable[str],
             for b in item.get("bullets") or []:
                 if b and mentions(b):
                     out.append(f'negative_pin:{term}@{key} :: "{_short(b)}"')
+        seen = set()
+        for where, field_, text in _page_text_fields(content):
+            if mentions(text) and (where, field_) not in seen:
+                seen.add((where, field_))
+                out.append(f'negative_pin:{term}@{where} :: {field_}: "{_short(text)}"')
+    return out
+
+
+def rule_violations(content: Dict, resolved: Dict[str, Any],
+                    values: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    """What the page breaks of the hard document rules (#298), from its content alone.
+
+    `resolved` is `harness.rules.resolve` over the rules in scope; `values` the finalize numbers
+    the executor settled (`harness.rules.effective_finalize`), so a plan that tightened
+    `bullets_per_item` is held to its own number. Returns `{rule_id, check, detail, hint}`: a
+    section a hard rule leaves off that still has content, an item with more bullets than the
+    limit. What needs a measurement (pages, bullet lines, skills count) or the plan itself (its
+    finalize values and section order) is checked by the executor, against the same `resolved`.
+    Soft rules are never violations; the finalize result reports them applied or not."""
+    out: List[Dict[str, Any]] = []
+    limits = resolved.get("limits") or {}
+
+    for section, key in rules_mod.CONTENT_KEY.items():
+        entry = (limits.get(section) or {}).get("hard")
+        if entry and content.get(key):
+            out.append({"rule_id": entry["rule_id"], "check": "rules",
+                        "detail": f"{section} section is on the page, which {rules_mod.describe(entry)} "
+                                  "leaves off",
+                        "hint": f"leave {section} out of finalize.keep_sections; only the user can "
+                                "change the rule"})
+
+    cap = (limits.get("bullets_per_item") or {}).get("hard")
+    limit = min([v for v in (cap["value"] if cap else None,
+                             (values or {}).get("bullets_per_item")) if v is not None], default=None)
+    if limit is not None:
+        who = rules_mod.describe(cap) if cap else "finalize.bullets_per_item"
+        for key, item in _page_items(content):
+            n = len([b for b in item.get("bullets") or [] if (b or "").strip()])
+            if n > limit:
+                excess = [f"{key}#b{i}" for i in range(limit, n)]
+                out.append({"rule_id": cap["rule_id"] if cap else None, "check": "rules",
+                            "detail": f"{key} has {n} bullets, {who} allows {limit}",
+                            "hint": f"cut {n - limit} with a delete_bullet node "
+                                    f"(cut_bullets: {excess}) and a because"})
     return out
 
 
@@ -441,4 +508,5 @@ def accept(before: Dict, after: Dict, *, improves: Iterable[str] = (),
 
 __all__ = ["Context", "DEFAULT_TOLERANCES", "GATES", "GUARDS", "OPTIONAL_TARGETS", "TARGETS", "accept",
            "VARIANT_DRIFT_TOLERANCE", "consistency_violations", "metric_vector",
-           "preference_violations", "term_pattern", "token_distance", "variant_drift"]
+           "negative_pin_violations", "preference_violations", "rule_violations", "term_pattern",
+           "token_distance", "variant_drift"]
