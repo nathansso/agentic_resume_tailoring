@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlmodel import Session, select
 from typing import List, Dict, Any, Optional
 
-from database.db import engine
+from database.db import engine, ordered_blurbs
 from agents.skill_matching import SkillMatcher, canonical_key
 from database.models import (
     User, Skill, UserSkill, Project, ProjectBlurb, Experience, Education, Achievement,
@@ -136,10 +136,8 @@ class SkillGraphBuilder:
         if not ids:
             return {}
         rows = session.exec(select(ProjectBlurb).where(ProjectBlurb.project_id.in_(ids))).all()
-        out: Dict[Any, List[str]] = {}
-        for b in sorted(rows, key=lambda r: (str(r.project_id), r.style or "", str(r.blurb_id))):
-            out.setdefault(b.project_id, []).append(b.content)
-        return out
+        return {pid: [b.content for b in blurbs]
+                for pid, blurbs in ordered_blurbs(rows).items()}
 
     def _connect_entities(self, skills: List[Skill], projects: List[Project],
                           experiences: List[Experience],

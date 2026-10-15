@@ -263,8 +263,10 @@ def _add_blurbs(project_id: Any, blurbs: Sequence[str]) -> int:
     with Session(_db.engine) as session:
         for row in session.exec(select(ProjectBlurb).where(ProjectBlurb.project_id == pid)).all():
             wanted.pop(_norm(row.content), None)
-        for text in wanted.values():
-            session.add(ProjectBlurb(project_id=pid, style=DEFAULT_SOURCE, content=text))
+        seq = _db.next_blurb_seq(session, pid)      # new bullets go after the existing ones (#327)
+        for offset, text in enumerate(wanted.values()):
+            session.add(ProjectBlurb(project_id=pid, style=DEFAULT_SOURCE, content=text,
+                                     seq=seq + offset))
         session.commit()
     return len(wanted)
 
