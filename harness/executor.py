@@ -46,13 +46,12 @@ import services
 from agents.arbitration import HARD_STRENGTH
 from agents.ats_scorer import ATSScoringEngine
 from agents.checks import bullet_line_violations, exp_key, expected_sections, proj_key
-from agents.preferences import preferences_in_scope
 from agents.jd_payload import iter_requirements
 from agents.layout import resolve_bullets, resolve_section_order, resolve_skills
 from agents.skill_matching import match_requirement_terms, priority_skills
 from agents.skill_scorer import MAX_SKILLS, rank_and_select_skills, score_skills
 from database.models import JDProfile, JobDescription, PlanProgram, UserJobResult
-from harness import ART_VERSION, library, tree
+from harness import ART_VERSION, library, texdiff, tree
 from harness.acceptance import (
     Context, accept, metric_vector, preference_violations,
 )
@@ -66,7 +65,7 @@ from harness.decisions.negative_pins import (
 from harness.decisions.support import make_support_checker, reviews as support_reviews
 from harness.ingest import apply_job_rules, list_rules, resolve_rules
 from harness.program import Program, apply_patch, program_id
-from harness.tools import _records, edu_key, project_source_bullets, skill_key
+from harness.tools import _records, edu_key, preferences_for, project_source_bullets, skill_key
 
 log = logging.getLogger(__name__)
 
@@ -76,9 +75,46 @@ log = logging.getLogger(__name__)
 MEASURER: Optional[Callable[[Sequence[str]], List[int]]] = None
 
 
+# The hint on a `discards_editor_edits` violation (#278): what the host can do about it.
+DISCARDS_HINT = (
+    "The parent version carries hand edits to its .tex (detail), and a committed version renders "
+    "from its content, so this plan would drop them. Either carry them over as plan nodes (a "
+    "`revise` with the user's text for each edited or added bullet, a `delete_bullet` or `delete` "
+    "for each removed one; they go through the same gates as any edit) and run again, or, after "
+    "asking the user, set discard_editor_edits: true to commit without them. Regions marked "
+    "unmapped (headings, header, skills, anything outside the bullets) cannot be carried over.")
+
 # `execute_plan`'s `reason` when the plan would leave its parent's page unchanged (#257).
 NO_CHANGE = ("no_change: the plan leaves the page identical to its parent, so nothing was "
              "committed; see nodes[] for why each node was reverted, refused or kept")
+
+
+# What to do about each hard gate that refuses a verified carried-over editor edit (#306). The
+# text is the user's own, so the fix is never to reword it: it is to give the gate what it
+# asks for, or to ask the user.
+_FACT = ("record the fact it states with upsert_items (or ask the user whether it is true) so "
+         "a cited source bullet holds it, cite that bullet on this one, and run the plan again")
+_CARRIED_FIX = {
+    "consistency": "it states a number, date, name or amount that its cited evidence does not: " + _FACT,
+    "faithfulness": "its wording is not supported by the evidence it cites: " + _FACT,
+    "citations": "a cite on it does not resolve to live evidence: cite a bullet that exists "
+                 "(get_item lists them), or " + _FACT,
+    "preferences": "it breaks a hard preference: tell the user, and only if they agree change "
+                   "the preference (record_preference), then run the plan again",
+    "bullet_lines": "it renders longer than the line limit: ask the user to shorten it in the "
+                    "editor, then read diff_nodes again",
+}
+
+
+def _carried_refusal(reason: str, gate_violations: Dict[str, List[str]]) -> str:
+    """The reason for a carried-over editor edit that a hard gate refused: the gate and the
+    offending claim, then what the host can do about it (#306). Guards were waived for this
+    edit, so a veto here is always a hard gate."""
+    fixes = "; ".join(f"{gate} ({_CARRIED_FIX.get(gate, 'resolve it, or ask the user')})"
+                      for gate in sorted(gate_violations))
+    return (f"{reason} | carried_editor_edit: the user's edit was carried over verbatim, so guards "
+            f"were waived, but a hard gate still refuses it. Do not reword it. Fix: {fixes}. "
+            "Then retry (patch_plan on this program).")
 
 
 class PlanError(Exception):
@@ -367,7 +403,7 @@ def _hard_preferences(user_id: UUID, job_id: UUID) -> Tuple[Dict[str, Dict], Dic
     The third dict is the negative terms (#198): a hard suppression by name, not by item key,
     names a fact that must never render, in bullets as well as skills. A skill-keyed pin is one
     (#254), and so is a topic bound to nothing. `negative_pins.pin_target` decides which."""
-    prefs = preferences_in_scope(services.load_preferences(user_id), job_id=str(job_id))
+    prefs, _ = preferences_for(user_id, str(job_id))     # the job's role family too (#291)
     suppress, emphasize, skills = {}, {}, {}
     for p in sorted(prefs, key=lambda p: str(p.get("preference_id"))):
         if (p.get("strength") or 0) < HARD_STRENGTH:
@@ -594,6 +630,27 @@ def _variant_origin(node: Dict, kg: _KG) -> Dict[Tuple[str, str], str]:
     return out
 
 
+def _carried_edits(node: Dict, content: Dict,
+                   tex_edits: Callable[[], Optional[Dict]]) -> Optional[List[Dict]]:
+    """The user's editor edits this `revise`/`replace` node carries over verbatim, or None (#306).
+
+    The executor decides this itself, from the parent's `edited_tex` as `texdiff` reads it: the
+    node's bullets for the item must differ from the page's only by texts that are, after
+    whitespace normalization, the user's edited text for a bullet of that item, and by the bullets
+    those edits replaced or removed (`texdiff.carried_by`). Nothing the host says about its own
+    node counts, so a revise that reworded the edit even slightly, or touched any other bullet,
+    is an ordinary revise and faces every guard."""
+    if node["op"] not in ("revise", "replace") or not node.get("bullets"):
+        return None
+    edits = tex_edits()
+    if not edits:
+        return None
+    key = _target_key(node)
+    loc = _locate(content, key) if node["op"] == "revise" else None
+    page = (content[loc[0]][loc[1]].get("bullets") or []) if loc else []
+    return texdiff.carried_by(edits, key, page, [b["text"] for b in node["bullets"]])
+
+
 def _section_rank(content: Dict, key: str) -> Tuple[int, int]:
     loc = _locate(content, key)
     if loc is None:
@@ -694,6 +751,17 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     # place): the no-change check below compares the would-be version to this (#257).
     parent_content = copy.deepcopy(head["content"]) if head else None
     parent = (prog["parent"] or None)
+    edits_memo: List[Dict] = []
+
+    def tex_edits() -> Optional[Dict]:
+        """What the user's hand-edited .tex of the parent changed, read once and only when a
+        node needs it (#278, #306); None when the parent has no hand edit."""
+        if not (head and head.get("edited_tex")):
+            return None
+        if not edits_memo:
+            edits_memo.append(texdiff.node_edits(
+                user_id, {**head, "content": parent_content, "edited_tex": None}, head))
+        return edits_memo[0]
     if parent != head_id:
         raise PlanError("stale_parent",
                         f"The plan builds on {parent}, but HEAD is {head_id}. Rebase with "
@@ -757,11 +825,16 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
         evidence.update(origin)
         vector = metric_vector(candidate, ctx)
         ctx.variant_origin = {}
+        key = node["item_key"].strip().lower()
+        carried = _carried_edits(node, working, tex_edits)
         verdict = accept(current, vector, improves=node["accept"]["improves"],
                          tolerances=node["accept"]["tolerances"],
                          requested=node["op"] in ("delete", "delete_bullet")
-                         and bool(node.get("because")))
-        key = node["item_key"].strip().lower()
+                         and bool(node.get("because")),
+                         carried=carried is not None)
+        if carried is not None and not verdict["accepted"] and verdict["gate_violations"]:
+            verdict = {**verdict, "reason": _carried_refusal(verdict["reason"],
+                                                             verdict["gate_violations"])}
         if (not verdict["accepted"] and node["op"] == "delete" and key in prefs["suppress"]
                 and not verdict["gate_violations"]):
             # Compliance with a hard preference is itself a hard gate, which
@@ -773,8 +846,11 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
                    reason=verdict["reason"], improved=verdict["improved"],
                    deltas=verdict["deltas"])
         if verdict["waived"]:
-            # A requested delete accepted despite a guard regression (#279): shown, not hidden.
+            # A requested delete accepted despite a guard regression (#279), or a carried-over
+            # editor edit accepted despite one (#306): shown, not hidden.
             row["waived"] = verdict["waived"]
+        if carried is not None:
+            row["carried_edit"] = carried
         if ctx.coverage_checker:
             # What this node did to the requirements' semantic coverage (#126), compactly.
             detail = coverage_node_detail(ctx.coverage_checker(working),
@@ -828,9 +904,22 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     semantic = coverage_summary(ctx.coverage_checker(working), working) if ctx.coverage_checker else None
     if semantic:
         out["semantic_coverage"] = semantic
+    no_change = head is not None and working == parent_content
+    discarded = None
+    if head is not None and head.get("edited_tex") and not no_change:
+        # A committed version renders from its content, so it drops the parent's hand-edited
+        # .tex. The edits the plan carried over as content are not dropped; the rest are (#278).
+        left = texdiff.uncarried(tex_edits(), working, prog.get("section_order"))
+        if not texdiff.is_empty(left):
+            if prog.get("discard_editor_edits"):
+                discarded = texdiff.public(left)
+            else:
+                violations.append({
+                    "check": "discards_editor_edits", "detail": texdiff.public(left),
+                    "hint": DISCARDS_HINT})
     if violations:
         return out
-    if head is not None and working == parent_content:
+    if no_change:
         # Every node reverted, refused or kept, and nothing else moved the page (skills,
         # section order, job rules): the version would equal its parent, so it is not history
         # and not an editor event (#257). The first version of a job always commits (the
@@ -858,7 +947,10 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
             note=f"plan {pid}", expected_parent=parent, materialize=True)
     except tree.StaleParent as exc:
         raise PlanError("stale_parent", str(exc), [str(exc.head)] if exc.head else [])
-    return {**out, "committed": True, "node_id": node["node_id"]}
+    out = {**out, "committed": True, "node_id": node["node_id"]}
+    if discarded:
+        out["discarded_editor_edits"] = discarded
+    return out
 
 
 def _apply_layout(overrides: Optional[Dict], content: Dict) -> Dict:

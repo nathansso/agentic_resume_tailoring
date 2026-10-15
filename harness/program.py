@@ -165,6 +165,10 @@ class Program(_M):
     section_order: Optional[List[str]] = None
     finalize: Finalize = Field(default_factory=Finalize)
     host: HostInfo = Field(default_factory=HostInfo)
+    discard_editor_edits: bool = Field(
+        False, description="Set only after asking the user: commit even though the parent holds "
+                           "hand edits to its .tex that this plan does not carry over (#278). "
+                           "Without it such a commit is refused (violation discards_editor_edits).")
 
     @model_validator(mode="after")
     def _unique(self):

@@ -18,4 +18,5 @@ I want to edit a tailored resume by hand in ART's local editor.
    building and no checkout is needed. It shares the download the ART server already made,
    so it normally starts at once. Offline, add `UV_OFFLINE=1` to the environment.
 3. Tell me that anything I save or drag there comes back to you on my next message,
-   and that you'll build on my edits rather than overwrite them.
+   and that you'll build on my edits rather than overwrite them: ART won't let a new
+   version drop an edit I made to the `.tex` unless I agree to discarding it.

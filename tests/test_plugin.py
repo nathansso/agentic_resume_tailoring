@@ -126,6 +126,28 @@ def test_the_prompt_hook_reports_only_new_editor_edits(job):
     assert user_prompt(uid, {"session_id": "s2"}) is None   # a new session starts at "now"
 
 
+def test_the_prompt_hook_names_the_bullets_a_tex_edit_changed(job):
+    """Several saves in a row read as one change, from the last version that was not an edit (#278)."""
+    from harness import texdiff, tree
+    from harness.hooks import user_prompt
+
+    uid, job_id = job
+    payload = {"session_id": "s1", "prompt": "hi"}
+    assert user_prompt(uid, payload) is None
+    head = tree.get_head(uid, job_id)["head"]
+    tex = texdiff.node_tex(uid, head)
+    first = tree.commit_node(uid, job_id, content=head["content"], source="editor",
+                             edited_tex=tex.replace("Old bullet", "Older bullet"))
+    tree.commit_node(uid, job_id, content=head["content"], source="editor",
+                     edited_tex=first["edited_tex"].replace(
+                         "\\begin{center}", "\\begin{center}\n    \\small Phone 555-0100", 1))
+
+    text = user_prompt(uid, payload)
+    assert '"Old bullet" became "Older bullet"' in text                    # the earlier save counts too
+    assert "unmapped change in header" in text and "+\\small Phone 555-0100" in text
+    assert "discards_editor_edits" in text and text.count(f"job {job_id}") == 1
+
+
 def test_the_compact_hook_restores_pins_verbatim_and_the_current_job(job):
     from harness.hooks import session_start, user_prompt
 
