@@ -51,7 +51,7 @@ from agents.layout import resolve_bullets, resolve_section_order, resolve_skills
 from agents.skill_matching import match_requirement_terms, priority_skills
 from agents.skill_scorer import MAX_SKILLS, rank_and_select_skills, score_skills
 from database.models import JDProfile, JobDescription, PlanProgram, UserJobResult
-from harness import ART_VERSION, library, texdiff, tree
+from harness import ART_VERSION, constraints, library, texdiff, tree
 from harness import rules as rules_mod
 from harness.acceptance import (
     Context, accept, metric_vector, negative_pin_violations, preference_violations, rule_violations,
@@ -992,6 +992,14 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
             # delete, so a guard must not be able to veto it.
             verdict = {**verdict, "accepted": True, "waived": verdict["guard_regressions"],
                        "reason": f"hard_preference_override: {verdict['reason']}"}
+        if (not verdict["accepted"] and node["op"] == "replace"
+                and (node.get("replacement_key") or "").strip().lower() in prefs["emphasize"]
+                and not verdict["gate_violations"]):
+            # The same for a hard emphasize (#299): `replace` is the only op that puts a project on
+            # the page, so a guard that vetoes bringing in a project the user insisted on would make
+            # their pin unsatisfiable (finalize reports it missing). Hard gates still apply.
+            verdict = {**verdict, "accepted": True, "waived": verdict["guard_regressions"],
+                       "reason": f"hard_preference_override: {verdict['reason']}"}
         row.update(status="accepted" if verdict["accepted"] else "reverted",
                    reason=verdict["reason"], improved=verdict["improved"],
                    deltas=verdict["deltas"])
@@ -1067,6 +1075,10 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
         out["soft_preferences"] = soft
     if baseline:
         out["baseline"] = baseline
+    if dry_run:
+        # The reminder (#299), first in the result: a dry run is the host's last look before it
+        # commits, so what the user has said for this job leads. Not on a commit: additive only.
+        out = {"active_constraints": constraints.active_constraints(user_id, str(job_id)), **out}
     # Only when Jev (or its cache) answered for at least one bullet: with no key
     # the result is what it was before #193.
     findings = [f for f in ctx.support_checker(working) if f["status"] == "checked"]

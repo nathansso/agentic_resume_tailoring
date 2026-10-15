@@ -591,7 +591,11 @@ def suggest_actions(user_id: UUID, job_id: str, node_id: Optional[str] = None) -
                 "approved_variants": len(approved),
                 "actions": [{"op": op, "propensity": 1.0 / len(ops)} for op in ops],
                 "source": source, **extra})
-    return {"job_id": str(jid), "node_id": at, "floor": VARIANT_MATCH_FLOOR, "items": items}
+    # The reminder (#299), first: a host about to choose what each item says reads what the user
+    # has stated for this job before it reads the items.
+    from harness import constraints
+    return {"active_constraints": constraints.active_constraints(user_id, str(jid)),
+            "job_id": str(jid), "node_id": at, "floor": VARIANT_MATCH_FLOOR, "items": items}
 
 
 # ── reporting ────────────────────────────────────────────────────────────────

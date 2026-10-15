@@ -424,8 +424,10 @@ def test_contract_tools_are_writes():
 # ── determinism: the #197 acceptance test ────────────────────────────────────
 
 def _strip(result):
-    """A result without the one field a fresh commit must differ in."""
-    return {k: v for k, v in result.items() if k not in ("node_id", "committed", "dry_run")}
+    """A result without the fields a fresh commit must differ in: a dry run leads with the
+    reminder block (#299), which a commit does not carry."""
+    return {k: v for k, v in result.items()
+            if k not in ("node_id", "committed", "dry_run", "active_constraints")}
 
 
 def test_replaying_a_program_is_byte_identical(env):
@@ -1611,3 +1613,81 @@ def test_an_imported_variant_naming_a_technology_no_item_holds_is_not_approved(k
         "item_key": ML_EXP, "text": "Built a Kafka pipeline to stream patient events."}}])
     approved = library.list_variants(uid, ML_EXP, status=library.APPROVED)
     assert not [v for v in approved if "kafka" in v["text"].lower()]
+
+
+# ── a hard emphasize is satisfiable (#299) ───────────────────────────────────
+
+def _page_project_keys(uid, job_id):
+    from uuid import UUID
+
+    from agents.checks import proj_key
+    from harness import tree
+    head = tree.get_head(uid, UUID(job_id))["head"]
+    return [proj_key(p) for p in head["content"]["projects"]]
+
+
+def _veto_every_unrequested_node(monkeypatch):
+    """The acceptance rule as it reads when no target improves: every node not requested by a
+    user or a preference is reverted, as `replace` is on many pages (`no_target_improved`)."""
+    from harness import executor
+    real = executor.accept
+
+    def accept(before, after, **kw):
+        out = real(before, after, **kw)
+        if kw.get("requested") or kw.get("carried"):
+            return out
+        return {**out, "accepted": False, "reason": "no_target_improved: relevance_density"}
+    monkeypatch.setattr(executor, "accept", accept)
+
+
+def test_a_replace_that_brings_in_a_hard_emphasized_project_is_not_vetoed_by_a_guard(env, monkeypatch):
+    """`replace` is the only op that puts a project on a page. Reverted by a guard it leaves the
+    user's pin unsatisfiable (finalize: `missing:<key>`), so, like a delete that complies with a
+    hard suppress, it is accepted (`hard_preference_override`, the regressions shown)."""
+    from harness.contract import invoke
+
+    uid, job_id, _ = env
+    first = _run(uid, {"job_id": job_id, "nodes": [
+        {"id": "d", "op": "delete", "item_key": PROJ, "because": "user:not this one"}]})
+    assert first["committed"], first
+    keys = _page_project_keys(uid, job_id)
+    assert PROJ not in keys and len(keys) >= 2
+    parent = first["node_id"]
+
+    _veto_every_unrequested_node(monkeypatch)
+    swap = {"id": "s", "op": "replace", "item_key": keys[0], "replacement_key": PROJ}
+
+    # Without the pin, the guard's veto stands: the project is not brought in.
+    plain = _run(uid, {"job_id": job_id, "parent": parent, "nodes": [swap]}, dry_run=True)
+    assert plain["nodes"][0]["status"] == "reverted", plain["nodes"]
+
+    saved = invoke("record_preference", uid, {
+        "text": "Always include Pixel Adventure.", "polarity": "emphasize",
+        "target": "Pixel Adventure", "strength": 5})
+    assert saved["status"] == "stored", saved
+    out = _run(uid, {"job_id": job_id, "parent": parent, "nodes": [swap]})
+    node = out["nodes"][0]
+    assert node["status"] == "accepted", node
+    assert node["reason"].startswith("hard_preference_override"), node
+    assert out["committed"] and out["violations"] == []
+    assert PROJ in _page_project_keys(uid, job_id)
+
+
+def test_the_override_for_a_hard_emphasize_is_not_a_way_around_a_hard_gate(env, monkeypatch):
+    """Only the guards and the target rule are waived: a bullet that fabricates is still refused."""
+    from harness.contract import invoke
+
+    uid, job_id, _ = env
+    first = _run(uid, {"job_id": job_id, "nodes": [
+        {"id": "d", "op": "delete", "item_key": PROJ, "because": "user:not this one"}]})
+    keys = _page_project_keys(uid, job_id)
+    invoke("record_preference", uid, {
+        "text": "Always include Pixel Adventure.", "polarity": "emphasize",
+        "target": "Pixel Adventure", "strength": 5})
+    _veto_every_unrequested_node(monkeypatch)
+    out = _run(uid, {"job_id": job_id, "parent": first["node_id"], "nodes": [
+        {"id": "s", "op": "replace", "item_key": keys[0], "replacement_key": PROJ,
+         "bullets": [{"text": "Built it with Kafka and Spark on a 40-node cluster.",
+                      "cites": [PROJ]}]}]}, dry_run=True)
+    node = out["nodes"][0]
+    assert node["status"] in ("refused", "reverted") and "override" not in (node["reason"] or "")

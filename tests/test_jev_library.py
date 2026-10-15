@@ -272,9 +272,9 @@ def test_with_no_jev_answer_suggest_actions_is_exactly_the_overlap_fallback(env,
         assert item["best_score"] == best
         assert item["match"] == ("variant" if chosen else "no_match")
     assert _items(out)[EXP]["variant"]["text"] == strong
-    # the library-level result has exactly #229's keys: nothing added for the fallback
+    # the library-level result has exactly #229's keys, plus the reminder block (#299): nothing added for the fallback
     raw = library.suggest_actions(uid, job_id)
-    assert all(set(i) == OLD_ITEM_KEYS for i in raw["items"]) and set(raw) == {"job_id", "node_id", "floor", "items"}
+    assert all(set(i) == OLD_ITEM_KEYS for i in raw["items"]) and set(raw) == {"active_constraints", "job_id", "node_id", "floor", "items"}
 
 
 def test_an_api_error_costs_one_request_and_everything_after_it_falls_back(env, auto):
