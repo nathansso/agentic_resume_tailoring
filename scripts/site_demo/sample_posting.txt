@@ -1,0 +1,23 @@
+Data Science Intern, Summer 2027
+Cedarline Freight (sample posting written for this demo)
+Hybrid, 12 weeks
+
+About the internship
+You will join the delivery analytics team and help predict which shipments will arrive late. We want an intern who can turn messy operational data into models and reports that dispatchers act on.
+
+What you'll do
+- Build and evaluate models that predict shipment delays.
+- Turn messy operational data into clear dashboards and reports.
+- Work in Python and SQL every day, using pandas and scikit-learn.
+- Explain results to dispatchers and other non-technical teammates.
+
+Required qualifications
+- Currently pursuing a B.S. or M.S. in computer science, statistics, data science or a related field.
+- Experience with Python and SQL.
+- Familiarity with machine learning libraries such as scikit-learn.
+- Ability to explain results clearly to a non-technical audience.
+
+Preferred qualifications
+- Experience building dashboards, for example with Streamlit or Tableau.
+- Experience serving a model behind an API.
+- Exposure to Docker.
