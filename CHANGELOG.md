@@ -36,6 +36,26 @@ First step of epic #349 (Jev stays optional, so the no-key harness has to be rob
 
 ---
 
+## Issue 356 — Jev presented as an optional upgrade
+**Status:** complete | **Tests:** 3118 pass on SQLite (5 new in `test_site_home.py` and `test_site_docs.py`), 25 skipped, 2 xfailed, 0 fail; the Postgres leg was not run (nothing here touches storage)
+
+Decided 2026-10-15: Jev stays optional on the user's own TypeSafe key, called from their machine, and ART is solid without it. The landing page and the docs read as if a student had to add a TypeSafe key; they now say the opposite first. Copy and tests only; no code under `harness/` changed.
+
+### What shipped
+- **Home page FAQ.** "Do I need an API key?" answers "No." and gives the reason (no text-writing model is called). A second paragraph, "Optional: strengthen the checks with Jev.", says in plain words what a key adds: it catches a reworded claim its cited source doesn't back, catches a banned topic mentioned in other words, and picks the best approved bullet more often.
+- **Home page privacy note.** It leads with "Everything ARTie stores stays on your computer". The Jev facts moved under an "Optional: strengthen the checks with Jev" heading in the same note, with the same wording about what a request carries (now also naming the cited source text and the names of your skills, roles and projects, which `docs/harness.md` § 4 lists), and the same `ART_JEV_MODE=off` / no-key promise that nothing is sent.
+- **Install page.** The Jev section is its own table-of-contents entry, "Optional: strengthen the checks with Jev", after "Check that it worked" and "Optional extras" and before Troubleshooting. Its commands still render from `commands.json`; no command or `commands.json` entry changed.
+- **`INSTALL.md` and `plugin/README.md`.** "Jev (optional): strengthen the checks" (the "Jev (optional)" prefix is kept because `docs/harness.md` and the plugin README cite it) and the memory-gate hook paragraph now say that everything works without a key and that a key is an upgrade. Prose only; no command text changed.
+- **Tests.** `tests/test_site_home.py`: the API-key FAQ answer starts with "No." and its optional paragraph names the three claims and carries no number; the privacy note leads with local storage and keeps every Jev mention under the optional heading. `tests/test_site_docs.py`: the install page's Jev section is titled "Optional" and comes after the first-run check; no site page, `INSTALL.md` or `plugin/README.md` says a key is required or needed.
+
+### Deviations from spec
+- **No Jev-vs-fallback numbers.** The fitted figures in `docs/harness.md` (for example 47 of 48 against 18 of 48 for the bullet choice) are not quoted; #350 is measuring the fallbacks and a follow-up adds numbers. The FAQ says "more often", which that table supports, and a test forbids digits in that paragraph.
+- **The memory gate is not named on the home page.** `docs/harness.md` § 4 supports it (a key lets ART save a clear, low-stakes preference itself; without one every candidate goes to the host), but it is a hook detail, so it is covered in `plugin/README.md` and `INSTALL.md` only.
+- **"Nothing is skipped" is gone.** The old install copy said no safety check is skipped without a key. `docs/harness.md` § 4 lists the support check's fallback as "Unchecked; lexical drift still gates", so the copy now says the plain rules (word drift against the cited source, the literal term match, word overlap) still gate, and Jev adds the reworded cases they miss.
+- **The home page's source-text and name lists were incomplete.** The earlier note listed bullet excerpts, requirements, job title and messages; it now also lists the cited source text and the names of skills, roles and projects, per the Privacy paragraph of § 4.
+
+---
+
 ## Issue 298 — `ResumeRule`: what the user said about the page, enforced at finalize
 **Status:** complete | **Tests:** 3103 pass on SQLite (85 in `test_resume_rules.py`, after merging main), 24 skipped, 2 xfailed, 0 fail
 
@@ -98,6 +118,32 @@ The before and after on the landing page (#275) did not sell the product: two li
 - **The staged slip moved to the A/B swap** (a derived "19% relative lift"), because the earlier staged figure on the SQL bullet made the follow-up node fail the acceptance rule on its own; the first-pass revise now commits and the swap is the node that resubmits.
 - **Replay trimmed to fit 60 to 90 seconds.** The first plan is shown with its bullets counted (`"… 4 bullets, each citing its source"`) except the one that carries the slip; omitted fields are marked.
 - **Bottom-of-page fill is a proxy for the budget, not equal to it.** ART's line budget (60) is conservative: the usual page uses 52.9 of the 60 budget lines and fills 92% of the sheet.
+
+---
+
+## Issue 321 — Dismiss a skill claim that nothing proves
+**Status:** complete | **Tests:** 3137 pass on SQLite (15 new), 16 skipped, 0 fail; frontend 174 pass (4 new); `npm run build` and `npm ci --dry-run` pass; the Postgres leg was not run locally (the Docker daemon was not running), CI's required Postgres leg covers it
+
+A skill no bullet cites (a LinkedIn skill list entry, a GitHub language) can be dismissed from the evidence map's side panel. It leaves the map, the job overlay, the picker and tailoring inputs, and a re-import does not bring it back. A "Dismissed · N" button in the summary strip opens a list with Restore.
+
+### What shipped
+
+- **`services.dismiss_skill` / `list_dismissed_skills` / `restore_skill`** and three owner-scoped routes: `POST /api/profile/skills/{skill_id}/dismiss` (404 when it is not the caller's, 409 when a bullet cites it), `GET /api/profile/skills/dismissed` (`[{skill_id, name, dismissed_at, sources}]`, A to Z) and `POST /api/profile/skills/{skill_id}/restore`. Dismissing deletes the user's `UserSkill` rows for the skill (every source) and writes a `DeletedEntry` tombstone (`entity_type="skill"`, `key_a` the canonical key); the global `Skill` row is untouched. Whether a bullet cites the skill is read from the evidence view itself (`evidence_view.cited_skill_keys`), not from a second matcher, so the panel and the server agree. A GitHub-only link does not count as a citation.
+- **`DeletedEntry.payload`**, a nullable JSON column (`ALTER TABLE deletedentry ADD COLUMN payload JSON` in `_migrate_db`). A skill tombstone snapshots the deleted rows (source, detail, proficiency, confidence, `is_core`, `source_context`, both timestamps), so a restore re-creates them exactly and drops the tombstone. Existing tombstones keep a NULL payload and block as before; other entity types do not use it. It exports and imports like the table's other columns.
+- **Ingest respects it.** `agents/kg_store._save_skills` loads the user's skill tombstones once and returns `skipped_tombstone` for a dismissed skill, so the legacy parser, GitHub and LinkedIn ingest and the harness `upsert_items` all skip it. Matching is on `agents.skill_matching.skill_fold` (the canonical name, punctuation and spacing folded), so an alias ("torch" for PyTorch) and a re-spelling ("Time-Series Analysis") are caught. `harness/ingest.py` gives it a message ("The user dismissed this skill; it was not re-added.") and reports every spelling of it in one batch as skipped.
+- **An explicit add clears the dismissal.** `add_skill_to_profile` and `create_artifact_from_chat` (a skill) delete the matching tombstone before adding, so asking for the skill in chat brings it back.
+- **UI.** `SkillDetail` shows "Dismiss this skill" for a skill with no citing bullet (`lib/evidenceMap.ts::canDismiss`), with an inline confirmation (no `window.confirm`) that says what it does, then re-reads the map and opens the dismissed list. `DismissedList` has a Restore button per skill. A selection key `DISMISSED_KEY` names the list; `isPanelKey` keeps it out of the neighbourhood highlight. Tailwind utilities and `--graph-*` tokens only; no new npm dependency, `package-lock.json` untouched.
+- **Tests.** 15 Python in `tests/test_skill_dismiss.py`: rows gone with a tombstone snapshot and absent from the view, `get_skills`, the graph and harness `list_items`; a cited skill is refused with nothing changed; a GitHub-only skill can be dismissed; the kg_store path skips a skill, an alias and a re-spelling; the harness `upsert_items` path skips it; restore returns identical rows; a restored skill ingests again; a chat add clears it (both chat paths); route round trip; cross-user isolation (another user's dismiss, restore and list, and an ingest for a user who did not dismiss); an old table without `payload` migrates, idempotently, and an old tombstone still blocks. 4 vitest in `lib/evidenceMap.test.ts` (`canDismiss`, `skillIdOf`, `isPanelKey`).
+- **Verified by hand** in `python -m web.local_ui` against a throwaway SQLite store: dismissing a no-evidence skill through the inline confirmation, the "Dismissed · 1" button and list, the skill gone from the map and the Skills tab count, a harness re-ingest of the same skill reporting `skipped_tombstone`, Restore putting it back, a cited skill showing no Dismiss button and answering the route with 409, and a cross-origin POST refused by the local-mode guard (403).
+
+### Deviations from spec
+
+- **The Dismissed list is a panel selection, not a separate view.** It opens in the side panel like a skill or an item, from the summary strip. When the last skill is restored, the panel returns to its empty state.
+- **Dismissing also clears nothing else.** A preference or term pin that names the skill is left alone: a ban on a skill is still a ban.
+- **The tombstone key is the canonical name, matched folded.** The plan said "canonical key"; ingest also dedups on a punctuation-folded form, so the match uses `skill_fold`, which is a superset.
+- **A skill that was already tombstoned and is dismissed again** replaces the old tombstone rather than stacking.
+- **No MCP or harness tool** for dismiss or restore in this issue (a possible follow-up, since a host cannot dismiss a claim today).
+- **Not done:** the Postgres leg (Docker daemon not running); a screen reader pass; component tests (the repo has no DOM test setup, so the panel flow was checked in the browser). Two `Skill` rows that fold to one name would show as two skills and need dismissing separately, though a re-ingest of either is skipped.
 
 ---
 

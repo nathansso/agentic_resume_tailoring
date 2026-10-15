@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  updateEducation, updateExperience, updateProject, updateProjectBlurb,
+  dismissSkill, restoreSkill, updateEducation, updateExperience, updateProject, updateProjectBlurb,
   type EducationEdit, type ExperienceEdit, type ProjectEdit,
 } from "../api/profile";
-import type { EvidenceItem, EvidenceKind, EvidenceSkill, EvidenceView } from "../types";
+import type { DismissedSkill, EvidenceItem, EvidenceKind, EvidenceSkill, EvidenceView } from "../types";
 import {
-  dateRange, editableFields, githubOnlyLinks, highlightSegments, initialDraft, linksByBullet, planSave,
-  recentEditable, skillEvidence, textIsDescription, type Draft, type JobOverlay, type SaveOp,
+  DISMISSED_KEY, canDismiss, dateRange, editableFields, githubOnlyLinks, highlightSegments, initialDraft, linksByBullet, planSave,
+  recentEditable, skillEvidence, skillIdOf, textIsDescription, type Draft, type JobOverlay, type SaveOp,
 } from "../lib/evidenceMap";
 import { cn } from "../lib/utils";
 
@@ -14,7 +14,9 @@ import { cn } from "../lib/utils";
  * The side panel (issue #136): one shared selection. A skill shows what backs it, with
  * the citing bullets quoted and the words that name it marked; an item is an editor,
  * because that is where a skill's links are fixed. Skills are not edited here: they
- * follow from the text, and the map re-derives them from the saved text.
+ * follow from the text, and the map re-derives them from the saved text. The one
+ * action on a skill is to dismiss a claim no bullet proves (#321), with a list to
+ * restore it from.
  */
 
 const KIND_LABEL: Record<EvidenceKind, string> = { exp: "Experience", proj: "Project", edu: "Education" };
@@ -36,12 +38,14 @@ interface Props {
   selected: string | null;
   overlay: JobOverlay | null;
   jobOn: boolean;
+  /** Skills the user dismissed, A to Z as the server sends them (#321). */
+  dismissed: DismissedSkill[];
   onSelect: (key: string | null) => void;
   /** Called after a save, so the map is re-read from the server. */
   onSaved: () => Promise<void>;
 }
 
-export function EvidencePanel({ view, selected, overlay, jobOn, onSelect, onSaved }: Props) {
+export function EvidencePanel({ view, selected, overlay, jobOn, dismissed, onSelect, onSaved }: Props) {
   const item = selected ? view.items.find((i) => i.key === selected) : undefined;
   const skill = selected ? view.skills.find((s) => s.key === selected) : undefined;
   const ghost = selected?.startsWith("ghost:") ? overlay?.missing.find((m) => `ghost:${m.name}` === selected) : undefined;
@@ -54,7 +58,12 @@ export function EvidencePanel({ view, selected, overlay, jobOn, onSelect, onSave
       {item ? (
         <ItemEditor key={item.key} view={view} item={item} onSelect={onSelect} onSaved={onSaved} />
       ) : skill ? (
-        <SkillDetail view={view} skill={skill} overlay={overlay} jobOn={jobOn} onSelect={onSelect} />
+        <SkillDetail
+          key={skill.key} view={view} skill={skill} overlay={overlay} jobOn={jobOn}
+          onSelect={onSelect} onSaved={onSaved}
+        />
+      ) : selected === DISMISSED_KEY ? (
+        <DismissedList dismissed={dismissed} onSaved={onSaved} />
       ) : ghost ? (
         <div>
           <Kicker><span className="h-2.5 w-2.5 rounded-full border border-dashed border-graph-gap" />Missing skill</Kicker>
@@ -104,9 +113,9 @@ function Pips({ value }: { value: number }) {
 
 // ── a skill ────────────────────────────────────────────────────────────────────
 
-function SkillDetail({ view, skill, overlay, jobOn, onSelect }: {
+function SkillDetail({ view, skill, overlay, jobOn, onSelect, onSaved }: {
   view: EvidenceView; skill: EvidenceSkill; overlay: JobOverlay | null; jobOn: boolean;
-  onSelect: (key: string) => void;
+  onSelect: (key: string | null) => void; onSaved: () => Promise<void>;
 }) {
   const evidence = useMemo(() => skillEvidence(view, skill.key), [view, skill.key]);
   const bullets = evidence.reduce((n, e) => n + e.bullets.length, 0);
@@ -211,9 +220,114 @@ function SkillDetail({ view, skill, overlay, jobOn, onSelect }: {
           </div>
         ))}
       </div>
+      {canDismiss(view, skill.key) && (
+        <DismissSkill skill={skill} onDone={async () => { await onSaved(); onSelect(DISMISSED_KEY); }} />
+      )}
       <p className="mt-5 text-[12.5px] text-muted-foreground">
         Skills are not edited here. They follow from your experiences and projects.
       </p>
+    </div>
+  );
+}
+
+/** Dismiss a claim nothing proves (#321). Two steps, inline: the second says what it does. */
+function DismissSkill({ skill, onDone }: { skill: EvidenceSkill; onDone: () => Promise<void> }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const dismiss = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await dismissSkill(skillIdOf(skill.key));
+      await onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not dismiss the skill");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <h4 className={sectionHead}>Not a skill you claim?</h4>
+      {!confirming ? (
+        <button type="button" className={linkButton} onClick={() => setConfirming(true)}>
+          Dismiss this skill
+        </button>
+      ) : (
+        <div role="group" aria-label={`Dismiss ${skill.name}`} className="rounded-md border border-graph-gap/40 p-3 text-[13px]">
+          <p>
+            Dismiss <b className="font-semibold">{skill.name}</b>? It leaves your profile and tailoring,
+            and it won't come back when you re-import. You can restore it from the Dismissed list.
+          </p>
+          <div className="mt-2.5 flex gap-2">
+            <button
+              type="button" disabled={busy} onClick={dismiss}
+              className="rounded-md bg-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground transition-opacity disabled:opacity-40"
+            >
+              {busy ? "Dismissing…" : "Dismiss"}
+            </button>
+            <button
+              type="button" disabled={busy} autoFocus onClick={() => { setConfirming(false); setError(null); }}
+              className="rounded-md border border-border px-3 py-1.5 text-[13px] transition-colors hover:bg-muted disabled:opacity-40"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {error && <p role="alert" className="mt-2 text-[13px] text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+// ── the dismissed skills ───────────────────────────────────────────────────────
+
+function DismissedList({ dismissed, onSaved }: { dismissed: DismissedSkill[]; onSaved: () => Promise<void> }) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const restore = async (id: string) => {
+    setBusyId(id);
+    setError(null);
+    try {
+      await restoreSkill(id);
+      await onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not restore the skill");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div>
+      <Kicker>Dismissed · {dismissed.length}</Kicker>
+      <h3 className="mt-1 text-lg font-semibold">Skills you dismissed</h3>
+      <p className="mt-0.5 text-[13px] text-muted-foreground">
+        These are off your profile and out of tailoring, and a re-import skips them. Restore one to put it back
+        as it was.
+      </p>
+      <ul className="mt-3 space-y-2">
+        {dismissed.map((d) => (
+          <li key={d.skill_id} className="flex items-center justify-between gap-3 rounded-md border border-border p-2.5 text-[13px]">
+            <span className="min-w-0">
+              <span className="block truncate font-medium">{d.name}</span>
+              <span className="block text-[12px] text-muted-foreground">
+                {d.sources.length > 0 ? `Claimed by ${d.sources.map((s) => SOURCE_LABEL[s] ?? s).join(" and ")}` : "No source recorded"}
+              </span>
+            </span>
+            <button
+              type="button" className={cn(linkButton, "shrink-0 disabled:opacity-40")}
+              disabled={busyId !== null} aria-label={`Restore ${d.name}`} onClick={() => restore(d.skill_id)}
+            >
+              {busyId === d.skill_id ? "Restoring…" : "Restore"}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {error && <p role="alert" className="mt-3 text-[13px] text-destructive">{error}</p>}
     </div>
   );
 }

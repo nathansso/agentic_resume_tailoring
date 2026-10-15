@@ -177,6 +177,8 @@ def _migrate_db() -> None:
         # user's job-scoped rules. Both nullable, so existing rows load.
         "ALTER TABLE jobdescription ADD COLUMN application_status TEXT DEFAULT 'drafting'",
         "ALTER TABLE jdprofile ADD COLUMN eligibility JSON",
+        # issue 321: a skill tombstone keeps a snapshot of the rows it removed, for restore
+        "ALTER TABLE deletedentry ADD COLUMN payload JSON",
         # Project context: Project -PART_OF-> Experience/Education and
         # Achievement -AWARDED_FOR-> Project. Nullable (status defaults to
         # 'unreviewed'), so existing rows load unlinked. Typed UUID so Postgres

@@ -462,6 +462,29 @@ export function skillEvidence(view: EvidenceView, skillKey: string): SkillEviden
     || cmpStr(a.item.key, b.item.key));
 }
 
+/** The selection that opens the list of dismissed skills (#321). Not a node of the map. */
+export const DISMISSED_KEY = "panel:dismissed";
+
+/** A selection that names a panel, not a node: `ghost:<name>` or `DISMISSED_KEY`. Item and skill keys have no colon. */
+export function isPanelKey(key: string): boolean {
+  return key.includes(":");
+}
+
+/**
+ * Whether a skill may be dismissed (#321): no bullet cites it. A GitHub-only link or no link at
+ * all is a claim nothing proves; a cited skill is fixed by editing the bullet. The server decides
+ * the same way and refuses (409) otherwise.
+ */
+export function canDismiss(view: EvidenceView, skillKey: string): boolean {
+  return view.skills.some((s) => s.key === skillKey)
+    && !view.edges.some((e) => e.skill_key === skillKey && e.cites.length > 0);
+}
+
+/** The server id behind a skill node key (`skill/<id>`). */
+export function skillIdOf(skillKey: string): string {
+  return skillKey.startsWith("skill/") ? skillKey.slice("skill/".length) : skillKey;
+}
+
 /** The most recent experiences and projects that have text, for "edit one of these to back this skill". */
 export function recentEditable(view: EvidenceView, n = 3): EvidenceItem[] {
   return view.items.filter((i) => i.kind !== "edu").sort(byRecency).slice(0, n);
