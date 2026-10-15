@@ -197,6 +197,14 @@ export interface EvidenceView {
   stats: EvidenceStats;
 }
 
+/** A skill the user dismissed from the evidence map and can restore (#321). */
+export interface DismissedSkill {
+  skill_id: string;
+  name: string;
+  dismissed_at: string;             // ISO timestamp
+  sources: string[];                // the kinds of source that had claimed it
+}
+
 export interface JobSkillRow {
   name: string;
   required: boolean;                // false = preferred

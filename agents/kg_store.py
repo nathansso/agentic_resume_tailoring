@@ -23,6 +23,7 @@ import database.db as _db
 from database.clock import utc_now
 from database.db import next_seq
 from database.models import Achievement, DeletedEntry, Education, Experience, Project, Skill, UserSkill
+from agents.skill_matching import skill_fold
 from agents.skill_postprocessor import normalize_skill_name
 from agents import project_context as _ctx
 from institution import canonicalize_institution
@@ -735,6 +736,13 @@ class KGStoreMixin:
     def _education_tombstoned(cls, tombs, institution, degree) -> bool:
         return any(cls._education_match(t.key_a, t.key_b, institution, degree) for t in tombs)
 
+    @staticmethod
+    def _skill_tombstoned(tombs, name) -> bool:
+        """Whether the user dismissed this skill (#321). Matched on the canonical name, so an
+        alias ("torch" for PyTorch) or a re-spelling ("Time-Series Analysis") is caught."""
+        folded = skill_fold(name)
+        return bool(folded) and any(skill_fold(t.key_a) == folded for t in tombs)
+
     @classmethod
     def _experience_is_includable(cls, title, company, start, end, description, bullets) -> bool:
         """Whether an experience is substantive enough to auto-add (issue #85).
@@ -758,11 +766,16 @@ class KGStoreMixin:
         touched_pairs = {}
         outcomes = []
         with Session(_db.engine) as session:
+            tombs = self._load_tombstones(session, self.user.user_id, "skill")
             for item in data:
                 # Normalize name via alias map
                 raw_name = normalize_skill_name(item.get("name", "").strip())
                 if not raw_name:
                     outcomes.append(("skipped_empty", None))
+                    continue
+                # A skill the user dismissed from the evidence map stays dismissed (#321).
+                if self._skill_tombstoned(tombs, raw_name):
+                    outcomes.append(("skipped_tombstone", None))
                     continue
 
                 # Get or create the Skill node
