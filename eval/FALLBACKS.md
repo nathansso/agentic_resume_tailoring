@@ -37,7 +37,7 @@ Any threshold a fix introduces is fitted the way `docs/architecture.md` § 8.8 s
 | coverage | good enough | none possible: an absent target blocks and writes nothing | hold: the target stays absent without Jev | `semantic_coverage` is a target, never a gate; the literal `coverage` and `relevance_density` still steer. |
 | memory gate | good enough | 0 automatic writes without Jev (hold) | hold 57/67 preferences kept | Nothing is written, so no write can be wrong; the 10 misses are the prefilter's, which Jev sits behind and shares. |
 | variant choice | work: #352 | 0/48 poor-fit picks, and at most 1 other wrong pick | 33/48 correct, and above the constant 'always no_match' (15/48) | Half the way from 18 to Jev's 47; today's fallback is only 3 cases better than a constant. |
-| track baseline | work: #352 | 0/36 wrong tracks | 31/36 correct, and above the constant 'always none' (14/36) | Half the way from 27 to Jev's 35; the lookup reads the title alone and is wrong on every job whose title and duties disagree. |
+| track baseline | work: #352 | 0/36 wrong tracks | 31/36 correct, and above the constant 'always none' (14/36) | Half the way from 27 to Jev's 35; the lookup reads the title alone and is right on none of the jobs whose title and duties disagree. |
 <!-- fallback-benchmark:end targets -->
 
 ### Already good enough: spend no work here
@@ -49,7 +49,7 @@ Any threshold a fix introduces is fitted the way `docs/architecture.md` § 8.8 s
 ### Needs work
 
 - **Support (#351)** is the one that matters: nothing semantic stops a reworded claim, and the only deterministic gate beside it (#123) reads new numbers and names, so role inflation, invented scope and contradictions that introduce no new token pass. The residual after #123 is the target of the new check.
-- **Variant choice and track baseline (#352).** The overlap pick is barely better than answering `no_match` every time, and the role-family lookup reads the title alone, so it is wrong on every job whose title and duties disagree.
+- **Variant choice and track baseline (#352).** The overlap pick is barely better than answering `no_match` every time, and the role-family lookup reads the title alone, so it is right on none of the jobs whose title and duties disagree (6 wrong tracks and 1 no pick, of 7).
 
 ## Support: cited-bullet check (#193, #237)
 

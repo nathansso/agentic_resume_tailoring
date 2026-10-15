@@ -522,7 +522,7 @@ def targets(m: Dict[str, Any], j: Dict[str, Any]) -> Dict[str, Any]:
                            "bar": f"{b_bar}/{b['n']} correct, and above the constant 'always none' "
                                   f"({m['track_baseline']['constant']['correct']}/{b['n']})",
                            "reason": f"Half the way from {b['correct']} to Jev's {_ints(jb['correct'])[0]}; the lookup reads the "
-                                     "title alone and is wrong on every job whose title and duties disagree."},
+                                     "title alone and is right on none of the jobs whose title and duties disagree."},
     }
 
 
