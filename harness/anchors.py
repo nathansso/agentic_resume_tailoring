@@ -27,7 +27,12 @@ a step with several is ambiguous and never picks one.
 
 **A substring never binds.** "Kafka" is not "Kafka Streams", "R" is not "React", "Go" is not
 "Google": every step compares the whole subject. Short names (at most `SHORT_NAME_MAX` characters:
-R, C, Go) bind only by their own name, never through an alias, as in `skill_forms`.
+R, C, Go) bind only by their own name, never through an alias, as in `skill_forms`. `torchvision` and
+`torchnet` are not spellings of PyTorch here (`DISTINCT_PACKAGES`).
+
+**A document subject holds a document word and nothing else that names a thing** (`DOCUMENT_WORDS`,
+`FRAME_WORDS`): "one page", "formal tone" and "the order of my sections" are about the page; "Page
+Rank", "Style Transfer" and "my order-routing startup" are not, and stay pending (#296).
 
 `mentions` is the same decision run on a whole message, which is what the memory gate's automatic
 write is checked against (`harness/memory.py::_auto_write`): the gate may write only a key this
@@ -56,10 +61,31 @@ STATUSES = (BOUND, AMBIGUOUS, PENDING, DOCUMENT, MULTIPLE)
 
 STEPS = ("key", "label", "name", "alias")
 
-# A subject about the page and not about a thing on it. Whole words, lowercased.
+# A subject about the page and not about a thing on it (#296). A phrase is a document subject when it
+# holds one of DOCUMENT_WORDS and every other word is a FRAME word: a stop word, a directive verb, a
+# count, a plain modifier ("keep it to one page", "formal tone", "the order of my sections"). Any other
+# word makes it a nameable thing: "Page Rank", "Style Transfer" and "my order-routing startup" hold a
+# document word and are not about the page. A miss costs little (a term the page never holds, as before
+# #295); a false hit would send a real ban to the document rules, where nothing blocks it.
 DOCUMENT_WORDS = frozenset(
     "page pages length order ordering tone wording summary layout format formatting font fonts "
-    "margin margins spacing style voice phrasing".split())
+    "margin margins spacing style voice phrasing section sections tense jargon buzzword buzzwords "
+    "bullet bullets".split())
+
+FRAME_WORDS = frozenset(
+    "the a an my your our its this that these those it them of in on at to for per from by with without "
+    "as be is are was keep keeps kept make makes use uses using put puts set stay stays fit fits show "
+    "shows write written list lists have has all any only no not never always more less too very much "
+    "same one two three four five six single whole entire overall total final max maximum min minimum "
+    "limit limited count number resume resumes cv document formal informal casual professional plain "
+    "clean simple consistent concise short long tight tighter plainer shorter longer active passive "
+    "first second third past present future heading headings header point points line lines role roles "
+    "item items each every".split())
+
+# Separate packages `SKILL_ALIASES` folds into a skill so an ingested skills list stays tidy. A ban on
+# one of them is not a ban on the skill (it would also forbid "PyTorch"), so they are never spellings
+# of it here. The alias map itself is untouched: that is how every ingested skill is normalized.
+DISTINCT_PACKAGES = frozenset({"torchvision", "torchnet"})
 
 # What joins two subjects. `/`, `&` and `+` count only with spaces around them ("R&D", "C/C++" and
 # "Q&A" are one name each). "and" is the exception: it is also inside names ("Research and
@@ -68,6 +94,7 @@ _SPLIT = re.compile(r"\s*(?:,|;|\s&\s|\s/\s|\s\+\s|\band/or\b|\bor\b)\s*", re.IG
 _AND = re.compile(r"\s+and\s+", re.IGNORECASE)
 _SECTION = re.compile(r"^section\s*:\s*", re.IGNORECASE)
 _PREFIX_KEY = re.compile(r"^(exp|proj|skill|edu|ach|section):", re.IGNORECASE)
+_DISTINCT = re.compile(r"(?<![a-z0-9])(?:" + "|".join(sorted(DISTINCT_PACKAGES)) + r")(?![a-z0-9])", re.IGNORECASE)
 _COMPANY_STOP = frozenset("the of and for inc llc ltd corp co company at a an".split())
 
 Source = Union[UUID, str, Sequence[Dict[str, Any]]]
@@ -155,7 +182,7 @@ def _candidate(item: Dict[str, Any]) -> Dict[str, str]:
 def _alias_match(subject: str, item: Dict[str, Any]) -> bool:
     """Whether `subject` is a spelling of this skill: one canonical name, or a form `skill_forms` knows."""
     name = item.get("skill")
-    if not name or len(subject) <= SHORT_NAME_MAX:
+    if not name or len(subject) <= SHORT_NAME_MAX or _loose(subject) in DISTINCT_PACKAGES:
         return False
     if canonical_key(subject) == canonical_key(name):
         return True
@@ -175,8 +202,16 @@ def _step_matches(step: str, subject: str, items: Sequence[Dict[str, Any]]) -> L
 
 
 def _is_document(subject: str) -> bool:
-    words = re.findall(r"[a-z]+", subject.lower())
-    return bool(words) and any(w in DOCUMENT_WORDS for w in words)
+    """Whether the whole phrase is about the page: a document word, and nothing but frame words and
+    single digits around it (see `DOCUMENT_WORDS`). A bare section name ("skills") is one too."""
+    words = re.findall(r"[a-z0-9]+", subject.lower())
+    if not words:
+        return False
+    if len(words) == 1 and words[0] in SECTION_NAMES:
+        return True
+    allowed = DOCUMENT_WORDS | FRAME_WORDS | set(SECTION_NAMES)
+    return (any(w in DOCUMENT_WORDS for w in words)
+            and all(w in allowed or (len(w) == 1 and w.isdigit()) for w in words))
 
 
 def _is_known(piece: str, items: Sequence[Dict[str, Any]]) -> bool:
@@ -262,7 +297,7 @@ def mentions(source: Source, text: str) -> Dict[str, Any]:
     named: List[Dict[str, Any]] = []
     for item in _items(source):
         if item["kind"] == "skill":
-            hit = SkillMatcher(item["skill"]).mentions(text)
+            hit = SkillMatcher(item["skill"]).mentions(_DISTINCT.sub(" ", text))
         elif item["kind"] == "experience":
             company = item.get("company") or ""
             hit = any(_phrase(n).search(hay)
