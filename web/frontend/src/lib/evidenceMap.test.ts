@@ -3,6 +3,7 @@ import type {
   EvidenceEdge, EvidenceItem, EvidenceKind, EvidenceSkill, EvidenceText, EvidenceView, JobSkillRow,
 } from "../types";
 import {
+  DISMISSED_KEY, canDismiss, isPanelKey, skillIdOf,
   arcPath, areaFoldKey, dateKey, edgeWidth, editableFields, estimateTextWidth, evidenceRows, firstMatch, fitText,
   ghostBlock, githubOnlyLinks, highlightSegments, initialDraft, jobOverlay, layoutMap, linkPath,
   linksByBullet, neighborhood, planSave, searchSkills, skillEvidence, skillMatchKey, skillRadius,
@@ -279,6 +280,33 @@ describe("the side panel's reads", () => {
     expect(links.get(1)?.map((s) => s.name)).toEqual(["PyTorch"]);
     expect(githubOnlyLinks(VIEW, "proj/beta").map((s) => s.name)).toEqual(["TypeScript"]);
     expect(githubOnlyLinks(VIEW, "proj/alpha")).toEqual([]);
+  });
+});
+
+describe("dismissing a skill nothing proves (#321)", () => {
+  it("offers it for a skill with no link, or only a GitHub link, and not for a cited one", () => {
+    // VIEW: Python, SQL, PyTorch are cited; TypeScript is linked from GitHub only; Kafka and Docker have no link.
+    expect(canDismiss(VIEW, kafka.key)).toBe(true);
+    expect(canDismiss(VIEW, docker.key)).toBe(true);
+    expect(canDismiss(VIEW, ts.key)).toBe(true);
+    expect(canDismiss(VIEW, py.key)).toBe(false);
+    expect(canDismiss(VIEW, torch.key)).toBe(false);
+  });
+
+  it("is cited as soon as any one item's bullet names it", () => {
+    const v = view([acme, beta], [ts], [edge("proj/beta", ts, [], true), edge("exp/acme", ts, [1])]);
+    expect(canDismiss(v, ts.key)).toBe(false);
+  });
+
+  it("does not offer a skill the view does not hold", () => {
+    expect(canDismiss(VIEW, "skill/ghost")).toBe(false);
+  });
+
+  it("tells the server id from the node key, and a panel selection from a node", () => {
+    expect(skillIdOf("skill/3f2a-91")).toBe("3f2a-91");
+    expect(isPanelKey(DISMISSED_KEY)).toBe(true);
+    expect(isPanelKey("ghost:Rust")).toBe(true);
+    expect(isPanelKey(py.key) || isPanelKey(acme.key)).toBe(false);
   });
 });
 
