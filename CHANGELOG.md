@@ -14,6 +14,34 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 337 — Landing site demo: a stronger before/after, the target role shown, full pages
+**Status:** complete | **Tests:** 2929 pass on SQLite (6 new in `tests/test_site_demo.py`, 1 rewritten), 24 skipped, 0 fail; the Postgres leg was not run (nothing here touches storage)
+
+The before and after on the landing page (#275) did not sell the product: two lightly reworded bullets, one dropped project, no word of what role it was tailored to, and both pages cropped with an empty foot. The demo is rebuilt around a student whose graph holds more than fits on a page.
+
+### What shipped
+
+- **A profile bigger than one page.** `scripts/site_demo/sample_resume.md` is now the resume Riley sends everywhere: web work first (a web developer internship, a teaching assistantship, a coffee-shop job), four projects, 18 skills. `sample_repos.md` holds the READMEs of three repos that are not on it (a checkout A/B test, a subscription churn model, a retail sales dashboard). Both are ingested by the replay's `/art:setup`, as two `upsert_items` calls. Synthetic throughout: example.com, a 555 number, invented company and school.
+- **A posting with requirements.** `sample_posting.txt` is a made-up Data Science Intern posting at an invented company ("Brightwell Market"), labelled as a sample, with six requirements the agent reads out of it (A/B tests, SQL and pandas, scikit-learn, dashboards, explaining results, the degree).
+- **The before is a real committed version.** Version 1 of the job is the usual resume: `execute_plan` on the whole graph with three user-approved deletes (the repo projects) and the skills in Riley's own order. It is the content of `resume.md`, nothing reworded, rendered by ART. The page labels it that way.
+- **The after is the executor's version 3.** The plan puts Projects above Experience, swaps the three repo projects in for Recycling Sorter, Budget Tracker and Portfolio Site, leads the internship with its SQL bullet and the TA role with its plain-language bullet, rewords toward the posting's terms from cited bullets, cuts two web bullets and the coffee-shop job, and ranks the skills (18 become 10). One bullet in the first draft deliberately carries a relative lift the agent worked out and no source states; ART's consistency gate reverts that swap, everything else commits as version 2, and the resubmitted swap commits as version 3. The draft is labelled as written for the demo.
+- **Full pages.** Both pages are whole US Letter pages (the crop is gone, along with the "blank foot is cropped" copy). The last line of text ends at 92.4% (before) and 94.0% (after) of the page height. `build_site_demo.py` stops if either ends above 90%, records both in `before-after.json` (`fill`), and a test reads the committed images themselves.
+- **The role on screen.** A posting card (title, company, location, the six requirements, "Sample posting, written for this demo") sits above the pages, and the change groups replace the raw removed/added list: Added from your graph, Moved up, Reworded, Cut, Skills trimmed. Each entry names the requirement it serves. The groups are computed by `build_groups` from the two versions' stored content (`get_head`), the source bullets (`get_item`) and ART's own `diff_nodes` answer, which the build script asserts agrees with the pages. The line-by-line text list stays, under a `<details>`, as the text alternative to the highlights.
+- **One run.** The replay and the before/after come from the same capture (32 steps, 88 seconds). The replay's new steps: two ingests, the usual resume as version 1, the plan, the gate rejection, the resubmit and a real `diff_nodes` call.
+- **Weight.** The home page is 635,205 bytes (images 356 KB); `npm run check:weight` passes at 2,000,000. Checked at 375px and 1280px in light and dark in headless Chromium: no horizontal scroll, no console errors, before and after side by side from 768px and stacked below.
+- **Tests (`tests/test_site_demo.py`).** The two pages fill the bottom tenth (from the images and the recorded metric); the posting card lists 4 to 6 requirements that are in the posting; the versions really differ (an added item that was not on the usual page and leads the projects, a cut, a section move, a bullet move up, a rewording) and every requirement a change names is on the card and its terms appear in the changed text; `build_groups` is checked on a small fixture and rejects a diff that disagrees with the pages; every figure in the plan is in a source bullet except the staged one, which is not; the owner-identifier ban now also covers the repo READMEs.
+
+### Deviations from spec
+
+- **Which requirement a change serves is partly authored.** The plan records no per-requirement rationale, only `keywords` per node (which the executor accepts). The page maps a change to the requirements whose listed terms match those keywords, narrowed to the terms that appear in the changed text. The requirement list and the reasons shown for cuts are written for the demo, and the page says so.
+- **"Moved up" is a section and bullets, not items.** The executor can reorder bullets inside an item and sections (`section_order`), but not items within a section: a project added by `replace` takes the slot of the one it replaces. The new projects lead because the replaced ones were first, and Projects moves above Experience.
+- **Version 1 is user-directed, not a saved baseline.** A track baseline (`save_baseline`) would need a second job in the replay. The usual resume is instead a first plan of explicit, user-approved deletes. It is not a general-purpose "untailored" version, and the page says what it is.
+- **The staged slip moved to the A/B swap** (a derived "19% relative lift"), because the earlier staged figure on the SQL bullet made the follow-up node fail the acceptance rule on its own; the first-pass revise now commits and the swap is the node that resubmits.
+- **Replay trimmed to fit 60 to 90 seconds.** The first plan is shown with its bullets counted (`"… 4 bullets, each citing its source"`) except the one that carries the slip; omitted fields are marked.
+- **Bottom-of-page fill is a proxy for the budget, not equal to it.** ART's line budget (60) is conservative: the usual page uses 52.9 of the 60 budget lines and fills 92% of the sheet.
+
+---
+
 ## Issue 326 — diff_nodes handles skill objects
 **Status:** complete | **Tests:** 2923 pass on SQLite (4 new), 24 skipped, 0 fail; the Postgres leg was not run locally (Docker was not running), CI's required Postgres leg covers it
 
