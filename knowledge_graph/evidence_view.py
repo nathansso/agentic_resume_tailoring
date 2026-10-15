@@ -1,11 +1,11 @@
 """The payload behind the evidence map (issue #136).
 
 One caller's experiences, education and projects on one side, their skills on the
-other, and an edge for every (item, skill) pair the knowledge graph links, with
-the bullets that name the skill. It is assembled on top of
-`SkillGraphBuilder.build_graph()` and does not change it: that graph feeds
-matching and tailoring, and the GitHub provenance edges added here are for this
-view only.
+other, and an edge for every (item, skill) pair with evidence: the bullets that
+name the skill, or, for a project, the GitHub repo that reported it. It is
+assembled on top of `SkillGraphBuilder.build_graph()` and does not change it: that
+graph feeds matching and tailoring, and the GitHub provenance edges added here are
+for this view only.
 
 **Bullet numbers.** `cites` on an edge are the ordinals the harness cites by
 (`<item key>#b<n>`, `harness/executor.py::_KG`): an experience's bullets and a
@@ -224,7 +224,10 @@ def build_evidence_view(user_id: Optional[UUID]) -> Dict[str, Any]:
                         "cites": [], "github": False})
                     edge["github"] = True
 
-    edge_list = sorted(edges.values(), key=lambda e: (e["item_key"], e["skill_key"]))
+    # A link that rests only on a role's title or a project's name has no bullet and no
+    # recorded source behind it: it is not evidence, so the map does not draw it.
+    edge_list = sorted((e for e in edges.values() if e["cites"] or e["github"]),
+                       key=lambda e: (e["item_key"], e["skill_key"]))
 
     # Which words of each citing bullet name the skill, so the panel can highlight them
     # (an alias such as "torch" for PyTorch included). `marks[i]` belongs to `cites[i]`.

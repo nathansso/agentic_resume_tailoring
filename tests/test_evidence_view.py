@@ -343,7 +343,7 @@ def test_a_project_without_blurbs_uses_its_description_as_bullet_zero(isolated_e
     assert _edge(view, "Alpha", "Python")["cites"] == [0]
     named = _item(view, "Nameless Python thing")
     assert named["text_source"] == "none" and named["text"] == []
-    assert _edge(view, "Nameless Python thing", "Python")["cites"] == []   # linked by name only
+    assert _edge(view, "Nameless Python thing", "Python") is None   # a name alone is not evidence
 
 
 def test_an_edge_says_which_words_of_each_cited_bullet_name_the_skill(isolated_engine):
