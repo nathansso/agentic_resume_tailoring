@@ -61,9 +61,11 @@ DOCUMENT_WORDS = frozenset(
     "page pages length order ordering tone wording summary layout format formatting font fonts "
     "margin margins spacing style voice phrasing".split())
 
-# Words that join two subjects. `/` and `&` count only with spaces around them ("R&D", "C/C++" and
-# "Q&A" are one name each).
-_SPLIT = re.compile(r"\s*(?:,|;|\s&\s|\s/\s|\+|\band/or\b|\bor\b|\band\b)\s*", re.IGNORECASE)
+# What joins two subjects. `/`, `&` and `+` count only with spaces around them ("R&D", "C/C++" and
+# "Q&A" are one name each). "and" is the exception: it is also inside names ("Research and
+# Development"), so it splits only when every piece is something on its own (`_subjects`).
+_SPLIT = re.compile(r"\s*(?:,|;|\s&\s|\s/\s|\s\+\s|\band/or\b|\bor\b)\s*", re.IGNORECASE)
+_AND = re.compile(r"\s+and\s+", re.IGNORECASE)
 _SECTION = re.compile(r"^section\s*:\s*", re.IGNORECASE)
 _PREFIX_KEY = re.compile(r"^(exp|proj|skill|edu|ach|section):", re.IGNORECASE)
 _COMPANY_STOP = frozenset("the of and for inc llc ltd corp co company at a an".split())
@@ -177,8 +179,25 @@ def _is_document(subject: str) -> bool:
     return bool(words) and any(w in DOCUMENT_WORDS for w in words)
 
 
-def _parts(subject: str) -> List[str]:
-    return [p for p in _SPLIT.split(subject) if p.strip()]
+def _is_known(piece: str, items: Sequence[Dict[str, Any]]) -> bool:
+    """Whether `piece` is, on its own, an item (bound or ambiguous), a section or a document subject."""
+    piece = piece.strip()
+    return (any(_step_matches(step, piece, items) for step in STEPS) or piece.lower() in SECTION_NAMES
+            or bool(_SECTION.match(piece)) or _is_document(piece))
+
+
+def _subjects(subject: str, items: Sequence[Dict[str, Any]]) -> List[str]:
+    """The subjects a phrase states. `or`, `and/or`, commas, semicolons and spaced `/`, `&`, `+` always
+    separate; `and` separates only when every piece around it is known on its own, so "Kafka and
+    PyTorch" (both held) is two and "Research and Development" (neither held) is one."""
+    out: List[str] = []
+    for part in (p for p in _SPLIT.split(subject) if p.strip()):
+        pieces = [p for p in _AND.split(part) if p.strip()]
+        if len(pieces) > 1 and all(_is_known(p, items) for p in pieces):
+            out.extend(p.strip() for p in pieces)
+        else:
+            out.append(part.strip())
+    return out
 
 
 def resolve(source: Source, subject: Optional[str]) -> Dict[str, Any]:
@@ -210,7 +229,7 @@ def resolve(source: Source, subject: Optional[str]) -> Dict[str, Any]:
     name = subject.lower()
     if name in SECTION_NAMES:                         # a bare section name: "achievements"
         return {**out, "status": DOCUMENT, "key": f"section:{name}"}
-    parts = _parts(subject)
+    parts = _subjects(subject, items)
     if len(parts) > 1:
         if all(_is_document(p) for p in parts):
             return {**out, "status": DOCUMENT}

@@ -168,11 +168,14 @@ def test_an_item_named_like_a_document_word_is_still_that_item():
 
 @pytest.mark.parametrize("subject,parts", [
     ("Kafka or Spark", ["Kafka", "Spark"]),
-    ("Kafka and Spark", ["Kafka", "Spark"]),
     ("Kafka, Spark", ["Kafka", "Spark"]),
     ("Kafka & Spark & Flink", ["Kafka", "Spark", "Flink"]),
     ("Kafka / Spark", ["Kafka", "Spark"]),
-    ("Python and my startup", ["Python", "my startup"]),
+    ("Python + SQL", ["Python", "SQL"]),
+    ("Kafka and PyTorch", ["Kafka", "PyTorch"]),            # both held: "and" separates
+    ("Kafka and the page length", ["Kafka", "the page length"]),
+    ("Kafka and Python or Flink", ["Kafka", "Python", "Flink"]),
+    ("Research and Development or Kafka", ["Research and Development", "Kafka"]),
 ])
 def test_several_subjects_are_refused_and_listed(subject, parts):
     out = anchors.resolve(_items(), subject)
@@ -180,10 +183,34 @@ def test_several_subjects_are_refused_and_listed(subject, parts):
 
 
 def test_one_name_with_a_joining_character_is_not_several():
-    items = anchors.build_items(skills=[{"name": "C/C++"}, {"name": "R&D"}])
+    items = anchors.build_items(skills=[{"name": "C/C++"}, {"name": "R&D"}, {"name": "C++"}])
     assert _bound("C/C++", items) == "skill:c/c++"
+    assert _bound("C++", items) == "skill:c++"
     assert anchors.resolve([], "Q&A")["status"] == PENDING
+    assert anchors.resolve([], "C++ templates")["status"] == PENDING
     assert anchors.resolve([], "Black & Decker")["status"] == MULTIPLE      # spaces around & join two
+
+
+@pytest.mark.parametrize("subject", [
+    "Research and Development", "Machine Learning and AI Club", "Python and my startup",
+    "Kafka and Spark",                                      # Spark is not held, so one phrase
+])
+def test_and_inside_a_name_is_not_a_second_subject_unless_every_piece_is_known(subject):
+    out = anchors.resolve(_items(), subject)
+    assert out["status"] == PENDING and out["subject"] == subject and "subjects" not in out
+
+
+def test_c_plus_plus_and_python_are_two_when_both_are_held_and_not_split_at_the_plus():
+    items = anchors.build_items(skills=[{"name": "C++"}, {"name": "Python"}])
+    out = anchors.resolve(items, "C++ and Python")
+    assert out["status"] == MULTIPLE and out["subjects"] == ["C++", "Python"]
+    assert anchors.resolve(items, "C++ + Python")["subjects"] == ["C++", "Python"]
+
+
+def test_a_held_name_with_and_in_it_binds_as_one():
+    items = anchors.build_items(projects=[{"name": "Research and Development"}], skills=[{"name": "Kafka"}])
+    assert _bound("Research and Development", items) == "proj:research and development"
+    assert _bound("research and development", items) == "proj:research and development"
 
 
 def test_an_empty_subject_binds_nothing():
