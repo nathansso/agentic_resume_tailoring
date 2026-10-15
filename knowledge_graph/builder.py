@@ -1,5 +1,6 @@
 import networkx as nx
 import logging
+import re
 from uuid import UUID
 from sqlmodel import Session, select
 from typing import List, Dict, Any, Optional
@@ -11,6 +12,22 @@ from database.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+_REPO_SLUG_RE = re.compile(r"github\.com/([^/\s]+/[^/\s]+?)(?:\.git)?/?$")
+
+
+def repo_slug(url: Optional[str]) -> Optional[str]:
+    """Lowercased `owner/repo` from a GitHub URL, or None.
+
+    The one place that decides which repository a `Project.repo_url` names, shared
+    by the project scorer (`agents/tailor.py::_count_linked_skills`, #46) and the
+    evidence map's GitHub provenance edges (#136) so the two cannot drift.
+    """
+    if not url:
+        return None
+    match = _REPO_SLUG_RE.search(url.strip())
+    return match.group(1).lower() if match else None
+
 
 class SkillGraphBuilder:
     """Builds the in-memory knowledge graph for ONE user.

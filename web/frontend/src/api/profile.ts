@@ -1,4 +1,6 @@
-import type { ProfileData, SkillRow, ExpRow, ProjectRow, EducationRow, AchievementRow, GraphData } from "../types";
+import type {
+  ProfileData, SkillRow, ExpRow, ProjectRow, EducationRow, AchievementRow, GraphData, EvidenceView,
+} from "../types";
 import { json } from "./http";
 
 export async function getProfile(): Promise<ProfileData> {
@@ -47,6 +49,10 @@ export async function getGraph(): Promise<GraphData> {
   return json(await fetch("/api/profile/graph", { credentials: "include" }));
 }
 
+export async function getEvidenceView(): Promise<EvidenceView> {
+  return json(await fetch("/api/profile/graph/view", { credentials: "include" }));
+}
+
 // ── Manual edit & delete of ingested rows (issue #92) ──────────────────────────
 // Payload keys are the backend field names (start_date/end_date/repo_url/…);
 // only the keys present are applied.
@@ -91,3 +97,9 @@ export const updateProject = (id: string, body: ProjectEdit): Promise<ProjectRow
   patch(`/api/profile/projects/${id}`, body);
 export const deleteProject = (id: string): Promise<{ result: string }> =>
   del(`/api/profile/projects/${id}`);
+
+/** Edit the text of one project bullet. Content only: the bullet keeps its position (#327). */
+export const updateProjectBlurb = (
+  projectId: string, blurbId: string, content: string,
+): Promise<{ id: string; project_id: string; content: string; seq: number | null; style: string }> =>
+  patch(`/api/profile/projects/${projectId}/blurbs/${blurbId}`, { content });

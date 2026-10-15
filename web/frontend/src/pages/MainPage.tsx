@@ -123,7 +123,7 @@ export function MainPage() {
   function renderMain() {
     switch (activeView) {
       case "data":
-        return <DataExplorer />;
+        return <DataExplorer currentJobId={selectedJobId} />;
       case "ingest":
         return <IngestPanel key={ingestTab ?? "default"} initialTab={ingestTab} />;
       case "profile":

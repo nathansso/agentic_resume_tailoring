@@ -22,7 +22,7 @@ from database.clock import as_utc, utc_now
 from database.db import engine, latest_result, next_seq
 from database.models import (
     Achievement, ChatMessage, DeletedEntry, Education, Experience,
-    JobDescription, JobSkill, Project, Skill, User, UserJobResult, UserSkill,
+    JobDescription, JobSkill, Project, ProjectBlurb, Skill, User, UserJobResult, UserSkill,
 )
 
 logger = logging.getLogger(__name__)
@@ -589,6 +589,71 @@ def update_project(user_id: Optional[UUID], project_id: str, fields: dict) -> Op
         session.commit()
         session.refresh(row)
         return _proj_row_dict(row)
+
+
+def update_project_blurb(
+    user_id: Optional[UUID], project_id: str, blurb_id: str, content: str,
+) -> Optional[dict]:
+    """Edit the text of one of a user's own project bullets (issue #136).
+
+    A project's links come from its blurbs when it has any, so the evidence map
+    edits them here. Only `content` changes: `seq` and `style` decide which bullet
+    is `#b<n>`, and a stored cite (a plan, `cut_bullets`) must keep naming the
+    bullet it named (issue #327). Sets the project's `manually_edited` like every
+    other edit. Returns the updated bullet, or None if not found / not owned.
+    Raises ValueError when the text is empty (deleting a bullet is not this route).
+    """
+    if user_id is None:
+        return None
+    text = str(content or "").strip()
+    with Session(engine) as session:
+        pid, bid = _as_uuid(project_id), _as_uuid(blurb_id)
+        project = session.get(Project, pid) if pid else None
+        blurb = session.get(ProjectBlurb, bid) if bid else None
+        if (not project or project.user_id != user_id
+                or not blurb or blurb.project_id != project.project_id):
+            return None
+        if not text:
+            raise ValueError("A bullet cannot be empty.")
+        blurb.content = text
+        project.manually_edited = True
+        project.updated_at = utc_now()
+        session.add(blurb)
+        session.add(project)
+        session.commit()
+        session.refresh(blurb)
+        return {"id": str(blurb.blurb_id), "project_id": str(blurb.project_id),
+                "content": blurb.content, "seq": blurb.seq, "style": blurb.style}
+
+
+def get_evidence_view(user_id: Optional[UUID]) -> dict:
+    """The evidence map payload (issue #136): items, skills with their area, and an edge
+    per linked (item, skill) with the bullets that cite it. See `knowledge_graph.evidence_view`."""
+    from knowledge_graph.evidence_view import build_evidence_view
+    return build_evidence_view(user_id)
+
+
+def get_job_skills(job_id: UUID) -> list[dict]:
+    """The skills a job asks for, for the evidence map's compare-to-a-job layer (issue #136).
+
+    `[{name, required, weight, area}]` from the job's `JobSkill` rows, required first,
+    then by name. Ownership is the caller's to check. A job that has not been analyzed
+    has no rows, which the UI reads as "analyze this job first".
+    """
+    from knowledge_graph.areas import skill_area
+    with Session(engine) as session:
+        rows = session.exec(
+            select(JobSkill, Skill).join(Skill, Skill.skill_id == JobSkill.skill_id)
+            .where(JobSkill.job_id == job_id)).all()
+    out = {}
+    for js, skill in rows:
+        key = skill.name.lower().strip()
+        prior = out.get(key)
+        if prior is None or (js.required and not prior["required"]):
+            out[key] = {"name": skill.name, "required": bool(js.required),
+                        "weight": float(js.weight if js.weight is not None else 1.0),
+                        "area": skill_area(skill.name, skill.category)}
+    return sorted(out.values(), key=lambda r: (not r["required"], r["name"].lower(), r["name"]))
 
 
 def _record_tombstone(session, user_id: UUID, entity_type: str, key_a: str, key_b) -> None:

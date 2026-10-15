@@ -1,4 +1,4 @@
-import type { JobDetail, JobListItem, TailorResult } from "../types";
+import type { JobDetail, JobListItem, JobSkillRow, TailorResult } from "../types";
 import type { BulletGroupOverride, LayoutOverride } from "../lib/layoutOverride";
 import { errorMessage, json } from "./http";
 
@@ -17,6 +17,11 @@ export async function createJob(title: string, company: string, description = ""
 
 export async function deleteJob(jobId: string): Promise<void> {
   await json(await fetch(`/api/jobs/${jobId}`, { method: "DELETE", credentials: "include" }));
+}
+
+/** The skills a job asks for (empty until the job is analyzed). */
+export async function getJobSkills(jobId: string): Promise<JobSkillRow[]> {
+  return json(await fetch(`/api/jobs/${jobId}/skills`, { credentials: "include" }));
 }
 
 export async function getJob(jobId: string): Promise<JobDetail> {

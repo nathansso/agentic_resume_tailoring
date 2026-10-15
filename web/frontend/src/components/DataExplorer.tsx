@@ -28,15 +28,17 @@ const colors = {
 const font = {
   size: { sm: "0.8125rem", base: "0.9375rem", lg: "1rem", xl: "1.25rem" },
 } as const;
+import { EvidenceMap } from "./EvidenceMap";
 import {
   getSkills, getExperiences, getProjects, getEducation, getAchievements, getGraph, setSkillCore,
   updateExperience, deleteExperience, updateEducation, deleteEducation, updateProject, deleteProject,
 } from "../api/profile";
 
-type Tab = "skills" | "experiences" | "education" | "projects" | "achievements" | "graph" | "charts";
+type Tab = "skills" | "experiences" | "education" | "projects" | "achievements" | "graph" | "summary" | "charts";
 
-export function DataExplorer() {
-  const [tab, setTab] = useState<Tab>("skills");
+/** `currentJobId` is the job open in the workspace; the evidence map's "compare to a job" starts on it. */
+export function DataExplorer({ currentJobId = null }: { currentJobId?: string | null }) {
+  const [tab, setTab] = useState<Tab>("graph");
   const [skills, setSkills] = useState<SkillRow[]>([]);
   const [exps, setExps] = useState<ExpRow[]>([]);
   const [education, setEducation] = useState<EducationRow[]>([]);
@@ -46,10 +48,13 @@ export function DataExplorer() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const loadAll = () =>
+    Promise.all([getSkills(), getExperiences(), getProjects(), getEducation(), getAchievements(), getGraph()])
+      .then(([s, e, p, ed, a, g]) => { setSkills(s); setExps(e); setProjects(p); setEducation(ed); setAchievements(a); setGraph(g); });
+
   useEffect(() => {
     setLoading(true);
-    Promise.all([getSkills(), getExperiences(), getProjects(), getEducation(), getAchievements(), getGraph()])
-      .then(([s, e, p, ed, a, g]) => { setSkills(s); setExps(e); setProjects(p); setEducation(ed); setAchievements(a); setGraph(g); })
+    loadAll()
       .catch(err => setError(err instanceof Error ? err.message : "Failed to load data"))
       .finally(() => setLoading(false));
   }, []);
@@ -65,12 +70,13 @@ export function DataExplorer() {
   };
 
   const tabs: { key: Tab; label: string }[] = [
+    { key: "graph", label: "Evidence map" },
     { key: "skills", label: `Skills (${skills.length})` },
     { key: "experiences", label: `Experiences (${exps.length})` },
     { key: "education", label: `Education (${education.length})` },
     { key: "projects", label: `Projects (${projects.length})` },
     { key: "achievements", label: `Achievements (${achievements.length})` },
-    { key: "graph", label: "Graph" },
+    { key: "summary", label: "Summary" },
     { key: "charts", label: "Charts" },
   ];
 
@@ -88,15 +94,18 @@ export function DataExplorer() {
         ))}
       </div>
 
-      <div style={s.content}>
-        {loading && <p style={s.muted}>Loading…</p>}
-        {error && <p style={{ ...s.muted, color: colors.error }}>{error}</p>}
+      {/* The evidence map manages its own scrolling and edge-to-edge layout. */}
+      <div className={tab === "graph" ? "min-h-0 flex-1 overflow-hidden" : "flex-1 overflow-y-auto p-4"}>
+        {tab !== "graph" && loading && <p style={s.muted}>Loading…</p>}
+        {tab !== "graph" && error && <p style={{ ...s.muted, color: colors.error }}>{error}</p>}
         {!loading && !error && tab === "skills" && <SkillsTab skills={skills} onToggleCore={toggleCore} />}
         {!loading && !error && tab === "experiences" && <ExpsTab exps={exps} setExps={setExps} />}
         {!loading && !error && tab === "education" && <EducationTab education={education} setEducation={setEducation} />}
         {!loading && !error && tab === "projects" && <ProjectsTab projects={projects} setProjects={setProjects} />}
         {!loading && !error && tab === "achievements" && <AchievementsTab achievements={achievements} />}
-        {!loading && !error && tab === "graph" && <GraphTab graph={graph ?? { top_skills: [], by_category: {}, evidence: {} }} />}
+        {/* The map loads itself; an edit made in it refreshes the other tabs' lists. */}
+        {tab === "graph" && <EvidenceMap defaultJobId={currentJobId} onChanged={() => { void loadAll().catch(() => undefined); }} />}
+        {!loading && !error && tab === "summary" && <GraphTab graph={graph ?? { top_skills: [], by_category: {}, evidence: {} }} />}
         {!loading && !error && tab === "charts" && <ChartsTab skills={skills} graph={graph} />}
       </div>
     </div>
@@ -682,7 +691,6 @@ const s: Record<string, CSSProperties> = {
     cursor: "pointer", fontFamily: "inherit", borderRadius: "0.375rem",
   },
   tabBtnActive: { color: colors.accent, borderBottomColor: colors.accent },
-  content: { flex: 1, overflowY: "auto", padding: "1rem" },
   muted: { color: colors.textMuted, fontSize: font.size.sm },
 };
 

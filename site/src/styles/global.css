@@ -84,6 +84,14 @@
   --ring: 152 60% 42%;
 
   --radius: 0.375rem;
+
+  /* Evidence map tokens: mirrored from the app (tests/test_site.py keeps them identical). */
+  --graph-evidence: 154 65% 34%;
+  --graph-experience: 212 65% 42%;
+  --graph-project: 205 50% 50%;
+  --graph-education: 326 40% 46%;
+  --graph-claim: var(--muted-foreground);
+  --graph-gap: var(--warning);
 }
 
 .dark {
@@ -115,6 +123,13 @@
   --border: 0 0% 20%;
   --input: 0 0% 20%;
   --ring: 152 60% 53%;
+
+  --graph-evidence: 152 60% 53%;
+  --graph-experience: 210 75% 70%;
+  --graph-project: 200 60% 78%;
+  --graph-education: 326 45% 72%;
+  --graph-claim: var(--muted-foreground);
+  --graph-gap: var(--warning);
 }
 
 /* Map the tokens into Tailwind. `inline` keeps the `var(--x)` reference live so
