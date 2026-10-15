@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type {
-  EvidenceEdge, EvidenceItem, EvidenceKind, EvidenceSkill, EvidenceText, EvidenceView, JobSkillRow,
+  EvidenceEdge, EvidenceItem, EvidenceKind, EvidenceSkill, EvidenceText, EvidenceView, JobSkillRow, ProjectContext,
 } from "../types";
 import {
-  DISMISSED_KEY, canDismiss, isPanelKey, skillIdOf,
+  DISMISSED_KEY, canDismiss, isPanelKey, needsPlacement, placementLabel, placementOptions, projectsToPlace, skillIdOf, topSuggestion,
   arcPath, areaFoldKey, dateKey, edgeWidth, editableFields, estimateTextWidth, evidenceRows, firstMatch, fitText,
   ghostBlock, githubOnlyLinks, highlightSegments, initialDraft, jobOverlay, layoutMap, linkPath,
   linksByBullet, neighborhood, planSave, searchSkills, skillEvidence, skillMatchKey, skillRadius,
@@ -307,6 +307,70 @@ describe("dismissing a skill nothing proves (#321)", () => {
     expect(isPanelKey(DISMISSED_KEY)).toBe(true);
     expect(isPanelKey("ghost:Rust")).toBe(true);
     expect(isPanelKey(py.key) || isPanelKey(acme.key)).toBe(false);
+  });
+});
+
+describe("placing a project (#322)", () => {
+  const unplaced = (key: string, o: Partial<EvidenceItem> = {}) =>
+    item(key, "proj", { context_status: "unreviewed", ...o });
+
+  it("counts a project as to place only when it is unreviewed and standalone", () => {
+    expect(needsPlacement(unplaced("proj/a"))).toBe(true);
+    expect(needsPlacement(item("proj/b", "proj", { context_status: "personal" }))).toBe(false);
+    expect(needsPlacement(item("proj/c", "proj", { context_status: "linked", parent_key: "exp/acme" }))).toBe(false);
+    // An older payload with no status, a role and a degree are never "to place".
+    expect(needsPlacement(item("proj/d", "proj"))).toBe(false);
+    expect(needsPlacement(item("exp/e", "exp", { context_status: "unreviewed" }))).toBe(false);
+    expect(needsPlacement(item("edu/f", "edu"))).toBe(false);
+  });
+
+  it("lists the projects to place in the order the map shows them, and shrinks as they are placed", () => {
+    const newer = unplaced("proj/newer", { title: "Newer", end: "2026-01" });
+    const older = unplaced("proj/older", { title: "Older", end: "2023-01" });
+    const nested = item("proj/nested", "proj", { context_status: "linked", parent_key: "exp/acme", end: "2024-01" });
+    const personal = item("proj/mine", "proj", { context_status: "personal", end: "2025-01" });
+    const v = view([older, acme, nested, personal, newer], [], []);
+    expect(projectsToPlace(v).map((i) => i.key)).toEqual(["proj/newer", "proj/older"]);
+
+    const placed = view([older, acme, { ...newer, context_status: "linked", parent_key: "exp/acme" }], [], []);
+    expect(projectsToPlace(placed).map((i) => i.key)).toEqual(["proj/older"]);
+    expect(projectsToPlace(view([acme, alpha], [], []))).toEqual([]);
+  });
+
+  it("includes a project that needs a description, which is listed last", () => {
+    const bareUnplaced = unplaced("proj/bare2", { text: [] });
+    const first = unplaced("proj/first", { end: "2024-01" });
+    expect(projectsToPlace(view([bareUnplaced, first], [], [])).map((i) => i.key)).toEqual(["proj/first", "proj/bare2"]);
+  });
+
+  it("offers every role and degree, newest first within each group, labelled with where", () => {
+    const opts = placementOptions(view([intern, school, acme, alpha, beta], [], []));
+    expect(opts.experiences).toEqual([
+      { key: "exp/acme", label: "Engineer · Acme" }, { key: "exp/intern", label: "Intern · Beta" },
+    ]);
+    expect(opts.education).toEqual([{ key: "edu/ucsd", label: "B.S. · UCSD" }]);
+    // The same list whatever order the items arrive in.
+    expect(placementOptions(view([acme, beta, school, alpha, intern], [], []))).toEqual(opts);
+    expect(placementOptions(view([beta], [], []))).toEqual({ experiences: [], education: [] });
+  });
+
+  it("names a degree by its institution alone when it has no other title", () => {
+    expect(placementLabel(item("edu/x", "edu", { title: "UCSD", org: "UCSD" }))).toBe("UCSD");
+    expect(placementLabel(item("exp/y", "exp", { title: "Intern", org: "" }))).toBe("Intern");
+  });
+
+  it("offers the best suggestion only for a project nobody has placed", () => {
+    const candidates = [
+      { key: "exp/acme", title: "Engineer @ Acme", reason: "repo name shares 'acme' with Acme" },
+      { key: "exp/intern", title: "Intern @ Beta", reason: "description names Beta" },
+    ];
+    const ctx = (status: ProjectContext["status"], parent: string | null = null): ProjectContext =>
+      ({ project_id: "beta", status, parent, candidates });
+    expect(topSuggestion(ctx("unreviewed"))).toEqual(candidates[0]);
+    expect(topSuggestion(ctx("linked", "exp/intern"))).toBeNull();
+    expect(topSuggestion(ctx("personal"))).toBeNull();
+    expect(topSuggestion({ ...ctx("unreviewed"), candidates: [] })).toBeNull();
+    expect(topSuggestion(undefined)).toBeNull();
   });
 });
 

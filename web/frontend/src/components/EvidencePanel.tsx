@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  dismissSkill, restoreSkill, updateEducation, updateExperience, updateProject, updateProjectBlurb,
-  type EducationEdit, type ExperienceEdit, type ProjectEdit,
+  dismissSkill, restoreSkill, setProjectContext, updateEducation, updateExperience, updateProject,
+  updateProjectBlurb, type EducationEdit, type ExperienceEdit, type ProjectEdit,
 } from "../api/profile";
-import type { DismissedSkill, EvidenceItem, EvidenceKind, EvidenceSkill, EvidenceView } from "../types";
+import type { DismissedSkill, EvidenceItem, EvidenceKind, EvidenceSkill, EvidenceView, ProjectContext } from "../types";
 import {
-  DISMISSED_KEY, canDismiss, dateRange, editableFields, githubOnlyLinks, highlightSegments, initialDraft, linksByBullet, planSave,
-  recentEditable, skillEvidence, skillIdOf, textIsDescription, type Draft, type JobOverlay, type SaveOp,
+  DISMISSED_KEY, canDismiss, dateRange, editableFields, githubOnlyLinks, highlightSegments, initialDraft, linksByBullet, placementLabel,
+  placementOptions, planSave, recentEditable, skillEvidence, skillIdOf, textIsDescription, topSuggestion,
+  type Draft, type JobOverlay, type SaveOp,
 } from "../lib/evidenceMap";
 import { cn } from "../lib/utils";
 
@@ -40,12 +41,14 @@ interface Props {
   jobOn: boolean;
   /** Skills the user dismissed, A to Z as the server sends them (#321). */
   dismissed: DismissedSkill[];
+  /** Where each project was done and what the rules suggest (#322). */
+  contexts: ProjectContext[];
   onSelect: (key: string | null) => void;
   /** Called after a save, so the map is re-read from the server. */
   onSaved: () => Promise<void>;
 }
 
-export function EvidencePanel({ view, selected, overlay, jobOn, dismissed, onSelect, onSaved }: Props) {
+export function EvidencePanel({ view, selected, overlay, jobOn, dismissed, contexts, onSelect, onSaved }: Props) {
   const item = selected ? view.items.find((i) => i.key === selected) : undefined;
   const skill = selected ? view.skills.find((s) => s.key === selected) : undefined;
   const ghost = selected?.startsWith("ghost:") ? overlay?.missing.find((m) => `ghost:${m.name}` === selected) : undefined;
@@ -56,7 +59,14 @@ export function EvidencePanel({ view, selected, overlay, jobOn, dismissed, onSel
       className="max-h-[50vh] w-full shrink-0 overflow-y-auto border-t border-border bg-card p-4 lg:max-h-none lg:w-[24rem] lg:border-l lg:border-t-0"
     >
       {item ? (
-        <ItemEditor key={item.key} view={view} item={item} onSelect={onSelect} onSaved={onSaved} />
+        <ItemEditor
+          key={item.key} view={view} item={item} onSelect={onSelect} onSaved={onSaved}
+          placement={item.kind === "proj" ? (
+            <ProjectPlacement
+              view={view} item={item} ctx={contexts.find((c) => c.project_id === item.id)} onSaved={onSaved}
+            />
+          ) : undefined}
+        />
       ) : skill ? (
         <SkillDetail
           key={skill.key} view={view} skill={skill} overlay={overlay} jobOn={jobOn}
@@ -332,6 +342,127 @@ function DismissedList({ dismissed, onSaved }: { dismissed: DismissedSkill[]; on
   );
 }
 
+// ── a project: where it was done (#322) ────────────────────────────────────────
+
+/**
+ * Where was this project done? Shows what the user has said, offers the rules' best guess as a
+ * one-click link, and lets them pick any role or degree, call it personal, or take the answer back.
+ * Every write is a click on a button here: a suggestion is only shown, and choosing in the select
+ * does nothing until "Link" is pressed.
+ */
+function ProjectPlacement({ view, item, ctx, onSaved }: {
+  view: EvidenceView; item: EvidenceItem; ctx: ProjectContext | undefined; onSaved: () => Promise<void>;
+}) {
+  const [choice, setChoice] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  const status = item.context_status ?? ctx?.status ?? "unreviewed";
+  const parent = item.parent_key ? view.items.find((i) => i.key === item.parent_key) : undefined;
+  const suggestion = topSuggestion(ctx);
+  const options = useMemo(() => {
+    const all = placementOptions(view);
+    // The one it is already under is not a move.
+    const rest = <T extends { key: string }>(list: T[]): T[] => list.filter((o) => o.key !== item.parent_key);
+    return { experiences: rest(all.experiences), education: rest(all.education) };
+  }, [view, item.parent_key]);
+  const hasOptions = options.experiences.length + options.education.length > 0;
+
+  const write = async (context: string, what: string) => {
+    setBusy(what);
+    setError(null);
+    setDone(false);
+    try {
+      await setProjectContext(item.id, context);
+      setChoice("");
+      await onSaved();
+      setDone(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save where this was done");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div role="group" aria-label="Where was this done?">
+      <h4 className={sectionHead}>Where was this done?</h4>
+      <p className="text-[13px]">
+        {status === "linked" && parent ? (
+          <>Done under <b className="font-semibold">{placementLabel(parent)}</b>.</>
+        ) : status === "personal" ? (
+          <>A personal project.</>
+        ) : (
+          <span className="text-muted-foreground">Not placed yet. It stands on its own in the map until you say where it was done.</span>
+        )}
+      </p>
+
+      {suggestion && (
+        <div className="mt-2.5 rounded-md border border-border bg-background p-3 text-[13px]">
+          <p><span className="text-muted-foreground">Suggested:</span> {suggestion.title}</p>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">{suggestion.reason}. A guess from the names, not a fact.</p>
+          <button
+            type="button" disabled={busy !== null} onClick={() => write(suggestion.key, "suggestion")}
+            className="mt-2 rounded-md bg-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground transition-opacity disabled:opacity-40"
+          >
+            {busy === "suggestion" ? "Linking…" : `Link to ${suggestion.title}`}
+          </button>
+        </div>
+      )}
+
+      {hasOptions && (
+        <div className="mt-2.5 flex items-center gap-2">
+          <label className="min-w-0 flex-1">
+            <span className="sr-only">{status === "linked" ? "Move this project under another role or degree" : "Link this project to a role or degree"}</span>
+            <select
+              value={choice} onChange={(e) => { setChoice(e.target.value); setDone(false); }} disabled={busy !== null}
+              className={cn(fieldClass, "text-foreground")}
+            >
+              <option value="">{status === "linked" ? "Move under another…" : "Choose a role or degree…"}</option>
+              {options.experiences.length > 0 && (
+                <optgroup label="Experience">
+                  {options.experiences.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+                </optgroup>
+              )}
+              {options.education.length > 0 && (
+                <optgroup label="Education">
+                  {options.education.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+                </optgroup>
+              )}
+            </select>
+          </label>
+          <button
+            type="button" className={cn(linkButton, "shrink-0 disabled:opacity-40")}
+            disabled={choice === "" || busy !== null} onClick={() => write(choice, "choice")}
+          >
+            {busy === "choice" ? "Linking…" : "Link"}
+          </button>
+        </div>
+      )}
+
+      <div className="mt-2.5 flex flex-wrap gap-2">
+        <button
+          type="button" className={cn(linkButton, "disabled:opacity-40")}
+          disabled={status === "personal" || busy !== null} onClick={() => write("personal", "personal")}
+        >
+          {busy === "personal" ? "Saving…" : "Personal project"}
+        </button>
+        {status !== "unreviewed" && (
+          <button
+            type="button" className={cn(linkButton, "disabled:opacity-40")}
+            disabled={busy !== null} onClick={() => write("unreviewed", "reset")}
+          >
+            {busy === "reset" ? "Saving…" : "Not sure yet"}
+          </button>
+        )}
+      </div>
+      {error && <p role="alert" className="mt-2 text-[13px] text-destructive">{error}</p>}
+      {done && !error && <p role="status" className="mt-2 text-[12.5px] text-accent">Saved. The map has been re-read.</p>}
+    </div>
+  );
+}
+
 // ── an item: the editor ────────────────────────────────────────────────────────
 
 /** Resize a textarea to its text. The height is runtime-computed from the content, so it is set inline. */
@@ -352,8 +483,10 @@ async function runOp(op: SaveOp): Promise<void> {
 }
 
 /** The item editor: shared with the bullet picker (issue #319), which opens it on an item's bullets. */
-export function ItemEditor({ view, item, onSelect, onSaved, savedNote = "Saved. The map has been re-read." }: {
+export function ItemEditor({ view, item, onSelect, onSaved, placement, savedNote = "Saved. The map has been re-read." }: {
   view: EvidenceView; item: EvidenceItem; onSelect: (key: string | null) => void; onSaved: () => Promise<void>;
+  /** A section shown above the details, for a surface that lets the user place a project (#322). */
+  placement?: ReactNode;
   /** What to say after a save, for the surface that hosts the editor. */
   savedNote?: string;
 }) {
@@ -426,6 +559,8 @@ export function ItemEditor({ view, item, onSelect, onSaved, savedNote = "Saved. 
           ))}
         </Callout>
       )}
+
+      {placement}
 
       {item.kind !== "edu" && item.text_source === "none" && (
         <Callout warn>
