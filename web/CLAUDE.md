@@ -40,7 +40,9 @@ web/
         AuthLayout.tsx         # Shared card/brand chrome for the signed-out pages
         WelcomePanel.tsx       # Shown to new users with no jobs — 4 CTAs
         ChatPanel.tsx          # Chat UI with SSE streaming
-        DataExplorer.tsx       # Tabs: Skills, Experiences, Projects, Graph, Charts
+        DataExplorer.tsx       # Tabs: Evidence map (default), Skills, Experiences, Education, Projects, Achievements, Summary, Charts
+        EvidenceMap.tsx        # Evidence map tab (#136): SVG evidence map, search, folding, compare-to-a-job
+        EvidencePanel.tsx      # Its side panel: skill evidence, item editor (saves via the PATCH routes)
         ProfilePanel.tsx       # View/edit user profile fields
         IngestPanel.tsx        # Resume upload, GitHub ingestion
         JobSidebar.tsx         # Job list, create/delete
@@ -55,7 +57,7 @@ web/
       hooks/useAutoCompile.ts  # Debounced LaTeX recompile on edit
       lib/                     # Pure, unit-tested helpers (theme, paneResize,
                                # texStructure, pdfOverlay, compileScheduler,
-                               # layoutOverride, insightMessages, welcome,
+                               # layoutOverride, insightMessages, welcome, evidenceMap,
                                # utils) — each with a co-located *.test.ts
       api/                     # Typed fetch wrappers for all endpoints
       types.ts                 # Shared TypeScript interfaces

@@ -40,7 +40,7 @@ from agents.checks import (  # re-exported: tests and callers import these from 
 from agents.tailor_planner import (
     DEFAULT_KNOBS, TailorPlanner, decision_log_entry, exploration_mode,
 )
-from knowledge_graph.builder import SkillGraphBuilder
+from knowledge_graph.builder import SkillGraphBuilder, repo_slug
 
 logger = logging.getLogger(__name__)
 
@@ -1341,10 +1341,9 @@ class ResumeTailorAgent:
         name against UserSkill.evidence_source/evidence_detail (issue #46).
         """
         needles = set()
-        if repo_url:
-            m = re.search(r"github\.com/([^/\s]+/[^/\s]+?)(?:\.git)?/?$", repo_url)
-            if m:
-                needles.add(m.group(1).lower())
+        slug = repo_slug(repo_url)
+        if slug:
+            needles.add(slug)
         if project_name:
             needles.add(project_name.lower())
         if not needles:
