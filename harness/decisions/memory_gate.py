@@ -532,6 +532,8 @@ _WHY = {
     "long_message": "the message is too long to store as the preference text",
     "read_only": "this ART process may not write",
     "would_supersede": "it would replace a preference the user already holds",
+    "anchor_disagrees": "the message does not name exactly the one item Jev picked, so the user "
+                        "confirms which item it is about",
 }
 
 

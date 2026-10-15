@@ -164,9 +164,12 @@ class RecordPreferenceInput(_Model):
                     "but present it differently, or a format rule.")
     target: Optional[str] = Field(
         None, description="What it is about: a key from list_items ('skill:python', "
-                          "'proj:<name>', 'exp:<title>|<company>'), 'section:<name>' "
-                          "(education, experience, projects, skills, achievements), or a bare "
-                          "topic ('GPA'). Required for emphasize and suppress.")
+                          "'proj:<name>', 'exp:<title>|<company>', 'edu:...', 'ach:...'), an "
+                          "item's name or an alias of a skill ('torch' is PyTorch), "
+                          "'section:<name>' (education, experience, projects, skills, "
+                          "achievements), or a bare topic ('GPA'). One subject per call. A name "
+                          "that fits several items is refused with the candidates. Required for "
+                          "emphasize and suppress.")
     strength: int = Field(
         3, ge=1, le=5, description="1 a passing remark to 5 an absolute rule the user stated "
                                    "as non-negotiable ('never'). A 5 becomes a hard gate on "
@@ -200,6 +203,17 @@ class RecordPreferenceOutput(_Output):
     supersedes: Optional[str] = Field(None, description="The earlier preference this replaced.")
     suggestions: List[str] = Field(default_factory=list,
                                    description="Catalog keys the target may have meant.")
+    anchor: Optional[Dict[str, Any]] = Field(
+        None, description="Where the target attached: status bound (an item, with its key and the "
+                          "step that found it: key, label, name or alias), pending (a thing the graph "
+                          "does not hold: stored by its term, and linked if it is ingested later), "
+                          "document (about the page, not an item), ambiguous or multiple (refused).")
+    candidates: List[Dict[str, Any]] = Field(
+        default_factory=list, description="When the target named several items: each one's key and "
+                                          "label. Ask the user which, then call again with its key.")
+    subjects: List[str] = Field(
+        default_factory=list, description="When the target named several things ('Kafka or Spark'): "
+                                          "each one. Call once per subject.")
 
 
 # ── kg_search / list_items / get_item ────────────────────────────────────────
@@ -991,8 +1005,9 @@ TOOLS: List[ToolSpec] = [
     ToolSpec(
         "record_preference",
         "Store one standing preference the user stated or confirmed, or refuse it with a "
-        "reason. Resolves the target against their knowledge graph (an exact key, label or "
-        "name) and keeps a replaced preference, superseded. Strength 5 makes it a hard gate "
+        "reason. Resolves the target against their knowledge graph (a key, a label, a name or "
+        "a skill's alias, never a part of one) and refuses a name that fits several items, "
+        "returning the candidates. Keeps a replaced preference, superseded. Strength 5 makes it a hard gate "
         "restored word for word after compaction, and a 5 suppression a negative pin: only for "
         "what the user insisted on. Only what the user said. Writes.",
         RecordPreferenceInput, RecordPreferenceOutput,
