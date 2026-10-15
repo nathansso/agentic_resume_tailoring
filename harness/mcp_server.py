@@ -92,7 +92,8 @@ def build_server(user_id=None, allow_writes: bool = True):
             description=spec.description,
             annotations=ToolAnnotations(read_only_hint=spec.read_only,
                                         destructive_hint=False,
-                                        idempotent_hint=spec.read_only),
+                                        idempotent_hint=spec.read_only,
+                                        open_world_hint=spec.network),
             structured_output=True)
     return server
 
