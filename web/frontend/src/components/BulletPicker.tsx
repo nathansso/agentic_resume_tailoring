@@ -92,6 +92,7 @@ export function BulletPicker({ defaultJobId = null, onChanged }: { defaultJobId?
   const kept = useMemo(() => (model ? resolveKept(model, budget, override) : new Set<string>()), [model, budget, override]);
   const cover: Coverage | null = useMemo(() => (model ? coverage(model, kept) : null), [model, kept]);
   const preview = useMemo(() => (model ? resumePreview(model, kept) : []), [model, kept]);
+  const names = useMemo(() => new Map((cover?.rows ?? []).map((r) => [r.match.id, r.label])), [cover]);
   const job = jobs?.find((j) => j.job_id === jobId) ?? null;
 
   const chooseJob = (id: string) => { setJobId(id); setOverride(null); setFocusReq(null); };
@@ -169,7 +170,7 @@ export function BulletPicker({ defaultJobId = null, onChanged }: { defaultJobId?
                 <ol className="min-w-0 space-y-0.5" aria-label="Bullets, best first">
                   {model.ranked.map((b) => (
                     <BulletRow
-                      key={b.id} bullet={b} kept={kept.has(b.id)} model={model}
+                      key={b.id} bullet={b} kept={kept.has(b.id)} names={names}
                       dim={focusReq !== null && !b.covers.includes(focusReq)}
                       cut={b.rank === budget && b.rank < model.ranked.length}
                       onToggle={() => toggle(b.id)} onOpen={() => setOpenItem(b.item.key)}
@@ -189,7 +190,7 @@ export function BulletPicker({ defaultJobId = null, onChanged }: { defaultJobId?
                   </li>
                   {showRest && model.rest.map((b) => (
                     <BulletRow
-                      key={b.id} bullet={b} kept={kept.has(b.id)} model={model} dim={false} cut={false}
+                      key={b.id} bullet={b} kept={kept.has(b.id)} names={names} dim={false} cut={false}
                       onToggle={() => toggle(b.id)} onOpen={() => setOpenItem(b.item.key)}
                     />
                   ))}
@@ -234,7 +235,7 @@ export function BulletPicker({ defaultJobId = null, onChanged }: { defaultJobId?
               ← Résumé preview
             </button>
             <ItemEditor
-              key={editing.key} view={view} item={editing} onSelect={select}
+              key={editing.key} view={view} item={editing} onSelect={select} savedNote="Saved. The ranking has been updated."
               onSaved={async () => { await reload(); onChanged?.(); }}
             />
           </>
@@ -335,12 +336,12 @@ function NotCoverable({ cover }: { cover: Coverage }) {
 
 // ── the ranked list ────────────────────────────────────────────────────────────
 
-function BulletRow({ bullet, kept, model, dim, cut, onToggle, onOpen, refEl }: {
-  bullet: PickerBullet & { rank?: number; gain?: string[] }; kept: boolean; model: PickerModel; dim: boolean; cut: boolean;
+function BulletRow({ bullet, kept, names, dim, cut, onToggle, onOpen, refEl }: {
+  bullet: PickerBullet & { rank?: number; gain?: string[] }; kept: boolean; names: ReadonlyMap<string, string>; dim: boolean; cut: boolean;
   onToggle: () => void; onOpen: () => void; refEl?: (el: HTMLElement | null) => void;
 }) {
   const ranked = bullet.rank !== undefined;
-  const name = (id: string) => model.matches.find((m) => m.id === id)?.skills[0]?.name ?? model.matches.find((m) => m.id === id)?.row.name ?? id;
+  const name = (id: string) => names.get(id) ?? id;
   const label = bullet.item.kind === "exp" ? bullet.item.org || bullet.item.title : bullet.item.title;
   return (
     <>
