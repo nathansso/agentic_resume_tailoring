@@ -80,8 +80,16 @@ The tools named below are the ART MCP server's tools.
 - A commit on top of a `.tex` edit is refused (`discards_editor_edits`, listing the edited
   bullets) because a new version is built from structured content and would drop the
   user's text. Carry the edits over as nodes: a `revise` for each reworded or added bullet
-  with the user's text (it faces the usual gates), a `delete_bullet` with a `because` for
-  each bullet they removed, then run again. An `unmapped` region cannot be carried. When
+  with the user's text, a `delete_bullet` with a `because` for each bullet they removed,
+  then run again. Send the user's text **verbatim** (the `after` of each `tex_edits`
+  entry, the rest of the item's bullets unchanged) and the executor recognises it against
+  their `.tex` (`carried_edit` on the node): no guard vetoes the user's own words, and
+  any MTLD or keyword-density drop is listed under `waived`, so tell them what it cost.
+  Hard gates still apply. If one refuses it, the node's `reason` names the gate and the
+  claim (a number or name its cited evidence does not state): record that fact with
+  `upsert_items` (or ask the user whether it is true), cite it, and retry. Do not reword
+  the user's text to get past a gate: reworded, it is an ordinary revise and every guard
+  applies again. An `unmapped` region cannot be carried. When
   the user does not want an edit kept, ask them, and only then set
   `discard_editor_edits: true`; the response lists what was discarded, so tell them.
 

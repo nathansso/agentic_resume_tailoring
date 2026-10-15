@@ -771,6 +771,239 @@ def test_a_hand_reorder_without_an_override_is_not_dropped_silently(isolated_eng
     assert [r["item"] for r in v["detail"]["reordered"]] == [EXP] and v["detail"]["bullets"] == []
 
 
+# ── the user's own edit, carried over verbatim, is not vetoed by a guard (#306) ──
+
+# What a user types is not what an optimiser writes: short, repetitive, off the posting. It
+# lowers MTLD and the posting's keyword density, and an ordinary revise of it is reverted.
+USER_PLAIN = "Worked on the team and the team worked on the work of the team."
+USER_UNSUPPORTED = "Cut ranking latency by 47% across 9 regions."
+
+
+def _carry_nodes(src, text, cites=None, drop_first=True):
+    """A revise of EXP that puts `text` first and keeps the other source bullets, citing them."""
+    first = {"text": text, "cites": cites or [f"{EXP}#b0"]}
+    return [{"id": "user-edit", "op": "revise", "item_key": EXP, "accept": {"improves": []},
+             "bullets": [first] + [{"text": t, "cites": [f"{EXP}#b{i}"]}
+                                   for i, t in enumerate(src) if i or not drop_first]}]
+
+
+def _edited_with(isolated_engine, env, text):
+    """A job whose HEAD is the user's hand edit of the first ML-engineer bullet to `text`."""
+    from harness import executor
+
+    uid, job_id, _ = env
+    first = _run(uid, {"job_id": job_id})
+    src = executor._KG(uid).source_bullets[EXP]
+    edit = _hand_edit(isolated_engine, uid, job_id, lambda tex, esc: tex.replace(
+        r"\resumeItem{" + esc(src[0]) + "}", r"\resumeItem{" + esc(text) + "}"))
+    return uid, job_id, first, edit, src
+
+
+def _plan(job_id, edit, nodes, **kw):
+    return {"job_id": job_id, "parent": edit["node_id"], "nodes": nodes, **kw}
+
+
+def test_a_verbatim_carry_over_commits_despite_a_guard_regression_and_reports_it(
+        isolated_engine, env):
+    from harness import tree
+
+    uid, job_id, first, edit, src = _edited_with(isolated_engine, env, USER_PLAIN)
+    out = _run(uid, _plan(job_id, edit, _carry_nodes(src, USER_PLAIN)))
+
+    [node] = out["nodes"]
+    assert node["status"] == "accepted", node
+    assert node["reason"].startswith("guard_waived: carried editor edit")
+    assert set(node["waived"]) == {"mtld", "relevance_density"}, node     # a guard and a target
+    assert node["carried_edit"] == [{"change": "revised", "bullet": f"{EXP}#b0", "after": USER_PLAIN}]
+    assert out["committed"] and out["violations"] == [] and "discarded_editor_edits" not in out
+    assert USER_PLAIN in str(tree.get_node(uid, out["node_id"])["content"])
+
+
+def test_the_same_text_with_no_tex_edit_behind_it_is_an_ordinary_revise(isolated_engine, env):
+    """No hand edit to verify against (a label cannot stand in for one): every guard applies."""
+    from harness import executor
+
+    uid, job_id, _ = env
+    first = _run(uid, {"job_id": job_id})
+    src = executor._KG(uid).source_bullets[EXP]
+    out = _run(uid, {"job_id": job_id, "parent": first["node_id"],
+                     "nodes": _carry_nodes(src, USER_PLAIN)})
+    [node] = out["nodes"]
+    assert node["status"] == "reverted" and "carried_edit" not in node and not node.get("waived")
+    assert node["reason"].startswith(("guard:", "no_target_improved"))
+
+
+@pytest.mark.parametrize("change", [
+    pytest.param(lambda t: t + " Also this.", id="a word more"),
+    pytest.param(lambda t: t.replace("Worked", "Labored"), id="a word swapped"),
+    pytest.param(lambda t: t.rstrip("."), id="a trailing period"),
+])
+def test_text_that_differs_from_the_edit_even_slightly_faces_every_guard(
+        isolated_engine, env, change):
+    uid, job_id, first, edit, src = _edited_with(isolated_engine, env, USER_PLAIN)
+    out = _run(uid, _plan(job_id, edit, _carry_nodes(src, change(USER_PLAIN))))
+    [node] = out["nodes"]
+    assert node["status"] == "reverted" and "carried_edit" not in node and not node.get("waived")
+    assert node["reason"].startswith(("guard:", "no_target_improved"))
+    assert not out["committed"]
+
+
+def test_whitespace_is_the_only_difference_a_carry_over_forgives(isolated_engine, env):
+    uid, job_id, first, edit, src = _edited_with(isolated_engine, env, USER_PLAIN)
+    spaced = "  " + USER_PLAIN.replace(" and ", "   and\n ") + " "
+    out = _run(uid, _plan(job_id, edit, _carry_nodes(src, spaced)))
+    assert out["nodes"][0]["status"] == "accepted" and out["nodes"][0]["carried_edit"]
+
+
+def test_a_revise_that_carries_the_edit_but_also_rewrites_another_bullet_is_ordinary(
+        isolated_engine, env):
+    """One verbatim bullet must not carry a waiver for text the user never wrote."""
+    uid, job_id, first, edit, src = _edited_with(isolated_engine, env, USER_PLAIN)
+    nodes = _carry_nodes(src, USER_PLAIN)
+    nodes[0]["bullets"][1]["text"] = "Worked on the team and the team worked on the work again."
+    nodes2 = _carry_nodes(src, USER_PLAIN)
+    del nodes2[0]["bullets"][1]                           # or silently drops one the user kept
+    for plan_nodes in (nodes, nodes2):
+        out = _run(uid, _plan(job_id, edit, plan_nodes))
+        [node] = out["nodes"]
+        assert "carried_edit" not in node and not node.get("waived"), node
+        assert node["status"] == "reverted" and not out["committed"]
+
+
+def test_a_carried_edit_that_breaks_a_hard_gate_is_refused_with_an_actionable_reason(
+        isolated_engine, env):
+    from harness import tree
+
+    uid, job_id, first, edit, src = _edited_with(isolated_engine, env, USER_UNSUPPORTED)
+    out = _run(uid, _plan(job_id, edit, _carry_nodes(src, USER_UNSUPPORTED)))
+
+    [node] = out["nodes"]
+    assert node["status"] == "reverted" and not out["committed"]
+    reason = node["reason"]
+    assert reason.startswith("hard_gate: consistency") and "47%" in reason     # the gate and the claim
+    assert "upsert_items" in reason and "ask the user" in reason and "retry" in reason
+    assert "Do not reword" in reason
+    assert not node.get("waived")                         # nothing is waived on a refused node
+    assert tree.get_head(uid, job_id)["head"]["node_id"] == edit["node_id"]
+    assert out["reason"].startswith("no_change")          # the edit stayed unreflected; nothing moved
+
+
+def test_a_carried_edit_that_cites_nothing_real_names_the_citation_gate(isolated_engine, env):
+    uid, job_id, first, edit, src = _edited_with(isolated_engine, env, USER_PLAIN)
+    out = _run(uid, _plan(job_id, edit, _carry_nodes(src, USER_PLAIN, cites=[f"{EXP}#b99"])))
+    [node] = out["nodes"]
+    assert node["status"] == "refused" and node["reason"].startswith("unresolved_cite")
+
+
+def test_an_edited_text_that_a_hard_preference_forbids_is_still_refused(isolated_engine, env):
+    uid, job_id, _ = env
+    with Session(isolated_engine) as s:
+        s.add(UserPreference(user_id=uid, text="Never mention the work of the team",
+                             polarity="suppress", target_term="work of the team",
+                             scope_type="global", strength=5))
+        s.commit()
+    uid, job_id, first, edit, src = _edited_with(isolated_engine, env, USER_PLAIN)
+    out = _run(uid, _plan(job_id, edit, _carry_nodes(src, USER_PLAIN)))
+    [node] = out["nodes"]
+    assert node["status"] == "refused" and node["reason"].startswith("negative_pin")
+    assert not out["committed"] and not node.get("waived")
+
+
+def test_the_edit_loop_runs_end_to_end_from_diff_nodes_to_a_commit(isolated_engine, env):
+    """editor edit -> diff_nodes.tex_edits -> a revise built from it -> commit, no discard flag."""
+    from harness import tree
+    from harness.contract import invoke
+
+    uid, job_id, first, edit, src = _edited_with(isolated_engine, env, USER_PLAIN)
+    diff = invoke("diff_nodes", uid, {"from_node": first["node_id"], "to_node": edit["node_id"]})
+    [e] = diff["tex_edits"]["bullets"]
+    assert (e["change"], e["bullet"], e["after"]) == ("revised", f"{EXP}#b0", USER_PLAIN)
+
+    # The host reads the edit and carries it over: the edited bullet's text, the rest as they were.
+    n = int(e["bullet"].rpartition("#b")[2])
+    bullets = [{"text": e["after"] if i == n else t, "cites": [f"{EXP}#b{i}"]}
+               for i, t in enumerate(src)]
+    out = _run(uid, _plan(job_id, edit, [{"id": "user-edit", "op": "revise", "item_key": EXP,
+                                          "bullets": bullets, "accept": {"improves": []}}]))
+    assert out["committed"] and out["violations"] == [] and "discarded_editor_edits" not in out
+    assert out["nodes"][0]["carried_edit"][0]["bullet"] == e["bullet"]
+    node = tree.get_node(uid, out["node_id"])
+    assert node["edited_tex"] is None and node["parent_id"] == edit["node_id"]
+    assert next(x for x in node["content"]["experiences"]
+                if x["title"] == "Machine Learning Engineer")["bullets"][n] == USER_PLAIN
+
+
+def test_the_acceptance_rule_waives_guards_and_a_fallen_target_for_a_carried_edit_only():
+    from harness.acceptance import Context, accept, metric_vector
+
+    ctx = Context(jd_text="retail demand forecasting")
+    before = metric_vector(_content(BASE), ctx)
+    before["guards"]["mtld"] = 80.0
+    before["targets"]["relevance_density"] = 0.4
+    after = copy.deepcopy(before)
+    after["guards"]["mtld"] = 40.0
+    after["targets"]["relevance_density"] = 0.3
+    assert not accept(before, after)["accepted"]
+    assert not accept(before, after, requested=True)["waived"].get("relevance_density")
+    verdict = accept(before, after, carried=True)
+    assert verdict["accepted"] and verdict["reason"].startswith("guard_waived: carried editor edit")
+    assert verdict["waived"] == {"mtld": 0.5, "relevance_density": 0.1}
+    # A target that fell while another rose would not have vetoed, so it is not "waived".
+    after["targets"]["coverage"] = before["targets"]["coverage"] + 0.2
+    assert set(accept(before, after, carried=True)["waived"]) == {"mtld"}
+    # Nothing regressed and nothing improved: a carried edit owes the posting nothing.
+    same = accept(before, copy.deepcopy(before), carried=True)
+    assert same["accepted"] and same["waived"] == {} and same["reason"] is None
+    # Hard gates apply in full.
+    ctx2 = Context(jd_text="retail demand forecasting", hard_suppress={"proj:tool"})
+    gated = accept(metric_vector(_content(BASE), Context(jd_text="x")),
+                   metric_vector(_content(BASE), ctx2), carried=True)
+    assert not gated["accepted"] and gated["reason"].startswith("hard_gate: preferences")
+    assert gated["waived"] == {}
+
+
+def test_carried_by_accounts_for_every_change_from_the_users_edits_and_nothing_else():
+    from harness.texdiff import carried_by
+
+    k = "exp:a|b"
+    edits = {"bullets": [
+        {"item": k, "change": "revised", "bullet": f"{k}#b0", "before": "old one", "after": "new  one"},
+        {"item": k, "change": "removed", "bullet": f"{k}#b2", "before": "old three", "after": None},
+        {"item": k, "change": "added", "bullet": None, "before": None, "after": "added four"},
+        {"item": "exp:other|x", "change": "revised", "bullet": "exp:other|x#b0",
+         "before": "o", "after": "other text"}]}
+    page = ["old one", "old two", "old three"]
+    ok = carried_by(edits, k, page, ["new one", "old two", "added four"])
+    assert [e["change"] for e in ok] == ["revised", "added"]
+    assert carried_by(edits, k, page, ["old two", "new one"])                  # a removal and a revise
+    assert carried_by(edits, k, page, ["old two", "added four", "new one"])    # in any order
+    assert carried_by(edits, k, page, ["old one", "old two", "old three"]) is None   # no new text
+    assert carried_by(edits, k, page, ["new one!", "old two", "old three"]) is None  # reworded
+    assert carried_by(edits, k, page, ["new one", "old three"]) is None        # drops "old two"
+    assert carried_by(edits, k, page, ["new one", "old two", "old three", "extra"]) is None
+    assert carried_by(edits, k, page, ["other text", "old two", "old three"]) is None   # another item's
+    assert carried_by(None, k, page, ["new one"]) is None and carried_by({}, k, page, ["x"]) is None
+
+
+def test_an_added_bullet_in_the_tex_is_carried_the_same_way(isolated_engine, env):
+    uid, job_id, _ = env
+    from harness import executor
+
+    first = _run(uid, {"job_id": job_id})
+    src = executor._KG(uid).source_bullets[EXP]
+    edit = _hand_edit(isolated_engine, uid, job_id, lambda tex, esc: tex.replace(
+        "        \\resumeItem{" + esc(src[-1]) + "}\n",
+        "        \\resumeItem{" + esc(src[-1]) + "}\n        \\resumeItem{" + esc(USER_PLAIN) + "}\n"))
+    bullets = [{"text": t, "cites": [f"{EXP}#b{i}"]} for i, t in enumerate(src)] + [
+        {"text": USER_PLAIN, "cites": [f"{EXP}#b0"]}]
+    out = _run(uid, _plan(job_id, edit, [{"id": "u", "op": "revise", "item_key": EXP,
+                                          "bullets": bullets, "accept": {"improves": []}}]))
+    [node] = out["nodes"]
+    assert node["status"] == "accepted", node
+    assert node["carried_edit"] == [{"change": "added", "bullet": None, "after": USER_PLAIN}]
+    assert out["committed"] and out["violations"] == []
+
+
 # ── a requested delete is not vetoed by a guard (#279) ───────────────────────
 
 def _mtld_down(vector, by=0.30):
