@@ -395,6 +395,25 @@ def _items(content: Dict) -> Dict[str, Dict[str, Any]]:
     return out
 
 
+def _skill_names(content: Dict) -> Dict[str, str]:
+    """`{folded name: display name}` for a version's `skills_ranked`, in rank order.
+
+    The executor and pipeline store `{name, category, score}` objects; a plain string is
+    accepted too, so a version written by hand or by an older build still diffs. Entries with
+    no name are skipped. Names fold on case and spacing, so a re-scored or reordered skill is
+    the same skill (the executor's own `held` set folds the same way).
+    """
+    out: Dict[str, str] = {}
+    for s in content.get("skills_ranked") or []:
+        name = s.get("name") if isinstance(s, dict) else s
+        if not isinstance(name, str):
+            continue
+        shown = " ".join(name.split())
+        if shown:
+            out.setdefault(shown.lower(), shown)
+    return out
+
+
 def diff_nodes(user_id, a, b) -> Dict[str, Any]:
     """What changed from node `a` to node `b`, by item key and bullet. When the hand-edited `.tex`
     differs, `tex_edits` maps it back to bullets (texdiff.compare)."""
@@ -420,11 +439,10 @@ def diff_nodes(user_id, a, b) -> Dict[str, Any]:
                             "bullets_removed": [x for x in before if x not in after],
                             "bullets_added": [x for x in after if x not in before],
                             "reordered": sorted(before) == sorted(after)})
-    skills_a = list(ca.get("skills_ranked") or [])
-    skills_b = list(cb.get("skills_ranked") or [])
+    skills_a, skills_b = _skill_names(ca), _skill_names(cb)
     out = {"from": str(na.node_id), "to": str(nb.node_id), "items": changes,
-           "skills_added": [s for s in skills_b if s not in skills_a],
-           "skills_removed": [s for s in skills_a if s not in skills_b],
+           "skills_added": [n for k, n in skills_b.items() if k not in skills_a],
+           "skills_removed": [n for k, n in skills_a.items() if k not in skills_b],
            "tex_changed": tex_changed, "layout_changed": layout_changed}
     if full:
         # The .tex is the user's own text: say which bullets it changed (#278). Reading it back
