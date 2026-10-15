@@ -39,6 +39,61 @@ The Install and Usage pages of the landing site (#271), replacing #272's stubs. 
 
 ---
 
+## Issue 273 — Landing site home page content
+**Status:** complete | **Tests:** 2666 pass (30 new), 24 skipped, on SQLite; the Postgres leg was not run (nothing here touches storage)
+
+Second child of the landing-site epic (#271): the real home page for students applying to internships and new-grad roles, replacing #272's placeholder. The install and usage pages are #274.
+
+### What shipped
+
+- **`site/src/pages/index.astro`**, seven sections: the hero (headline "Land your first role with ARTie", a primary "Install in Claude Code" button to `/install`, a "How it works" button to `#how-it-works`, no account of any kind); three student pain points ported from `LandingPage.tsx` (first resume, no idea what recruiters want, one resume for fifty postings); "How ARTie tailors a resume" in five steps for the harness model (your agent reads you, reads the posting, tailors from approved bullets and preferences, ART's gates check it, a LaTeX PDF is rendered); "It never invents experience you don't have" with the changes/never-changes card; who it's for and what you need (Claude Code or Codex, `uv`, tectonic or pdflatex); a `<details>` FAQ; and a closing install band.
+- **A privacy note under "How it works".** ARTie runs locally and stores data on your machine; the only things that leave are what your own agent sends to its model provider; and the optional TypeSafe Jev key, when set, sends excerpts of resume bullets, the posting's requirements and title, and your messages when the memory gate runs. With no key or `ART_JEV_MODE=off`, nothing is sent. Worded from `docs/harness.md` section 4, "Privacy".
+- **The ATS answer.** The FAQ says ARTie reports an ATS-style score but never optimizes for it or promises one, and why: the composite only rises as text is added (`docs/harness.md` section 5).
+- **`site/src/components/home/Icon.astro`**, a small inline-SVG icon set (Lucide shapes, ISC) so the page needs no icon dependency.
+- **`tests/test_site_home.py`** (no npm, no network): one h1, the CTA targets, the `#how-it-works` anchor, every internal link going to `/install` or an anchor, banned phrases (open source, sign up, hosted, guarantee, "beat the ATS", an ATS percentage), no statistics, no mention of planned tools (`record_feedback`, `check_draft`), the five harness steps, the accuracy of the privacy and Jev wording, the FAQ questions, and the aria wiring.
+- Checked at 375px in light and dark: no horizontal scroll, and nothing outside the clipped hero glows is wider than the viewport.
+
+### Deviations from spec
+
+- **"GitHub" is not named as a source.** The issue lists resume, GitHub and LinkedIn, but `docs/harness.md` and `plugin/README.md` say the host reads the resume, the LinkedIn export and local project folders (repos). The page says exactly that.
+- **The "one page" gate.** The docs file page count under "Finalize" (nothing commits on a violation), not under the hard gates, and the two-line bullet limit is a hard gate. The page says "the result has to fit on one page, at two lines per bullet or fewer" rather than calling both hard gates.
+- **No license claim.** `pyproject.toml` says Proprietary. The page says "free to use" and "the code is public on GitHub", and never "open source". The epic's "free, open-source" wording is untouched; settling the license is still open.
+- **Lighthouse was not run.** The accessibility score (95 or higher) needs a Lighthouse run against the deployed preview. Semantics were checked by hand: one h1, labelled sections, decorative icons aria-hidden, native `<details>`.
+- **Not described, because planned (#252):** `record_feedback`, `check_draft`, and the Jev points for eligibility rules, semantic duplicates, action ranking and role family.
+
+---
+
+## Issue 295 — Preference anchor resolver: a preference binds to what its subject denotes, or stays pending, or is a document subject
+**Status:** complete | **Tests:** 2766 pass on SQLite (59 new), 24 skipped
+
+`record_preference` resolved its target through `_find_target`, which matched a key, a label or `title @ company`, so "torch" never reached `skill:pytorch`, a subject that fit two items was silently given the first, and `edu:` / `ach:` keys could not be named at all. This is phase 2 of 7 of the preference-anchoring plan (#295–#300): one deterministic resolver decides where a preference attaches.
+
+### What shipped
+- **`harness/anchors.py`: `resolve(user_id | items, subject)`**, model-free. It returns `{status, subject, key?, step?, candidates?, subjects?}` with one of five statuses:
+  - `bound`: exactly one item matched, trying in order the exact key, the label, the bare name, then (skills only) an alias. The first step that matches anything decides; a step with several matches is `ambiguous` and names its candidates, never one of them.
+  - `pending`: a nameable thing the graph does not hold. It is stored with `target_key` NULL and `target_term` set, as before.
+  - `document`: a `section:` prefix, a bare section name, or a subject about the page (`page`, `length`, `order`, `tone`, `wording`, `summary`, `layout`, `format`, `style`, ...). A section subject carries its `section:<name>` key.
+  - `multiple`: "Kafka or Spark", "Kafka, Spark", "Kafka & Spark", "Kafka / Spark", "Python + SQL". `&`, `/` and `+` separate only with spaces around them, so `R&D`, `C/C++`, `C++` and `Q&A` are one name each. `and` separates only when every piece around it is known on its own (an item, a section or a document subject): "Kafka and PyTorch" with both held is two, "Research and Development" absent from the graph is one pending subject.
+- **A substring never binds.** Every step compares the whole subject: "Kafka" is not "Kafka Streams", "R" is not "React", "Go" is not "Google". A name of at most two characters (R, C, Go) binds only by its own name, never through an alias, the rule `skill_forms` already applies to text (so "tf" does not reach TensorFlow: it is also a fragment of TF-IDF).
+- **Aliases** are `normalize_skill_name` / `canonical_key` on both sides ("torch" and a skill stored as "PyTorch" reduce to one name, whichever way round), plus the spellings `skill_forms` knows, with hyphen and space interchangeable ("scikit learn").
+- **`record_preference` uses it** in place of `_find_target`, which is gone. The refusal style and the `suggestions` output for an unbound subject are unchanged. A new `anchor` field reports `{status, key?, step?, candidates?}` on every result; an `ambiguous` target is refused with `candidates`, a `multiple` one with `subjects`, and nothing is stored in either case. `edu:` and `ach:` keys, labels and names now resolve. The tool contract (`RecordPreferenceOutput`, the `target` description) carries the new fields.
+- **`_auto_write` needs the resolver to agree.** The gate's automatic write now also requires `anchors.mentions(user, message)`, the same decision run on the whole message (a skill by `SkillMatcher`, a project, degree or award by its whole name, a role by its title, company or company's first word), to bind exactly the key Jev picked. A message that names two items, or none that binds, goes to the host with reason `anchor_disagrees` and nothing is written.
+- **Docs.** `docs/harness.md` (the routing and `record_preference` paragraphs).
+- **Tests.** `tests/test_preference_anchors.py` (59): the steps and their order, aliases both ways, the Kafka / Kafka Streams, R / React, Go / Google, Java / JavaScript, C / C++ and Spark / PySpark contrasts, short names, ambiguous with candidates, pending, document, multiple, a message; `record_preference` binding an alias, refusing an ambiguous and a multiple subject, storing pending, reporting document, resolving `edu:` and `ach:` and keeping them enforceable; the gate writing when Jev and the resolver agree and not when they differ (two skills in the message, and a forced disagreement). `tests/test_memory_gate.py`, `test_preferences.py`, `test_negative_pin_gate.py` and `test_memory_gate_labels.py` pass unchanged; no Jev answer was re-recorded.
+
+### Deviations from spec
+- **A company alone is not a role's name.** "IDX Exchange" stays pending (a term pin) instead of binding the one role held there. A term pin refuses every mention of the company; an `exp:` item pin removes only that role and would leave "built at IDX Exchange" in a project bullet. A role binds by `title @ company` (as before) or by its title, which is ambiguous when two roles share it. #297 can revisit this once items carry their preferences.
+- **An education or an award is stored with `target_type` `topic` and its `target_term` is the user's own words.** `PreferenceTargetType` has no education or achievement member and adding one changes the structured-output schema the legacy extraction path sends to a model; the key is still set. The words are kept as the term because `pin_target` enforces `edu:` / `ach:` keys by term (#254), so a ban that was a text pin before ("1st Place Overall") is the same text pin now, with a key on it. The label `education: ...` would match nothing on the page.
+- **"The resolver, run on the message's target" is run on the message.** Jev's target is already a catalog key, so resolving its label would agree with itself. `anchors.mentions` instead reads the message text, so the check is independent of the key Jev chose. It is conservative on purpose: "Put Python before SQL" names two skills, and a name inside a longer one ("Kafka" in "Kafka Streams") is named by both, so both go to the host. A `section:` key Jev picks is never bound by it (the gate already routes those to the host).
+- **`document` subjects keep today's storage.** A section binds its `section:` key and any other document subject is stored by its term, with `anchor.status` reporting `document`. #298 moves them to `ResumeRule`.
+- **A document vocabulary of 19 words decides the page subjects**, and runs only after the item steps, so a project named "Order Management System" still binds. It will misfire on a nameable thing that contains one of the words and is not an item ("my order-routing startup"): the result is `document` and a term, which is what the row would have been stored as anyway. #296's labelled set is where its precision is measured, and where the Jev-for-document question in the plan is settled.
+- **"and" is a conditional separator, and `+` needs spaces.** The first version split on every `and` and on a bare `+`, which refused single names: "C++ and Python" became `['C', 'Python']` and "Research and Development" became two subjects (found in review, by the planning session). `or`, `and/or`, commas, semicolons and spaced `/`, `&`, `+` separate unconditionally; `and` only when each piece resolves on its own. The cost: "Kafka and Spark" with Spark absent is one pending subject (a term pin of the whole phrase) and not a refusal, so a user who writes two absent things with "and" gets one odd term. A pending term is what that phrase would have been stored as before this change, so nothing regresses; #296's labelled set (multi-subject rows) is where the rule's recall is measured.
+- **`k8s` is not an alias.** The plan's examples name it, but `SKILL_ALIASES` does not hold it and adding it changes how every ingested skill is normalized. "k8s" resolves to `pending`; #296 will show whether it should be added to the map.
+- **The branch name** is `claude/issue-295-anchor-resolver-18d42a` (the worktree's), not `issue-295-anchor-resolver`.
+- **The Postgres leg was not run locally.** Nothing here touches storage.
+
+---
+
 ## Issue 306 — The user's own editor edit, carried over verbatim, is not vetoed by a guard
 **Status:** complete | **Tests:** 2704 pass on SQLite (14 new), 24 skipped, 0 fail. The Postgres leg was not run locally; CI runs it
 

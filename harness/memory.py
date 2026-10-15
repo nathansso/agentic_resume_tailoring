@@ -9,8 +9,8 @@ written from a message.
   Without a key, in mode `off`, or on an API error, the prefilter alone decides and nothing is
   written.
 - **`record_preference(...)`**: the host's path, and the confirmation path for what the gate hands
-  over. It validates, resolves the target against the user's knowledge graph, and stores or
-  refuses with a reason. Strength 5 and negative pins are allowed here, because here the user has
+  over. It validates, resolves the target against the user's knowledge graph with the anchor
+  resolver (`harness/anchors.py`, #295), and stores or refuses with a reason. Strength 5 and negative pins are allowed here, because here the user has
   confirmed them.
 
 **The write barrier (#129, services.py).** That barrier says a pipeline able to write the user's
@@ -41,14 +41,14 @@ import services
 from agents.preferences import (
     POLARITIES, STATUS_ACTIVE, compile_preferences, resolve_against_existing,
 )
-from harness import transcript
+from harness import anchors, transcript
 from harness.decisions import memory_gate as mg
 from harness.decisions.negative_pins import is_negative_pin
 
 log = logging.getLogger(__name__)
 
 SCOPES = ("global", "role_family", "job")
-_KEY = re.compile(r"^(?:exp|proj|skill|section):", re.IGNORECASE)
+_KEY = re.compile(r"^(?:exp|proj|skill|edu|ach|section):", re.IGNORECASE)
 HOOK_TIMEOUT = 8.0           # seconds: a hook must not stall the user's prompt
 
 
@@ -61,19 +61,6 @@ def memory_catalog(user_id: UUID) -> List[Dict[str, str]]:
         skills=[s["name"] for s in services.get_skills(user_id)],
         experiences=[(e["title"], e["company"]) for e in services.get_experiences(user_id)],
         projects=[p["name"] for p in services.get_projects(user_id)])
-
-
-def _find_target(target: str, catalog: List[Dict[str, str]]) -> Optional[Dict[str, str]]:
-    """The catalog entry `target` exactly names: its key, its label, or its bare name. Never a
-    partial match: a wrong binding silently suppresses the wrong item."""
-    want = " ".join(target.lower().split())
-    if not want:
-        return None
-    for entry in catalog:
-        if want in (entry["key"].lower(), entry["label"].lower()):
-            return entry
-    named = [e for e in catalog if want == e["label"].partition(": ")[2].lower()]
-    return named[0] if len(named) == 1 else None
 
 
 def _suggestions(target: str, catalog: List[Dict[str, str]], limit: int = 5) -> List[str]:
@@ -172,8 +159,15 @@ def observe(user_id: UUID, text: str, session_id: Optional[str] = None, *, write
 def _auto_write(user_id: UUID, decision: Dict[str, Any], catalog: List[Dict[str, str]],
                 job_id: Optional[str], session_id: Optional[str]) -> Dict[str, Any]:
     """Store what the gate decided to write, unless the user already holds it (nothing to do) or
-    it would replace something they hold (their call)."""
+    it would replace something they hold (their call).
+
+    The key Jev picked must also be the one the anchor resolver finds in the message (#295): a
+    message that names two items, or none the resolver can bind, goes to the host. Jev's pick is a
+    guess; the resolver's is the rule, and the write needs both."""
     g = decision["guess"]
+    anchor = anchors.mentions(user_id, decision["text"])
+    if anchor["status"] != anchors.BOUND or anchor["key"] != g["target"]:
+        return {**decision, "action": "host", "reason": "anchor_disagrees", "anchor": _anchor_view(anchor)}
     entry = next(c for c in catalog if c["key"] == g["target"])
     scoped = decision["scope"] == "job"
     note = {"text": decision["text"], "polarity": g["direction"], "target_label": entry["label"],
@@ -214,6 +208,13 @@ def _refuse(reason: str, **extra: Any) -> Dict[str, Any]:
     return {"status": "refused", "reason": reason, **extra}
 
 
+def _anchor_view(anchor: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """What the host is told of a resolution: its status, and the key, step and candidates it has."""
+    if not anchor:
+        return None
+    return {k: anchor[k] for k in ("status", "key", "step", "candidates", "subjects") if anchor.get(k)}
+
+
 def _summary(pref: Dict[str, Any]) -> Dict[str, Any]:
     strength = pref.get("strength") or 0
     return {"preference_id": pref.get("preference_id"), "text": pref["text"],
@@ -225,15 +226,38 @@ def _summary(pref: Dict[str, Any]) -> Dict[str, Any]:
             "negative_pin": is_negative_pin(pref)}
 
 
+def _entry_for(anchor: Optional[Dict[str, Any]], catalog: List[Dict[str, str]],
+               target: str) -> Optional[Dict[str, str]]:
+    """The catalog-shaped entry a resolved subject binds to, or None (the preference is stored by its
+    term). A role, project or skill is its catalog entry, so what is stored is what it always was; a
+    section is its catalog entry too (a `document` subject, kept until #298). An education or an award
+    is not in the catalog (the gate's catalog stays as recorded): it gets an entry whose label is the
+    user's own words, so its stored `target_term` is what the term match enforces on, as for any topic."""
+    if not anchor or not anchor.get("key"):
+        return None
+    key = anchor["key"]
+    entry = next((c for c in catalog if c["key"] == key), None)
+    if entry is None and key.startswith(("edu:", "ach:")):
+        return {"key": key, "label": target, "target_type": "topic"}
+    return entry
+
+
 def record_preference(user_id: UUID, text: str, polarity: str, target: Optional[str] = None,
                       strength: int = 3, scope: str = "global", scope_value: Optional[str] = None,
                       quote: Optional[str] = None) -> Dict[str, Any]:
     """Store one preference the user stated or confirmed, or refuse it with a reason.
 
-    Resolves `target` against the knowledge graph (an exact key, label or name; never a partial
-    match), validates, and resolves against what the user already holds: a new subject is stored,
+    Resolves `target` against the knowledge graph (a key, label, name or skill alias; never a
+    partial match), validates, and resolves against what the user already holds: a new subject is stored,
     a different polarity or strength for the same subject and scope replaces the old one (which is
-    kept, superseded), the same again is `already_recorded`. A strength of 5 is stored as a pin."""
+    kept, superseded), the same again is `already_recorded`. A strength of 5 is stored as a pin.
+
+    `target` goes through the anchor resolver (`harness/anchors.py`, #295), whose status comes
+    back as `anchor`: `bound` (a key, found by its key, label, name or alias), `pending` (a thing
+    the graph does not hold: stored with its term only), `document` (about the page: stored as
+    before, by its section key or its term, until the rule table of #298). `ambiguous` and
+    `multiple` are refused, with the candidates or the subjects, so nothing is stored under a
+    guess."""
     text = " ".join((text or "").split())
     if not text:
         return _refuse("text is empty: give the preference as a standalone instruction.")
@@ -262,7 +286,15 @@ def record_preference(user_id: UUID, text: str, polarity: str, target: Optional[
                        "section:<name>, or a topic such as 'GPA'.")
 
     catalog = memory_catalog(user_id)
-    entry = _find_target(target, catalog) if target else None
+    anchor = anchors.resolve(user_id, target) if target else None
+    if anchor and anchor["status"] == anchors.AMBIGUOUS:
+        return _refuse(f"'{target}' names more than one item: say which, by its key.",
+                       anchor=_anchor_view(anchor), candidates=anchor["candidates"])
+    if anchor and anchor["status"] == anchors.MULTIPLE:
+        return _refuse(f"'{target}' names several things: record one preference per subject, "
+                       "so each can be changed or removed on its own.",
+                       anchor=_anchor_view(anchor), subjects=anchor["subjects"])
+    entry = _entry_for(anchor, catalog, target)
     suggestions = [] if entry or not target else _suggestions(target, catalog)
     term = None if entry else (re.sub(r"^[a-z]+:", "", target, flags=re.IGNORECASE).split("|")[0].strip()
                                if _KEY.match(target) else target)
@@ -274,10 +306,11 @@ def record_preference(user_id: UUID, text: str, polarity: str, target: Optional[
     existing = services.load_preferences(user_id)
     [proposal] = resolve_against_existing(compiled, existing)
 
+    view = _anchor_view(anchor)
     if proposal["decision"] == "no_op":
         prior = next((p for p in existing if str(p["preference_id"]) == str(proposal.get("supersedes_id"))), None)
         if prior is not None and prior.get("strength") == strength:
-            return {"status": "already_recorded", **_summary(prior), "suggestions": suggestions}
+            return {"status": "already_recorded", **_summary(prior), "anchor": view, "suggestions": suggestions}
         proposal["decision"] = "supersede"            # the same subject, a different strength: the user changed it
     result = services.apply_preference_decision(user_id, proposal)
     stored = _find_stored(user_id, proposal)
@@ -285,4 +318,5 @@ def record_preference(user_id: UUID, text: str, polarity: str, target: Optional[
         log.warning("record_preference: could not store: %s", result)
         return _refuse("the preference could not be stored.")
     return {"status": "superseded" if proposal["decision"] == "supersede" else "stored",
-            **_summary(stored), "supersedes": proposal.get("supersedes_text"), "suggestions": suggestions}
+            **_summary(stored), "anchor": view, "supersedes": proposal.get("supersedes_text"),
+            "suggestions": suggestions}
