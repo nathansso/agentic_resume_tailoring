@@ -117,6 +117,28 @@ def _chunks(state_tokens: int, misses: List):
         yield chunk
 
 
+def lookup(point: str, state: Any, questions: Sequence[Question]) -> List[Optional[Answer]]:
+    """The cached answer for each question, or None for a miss. Reads the cache only, in
+    any mode: it never calls the API, never falls back and raises nothing for a miss, so a
+    request path that must stay fast and offline (#318) can use what a write path already
+    decided. Not counted in `stats()`: it is not a decision."""
+    questions = list(questions)
+    for q in questions:
+        if q.point != point:
+            raise ValueError(f"question {q.version} does not belong to decision point {point!r}")
+    model = configured_model()
+    keys = [cache.cache_key(state, q, model) for q in questions]
+    rows = cache.get_many(keys)
+    out: List[Optional[Answer]] = []
+    for key, q in zip(keys, questions):
+        row = rows.get(key)
+        try:
+            out.append(q.parse(row.answer, model=row.resolved_model, source="cache") if row else None)
+        except AnswerError:                          # a corrupt row is a miss
+            out.append(None)
+    return out
+
+
 def decide(point: str, state: Any, questions: Sequence[Question], fallback: Fallback = None,
            *, client: Optional[JevClient] = None,
            mode_override: Optional[str] = None) -> List[Answer]:

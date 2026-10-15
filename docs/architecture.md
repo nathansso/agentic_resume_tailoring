@@ -1190,7 +1190,7 @@ and the fallback (where there is one) runs.
 
 ### 8.4 The decision points
 
-Six decision points ship (`harness/decisions/`), listed here with their question versions. Each feeds a
+Seven decision points ship (`harness/decisions/`), listed here with their question versions. Each feeds a
 gate, a target, a suggestion or the memory gate, and each falls back to a deterministic rule or to
 nothing.
 
@@ -1202,6 +1202,7 @@ nothing.
 | `memory_gate@v1`, `@v2` (#202, #244) | `noul`, `choice`, `score`, `choice` over the user's catalog | the message; v2 adds the previous assistant turn | `observe` and the `user-prompt` hook | 0.25 / 0.65 / 0.75; v2 0.20 / 0.65 / 0.75 | the prefilter alone |
 | `variant_choice@v1` (#199) | `choice` over an item's approved variants plus `no_match` | job title, top 8 requirements, item title | `suggest_actions` | mass off `no_match` ≥ 0.50 | term overlap (#229) |
 | `track_baseline@v1` (#199) | `choice` over saved tracks plus `none` | job title, top 8 requirements | `open_job`'s baseline | own pick ≥ 0.50 | role-family lookup (#229) |
+| `skill_area@v1` (#318) | `choice` per skill over the seven areas plus `Other` | a constant; the skill and its category are in the question | the skill's area in the evidence map (`knowledge_graph/areas.py`), for skills the keyword table leaves in `Other` | none (Jev's own choice) | `Other` |
 
 (`requirement_covered@v1` is kept as `LEGACY_VERSION` for the benchmark recordings. The memory
 gate's three cutoffs are `TAU_LO`, `TAU_HI` and `TAU_TARGET`.)

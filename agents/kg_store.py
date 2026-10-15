@@ -755,6 +755,7 @@ class KGStoreMixin:
 
     def _save_skills(self, data: List[Dict], source: str):
         touched_skill_ids = set()
+        touched_pairs = {}
         outcomes = []
         with Session(_db.engine) as session:
             for item in data:
@@ -778,6 +779,7 @@ class KGStoreMixin:
                     skill.category = item["category"].strip()
                     session.add(skill)
                 touched_skill_ids.add(skill.skill_id)
+                touched_pairs[skill.skill_id] = (skill.name, skill.category)
 
                 # Check if this exact user+skill+source edge already exists
                 existing_link = session.exec(
@@ -818,7 +820,11 @@ class KGStoreMixin:
                 ensure_skill_embeddings(session, touched_skill_ids)
             except Exception as exc:
                 logger.warning("Skill embedding refresh skipped: %s", exc)
-            return result
+        # Place the skills the keyword table cannot in an area (#318): one cached Jev
+        # request for the new ones, after the save so a slow or failed call never loses it.
+        from knowledge_graph.areas import classify_skills_at_write
+        classify_skills_at_write(list(touched_pairs.values()))
+        return result
 
     @staticmethod
     def _outcomes(pairs) -> List:
