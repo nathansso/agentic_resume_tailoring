@@ -23,10 +23,16 @@ const toc = Object.values(S);
   title="Privacy: ARTie"
   description="What the optional LinkedIn lookup sends, what ARTie keeps (quota counters only), and the LinkedIn data export you can use instead."
   heading="Privacy"
-  lede="ARTie keeps your resume data on your computer. This page covers the one part that doesn't: the optional LinkedIn lookup."
+  lede="ARTie keeps your resume data on your computer. This page covers the one part that won't: the optional LinkedIn lookup, which is coming soon."
   toc={toc}
 >
   <DocSection section={S.short}>
+    <p>
+      <strong>Coming soon.</strong> The LinkedIn lookup isn't available yet. Until it is, nothing
+      leaves your computer through ARTie, and you can bring in your LinkedIn history with the
+      <a href="#linkedin-export">LinkedIn data export</a>. This page says how the lookup will
+      handle your data when it arrives.
+    </p>
     <p>
       ARTie runs on your computer, and your resume, your knowledge graph and your tailored
       versions stay there. The one exception is the LinkedIn lookup, which you can skip. When you
@@ -46,8 +52,9 @@ const toc = Object.values(S);
       </li>
       <li>
         <strong>A GitHub token</strong> from <code>art github login</code>. The service sends it
-        to GitHub to learn your numeric GitHub user id, so it knows whose daily limit to use. It
-        reads nothing else from your GitHub account, and it does not store the token.
+        to GitHub to learn your numeric GitHub user id, so it knows whose daily limit to use.
+        GitHub's answer also includes your public profile details; the service uses only the user
+        id, keeps none of the rest, and does not store the token.
       </li>
       <li>
         <strong>The profile</strong> the data provider returns. The service hands it back to you
