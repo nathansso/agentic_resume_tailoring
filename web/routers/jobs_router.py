@@ -272,6 +272,19 @@ def get_jd_profile(job_id: str, user: User = Depends(get_current_user)):
     return profile
 
 
+@router.get("/{job_id}/skills")
+def get_job_skills(job_id: str, user: User = Depends(get_current_user)):
+    """The skills this job asks for, `[{name, required, weight, area}]` (evidence map, #136).
+    Empty until the job is analyzed. Someone else's job is indistinguishable from no job."""
+    try:
+        job, session = _get_owned_job(job_id, user)
+    except HTTPException as e:
+        raise HTTPException(status_code=404, detail="Job not found") from e
+    session.close()
+    import services
+    return services.get_job_skills(job.job_id)
+
+
 @router.put("/{job_id}/profile")
 def edit_jd_profile(
     job_id: str, body: ProfileEditBody, user: User = Depends(get_current_user),

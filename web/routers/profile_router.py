@@ -242,6 +242,25 @@ def edit_project(
     return row
 
 
+class BlurbUpdate(BaseModel):
+    content: str
+
+
+@router.patch("/projects/{project_id}/blurbs/{blurb_id}")
+def edit_project_blurb(
+    project_id: str, blurb_id: str, body: BlurbUpdate, user: User = Depends(get_current_user),
+):
+    """Edit the text of one project bullet (issue #136). Content only: the bullet keeps
+    its position, so a stored `#b<n>` cite keeps naming it (#327)."""
+    try:
+        row = services.update_project_blurb(user.user_id, project_id, blurb_id, body.content)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if row is None:
+        raise HTTPException(status_code=404, detail="Bullet not found")
+    return row
+
+
 @router.delete("/projects/{project_id}")
 def remove_project(project_id: str, user: User = Depends(get_current_user)):
     if not services.delete_project(user.user_id, project_id):
@@ -252,3 +271,9 @@ def remove_project(project_id: str, user: User = Depends(get_current_user)):
 @router.get("/graph")
 def get_graph(user: User = Depends(get_current_user)):
     return services.get_graph_summary(user.user_id)
+
+
+@router.get("/graph/view")
+def get_graph_view(user: User = Depends(get_current_user)):
+    """The evidence map payload (issue #136): items, skills by area, and cited edges."""
+    return services.get_evidence_view(user.user_id)
