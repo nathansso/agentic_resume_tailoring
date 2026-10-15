@@ -1,4 +1,5 @@
-"""The landing site's demo (issue #275): a replay of a real run, and a before/after resume.
+"""The landing site's demo (issues #275, #337): a replay of a real run, the target role, and a
+before/after resume.
 
 Hermetic: reads the committed files and never runs ART, npm, tectonic or the network. The
 files are written by `scripts/build_site_demo.py` from a real run; these tests hold them to
@@ -9,6 +10,9 @@ what the page promises:
 - nothing in the profile, the posting, the transcript or the images' data names the owner,
   or carries a local path;
 - the images exist, are small, and the page stays well under its 2 MB budget;
+- both resume pages are whole pages that fill the sheet (their last line is in the bottom tenth),
+  the posting card lists 4 to 6 requirements, and the two versions really differ: an item added
+  from the graph, a cut, a move and a rewording, each tied to a requirement the posting makes;
 - the page says the demo is a replay of a real run, and what was written by hand;
 - the build script keeps a real user's data out of the run (scratch directory, no keys).
 """
@@ -155,7 +159,8 @@ def _identifiers() -> list[str]:
 
 
 def test_the_profile_posting_and_replay_carry_no_owner_identifier():
-    files = [DEMO_DATA / "sample_resume.md", DEMO_DATA / "sample_posting.txt", DEMO_DATA / "demo_script.py",
+    files = [DEMO_DATA / "sample_resume.md", DEMO_DATA / "sample_repos.md",
+             DEMO_DATA / "sample_posting.txt", DEMO_DATA / "demo_script.py",
              TRANSCRIPT, BEFORE_AFTER, DEMO / "SessionReplay.astro", DEMO / "BeforeAfter.astro"]
     for path in files:
         text = path.read_text(encoding="utf-8").lower()
@@ -179,22 +184,41 @@ def test_no_local_path_or_machine_detail_reaches_the_page():
     assert "~/.art/applications/" in json.dumps(T)
 
 
-def test_the_records_the_agent_stores_are_in_the_sample_resume_word_for_word():
+def _bullets_of(records) -> list[str]:
+    return [b for r in records for b in r["data"].get("bullets", []) + r["data"].get("blurbs", [])]
+
+
+def test_the_records_the_agent_stores_are_in_the_sample_sources_word_for_word():
     script = _module("site_demo_script", DEMO_DATA / "demo_script.py")
     resume = (DEMO_DATA / "sample_resume.md").read_text(encoding="utf-8")
-    for rec in script.RECORDS:
-        data = rec["data"]
-        for bullet in data.get("bullets", []) + data.get("blurbs", []):
-            assert f"- {bullet}" in resume, bullet
-    for name, _ in script.SKILLS:
+    repos = (DEMO_DATA / "sample_repos.md").read_text(encoding="utf-8")
+    for bullet in _bullets_of(script.RESUME_RECORDS):
+        assert f"- {bullet}" in resume, bullet
+        assert f"- {bullet}" not in repos
+    for bullet in _bullets_of(script.REPO_RECORDS):
+        assert f"- {bullet}" in repos, bullet
+        assert f"- {bullet}" not in resume, "a repo project must not also be on the resume"
+    for name, _ in script.RESUME_SKILLS:
         assert name in resume, name
-    # Every figure in the plan's revised bullets is in a source bullet, except the one
-    # figure staged to be rejected (SLIP_SUFFIX).
-    sources = " ".join(b for r in script.RECORDS for b in r["data"].get("bullets", []) + r["data"].get("blurbs", []))
-    for text, _ in script.TAMARACK_BULLETS + script.TRANSIT_BULLETS:
-        staged = text.replace(script.SLIP_SUFFIX, "")
-        for number in re.findall(r"\d[\d,.]*", staged):
+    for name, _ in script.REPO_SKILLS:
+        assert name in repos and name not in resume, name
+    assert len(script.REPO_RECORDS) == 3 and all(r["kind"] == "project" for r in script.REPO_RECORDS)
+
+
+def test_every_figure_in_the_plan_is_in_a_source_bullet_and_the_staged_one_is_not():
+    """The plan only restates numbers the sources state, except the one staged to be rejected
+    (SLIP_FIGURE), which the consistency gate must catch."""
+    script = _module("site_demo_script", DEMO_DATA / "demo_script.py")
+    sources = " ".join(_bullets_of(script.RESUME_RECORDS + script.REPO_RECORDS))
+    plan = (script.KESTREL_BULLETS + script.TA_BULLETS + script.AB_BULLETS + script.CHURN_BULLETS
+            + script.RETAIL_BULLETS)
+    for text, _ in plan:
+        for number in re.findall(r"\d[\d,.]*", text):
             assert number.rstrip(".,") in sources, (number, text)
+    assert script.SLIP_FIGURE not in sources
+    assert script.SLIP_FIGURE in script.AB_RESULT_SLIP and script.SLIP_FIGURE not in script.AB_RESULT
+    # Every plan bullet cites a source bullet.
+    assert all(starts for _, starts in plan)
 
 
 # --- images and weight --------------------------------------------------------------------
@@ -231,6 +255,36 @@ def test_media_weight_is_small_and_the_page_is_under_budget():
     assert not list(PUBLIC.rglob("*.mp4")) and not list(PUBLIC.rglob("*.webm"))
 
 
+def _last_ink_row(path: Path) -> float:
+    """The bottom edge of the last row with dark pixels, as a fraction of the page height."""
+    from PIL import Image
+
+    with Image.open(path) as im:
+        gray = im.convert("L")
+        w, h = gray.size
+        pixels = gray.load()
+        for y in range(h - 1, -1, -1):
+            if any(pixels[x, y] < 160 for x in range(0, w, 2)):
+                return (y + 1) / h
+    raise AssertionError(f"{path} is blank")
+
+
+def test_both_pages_are_whole_and_full():
+    """#337: no cropped, empty foot. The last line of text on each page sits in the bottom tenth,
+    read from the images themselves and from the metric the build script records."""
+    for side in ("before", "after"):
+        big, small = BA[side]["sources"]
+        # whole US Letter pages, not a crop
+        for src in (big, small):
+            assert abs(src["width"] / src["height"] - 8.5 / 11) < 0.01, (side, src)
+            bottom = _last_ink_row(PUBLIC / src["src"].lstrip("/"))
+            assert 0.90 <= bottom <= 0.985, (side, src["src"], bottom)
+        assert 0.90 <= BA["fill"][side] <= 0.985, BA["fill"]
+        assert abs(_last_ink_row(PUBLIC / big["src"].lstrip("/")) - BA["fill"][side]) < 0.01
+    assert BUILD.MIN_FILL == 0.90
+    assert "cropped_to" not in BA
+
+
 def test_the_weight_check_and_the_ci_step_exist():
     assert (SITE / "scripts" / "check-weight.mjs").is_file()
     pkg = _load(SITE / "package.json")
@@ -253,7 +307,7 @@ def test_highlights_are_real_boxes_computed_from_the_diff():
     assert changes and sum(len(c["removed"]) for c in changes) == BA["counts"]["removed"]
     assert sum(len(c["added"]) for c in changes) == BA["counts"]["added"]
     # The tailored bullet the replay builds is among the changes.
-    assert any("predict late shipments" in " ".join(c["added"]) for c in changes)
+    assert any("predict which subscribers cancel" in " ".join(c["added"]) for c in changes)
 
 
 # --- the page ---------------------------------------------------------------------------
@@ -286,7 +340,7 @@ def test_images_have_alt_text_lazy_loading_and_dimensions():
     tag = re.search(r"<img\b.*?/>", BEFORE_AFTER_SRC, re.S).group(0)
     for needle in ('alt={alt}', 'loading="lazy"', "width={big.width}", "height={big.height}", "srcset="):
         assert needle in tag, needle
-    assert "Read the changes as text" in BEFORE_AFTER_SRC, "highlights need a text alternative"
+    assert "Read every changed line as text" in BEFORE_AFTER_SRC, "highlights need a text alternative"
     assert "md:grid-cols-2" in BEFORE_AFTER_SRC, "side by side on desktop, stacked on mobile"
 
 
@@ -338,4 +392,5 @@ def test_the_readme_documents_the_refresh():
     assert "scripts/build_site_demo.py" in readme
     assert "replay" in readme.lower() and "tectonic" in readme
     assert "check:weight" in readme
+    assert "sample_repos.md" in readme and "usual" in readme
     assert (SCRIPTS / "build_site_demo.py").is_file()
