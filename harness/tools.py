@@ -341,6 +341,39 @@ def _snippet(it: Dict) -> str:
     return (it["text"] or it["title"]).strip().replace("\n", " ")[:200]
 
 
+def _item_preference(p: Dict) -> Dict[str, Any]:
+    return {k: p.get(k) for k in ("preference_id", "text", "polarity", "target_key", "target_term",
+                                  "scope_type", "scope_value", "strength")} | {
+        "negative_pin": is_negative_pin(p)}
+
+
+def _attach_attachments(user_id: UUID, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """What the user has said about each item, on the item (#297): `preferences` (the active ones
+    keyed to its key, in every scope, each carrying its `scope_type` / `scope_value`, strength-5 first)
+    and `job_rules` (`JobRule` rows whose `item_key` it is). One read of each table, not one per row;
+    an item with neither gets two empty lists. Both are additive fields on the item records.
+
+    The size of a list result is bounded by the number of active preferences and rules the user
+    holds (each attaches to one item), not by the number of items, so `list_items` carries them in full
+    instead of counts. A preference with no key (pending) is on no item."""
+    by_pref: Dict[str, List[Dict]] = {}
+    for p in services.load_preferences(user_id):
+        key = (p.get("target_key") or "").strip().lower()
+        if key:
+            by_pref.setdefault(key, []).append(p)
+    from harness.ingest import list_rules  # harness/ingest imports this module
+    by_rule: Dict[str, List[Dict]] = {}
+    for rule in list_rules(user_id):
+        by_rule.setdefault(rule["item_key"].strip().lower(), []).append(rule)
+    for row in rows:
+        key = (row.get("key") or "").strip().lower()
+        prefs = sorted(by_pref.get(key, []),
+                       key=lambda p: (-(p.get("strength") or 0), str(p.get("preference_id"))))
+        row["preferences"] = [_item_preference(p) for p in prefs]
+        row["job_rules"] = list(by_rule.get(key, []))
+    return rows
+
+
 def kg_search(user_id: UUID, query: str, kinds: Optional[Sequence[str]] = None,
               limit: int = 10) -> List[Dict[str, Any]]:
     """Full-text search over the KG (#194): SQLite FTS5 with stemming and BM25,
@@ -358,10 +391,12 @@ def kg_search(user_id: UUID, query: str, kinds: Optional[Sequence[str]] = None,
     ranked = fts_search(docs, " ".join(q), weights=(_TITLE_WEIGHT, 1.0))
     if ranked is not None:
         by_key = {it["key"]: it for it in items}
-        return [_with_context({"key": k, "kind": by_key[k]["kind"], "title": by_key[k]["title"],
+        hits = [_with_context({"key": k, "kind": by_key[k]["kind"], "title": by_key[k]["title"],
                                "score": score, "snippet": _snippet(by_key[k])}, by_key[k])
                 for k, score in ranked[: max(1, int(limit))]]
-    return _lexical_search(items, q, limit)
+    else:
+        hits = _lexical_search(items, q, limit)
+    return _attach_attachments(user_id, hits)
 
 
 def _with_context(hit: Dict[str, Any], item: Dict) -> Dict[str, Any]:
@@ -402,7 +437,7 @@ def get_item(user_id: UUID, key: str) -> Dict[str, Any]:
                     # to start from instead of the raw bullets. Drafts are never listed.
                     from harness import library  # library imports this module
                     out["variants"] = library.list_variants(user_id, norm)
-                return out
+                return _attach_attachments(user_id, [out])[0]
     query = norm.split(":", 1)[-1].replace("|", " ")
     return {"key": key, "error": {
         "code": "not_found", "message": f"No item with key {key!r}.",
@@ -416,8 +451,9 @@ def list_items(user_id: UUID, kind: Optional[str] = None) -> List[Dict[str, Any]
     terms that happened to match; this is that gap (#191).
     """
     items = _records(user_id, [kind] if kind else None)
-    return sorted(({"key": it["key"], "kind": it["kind"], "title": it["title"]}
-                   for it in items), key=lambda r: (r["kind"], r["key"]))
+    return _attach_attachments(user_id, sorted(
+        ({"key": it["key"], "kind": it["kind"], "title": it["title"]} for it in items),
+        key=lambda r: (r["kind"], r["key"])))
 
 
 def suggest_project_contexts(user_id: UUID, include_reviewed: bool = False) -> Dict[str, Any]:
