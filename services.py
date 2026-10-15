@@ -516,6 +516,8 @@ def update_experience(user_id: Optional[UUID], experience_id: str, fields: dict)
         row = session.get(Experience, eid) if eid else None
         if not row or row.user_id != user_id:
             return None
+        from agents.checks import exp_key
+        old_key = exp_key({"title": row.title, "company": row.company})
         if "title" in fields:
             title = str(fields["title"] or "").strip()
             if not title:
@@ -536,7 +538,10 @@ def update_experience(user_id: Optional[UUID], experience_id: str, fields: dict)
         session.add(row)
         session.commit()
         session.refresh(row)
-        return _exp_row_dict(row)
+        new_key = exp_key({"title": row.title, "company": row.company})
+        result = _exp_row_dict(row)
+    follow_rename(user_id, old_key, new_key)
+    return result
 
 
 def update_education(user_id: Optional[UUID], education_id: str, fields: dict) -> Optional[dict]:
@@ -548,6 +553,8 @@ def update_education(user_id: Optional[UUID], education_id: str, fields: dict) -
         row = session.get(Education, eid) if eid else None
         if not row or row.user_id != user_id:
             return None
+        from agents.project_context import edu_key
+        old_key = edu_key({"institution": row.institution, "degree": row.degree})
         if "institution" in fields:
             inst = str(fields["institution"] or "").strip()
             if not inst:
@@ -563,7 +570,10 @@ def update_education(user_id: Optional[UUID], education_id: str, fields: dict) -
         session.add(row)
         session.commit()
         session.refresh(row)
-        return _edu_row_dict(row)
+        new_key = edu_key({"institution": row.institution, "degree": row.degree})
+        result = _edu_row_dict(row)
+    follow_rename(user_id, old_key, new_key)
+    return result
 
 
 def update_project(user_id: Optional[UUID], project_id: str, fields: dict) -> Optional[dict]:
@@ -575,6 +585,8 @@ def update_project(user_id: Optional[UUID], project_id: str, fields: dict) -> Op
         row = session.get(Project, pid) if pid else None
         if not row or row.user_id != user_id:
             return None
+        from agents.checks import proj_key
+        old_key = proj_key({"name": row.name})
         if "name" in fields:
             name = str(fields["name"] or "").strip()
             if not name:
@@ -588,7 +600,10 @@ def update_project(user_id: Optional[UUID], project_id: str, fields: dict) -> Op
         session.add(row)
         session.commit()
         session.refresh(row)
-        return _proj_row_dict(row)
+        new_key = proj_key({"name": row.name})
+        result = _proj_row_dict(row)
+    follow_rename(user_id, old_key, new_key)
+    return result
 
 
 def update_project_blurb(
@@ -718,12 +733,18 @@ def delete_experience(user_id: Optional[UUID], experience_id: str) -> bool:
         if not row or row.user_id != user_id:
             return False
         _record_tombstone(session, user_id, "experience", row.title, row.company)
+        from agents.checks import exp_key
         from agents.project_context import unlink
+        # A role's title alone is a thing other roles share: a term pin on it would refuse a
+        # different role with the same title. "title @ company" names only this one.
+        key = exp_key({"title": row.title, "company": row.company})
+        term = f"{row.title} @ {row.company}" if row.company else row.title
         unlink(session, Project, "experience_id", row.experience_id)
         session.flush()
         session.delete(row)
         session.commit()
-        return True
+    _unlink_deleted(user_id, key, term)
+    return True
 
 
 def delete_education(user_id: Optional[UUID], education_id: str) -> bool:
@@ -736,12 +757,14 @@ def delete_education(user_id: Optional[UUID], education_id: str) -> bool:
         if not row or row.user_id != user_id:
             return False
         _record_tombstone(session, user_id, "education", row.institution, row.degree)
-        from agents.project_context import unlink
+        from agents.project_context import edu_key, unlink
+        key, term = edu_key({"institution": row.institution, "degree": row.degree}), row.institution
         unlink(session, Project, "education_id", row.education_id)
         session.flush()
         session.delete(row)
         session.commit()
-        return True
+    _unlink_deleted(user_id, key, term)
+    return True
 
 
 def delete_project(user_id: Optional[UUID], project_id: str) -> bool:
@@ -759,12 +782,15 @@ def delete_project(user_id: Optional[UUID], project_id: str) -> bool:
         for blurb in list(row.blurbs):
             session.delete(blurb)
         # An award won for it stays an award, just no longer tied to a project.
+        from agents.checks import proj_key
         from agents.project_context import unlink
+        key, term = proj_key({"name": row.name}), row.name
         unlink(session, Achievement, "project_id", row.project_id)
         session.flush()
         session.delete(row)
         session.commit()
-        return True
+    _unlink_deleted(user_id, key, term)
+    return True
 
 
 def get_jobs() -> list[dict]:
@@ -2001,6 +2027,102 @@ def apply_preference_decision(user_id: UUID, proposal: dict) -> str:
     except Exception as exc:
         logger.warning("apply_preference_decision failed for user %s: %s", user_id, exc)
         return "Could not save that preference."
+
+
+def reanchor_preferences(user_id: UUID, changes: list[dict]) -> list[dict]:
+    """Move preferences to another target, the supersede way (#297). Never deletes.
+
+    Each change is `{preference_id, target_key, target_type?, target_term?, provenance?}`: the
+    active row is marked `superseded` and a copy that differs only in the given target fields (and
+    `provenance`, merged over the old row's) is written with `supersedes_id` pointing back, so
+    the history of one preference stays one chain, as `apply_preference_decision` leaves it.
+    `target_key` may be None: an unlink back to a pending, term-only preference. A row that is
+    not this user's, or no longer active, is skipped. The persona is rebuilt once.
+
+    Returns the new rows, in order. Never raises.
+    """
+    from agents.preferences import STATUS_ACTIVE, STATUS_SUPERSEDED
+    from database.models import UserPreference
+
+    moved: list[dict] = []
+    try:
+        with Session(engine) as session:
+            for change in changes or []:
+                pid = _as_uuid(change.get("preference_id"))
+                prior = session.get(UserPreference, pid) if pid else None
+                if prior is None or prior.user_id != user_id or prior.status != STATUS_ACTIVE:
+                    continue
+                provenance = prior.provenance
+                if isinstance(provenance, str):
+                    try:
+                        provenance = json.loads(provenance)
+                    except (ValueError, TypeError):
+                        provenance = {}
+                prior.status = STATUS_SUPERSEDED
+                prior.updated_at = utc_now()
+                session.add(prior)
+                row = UserPreference(
+                    user_id=user_id, text=prior.text, polarity=prior.polarity,
+                    target_type=change.get("target_type") or prior.target_type,
+                    target_key=change.get("target_key") or None,
+                    target_term=(change["target_term"] if "target_term" in change
+                                 else prior.target_term),
+                    scope_type=prior.scope_type, scope_value=prior.scope_value,
+                    strength=prior.strength, status=STATUS_ACTIVE, supersedes_id=prior.preference_id,
+                    confidence=prior.confidence, edited=prior.edited,
+                    provenance={**(provenance or {}), **(change.get("provenance") or {})},
+                    extraction_version=prior.extraction_version,
+                )
+                session.add(row)
+                session.flush()
+                moved.append(_preference_dict(row))
+            session.commit()
+    except Exception as exc:
+        logger.warning("reanchor_preferences failed for user %s: %s", user_id, exc)
+        return []
+    if moved:
+        rebuild_persona(user_id)
+    return moved
+
+
+def follow_rename(user_id: UUID, old_key: str, new_key: str) -> None:
+    """A renamed item keeps its preferences: the active ones keyed to `old_key` are re-keyed to
+    `new_key`, with `provenance.renamed_from`. Item keys are derived from names, so without this
+    a rename leaves the preference pointing at nothing (#297). Never raises."""
+    if not old_key or old_key == new_key:
+        return
+    try:
+        changes = [{"preference_id": p["preference_id"], "target_key": new_key,
+                    "provenance": {"renamed_from": old_key}}
+                   for p in load_preferences(user_id)
+                   if (p.get("target_key") or "").strip().lower() == old_key]
+        if changes:
+            reanchor_preferences(user_id, changes)
+    except Exception as exc:
+        logger.warning("follow_rename failed for user %s: %s", user_id, exc)
+
+
+def _unlink_deleted(user_id: UUID, key: str, term: str) -> None:
+    """A deleted item cannot hold a preference, but the user's ban outlives it: each active
+    preference keyed to `key` becomes a pending one (no key, `term` as its subject, `provenance.
+    unlinked_from`), so what it names is still kept off the page (#297). Never raises."""
+    if not key:
+        return
+    try:
+        changes = []
+        for p in load_preferences(user_id):
+            if (p.get("target_key") or "").strip().lower() != key:
+                continue
+            kept = (p.get("target_term") or "").strip()
+            # An education or an award is stored under the user's own words (#295): keep them.
+            words = kept if key.startswith(("edu:", "ach:")) and kept else (term or kept)
+            changes.append({"preference_id": p["preference_id"], "target_key": None,
+                            "target_type": "topic", "target_term": words or None,
+                            "provenance": {"unlinked_from": key}})
+        if changes:
+            reanchor_preferences(user_id, changes)
+    except Exception as exc:
+        logger.warning("_unlink_deleted failed for user %s: %s", user_id, exc)
 
 
 # Fields a human may correct. `polarity` and `strength` are the two that change

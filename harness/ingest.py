@@ -55,6 +55,7 @@ from database.models import (
     ProjectBlurb, Skill, UserSkill,
 )
 from harness import library
+from harness.relink import relink
 from harness.tools import KINDS, _records, ach_key, edu_key, skill_key
 
 log = logging.getLogger(__name__)
@@ -229,6 +230,7 @@ def _correct(user_id: UUID, kind: str, data: Dict) -> Optional[Tuple[str, Dict, 
             return ("skipped_manual", row.model_dump(),
                     "The user edited this item by hand; ask them to change it in the editor.")
         changed = []
+        was = _row_key(kind, row.model_dump())
         for field in _CORRECTABLE[kind]:
             if field not in data:
                 continue
@@ -245,8 +247,12 @@ def _correct(user_id: UUID, kind: str, data: Dict) -> Optional[Tuple[str, Dict, 
             session.add(row)
             session.commit()
             session.refresh(row)
-        return ("corrected" if changed else "unchanged", row.model_dump(),
-                f"Set {', '.join(changed)}." if changed else None)
+        now = _row_key(kind, row.model_dump())
+        result = ("corrected" if changed else "unchanged", row.model_dump(),
+                  f"Set {', '.join(changed)}." if changed else None)
+    if now != was:          # an education's degree is in its key: its preferences follow it (#297)
+        services.follow_rename(user_id, was, now)
+    return result
 
 
 def _add_blurbs(project_id: Any, blurbs: Sequence[str]) -> int:
@@ -423,7 +429,8 @@ def upsert_items(user_id: UUID, records: Sequence[Dict], source: str = DEFAULT_S
     counts: Dict[str, int] = {}
     for r in results:
         counts[r["status"]] = counts.get(r["status"], 0) + 1
-    return {"results": results, "counts": counts}
+    # A preference that named something the graph lacked attaches to it now (#297).
+    return {"results": results, "counts": counts, "relinked": relink(user_id)["relinked"]}
 
 
 # ── job-scoped rules ─────────────────────────────────────────────────────────

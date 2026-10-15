@@ -43,6 +43,53 @@ The Data Explorer has a **Bullet picker** tab beside the evidence map. For one j
 
 ---
 
+## Issue 318 — Skill areas via keyword table and cached Jev
+**Status:** complete | **Tests:** 2991 pass on SQLite (16 new), 24 skipped, 0 fail; the Postgres leg was not run locally (the Docker daemon was not running), CI's required Postgres leg covers it
+
+A skill the #136 keyword table cannot place used to land in "Other" for good. It is now asked of Jev once, when it is ingested, and the answer is cached, so the evidence map, its job overlay and the coming area map group it reliably. Listing a profile's skills still never makes a call: the read path only reads the cache.
+
+### What shipped
+
+- **`harness/decisions/skill_area.py`** (`skill_area@v1`): one `Choice` per skill over the seven areas plus `Other`, the option descriptions being `areas.AREA_DESCRIPTIONS` (defined once, next to `AREAS`). `classify` is the write path (`engine.decide`: cache, one batched request for the misses, fallback on no key, mode `off` or an API error); `cached` is the read path.
+- **`engine.lookup`**: a cache-only read of Jev answers, in any mode, that never calls the API and never raises on a miss. The read path uses it, so `ART_JEV_MODE=off` still shows areas Jev already decided.
+- **`knowledge_graph/areas.py`**: `keyword_area` is the old rule path unchanged; `skill_area(name, category)` (signature kept) and the new batch `skill_areas(pairs)` run it first and consult the cache only for `Other`. `evidence_view` now makes one batch call for all of a profile's skills; its output is identical.
+- **Write time**: `KGStoreMixin._save_skills` classifies the skills it touched that the table leaves in `Other`, in one request, after the save. It cannot fail or roll back an ingest (any error is swallowed), and with no key or Jev off it does nothing.
+- **Backfill**: `knowledge_graph.areas.classify_unplaced_skills(user_id)` and `python scripts/classify_unplaced_skills.py --user-id <uuid> [--dry-run]`. It asks only for skills with no cached answer, so a second run makes no call.
+- **Tests (16 new, `tests/test_skill_area.py`)**: keyword path makes no Jev work; one request carries every unplaced skill of an ingest and the table's skills are not asked; the view returns the cached area with Jev off and no live client requested; a read miss is `Other` with no network; no key, an API 401 and a crash in the classifier each leave the ingest succeeding with `Other`; an `Other` answer is cached; a version bump invalidates; the backfill (dry run, scope to one user, once only, no key); `engine.lookup` modes and point check; the question text.
+
+### Deviations from spec
+
+- **The skill is in the question, not the state.** The plan said state = `{name, category}`, but `engine.decide` sends one state per request, so that would be one request per skill. The state is a constant and each question names its skill, so one request carries an ingest's unplaced skills and each skill still has its own cache row (the key hashes the question). The name is not case-folded; "Figma" and "figma" are separate rows.
+- **No confidence threshold.** The area is Jev's own choice. A wrong area costs a drag in the map, not a wrong resume, and there is no labelled set to fit one on; `Answer.p` is available if misfilings show up.
+- **The read path ignores `ART_JEV_MODE`** (plan: `mode_override="replay"` and catch the miss). `engine.lookup` is a plain cache read instead, which also avoids losing every hit in a batch to the first miss. Mode `off` still stops any request.
+- **Backfill is a `scripts/` entry point, not an `art` verb.** No existing CLI verb or harness tool fits a one-off per-user maintenance run cleanly. It takes `--user-id` explicitly because `DATABASE_URL` may point at production.
+- **`services.get_job_skills` is untouched** (parallel work on #319); it calls `skill_area` per skill, so it makes one cache query per skill the table cannot place.
+- **Not done:** the Postgres leg (Docker daemon not running); a live run against TypeSafe (tests use a fake transport). Skills ingested by `agents/job_analyzer.py` and `agents/chat.py` (which write `Skill` rows without `_save_skills`) are classified by the backfill or the next ingest that touches them, not at their own write.
+
+---
+
+## Issue 297 — Preferences follow the graph: re-link on ingest, follow renames and deletes, items carry their preferences
+**Status:** complete | **Tests:** 2835 pass on SQLite (21 new), 24 skipped
+
+A preference about something the graph lacked stayed pending forever, a renamed item silently orphaned its keyed preferences, a deleted one left a dangling key that enforced nothing, and `get_item` / `kg_search` / `list_items` showed none of what the user had said about an item. This is phase 4 of 7 of the preference-anchoring plan (#295–#300).
+
+### What shipped
+- **`harness/relink.py::relink(user_id)`**, model-free, called at the end of `upsert_items`, which reports the result as a new `relinked` list (additive). Each active pending `suppress` / `emphasize` row (`target_key` NULL, `target_term` set) is run through `anchors.resolve`; only `bound` relinks. The row is superseded by a keyed copy with the same text, polarity, strength and scope, `target_key` the bound key, `target_type` from the key's kind (`edu:` / `ach:` stay `topic`, as in #295) and `provenance.relinked_from` the old id. `ambiguous`, `pending`, `document` and `multiple` leave the row untouched. Idempotent: a second run finds nothing that binds. A failure is logged and leaves the rows pending, never failing an ingest.
+- **`services.reanchor_preferences`**, the supersede-and-copy write the three paths share: it marks the prior row `superseded`, links `supersedes_id`, merges `provenance`, and rebuilds the persona once per batch. Nothing is deleted.
+- **Renames.** `update_experience`, `update_project` and `update_education` compare the item's key before and after; a changed key re-keys the active preferences that pointed at the old one (`provenance.renamed_from`). `ingest._correct` can only change an education's `degree`, which is in its key (`edu:<institution>|<degree>`); it follows the same way. (An experience's title and a project's name are not correctable through ingestion.)
+- **Deletes.** `delete_experience`, `delete_education` and `delete_project` supersede each active preference keyed to the item with a pending copy: `target_key` NULL, `target_type` `topic`, `target_term` the item's name (a role's `title @ company`, a project's name; an education keeps the user's own words), `provenance.unlinked_from` the key. A ban outlives its item, and the term pin keeps enforcing it.
+- **Items carry their preferences.** `get_item`, `kg_search` hits and `list_items` rows have `preferences` (active rows keyed to the item, in every scope, each with `scope_type` / `scope_value`, `strength`, `negative_pin`; strength 5 first) and `job_rules` (`JobRule` rows whose `item_key` it is). Both are additive fields in the contract (`ItemPreference`, `RelinkedPreference`). `list_items` carries them in full rather than as counts: each preference or rule attaches to one item, so the size is bounded by how many the user holds, not by how many items they have, and an item with none gets two empty lists.
+- **Docs.** `docs/harness.md` (the tool table and the memory-gate section).
+- **Tests.** `tests/test_preference_relink.py`: a pending Kafka ban binds to `skill:kafka` when a Kafka skill is ingested and still refuses a bullet that says Kafka in another item (through `execute_plan`); relinking again changes nothing; "Kafka Streams" does not bind a Kafka ban; two matching items stay pending; role-family scope and an education's `topic` type survive; a project rename and a role rename re-key; a corrected degree re-keys an education preference; deleting an item pends its ban and the term pin still blocks; an unlinked ban comes back only to its own key; `get_item`, `kg_search` and `list_items` carry preferences and job rules; the contract validates every new field.
+
+### Deviations from spec
+- **A deleted role's ban is pended as `title @ company`, not its title** (found in review). A term pin on "Data Scientist" would refuse a different role with the same title, and the ban meant only the deleted one. `title @ company` is the label form the resolver binds at the name step, so the same-key relink still works when the row comes back, and it cannot match another role's text. A project's name and an education's words are unchanged. Contrastive test: two "Data Scientist" roles, ban the Acme one, delete it, and the Nimbus role and a bullet saying "data scientist" produce no violation.
+- **An unlinked ban re-binds only to its own key.** A pending row made by a delete carries `unlinked_from`, and `relink` binds it only when the resolver returns that same key. Without it, deleting one of two roles titled "Research Assistant" would hand the ban to the other on the next ingest, removing an item the user never named. The cost: a deleted item the user re-adds under a different name stays a term pin until they restate it.
+- **No skill or achievement delete path exists** (no `services.delete_skill` / `delete_achievement`, and no router for them). The only removals are the duplicate merges in `KGStoreMixin._heal_*`, which run inside ingestion and delete the poorer of two rows that `_*_match` called the same item. When the two rows' keys differ, a preference keyed to the deleted row's key is left dangling; an `exp:` / `proj:` pin on it enforces nothing. A sweep for dangling keys in `relink` would catch it, but it would also demote any keyed row whose item the resolver does not list, and the existing suites seed such rows on purpose (`proj:coursework-db`), so it is left for a follow-up.
+- **`target_term` is not rewritten on a rename.** It is the user's words as stated (`skill: Kafka`, `experience: …`), which is what a human reads back; enforcement of `exp:` / `proj:` pins is by key.
+- **The rename hooks are in `services`, not the router.** `update_*` / `delete_*` are the one place the web editor, the CLI and the harness all go through, so no caller can skip them. `harness/` is not imported by `services`.
+- **Role-family and job-scoped preferences are listed on the item**, marked by `scope_type`, as the issue asks, not filtered to the job being tailored. A host that wants the scope-filtered set still reads `art_briefing` / `art_pins`.
+- **The Postgres leg was not run locally** (see the PR for whether Docker was up). CI runs it.
 ## Issue 136 — Evidence map in art ui
 **Status:** complete | **Tests:** 2979 pass on SQLite (52 new), 16 skipped, 0 fail; frontend 151 pass (39 new); `npm run build` and `npm ci --dry-run` pass; the Postgres leg was not run locally (the Docker daemon was not running), CI's required Postgres leg covers it
 
@@ -1926,7 +1973,7 @@ A job's resume used to have one current version plus a one-level undo, and web r
 ---
 
 ## Issue 191 — One tool contract, served over MCP and a JSON CLI
-**Status:** complete | **Tests:** 1465 pass on SQLite (20 new), 10 skipped
+**Status:** complete | **Tests:** 1465 pass on SQLite (21 new), 10 skipped
 
 Hosts now reach ART through one declared contract instead of hand-written MCP closures. The contract also adds the two tools the #189 e2e run was missing.
 
