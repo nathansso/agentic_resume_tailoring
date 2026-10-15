@@ -132,6 +132,39 @@ def test_privacy_statement_is_local_first_and_accurate_about_jev() -> None:
     assert "Jev never writes resume text" in src
 
 
+def _faq_answer(src: str, question: str) -> tuple[str, str]:
+    """(a, more) of one FAQ entry, read from the frontmatter list."""
+    entry = re.search(
+        rf'q:\s*"{re.escape(question)}",\s*a:\s*"([^"]*)",(?:\s*more:\s*"([^"]*)",)?', src
+    )
+    assert entry, question
+    return entry.group(1), entry.group(2) or ""
+
+
+def test_api_key_faq_answers_no_first_then_offers_jev_as_optional() -> None:
+    """#356: the key is an optional upgrade, never a step the page asks for."""
+    answer, more = _faq_answer(INDEX.read_text(encoding="utf-8"), "Do I need an API key?")
+    assert answer.startswith("No."), answer
+    assert more.startswith("Optional: strengthen the checks with Jev."), more
+    # What Jev adds is limited to what docs/harness.md section 4 supports.
+    for claim in ("reworded claim", "cited source", "banned topic", "best approved bullet"):
+        assert claim in more, claim
+    # No Jev-vs-fallback numbers until #350 reports the measured fallbacks.
+    assert not re.search(r"\d", more)
+
+
+def test_privacy_note_leads_with_local_and_puts_jev_under_the_optional_heading() -> None:
+    src = INDEX.read_text(encoding="utf-8")
+    aside = src[src.index('aria-labelledby="privacy-heading"'):src.index("</aside>")]
+    local = aside.index("Everything ARTie stores stays on your computer")
+    optional = aside.index("Optional: strengthen the checks with Jev")
+    assert local < optional
+    # The Jev request wording lives under the optional heading, not before it.
+    assert "TypeSafe" not in aside[:optional]
+    assert "excerpts of your resume bullets" in aside[optional:]
+    assert "ARTie works fully without this" in aside[optional:]
+
+
 def test_requirements_are_named_honestly() -> None:
     src = INDEX.read_text(encoding="utf-8")
     for needle in ("Claude Code or Codex", "uv", "tectonic or pdflatex"):
