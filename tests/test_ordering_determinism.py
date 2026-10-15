@@ -634,3 +634,261 @@ def test_landing_context_and_job_threads_number_independently(isolated_engine):
 
     assert [m["content"] for m in landing] == ["landing one", "landing two"]
     assert [m["content"] for m in job] == ["job one", "job two"]
+
+
+# ── project bullet keys (`proj:<name>#b<n>`, issue #327) ─────────────────────
+#
+# A project's bullets are its `ProjectBlurb` rows, and a citation names one by
+# position. They were read back sorted on `(style, blurb_id)`: ingest stores every
+# bullet under one `style`, so a random uuid decided which was `#b0`, and two clean
+# ingests of one profile numbered a project's bullets differently.
+#
+# **These tests write the rows so the old order and the right order disagree.**
+# Passing against the old key proves nothing, for the same reason as above: a few
+# random uuids sort into ingest order often enough to go green by luck.
+
+PROJ_KEY = "proj:stable-keys"
+PROJ_BULLETS = [
+    "Predicted bus delays from 2M GPS pings.",
+    "Cut inference latency 3x with a feature cache.",
+    "Shipped a dashboard the transit team uses daily.",
+    "Wrote the evaluation harness and the replay tests.",
+]
+
+
+def _ingest_project(uid, name="stable-keys", bullets=PROJ_BULLETS):
+    from harness.ingest import upsert_items
+    upsert_items(uid, [{"kind": "project", "data": {
+        "name": name, "description": "Transit delay prediction.", "blurbs": list(bullets)}}])
+
+
+def _project_id(engine, uid, name="stable-keys"):
+    from database.models import Project
+    with Session(engine) as s:
+        return s.exec(select(Project).where(Project.user_id == uid,
+                                            Project.name == name)).one().project_id
+
+
+def _scramble_blurb_storage(engine, uid):
+    """Rewrite the project's blurb rows so every old tiebreak disagrees with ingest order.
+
+    Rows are re-inserted under one `style`, last bullet first, with ids that sort
+    in reverse of their `seq` and one shared `created_at`: the physical order, the
+    `blurb_id` order and the timestamp all say the opposite of the ordinal.
+    """
+    from database.models import ProjectBlurb
+
+    pid = _project_id(engine, uid)
+    with Session(engine) as s:
+        rows = sorted(s.exec(select(ProjectBlurb).where(ProjectBlurb.project_id == pid)).all(),
+                      key=lambda r: r.seq)
+        saved = [(r.content, r.seq, r.style) for r in rows]
+        for r in rows:
+            s.delete(r)
+        s.commit()
+        ids = sorted((uuid4() for _ in saved), reverse=True)
+        for (content, seq, style), blurb_id in reversed(list(zip(saved, ids))):
+            s.add(ProjectBlurb(blurb_id=blurb_id, project_id=pid, style=style, content=content,
+                               seq=seq, created_at=FIXED))
+        s.commit()
+        rows = s.exec(select(ProjectBlurb).where(ProjectBlurb.project_id == pid)).all()
+        by_id = [r.content for r in sorted(rows, key=lambda r: (r.style, str(r.blurb_id)))]
+    assert by_id == PROJ_BULLETS[::-1], "the old key must now disagree with ingest order"
+
+
+def _clear_blurb_seq(engine):
+    """Return every blurb to its pre-#327 shape (no position)."""
+    from database.models import ProjectBlurb
+    with Session(engine) as s:
+        for r in s.exec(select(ProjectBlurb)).all():
+            r.seq = None
+            s.add(r)
+        s.commit()
+
+
+def _user(engine, name="U"):
+    from database.models import User
+    with Session(engine) as s:
+        u = User(name=name, email=f"{name.lower()}@example.com")
+        s.add(u)
+        s.commit()
+        return u.user_id
+
+
+def test_ingest_numbers_a_projects_bullets_in_the_order_they_were_given(isolated_engine):
+    from harness.executor import _KG
+
+    uid = _user(isolated_engine)
+    _ingest_project(uid)
+    assert _KG(uid).source_bullets[PROJ_KEY] == PROJ_BULLETS
+
+
+def test_bullet_keys_do_not_depend_on_blurb_id_style_or_physical_order(isolated_engine):
+    """Every builder of `#b<n>` agrees with ingest order when storage disagrees."""
+    from database.models import Project
+    from harness.executor import _KG
+    from harness.tools import _records
+    from knowledge_graph.builder import SkillGraphBuilder
+
+    uid = _user(isolated_engine)
+    _ingest_project(uid)
+    _scramble_blurb_storage(isolated_engine, uid)
+
+    kg = _KG(uid)
+    assert kg.source_bullets[PROJ_KEY] == PROJ_BULLETS
+    assert kg.item(PROJ_KEY)["cites"] == {t: [f"{PROJ_KEY}#b{n}"] for n, t in enumerate(PROJ_BULLETS)}
+    assert all(kg.resolves(f"{PROJ_KEY}#b{n}") for n in range(len(PROJ_BULLETS)))
+    rec = next(r for r in _records(uid, ["project"]) if r["key"] == PROJ_KEY)
+    assert [b["content"] for b in rec["record"]["blurbs"]] == PROJ_BULLETS
+    with Session(isolated_engine) as s:
+        projects = s.exec(select(Project).where(Project.user_id == uid)).all()
+        built = SkillGraphBuilder._project_blurbs(s, projects)
+    assert list(built.values()) == [PROJ_BULLETS]
+
+
+def test_a_cite_names_the_same_bullet_through_the_gate_cut_and_texdiff(isolated_engine, monkeypatch):
+    """The consumers named in #327, end to end, over scrambled storage."""
+    from eval.profile_fixture import load_profile
+    from eval.scripted_host import open_task_job, seed_profile
+    from eval.tailoring_benchmark import PROFILES_DIR, load_tasks
+    from harness import executor, texdiff, tree
+    from harness.decisions.support import resolve_evidence
+    from harness.executor import _KG, execute_plan
+
+    monkeypatch.setattr(executor, "MEASURER", lambda texts: [1 for _ in texts])
+    uid = seed_profile(load_profile(PROFILES_DIR / "benchmark_profile.md"))
+    job_id = open_task_job(uid, load_tasks(limit=5)[3])
+    _ingest_project(uid)
+    _scramble_blurb_storage(isolated_engine, uid)
+
+    # The evidence a cite resolves to (the support and consistency checks).
+    kg = _KG(uid)
+    for n, text in enumerate(PROJ_BULLETS):
+        assert resolve_evidence([f"{PROJ_KEY}#b{n}"], kg.source_bullets) == [text]
+
+    first = execute_plan(uid, {"job_id": job_id})
+    assert first["committed"]
+    # cut_bullets: `#b1` removes the second bullet as written, and only that one.
+    out = execute_plan(uid, {"job_id": job_id, "parent": first["node_id"], "nodes": [
+        {"id": "c", "op": "delete_bullet", "item_key": PROJ_KEY, "because": "user:too long",
+         "cut_bullets": [f"{PROJ_KEY}#b1"]}]})
+    assert out["nodes"][0]["status"] == "accepted" and out["committed"]
+    page = next(i for i in tree.get_node(uid, out["node_id"])["content"]["projects"]
+                if i["name"] == "stable-keys")
+    assert page["bullets"] == [b for n, b in enumerate(PROJ_BULLETS) if n != 1]
+
+    # texdiff names the same ordinal on the way back out.
+    edits = texdiff.node_edits(uid, tree.get_node(uid, first["node_id"]),
+                               tree.get_node(uid, out["node_id"]))
+    [gone] = [e for e in edits["bullets"] if e["item"] == PROJ_KEY]
+    assert (gone["change"], gone["bullet"], gone["before"]) == (
+        "removed", f"{PROJ_KEY}#b1", PROJ_BULLETS[1])
+
+
+def test_clean_ingests_of_one_profile_number_every_project_the_same(isolated_engine):
+    """The acceptance criterion. Eight bullets, three users: under the old key each
+    user matched ingest order with probability 1/8! (a random uuid decided), so
+    this failed essentially every run."""
+    from harness.executor import _KG
+
+    bullets = [f"Bullet number {i} about transit delays." for i in range(8)]
+    seen = []
+    for name in ("A", "B", "C"):
+        uid = _user(isolated_engine, name)
+        _ingest_project(uid, bullets=bullets)
+        seen.append(_KG(uid).source_bullets[PROJ_KEY])
+    assert seen == [bullets] * 3
+
+
+def test_a_later_ingest_appends_after_the_bullets_already_stored(isolated_engine):
+    from harness.executor import _KG
+
+    uid = _user(isolated_engine)
+    _ingest_project(uid, bullets=PROJ_BULLETS[:2])
+    _ingest_project(uid, bullets=[PROJ_BULLETS[0], *PROJ_BULLETS[2:]])   # one repeat, two new
+    assert _KG(uid).source_bullets[PROJ_KEY] == PROJ_BULLETS
+
+
+# -- stores written before the column ----------------------------------------
+
+def _legacy_order(engine, uid):
+    """What a pre-#327 store read back: sorted on (style, blurb_id)."""
+    from database.models import ProjectBlurb
+    pid = _project_id(engine, uid)
+    with Session(engine) as s:
+        rows = s.exec(select(ProjectBlurb).where(ProjectBlurb.project_id == pid)).all()
+    return [r.content for r in sorted(rows, key=lambda r: (r.style or "", str(r.blurb_id)))]
+
+
+def test_a_store_with_no_positions_still_resolves_the_way_it_always_did(isolated_engine):
+    """Rows with `seq` NULL (a pre-fix store, an old export) keep their (style, blurb_id)
+    order: that is the order any cite already stored against them was written under."""
+    from harness.executor import _KG
+
+    uid = _user(isolated_engine)
+    _ingest_project(uid)
+    _clear_blurb_seq(isolated_engine)
+    legacy = _legacy_order(isolated_engine, uid)
+    assert sorted(legacy) == sorted(PROJ_BULLETS)
+    assert _KG(uid).source_bullets[PROJ_KEY] == legacy
+
+
+def test_the_backfill_freezes_the_legacy_order_so_stored_cites_keep_their_bullets(isolated_engine):
+    import database.db as db
+    from database.models import ProjectBlurb
+    from harness.executor import _KG
+
+    uid = _user(isolated_engine)
+    _ingest_project(uid)
+    _clear_blurb_seq(isolated_engine)
+    before = _KG(uid).source_bullets[PROJ_KEY]
+
+    db._backfill_blurb_seq()
+
+    assert _KG(uid).source_bullets[PROJ_KEY] == before      # no cite moved
+    with Session(isolated_engine) as s:
+        assert sorted(r.seq for r in s.exec(select(ProjectBlurb)).all()) == [0, 1, 2, 3]
+    db._backfill_blurb_seq()                                  # idempotent
+    assert _KG(uid).source_bullets[PROJ_KEY] == before
+
+
+def test_a_bullet_added_to_an_unnumbered_project_goes_last(isolated_engine):
+    """`next_blurb_seq` numbers the old rows first; otherwise the new bullet (seq 0)
+    would sort ahead of the unnumbered ones and shift every existing cite."""
+    from harness.executor import _KG
+
+    uid = _user(isolated_engine)
+    _ingest_project(uid, bullets=PROJ_BULLETS[:3])
+    _clear_blurb_seq(isolated_engine)
+    before = _KG(uid).source_bullets[PROJ_KEY]
+    _ingest_project(uid, bullets=[PROJ_BULLETS[3]])
+    assert _KG(uid).source_bullets[PROJ_KEY] == [*before, PROJ_BULLETS[3]]
+
+
+def test_init_db_adds_the_column_to_an_old_store_and_keeps_its_bullets_where_they_were(isolated_engine):
+    """The deployed path: `projectblurb.seq` arrives by ALTER TABLE, the ordinals by backfill.
+
+    `conftest` builds schemas with `create_all`, so nothing else in the suite runs the
+    migration list. Dropping the column (and its index) reproduces a pre-#327 database
+    on both engines; the bullets must come out of `init_db()` in the order they were
+    read in before it, which is the order any stored cite was written against.
+    """
+    from sqlalchemy import text
+    import database.db as db
+    from harness.executor import _KG
+
+    uid = _user(isolated_engine)
+    _ingest_project(uid)
+    _scramble_blurb_storage(isolated_engine, uid)
+    legacy = _legacy_order(isolated_engine, uid)
+    with Session(isolated_engine) as s:
+        s.execute(text("DROP INDEX IF EXISTS ix_projectblurb_seq"))
+        s.execute(text("ALTER TABLE projectblurb DROP COLUMN seq"))
+        s.commit()
+
+    db.init_db()
+
+    assert _KG(uid).source_bullets[PROJ_KEY] == legacy
+    with Session(isolated_engine) as s:
+        seqs = s.execute(text("SELECT seq FROM projectblurb ORDER BY seq")).scalars().all()
+    assert seqs == [0, 1, 2, 3]

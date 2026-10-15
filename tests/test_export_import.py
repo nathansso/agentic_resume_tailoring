@@ -91,7 +91,7 @@ def seed(engine, uid=UID, email="ada@example.org", with_secrets=True):
                             issuer="Example Hack", seq=0, project_id=i("proj"),
                             created_at=T0, updated_at=T0))
         s.add(m.ProjectBlurb(blurb_id=i("blurb"), project_id=i("proj"), style="metrics",
-                             content="Compared two rankers", created_at=T0))
+                             content="Compared two rankers", seq=0, created_at=T0))
         s.add(m.UserSkill(user_skill_id=i("us"), user_id=uid, skill_id=i("sk-py"),
                           proficiency=4, is_core=True, created_at=T0, updated_at=T0))
         s.add(m.JobDescription(job_id=i("job1"), user_id=uid, title="Data Scientist",
@@ -280,6 +280,7 @@ def test_the_round_trip_keeps_keys_links_and_values(isolated_engine, tmp_path):
         assert var.cites == ["exp:data intern|acme#b0"] and var.status == "approved"
         assert s.get(m.JobRoleFamily, _id("job1")).source == "host"
         assert s.get(m.Experience, _id("exp")).bullets[0] == "Built a churn model"
+        assert s.get(m.ProjectBlurb, _id("blurb")).seq == 0      # bullet position survives (#327)
         assert s.get(m.Project, _id("proj")).experience_id == _id("exp")
         pins = [p for p in s.execute(sa.select(m.UserPreference)).scalars()
                 if p.strength == 5 and p.polarity == "suppress"]
