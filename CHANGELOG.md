@@ -39,9 +39,6 @@ A skill the #136 keyword table cannot place used to land in "Other" for good. It
 
 ---
 
-
----
-
 ## Issue 297 — Preferences follow the graph: re-link on ingest, follow renames and deletes, items carry their preferences
 **Status:** complete | **Tests:** 2835 pass on SQLite (21 new), 24 skipped
 
