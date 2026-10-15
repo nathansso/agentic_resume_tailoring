@@ -202,6 +202,14 @@ class ProjectBlurb(SQLModel, table=True):
     style: str # 'concise', 'detailed', 'metrics', 'technical'
     content: str # The actual generated text
     created_at: datetime = Field(default_factory=utc_now)
+    # Position among the project's bullets (issue #327): the order they were
+    # written in. A project's blurbs are its bullets, and a citation names one by
+    # position (`proj:<name>#b<n>`), so `style` (often shared) and `blurb_id` (a
+    # random uuid) cannot be what decides which is `#b0`. NULL on rows written
+    # before the column: those keep the old (style, blurb_id) order, which is
+    # what their cites were written against. Read through
+    # `database.db.ordered_blurbs`; assigned by `database.db.next_blurb_seq`.
+    seq: Optional[int] = Field(default=None, index=True)
 
     project: Project = Relationship(back_populates="blurbs")
 
