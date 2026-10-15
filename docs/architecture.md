@@ -22,7 +22,7 @@ Companion documents: [`benchmark.md`](benchmark.md) (what the numbers mean),
 >   `suggest_actions`, and the editor is `art ui` in local mode.
 >
 > This file keeps describing merged behaviour, and is updated as each harness issue lands. It
-> was last brought level with `CHANGELOG.md` through #244.
+> was last brought level with `CHANGELOG.md` through #287 (the mid-October merges).
 
 ---
 
@@ -70,6 +70,10 @@ Two vocabularies organise everything below:
 | Bullet library, baselines | harness (memory) | `harness/library.py`, `BulletVariant` / `TrackBaseline` / `JobRoleFamily` | `upsert_items` (kind `variant`), `promote_bullet`, `approve_variant`, `save_baseline` | `suggest_actions`, `open_job`, the executor |
 | Memory gate | harness (memory write path) | `harness/memory.py`, `harness/decisions/memory_gate.py` | `observe`, `record_preference`, the `user-prompt` hook | `art_briefing`, `art_pins`, the executor's pins |
 | Skill retrieval | retrieval | `agents/skill_matching.py`, `knowledge_graph/builder.py` | — | `kg_default_content`, `open_job` |
+| Seniority detection | scoring input | `agents/seniority.py` | — | `ATSScoringEngine._role_level`, `agents/jd_payload.py`, the profile checks and the corpus audit |
+| Policy artifact | harness (config) | `harness/policy.json`, `harness/policy.py` | a re-fit | every threshold and guard tolerance (§8.8) |
+| Release wheel | harness (distribution) | `.github/workflows/release.yml`, `harness/hooks.py` (`WHEEL_URL`, `SOURCE`) | a `v*` tag | the plugin, the Codex hooks, `uvx` (§8.11) |
+| Landing site | outside the product | `site/` (Astro), `.github/workflows/site.yml` | — | visitors, on Vercel (§9) |
 | Export and import | harness (storage) | `harness/export_import.py` | `art export`, `art import` | the user |
 | The clock | invariant | `database/clock.py` | every `created_at` and "now" | every datetime comparison |
 
@@ -507,6 +511,17 @@ that scored the baseline, so the two are directly comparable:
 | `keyword_coverage` | 0.30 | JD keywords covered, weighted by importance × supportability (§5.3) |
 | `section_presence` | 0.15 | profile completeness |
 | `role_level` | 0.10 | seniority alignment between JD and resume |
+
+`role_level` reads each side's tier through `agents/seniority.py` (#181), which is model-free and
+shared by the scorer, the JD profile, the profile checks, the corpus audit and the scraper.
+`detect_level(text, title=None, kind="posting" | "candidate")` returns `intern | junior | mid |
+senior | lead | manager | unknown`. Keywords match on word boundaries, `lead` / `staff` / `principal`
+need an adjacent role noun, `manager` and `director` are read from titles only, and a posting's
+explicit title (else its first line) beats its body. A candidate is read from its short role lines,
+then from stated years. `unknown` is a tier: `_role_level` scores it a fixed neutral 75.0 whenever
+either side is unknown, where the old detector defaulted both sides to `mid`. Stored
+`JDProfile.role_level` values from before it are not rewritten; nothing scores from them. Figures
+recorded before #181 are not comparable with ones after (see the `CHANGELOG.md` preamble).
 
 Alongside the composite the node computes **keyword placement precision** (a keyword
 counts only when it lands in the item it was assigned to, not anywhere in the document),
@@ -1005,6 +1020,15 @@ Sorting by raw name is plain codepoint order, so `PostgreSQL` beats `Postgres`
 judgement about which alias should win, and the tests assert the actual behaviour rather
 than an intuition about it.
 
+**The cap holds (issue #185).** `select_skills` used to apply the drop-off cap and then append the
+inferred core floor (the `CORE_FLOOR_K` strongest skills, used when nothing is pinned) past it, so
+up to `MAX_SKILLS + CORE_FLOOR_K` = 22 rendered against a cap of 18. The floor now fills only the
+slots the cap left free, in the same proficiency order. Pinned skills (`UserSkill.is_core`) still
+render past the cap. A full selection is left as the cap chose it rather than displaced by
+low-relevance strong skills, so a high-proficiency skill outside a full cap is not guaranteed a
+place. A first harness plan that sets no `skills` of its own can no longer start over the cap and
+fail finalize with `skills_cap`.
+
 ### 7.3 What determinism buys
 
 Two consecutive plumbing runs produce byte-identical metrics **and** byte-identical
@@ -1046,7 +1070,8 @@ errors carried as an `error` field. It currently holds **27 tools**, in five gro
 
 `harness/mcp_server.py` serves the contract over stdio and `harness/cli.py` prints one JSON
 document per call; `tests/test_harness_contract.py` holds both to identical results. The `art`
-console script (`harness/entry.py`) adds what is not a tool: `art hook` (the plugin hooks),
+console script (`harness/entry.py`) adds what is not a tool: `art mcp` (the server, the
+command the plugin runs), `art hook` (the plugin hooks),
 `art hooks codex` (installs them in Codex's `hooks.json`, the fallback for a Codex without plugin hooks), `art jev` (§8.3), `art export` and `art import`
 (§8.9), and `art ui`. A write tool returns `read_only` on a remote or Postgres store unless the
 process was started with `--allow-writes`; local SQLite is writable. `record_feedback` and
@@ -1436,13 +1461,96 @@ ignores a constraint for a package the lock does not list, which is why the chec
 generated on Windows with Python 3.11 and installed on Linux with 3.12; `uvloop` is the one core
 dependency it does not pin.
 
+### 8.11 Distribution: the pinned release wheel (issues #256, #255, #283)
+
+The package is `art-mcp` (`pyproject.toml`; license `Proprietary`) and is **not on PyPI**. A push of a
+tag `v<ART_VERSION>` runs `.github/workflows/release.yml`: it builds the editor (`npm ci`,
+`npm run build`), runs `uv build`, asserts the wheel holds `web/static/index.html`, installs it into a
+clean venv and runs `scripts/smoke_art_mcp.py`, then attaches the wheel and sdist to a GitHub Release.
+It fails if the tag is not `v<ART_VERSION>` (`harness/__init__.py`) or `plugin/.mcp.json` does not pin
+that tag. `workflow_dispatch` is a dry run that creates nothing.
+
+- **One pin.** `harness/hooks.py` owns `WHEEL_URL` and `SOURCE = "art-mcp[ui] @ <WHEEL_URL>"`, derived
+  from `ART_VERSION`. The plugin's `.mcp.json` and `hooks.json`, `art hooks codex`, `/art:open` and the
+  install commands in `INSTALL.md` all use it; `tests/test_plugin.py` fails when they disagree.
+- **The editor ships in the wheel.** A git install has no `web/static` (it is not committed), so
+  `art ui` from one prints the release-wheel command instead (`web/local_ui.py::missing_static`); a
+  checkout is told to build the frontend.
+- **Hooks cannot fail.** A hook line is `uvx --offline --from "<pin>" art hook <event>; exit 0`: it
+  uses only what the MCP server's start cached and exits 0 when uvx or the cache is missing. The server
+  start itself is not offline-proof (uv re-resolves a few minutes after caching), which `INSTALL.md`
+  documents with its two fixes.
+- **Codex gets the hooks from the plugin** (#290). Codex 0.131 and later load a plugin's
+  `hooks/hooks.json`, and `plugin/.codex-plugin/plugin.json` names the same file Claude Code reads, so a
+  plugin install needs only the user's trust step in `/hooks`.
+- **`art hooks codex --write` is the fallback, and neither appends nor duplicates** (#283, #290).
+  `harness/hooks.py::is_art_hook` recognises ART's own entries from any earlier source (a `git+` URL
+  with or without a ref, or a release wheel of any version); `merge_hooks` replaces them and leaves every
+  other hook and its order alone, and the command writes the file only when something changed. When an
+  enabled ART plugin already bundles the hooks (`plugin_with_art_hooks`) it adds nothing and removes
+  ART's entries from the file instead; on a Codex older than 0.131, or with `--standalone`, it installs.
+
+### 8.12 Render and ingest details (issues #258, #259, #260)
+
+Three host-ingest defects from the October live run, each fixed at one place.
+
+- **Dates (#258).** `agents/dates.py::format_date` renders `YYYY-MM`, `YYYY-MM-DD`, `MM/YYYY` and
+  month-name forms as "Mon YYYY"; a bare year, "Present" and anything unparseable pass through, and
+  "Expected 2027-06" keeps its prefix. `agents/formatter.py` applies it on every path that prints a date
+  (LaTeX, DOCX, markdown). It is render-only: stored values and the render cache are untouched.
+- **Skill categories (#259).** `agents/skill_postprocessor.py::infer_skill_category` fills a missing
+  category from a curated map (`SKILL_CATEGORIES`, aliases resolved first) into the formatter's five
+  buckets. No model call. An unknown skill stays `None` rather than the literal "Other", and when every
+  skill is uncategorized the formatter renders the skills with no label.
+- **Project blurbs (#260).** `upsert_items` takes `blurbs` for a project (stored as `ProjectBlurb`
+  rows). A project without them renders its description verbatim, minus a redundant lead-in sentence
+  (`harness/tools.py::drop_redundant_lead_in`, deliberately narrow), and `get_item` marks it
+  `incomplete` with `missing: ["blurbs"]` so the host offers to write bullets. Only the harness path
+  changed; the legacy tailor still uses the description as stored.
+
+### 8.13 The editor round trip (issues #276, #277)
+
+Two defects stopped a host-tailored job from reaching `art ui` and back. Both are fixed.
+
+- **The editor opens on a host-built job.** `JobWorkspace` renders the editor only for `tailored` or
+  `exported` jobs, and only the web pipeline set that status. `harness/tree.py::_materialize` (used by
+  `execute_plan` and `checkout`) now moves `created` and `analyzed` to `tailored`.
+- **A drag survives the host's next commit.** `web/frontend/src/lib/texStructure.ts` now reads the
+  formatter's multi-line `\resumeSubheading` headings, ignores the preamble's `\newcommand`, and
+  unescapes labels, so `PUT /layout` accepts the drag. `harness/executor.py::_apply_layout` applies the
+  stored override to the new node's content (bullets, skills, then section order, as the pipeline does
+  in §2.6), so the next `execute_plan` renders the dragged order; the user's override outranks the
+  plan's own `section_order`. `tests/test_layout_overrides.py` fails when the formatter's output drifts
+  from the editor's committed fixture.
+
+---
+
+## 9. The landing site (issue #272)
+
+`site/` is the public site for ARTie: a standalone Astro and Tailwind v4 static project with its own
+`package.json` and lockfile. It shares no build with `web/frontend`, is excluded from the wheel and the
+sdist, and is **not** part of the web app or the harness. Its theme tokens are ported from
+`web/frontend/src/index.css`, and `tests/test_site.py` fails if the light and dark tokens drift.
+
+- **Hosting.** Vercel's free Hobby tier, project `artie`, Git-linked with root directory `site`. `main`
+  deploys to production at https://artie-sand.vercel.app (also the repository's homepage URL) and each
+  pull request gets a preview. `site/vercel.json` carries an `ignoreCommand` that skips a build when
+  nothing under `site/` changed since the last successful deployment. The one-time dashboard steps are
+  in [`site/README.md`](../site/README.md).
+- **CI.** `.github/workflows/site.yml` runs `npm ci && npm run build` in `site/` on a pull request or a
+  push to `main` that touches `site/`, so a broken site fails the PR even without Vercel.
+- **Content.** The epic is #271. #272 shipped the scaffold, a placeholder home page and stub install
+  and usage pages; the real home page (#273), the install and usage docs with a drift check (#274) and a
+  demo recording (#275) are open. The hosted web app's own `LandingPage.tsx` is frozen with the rest of
+  that app.
+
 ---
 
 ## In flight
 
 Open issues, specified but **not shipped**. Nothing below describes a capability the system
-has. The entries that use the present tense (#181, #185) report *defects* in code that does
-exist, and are here because their fixes have not landed.
+has. The entries that use the present tense (#278, #288, #291) report *defects* in
+code that does exist, and are here because their fixes have not landed.
 
 **The harness pivot (epic #207, [`harness.md`](harness.md))** sequences all of it into phases
 H0–H5; § 18 there has the phase table with each issue's status. Everything in H0 and H1,
@@ -1460,13 +1568,8 @@ described in §8. What follows is what is left.
 - **#163** will rank keyword-insertion candidates by importance × supportability instead of the
   current TF-IDF. `agents/keyword_planner.py` is untouched, so its behaviour is the pre-#125 one.
 - **#152** will learn guard tolerances and ranker weights against the human anchor set.
-- **#181** reports that `_detect_level`'s substring matching mislabels 128 of the 150 corpus
-  postings and the benchmark profile itself; `role_level` (weight 0.10) has been comparing two
-  independently wrong labels.
-- **#185** reports that `select_skills` appends its inferred core floor past the cap, so it can return
-  `MAX_SKILLS + CORE_FLOOR_K` (22) skills against a cap of 18. The harness path trims to the cap only
-  when requirement keywords matched a skill (§4.4); a first plan that sets no `skills` of its own can
-  therefore fail finalize with `skills_cap`.
+- **#291** reports that a hard preference scoped to a role family is not enforced by `execute_plan`,
+  and that `art_briefing` omits job-scoped ones.
 - **#252** tracks what is planned and not built. Jev points (§8.4): eligibility rules, an embedding or Jev
   reading of semantic duplicates, action ranking for `suggest_actions`, and a role family for JobCards;
   their fallbacks are what runs. Tools (§8.1): `record_feedback` and `check_draft`.
@@ -1486,12 +1589,18 @@ described in §8. What follows is what is left.
 - **#206** will add the host runner and its arms (A, B, B′, C); **#172** (chunk 7, the human anchor set),
   **#173** (the re-tailor and preference tasks) and **#178** (profile-bound conversations) feed it.
 
+**Landing site**
+- **#273**, **#274** and **#275** are the site's home page, install and usage docs (with a check that
+  the site's commands match `INSTALL.md`), and demo recording (§9).
+
 **Retrieval and infrastructure**
 - **#60** (the pgvector write path) is in the Icebox. The local default is SQLite with an FTS5/numpy
   fallback (#194).
 
 **Surfaces**
 `art ui` (#204) is merged. These issues remain:
+- **#278** reports that a host commit drops the user's editor `.tex` edits, and `diff_nodes` reports only `tex_changed`.
+  **#288** will give the host and `art ui` one shared current-job id.
 - **#205** will add the editor chat panel (an Agent SDK session with `art-mcp`, and an API-key fallback).
 - **#147** will add the inline chat-panel UI for knowledge-artifact suggestions, in that panel. It carries
   the deferred UI for #21, #129 and #133, all of which shipped API-only.
