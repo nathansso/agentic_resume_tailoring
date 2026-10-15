@@ -1327,3 +1327,197 @@ def test_the_briefing_and_pins_show_the_scope_the_executor_enforces(isolated_eng
     # Without it, a job's own pin is not shown, and a family's only when named.
     assert keys(art_briefing(uid)) == []
     assert keys(art_briefing(uid, role_family="machine_learning")) == [EXP]
+
+
+# ── the absent-thing premise (#296) ──────────────────────────────────────────
+#
+# "If no experience or project holds Kafka, a Kafka ban needs no enforcement: Kafka cannot reach the
+# page." Preferences anchored to nothing (#295's `pending`) rely on it, so it is attacked here, on a
+# profile with no Kafka anywhere. Each variant tries to put Kafka on the page by a different door.
+
+KAFKA_FREE_PROFILE = "ml_engineering_specialist_sofia_marchetti.md"
+ML_EXP = "exp:machine learning intern|vector health"
+ML_PROJ = "proj:tinydetect"
+
+
+@pytest.fixture()
+def kafkaless(isolated_engine, monkeypatch):
+    """A profile with no Kafka in any item, bullet, description or skill; and one job."""
+    from eval.profile_fixture import load_profile
+    from eval.tailoring_benchmark import PROFILES_DIR, load_tasks
+    from eval.scripted_host import open_task_job, seed_profile
+    from harness import executor
+    from harness.executor import _KG
+
+    monkeypatch.setattr(executor, "MEASURER", _one_line_each)
+    uid = seed_profile(load_profile(PROFILES_DIR / KAFKA_FREE_PROFILE))
+    job_id = open_task_job(uid, load_tasks(limit=5)[3])
+    kg = _KG(uid)
+    held = json.dumps(kg.records, default=str).lower()
+    assert "kafka" not in held and ML_EXP in kg.source_bullets and ML_PROJ in kg.source_bullets
+    return uid, job_id
+
+
+def _reword(uid, key, text, cite=None, which=0):
+    """`key`'s bullets with bullet `which` replaced by `text`, citing a real source bullet."""
+    from harness.executor import _KG
+
+    src = _KG(uid).source_bullets[key]
+    out = [{"text": b, "cites": [f"{key}#b{i}"]} for i, b in enumerate(src)]
+    out[which] = {"text": text, "cites": [cite or f"{key}#b{which}"]}
+    return out
+
+
+def _on_the_page(out, uid, job_id, isolated_engine):
+    """Every character the plan put on the page: the committed node's content, and the job's result."""
+    from harness import tree
+
+    pages = []
+    if out.get("committed"):
+        pages.append(json.dumps(tree.get_node(uid, out["node_id"])["content"]))
+    with Session(isolated_engine) as s:
+        for r in s.exec(select(UserJobResult).where(UserJobResult.job_id == UUID(job_id))).all():
+            pages.append(json.dumps(r.tailored_resume_content))
+    return " ".join(pages).lower()
+
+
+def _refused(out, why, node_id="k"):
+    """The node did not take effect, and for the reason named: a gate, not an unrelated revert."""
+    node = {n["id"]: n for n in out["nodes"]}[node_id]
+    assert node["status"] in ("reverted", "refused"), node
+    assert why in node["reason"].lower(), node
+    return node
+
+
+@pytest.mark.parametrize("text", [
+    "Built a Kafka pipeline to stream patient events into the training store.",
+    "Built a kafka pipeline to stream patient events into the training store.",
+    "Built an Apache Kafka pipeline to stream patient events into the training store.",
+    "Streamed patient events through Kafka.",
+    "Streamed patient events through Kafka-based ingestion.",
+    "Streamed patient events through apache-kafka.",
+    "Streamed patient events with confluent-kafka.",
+    "Streamed patient events with a kafkajs client.",
+    "Streamed patient events with aiokafka.",
+    "Streamed patient events through KAFKA.",
+])
+def test_a_revised_bullet_that_adds_kafka_to_a_cited_source_never_reaches_the_page(
+        isolated_engine, kafkaless, text):
+    uid, job_id = kafkaless
+    out = _run(uid, {"job_id": job_id, "nodes": [
+        {"id": "k", "op": "revise", "item_key": ML_EXP, "bullets": _reword(uid, ML_EXP, text)}]})
+    _refused(out, "hard_gate: consistency")
+    assert "kafka" in out["nodes"][0]["reason"].lower()
+    assert "kafka" not in _on_the_page(out, uid, job_id, isolated_engine)
+
+
+def test_the_consistency_gate_names_kafka_as_the_unsupported_token(kafkaless):
+    from agents.checks import unsupported_tokens
+    from harness.executor import _KG
+
+    uid, _ = kafkaless
+    evidence = _KG(uid).source_bullets[ML_EXP]
+    for text in ("Built a Kafka pipeline.", "Built a kafka pipeline.", "Built an Apache Kafka pipeline."):
+        assert any(t.lower().endswith("kafka") for t in unsupported_tokens(text, evidence)), text
+
+
+def test_an_uncited_bullet_with_kafka_is_refused_by_the_citation_gate(isolated_engine, kafkaless):
+    uid, job_id = kafkaless
+    bullets = _reword(uid, ML_EXP, "Built a Kafka pipeline to stream patient events.")
+    bullets[0]["cites"] = []
+    out = _run(uid, {"job_id": job_id, "nodes": [
+        {"id": "k", "op": "revise", "item_key": ML_EXP, "bullets": bullets}]})
+    _refused(out, "uncited_bullet")
+    assert "kafka" not in _on_the_page(out, uid, job_id, isolated_engine)
+
+
+@pytest.mark.parametrize("cite", ["skill:kafka", "exp:data engineer|acme#b0", f"{ML_EXP}#b99"])
+def test_a_bullet_citing_evidence_that_does_not_exist_is_refused(isolated_engine, kafkaless, cite):
+    uid, job_id = kafkaless
+    bullets = _reword(uid, ML_EXP, "Built a Kafka pipeline to stream patient events.", cite=cite)
+    out = _run(uid, {"job_id": job_id, "nodes": [
+        {"id": "k", "op": "revise", "item_key": ML_EXP, "bullets": bullets}]})
+    _refused(out, "unresolved_cite")
+    assert "kafka" not in _on_the_page(out, uid, job_id, isolated_engine)
+
+
+def test_a_project_bullet_with_kafka_never_reaches_the_page(isolated_engine, kafkaless):
+    """A project's text on the page is its bullets (the plan has no description field)."""
+    uid, job_id = kafkaless
+    out = _run(uid, {"job_id": job_id, "nodes": [
+        {"id": "k", "op": "revise", "item_key": ML_PROJ,
+         "bullets": _reword(uid, ML_PROJ, "Streams camera frames through Kafka into the detector.")}]})
+    _refused(out, "hard_gate: consistency")
+    assert "kafka" not in _on_the_page(out, uid, job_id, isolated_engine)
+
+
+@pytest.mark.parametrize("names", [["Python", "Kafka"], ["kafka"], ["Apache Kafka", "Python"]])
+def test_a_skills_list_naming_kafka_comes_back_unknown_and_is_not_rendered(
+        isolated_engine, kafkaless, names):
+    uid, job_id = kafkaless
+    out = _run(uid, {"job_id": job_id, "nodes": [{"id": "k", "op": "keep", "item_key": ML_EXP}],
+                     "skills": names})
+    assert any("kafka" in u.lower() for u in out["skills"]["unknown"]), out["skills"]
+    assert "kafka" not in _on_the_page(out, uid, job_id, isolated_engine)
+
+
+def test_kafka_among_the_real_skills_is_dropped_and_the_rest_commit(isolated_engine, kafkaless):
+    from harness.executor import _KG
+
+    uid, job_id = kafkaless
+    real = [r["record"]["name"] for r in _KG(uid).of("skill")]
+    out = _run(uid, {"job_id": job_id, "nodes": [{"id": "k", "op": "keep", "item_key": ML_EXP}],
+                     "skills": [*real[:3], "Kafka", *real[3:]]})
+    assert out["committed"] and out["skills"]["unknown"] == ["Kafka"]
+    assert "kafka" not in _on_the_page(out, uid, job_id, isolated_engine)
+
+
+def test_keywords_and_reasons_on_a_node_are_not_page_text(isolated_engine, kafkaless):
+    uid, job_id = kafkaless
+    from harness.executor import _KG
+
+    kept = _KG(uid).source_bullets[ML_EXP]
+    out = _run(uid, {"job_id": job_id, "nodes": [
+        {"id": "k", "op": "revise", "item_key": ML_EXP, "strategy": "keyword_weave",
+         "keywords": ["Kafka", "Apache Kafka"], "because": "user:mention Kafka",
+         "bullets": [{"text": b, "cites": [f"{ML_EXP}#b{i}"]} for i, b in enumerate(kept)]}]})
+    assert "kafka" not in _on_the_page(out, uid, job_id, isolated_engine)
+
+
+def test_a_section_order_cannot_carry_text_onto_the_page(isolated_engine, kafkaless):
+    uid, job_id = kafkaless
+    out = _run(uid, {"job_id": job_id, "nodes": [{"id": "k", "op": "keep", "item_key": ML_EXP}],
+                     "section_order": ["kafka", "experience", "projects", "skills"]})
+    assert not out["committed"]
+    assert {v["check"] for v in out["violations"]} >= {"section_order"}
+    assert "kafka" not in _on_the_page(out, uid, job_id, isolated_engine)
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    "Known limit of the consistency gate (#296): a lowercase name outside agents.checks._TECH "
+    "('redpanda') is not an entity candidate, since flagging every lowercase word would block "
+    "ordinary prose. A pending ban on such a name is not enforced by the evidence gates."))
+def test_a_lowercase_name_outside_the_tech_list_is_flagged(kafkaless):
+    from agents.checks import unsupported_tokens
+    from harness.executor import _KG
+
+    uid, _ = kafkaless
+    assert "redpanda" in unsupported_tokens(
+        "Built a redpanda pipeline.", _KG(uid).source_bullets[ML_EXP])
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    "Open gap in the premise (#296): `upsert_items` kind `variant` stores a curated bullet as "
+    "approved with no check against the item's evidence (#229: importing is the user's own "
+    "confirmation), and the consistency gate then exempts a bullet that is verbatim an approved "
+    "variant. A host can therefore import 'Built a Kafka pipeline' and use it with no Kafka in "
+    "the graph. Left as designed in this PR; closing it needs a decision on curated variants."))
+def test_an_imported_variant_naming_a_technology_no_item_holds_is_not_approved(kafkaless):
+    from harness import library
+    from harness.ingest import upsert_items
+
+    uid, _ = kafkaless
+    upsert_items(uid, [{"kind": "variant", "data": {
+        "item_key": ML_EXP, "text": "Built a Kafka pipeline to stream patient events."}}])
+    approved = library.list_variants(uid, ML_EXP, status=library.APPROVED)
+    assert not [v for v in approved if "kafka" in v["text"].lower()]

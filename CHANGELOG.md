@@ -14,6 +14,40 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 296 — Anchor labelled set, and the absent-thing premise tested against the evidence gates
+**Status:** complete | **Tests:** 2838 pass on SQLite (72 new), 24 skipped, 2 xfailed (the two open gaps below)
+
+Phase 3 of 7 of the preference-anchoring plan (#295–#300). A hand-labelled set measures `harness/anchors.py` (zero wrong-item bindings is the gate), and the plan's premise, "a thing no item holds cannot reach the page", is attacked through the executor. The set found one real binding error and a document rule that read 14 of 71 pending subjects as page subjects; the premise attack found four spellings of Kafka the consistency gate let through, and one door it does not close.
+
+### What shipped
+- **`eval/preference_anchor_labels/pairs.json`: 241 rows over five synthetic profiles** (`benchmark_profile`, `ml_engineering_specialist_sofia_marchetti`, `software_engineering_generalist_devon_whitaker`, `data_engineering_generalist_adaeze_nwosu`, `data_science_specialist_priya_raman`), in 20 categories. Labelled by hand from what the user means, before the resolver ran; a row may overlay items the profile lacks (`add`). `README.md` explains the numbers.
+- **`tests/test_preference_anchor_labels.py`.** Hard gate: 0 wrong-node bindings. Second gate: alias recall at least 0.9 (1.00, 18/18). Reported: per-category accuracy and document precision.
+
+  | | before | after |
+  |---|---|---|
+  | correct | 203 / 241 | 225 / 241 |
+  | wrong-node bindings | **2** | **0** |
+  | document precision / recall | 0.64 / 0.78 | 1.00 / 0.97 |
+  | pending subjects read as `document` | 14 of 71 | 0 of 71 |
+
+  The sixteen rows still wrong are findings the resolver was never meant to fix: `alias_candidate` 0/10 (`k8s`, `js`, `pg`, `ts`, `tf`, `Golang`, `wandb`, "Weights and Biases", `gh actions`; see below), `role_at_phrase` 0/3 ("Data Science Intern at Fairhaven Retail Group" stays pending, the comma form is refused as several subjects), `multiple` 14/16 ("Kafka and Rust" with Rust absent is one pending term, the #295 trade), `style` 10/11 ("first person"). Every other category is 1.00 (exact key, label, bare name, role, company alone, ambiguous, alias, overreach, absent, short-name decoys, substring decoys, section, scope, negation, `and` in a name, document-word decoys).
+- **`harness/anchors.py`, two fixes the set forced:**
+  - *Document rule.* A phrase was a page subject when it held any of 19 words, so "Page Rank", "Style Transfer", "Voice Assistant" and "my order-routing startup" were `document`, which sends a real ban to a rule store that blocks nothing. Now a document subject holds a document word and **only** frame words around it (stop words, directive verbs, counts, plain modifiers: `FRAME_WORDS`); any other word makes it a nameable thing. "one page", "keep it to one page", "formal tone" and "the order of my sections" are still documents. A bare section name is one too, so "projects and skills" is a document and not a `multiple`. The vocabulary gained `section(s)`, `tense`, `jargon`, `buzzword(s)` and `bullet(s)`. Precision is the point: a missed document phrase is stored as a term, as before #295, and a false one silently drops an enforceable ban.
+  - *`torchvision` and `torchnet`* are not spellings of PyTorch (`DISTINCT_PACKAGES`), in `resolve` and in `mentions`. `SKILL_ALIASES` folds them into PyTorch for ingestion; a ban on torchvision would have been bound to `skill:pytorch` and forbidden PyTorch too. The alias map is untouched.
+- **The premise, tested** (`tests/test_executor.py`, new section, on a Kafka-free profile). Every variant is reverted or refused, with the gate named, and "kafka" is absent from the committed node and the job result: a revised bullet citing a real source with "Kafka", "kafka", "KAFKA", "Apache Kafka" and "Kafka-based" (`hard_gate: consistency`); an uncited bullet (`uncited_bullet`); a bullet citing `skill:kafka`, another item's bullet, or a bullet index that does not exist (`unresolved_cite`); a project's bullets; a `skills` list naming Kafka (reported `unknown`, not rendered, also when the real skills commit); `keywords`, `because` and `section_order` carrying "kafka" (not page text).
+- **A gate gap, fixed.** `apache-kafka`, `confluent-kafka`, `kafkajs` and `aiokafka` passed the consistency gate when cited to a real source; the new tests fail on `main`. `agents/checks._entity_candidates` now reads a listed technology in a later hyphen part, and a listed name carrying a language affix (`kafkajs`, `aiokafka`, `librdkafka`; names of five or more letters, `_WRAPPED_TECH`), as that technology. `tests/test_consistency_gate.py` holds the unit cases and the ordinary hyphen forms that must not trip.
+
+### Deviations from spec
+- **The `env` fixture is not Kafka-free.** The brief called the executor's `env` profile Kafka-free; `benchmark_profile.md` holds Kafka in a bullet and in the skills (an existing test weaves it in). The premise tests use their own `kafkaless` fixture on `ml_engineering_specialist_sofia_marchetti`, which asserts the graph holds no "kafka" before it runs.
+- **Open: an imported variant is not checked against evidence.** `upsert_items` kind `variant` stores a bullet as `approved` ("importing is the user's own confirmation", #229) and the consistency gate exempts a bullet that is verbatim an approved variant. A host can import "Built a Kafka pipeline" and use it with no Kafka in the graph (it passed the consistency gate; in the probe an unrelated MTLD guard reverted it). Not changed here: curated variants legitimately carry wording the item's bullets lack, and closing it is a decision about the library. Pinned as a strict `xfail` (`test_an_imported_variant_naming_a_technology_no_item_holds_is_not_approved`) so it flips when fixed. **The premise holds for a plan's own text and not for the approved-variant library.**
+- **Open: a lowercase name outside `_TECH` is not caught** ("built a redpanda pipeline"). Flagging every lowercase word would block ordinary prose, so the gate is precise by design; a pending ban on a name the list does not hold (capitalized "Redpanda" is caught) is not enforced by the evidence gates. Pinned as a strict `xfail` (`test_a_lowercase_name_outside_the_tech_list_is_flagged`). Kafka is in the list, so the Kafka variants are covered.
+- **The program has no project-description field.** A project's page text is its bullets (`project_source_bullets`), so "a project description" is the project-bullets variant.
+- **No aliases were added.** `k8s` (Kubernetes), `js`, `ts`, `pg`, `tf`, `Golang`, `wandb`, `gh actions` and "Weights and Biases" are candidates, all `pending` today. Each is a one-line addition to `agents/skill_postprocessor.SKILL_ALIASES` that renormalizes every ingested skill, so it is left for a decision; `tf` and `ts` also need the short-name rule relaxed (two characters, and "TF" is a fragment of TF-IDF).
+- **The recall numbers are in-sample.** The document vocabulary was extended and tightened while looking at this set, so 0.97 recall and 1.00 precision are measured on the rows that shaped them; the decoy rows are not a held-out set. The plan's question, whether `pending` versus `document` needs a Jev call (more than about 5% deterministic misses): 14 of 71 pending rows (19.7%) were misread before the rule, 0 after, and 1 of 32 document rows is missed. A held-out set from real messages would settle it.
+- **Branch name** is the worktree's, `claude/issue-296-anchor-labels-c6b515`. **The Postgres leg was not run locally;** nothing here touches storage.
+
+---
+
 ## Issue 274 — Landing site install and usage docs
 **Status:** complete | **Tests:** 2681 pass on SQLite (18 new), 24 skipped, 0 fail; the Postgres leg was not run (nothing here touches storage)
 
