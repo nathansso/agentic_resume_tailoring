@@ -202,6 +202,8 @@ export interface JobSkillRow {
   required: boolean;                // false = preferred
   weight: number;
   area: string;
+  /** Every keyword the requirement names (a job opened through the harness); a profile skill matches on any. */
+  terms?: string[];
 }
 
 export interface ProfileData {
