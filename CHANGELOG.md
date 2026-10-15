@@ -14,6 +14,40 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 300 — Migrate existing preference rows to anchors and page rules
+**Status:** complete | **Tests:** 3146 pass on SQLite (32 new in `tests/test_preference_migration.py`), 24 skipped, 2 xfailed, 0 fail; the Postgres leg was not run locally (the Docker daemon was not running), CI covers it
+
+Phase 7 of 7 of the preference-anchoring plan (#295–#300). Rows written before #295 to #298 were still in users' stores: unkeyed topics that now name an item, keys whose item had been deleted, and `section:` rows enforced as the dead term "section: projects". `art migrate preferences` brings them to the new model, conservatively and repeatably, and a local store gets it automatically once.
+
+### What shipped
+- **`harness/migrations.py::migrate_preferences(user_id, dry_run=False)`**, model-free, returning `{relinked, unlinked, converted_to_rules, left_alone: [{preference_id, code, reason, text}], already_done, unchanged, counts}`. Each active row gets exactly one outcome:
+  - **keyed to an item that exists**: untouched (`unchanged`).
+  - **unkeyed, names exactly one item**: #297's `relink` (alias-aware through #295), reused rather than reimplemented. It gained `dry_run` and a `provenance` argument so the migration can report without writing and mark its copies.
+  - **keyed to an item that no longer exists**: a pending copy through `services.reanchor_preferences`, `provenance.unlinked_from` set so it re-binds only to its own key (#297); a role keeps "title @ company" as its term.
+  - **`section:<name>` suppress**: a `limit` `{<name>: 0}` `ResumeRule` with the row's strength and scope, so a hard row becomes a hard rule and now actually removes the section. The old row is superseded with `provenance.migrated_to = rule_id`.
+  - **a page-ish row** (a topic such as "keep it to one page", or no target at all): converted only when `rules.infer_limit` returns params for its words with the row's polarity.
+  - **everything else**: left exactly as it was and listed with a code (`section_not_clear`, `pending`, `ambiguous`, `multiple`, `negated_limit`, `scope_conflict`, `rule_conflict`, `no_target`, `no_items`, `unrecognized_key`, `bad_row`, `not_relinkable`, `unknown_section`).
+- **`services.supersede_preferences`**: retires active rows with merged provenance and no replacement row (the rule is the replacement). Nothing is deleted anywhere.
+- **Scope conflicts.** A conversion `rules.loosens_hard` refuses is left alone (`scope_conflict`, naming the broader rule). So is one that disagrees with a rule the user recorded since (`rule_conflict`): the newer statement stands. Two rows that say the same thing share one rule (the harder one makes it; `reused`).
+- **Idempotent.** Row state is the guard: every row the migration writes carries `provenance.migration`, a keyed copy is keyed, a pending copy has nothing to re-resolve, a superseded row is not active. A second run changes nothing and reports `already_done`.
+- **How it runs.** `art migrate preferences [--dry-run] [--user-id] [--database-url] [--allow-writes]` (`harness/entry.py`); a read-only store refuses without `--dry-run`. `harness.runtime.bootstrap(prepare=True)` also runs it once per user on a **local SQLite** store, gated by a small `migrations.json` marker beside the store, never on a remote store, and never raising into startup (`auto_migrate=False` is what the command passes).
+- **Docs.** `docs/harness.md` ("Migrating rows written before the anchoring model").
+- **Tests (`tests/test_preference_migration.py`).** The conftest preference set plus a store with a `section:projects` suppress (hard, and a soft duplicate), a `section:achievements` emphasize, a role-family soft section row, a pending "Kafka" that binds, "torch" that binds `skill:pytorch`, a pending "Snowflake" that stays, a dangling `exp:` key, a page limit and a negated one. Asserts each outcome and its provenance, nothing deleted, a second run changes nothing, a dry run writes nothing and reports what the real run does, a page limit cannot loosen a hard rule, a rule recorded since outranks an older row, an existing rule is reused, ambiguous and multiple subjects wait, the executor now refuses the excluded section's items and removes it from the page, left-alone and relinked pins enforce at least as before, the CLI, the marker, the remote and read-only paths, and a failure in startup.
+
+### Deviations from spec
+- **Idempotence by row state, plus a marker file for the automatic run only.** A new table would be a schema change for one boolean; the rows already say what has been done. The marker (`migrations.json` beside the SQLite file) only keeps startup from re-reading the preference table every time. It is written only when the user held preference rows, so a store that is imported into later is migrated at its next start. The CLI ignores it.
+- **A dangling key is not re-bound by alias.** `skill:torch` whose skill is now "PyTorch" becomes a pending "torch" (still a term pin; it re-binds only to `skill:torch`, so the user restates it to attach it to PyTorch), not a keyed copy. #297 forbids a deleted item's ban moving to another item; the migration cannot tell a rename from a delete, so it takes the conservative reading.
+- **A key with no stated term uses the key's own words.** The conftest set's `proj:coursework-db` becomes the pending term "coursework-db"; an `edu:` key becomes its institution. This enforces something where the keyed row enforced nothing (#297 noted such rows were seeded on purpose), so it is equal or better.
+- **No item at all means no key is judged dangling** (`no_items`), because an empty read cannot tell a deleted item from an unreadable graph.
+- **Page counts under a negator are left alone** unless the negator is a plain maximum ("never exceed two pages"). `infer_limit` ignores polarity for pages, so "avoid one-page resumes" would otherwise become a one-page rule.
+- **A row's compound words are not split.** "Keep it to one page and no projects section" is two readings, so `infer_limit` returns nothing and the row stays; the host can record two rules.
+- **The report is lists plus `counts`.** The issue's `{relinked, converted_to_rules, left_alone, already_done}` is a subset; `unlinked` and `unchanged` are added.
+- **The real store at `~/.art/art.db` holds no preference rows** (it predates the table; two users, 7 experiences, 52 projects, 264 skills). A copy was run: 0 rows, a no-op. Four synthetic legacy rows were then added to the copy (a hard `section:` suppress, a pending skill name, a dangling `exp:` key, a page limit): 1 relinked, 1 unlinked, 2 converted to rules, 0 left alone; a second run changed nothing. The original was not touched.
+- **Found by that run:** the module imported `services` at top level, so `art migrate` built an engine from `.env` before `bootstrap` pinned the database (it failed to connect and wrote nothing). The imports are now inside the functions and a test pins it.
+- **Postgres leg not run locally** (the Docker daemon was not running); the new writes go through the existing `services` JSON-column paths. CI runs it. `test_timezone_datetimes.py::test_no_source_file_reads_a_naive_utc_clock` is the known local-only failure (untracked folders).
+
+---
+
 ## Issue 298 — `ResumeRule`: what the user said about the page, enforced at finalize
 **Status:** complete | **Tests:** 3103 pass on SQLite (85 in `test_resume_rules.py`, after merging main), 24 skipped, 2 xfailed, 0 fail
 

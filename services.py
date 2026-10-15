@@ -2085,6 +2085,44 @@ def reanchor_preferences(user_id: UUID, changes: list[dict]) -> list[dict]:
     return moved
 
 
+def supersede_preferences(user_id: UUID, changes: list[dict]) -> list[str]:
+    """Retire active preferences without a replacement row, because a `ResumeRule` now holds them
+    (#300). Each change is `{preference_id, provenance?}`: the row is marked `superseded` and the
+    provenance merged over its own (`migrated_to` names the rule). Nothing is deleted. A row that
+    is not this user's or no longer active is skipped. The persona is rebuilt once.
+
+    Returns the ids retired. Never raises."""
+    from agents.preferences import STATUS_ACTIVE, STATUS_SUPERSEDED
+    from database.models import UserPreference
+
+    done: list[str] = []
+    try:
+        with Session(engine) as session:
+            for change in changes or []:
+                pid = _as_uuid(change.get("preference_id"))
+                prior = session.get(UserPreference, pid) if pid else None
+                if prior is None or prior.user_id != user_id or prior.status != STATUS_ACTIVE:
+                    continue
+                provenance = prior.provenance
+                if isinstance(provenance, str):
+                    try:
+                        provenance = json.loads(provenance)
+                    except (ValueError, TypeError):
+                        provenance = {}
+                prior.status = STATUS_SUPERSEDED
+                prior.provenance = {**(provenance or {}), **(change.get("provenance") or {})}
+                prior.updated_at = utc_now()
+                session.add(prior)
+                done.append(str(prior.preference_id))
+            session.commit()
+    except Exception as exc:
+        logger.warning("supersede_preferences failed for user %s: %s", user_id, exc)
+        return []
+    if done:
+        rebuild_persona(user_id)
+    return done
+
+
 def follow_rename(user_id: UUID, old_key: str, new_key: str) -> None:
     """A renamed item keeps its preferences: the active ones keyed to `old_key` are re-keyed to
     `new_key`, with `provenance.renamed_from`. Item keys are derived from names, so without this
