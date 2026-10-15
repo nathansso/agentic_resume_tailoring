@@ -310,6 +310,122 @@ def test_highlights_are_real_boxes_computed_from_the_diff():
     assert any("predict which subscribers cancel" in " ".join(c["added"]) for c in changes)
 
 
+# --- the role and the difference (#337) --------------------------------------------------
+
+def _terms(text: str) -> str:
+    return text.lower().replace("-", " ")
+
+
+def test_the_posting_card_shows_the_role_and_four_to_six_requirements():
+    script = _module("site_demo_script", DEMO_DATA / "demo_script.py")
+    card = BA["posting"]
+    assert card["title"] == script.POSTING_TITLE and card["company"] == script.POSTING_COMPANY
+    assert 4 <= len(card["requirements"]) <= 6
+    posting = _terms((DEMO_DATA / "sample_posting.txt").read_text(encoding="utf-8"))
+    assert _terms(script.POSTING_COMPANY) in posting and _terms(script.POSTING_TITLE) in posting
+    assert "sample posting" in posting
+    ids = [r["id"] for r in card["requirements"]]
+    assert len(set(ids)) == len(ids)
+    for req in script.REQUIREMENTS:
+        assert any(_terms(t) in posting for t in req["terms"]), f"{req['id']}: none of its terms are in the posting"
+    src = (DEMO / "BeforeAfter.astro").read_text(encoding="utf-8")
+    assert "posting-heading" in src and "Sample posting, written for this demo" in src
+    assert src.index("posting-heading") < src.index("<figure"), "the role comes before the pages"
+
+
+def _entries(group_id: str) -> list[dict]:
+    return [e for g in BA["groups"] if g["id"] == group_id for e in g["entries"]]
+
+
+def test_the_demo_really_differs_and_each_change_names_a_requirement():
+    script = _module("site_demo_script", DEMO_DATA / "demo_script.py")
+    reqs = {r["id"]: r for r in script.REQUIREMENTS}
+    assert [g["id"] for g in BA["groups"]] == ["added", "moved", "reworded", "cut", "skills"]
+    assert [g["title"] for g in BA["groups"]] == ["Added from your graph", "Moved up", "Reworded", "Cut",
+                                                  "Skills trimmed"]
+    added, moved, reworded, cut = (_entries(g) for g in ("added", "moved", "reworded", "cut"))
+    assert added and cut and moved and reworded
+    removed_text = " ".join(t for c in BA["changes"] for t in c["removed"])
+    added_text = " ".join(t for c in BA["changes"] for t in c["added"])
+    for entry in added:
+        # not on the usual page, on the tailored one
+        assert entry["title"] in added_text and entry["title"] not in removed_text, entry["title"]
+        assert entry["serves"], entry["title"]
+    for entry in cut:
+        if entry["scope"] == "item":
+            head = entry["title"].split(",")[0]
+            assert head in removed_text and head not in added_text, entry["title"]
+        else:
+            assert entry["text"] in removed_text and entry["text"] not in added_text
+    first = next(e for e in added if e["position"] == 1)
+    assert first["kind"] == "project", "an item from the graph leads the tailored projects"
+    assert any(e["scope"] == "section" for e in moved), "Projects moved above Experience"
+    for entry in moved:
+        if entry["scope"] == "bullet":
+            assert entry["to"] < entry["from"]
+    # Every requirement a change names is one the posting card lists, and for a reworded or
+    # added item the requirement's own terms appear in the text that changed.
+    for g in BA["groups"]:
+        for e in g["entries"]:
+            for s in e.get("serves", []):
+                assert s["id"] in reqs and s["short"] == reqs[s["id"]]["short"], s
+    for e in reworded:
+        assert e["before"] != e["after"]
+        text = _terms(e["after"])
+        assert any(_terms(t) in text for s in e["serves"] for t in reqs[s["id"]]["terms"]), e
+    for e in added:
+        text = _terms(" ".join(e["bullets"]))
+        assert any(_terms(t) in text for s in e["serves"] for t in reqs[s["id"]]["terms"]), e["title"]
+    skills = _entries("skills")[0]
+    assert skills["after_count"] < skills["before_count"] and skills["added"] and skills["removed"]
+    assert set(skills["first"]) >= {"Python", "SQL"}
+
+
+def test_nothing_on_the_page_says_it_is_cropped_or_quotes_an_ats_score():
+    assert "cropped" not in INDEX.lower() and "cropped" not in (DEMO / "BeforeAfter.astro").read_text().lower()
+    assert "ats" not in re.findall(r"[a-z]+", json.dumps(BA).lower())
+
+
+def test_build_groups_reads_the_changes_from_the_two_versions():
+    """The grouping is pure: two versions' contents, ART's diff, the source bullets and the plan."""
+    before = {"experiences": [{"title": "T", "company": "C", "bullets": ["a one", "b two", "c three"], "cites": {}}],
+              "projects": [{"name": "Old", "bullets": ["old bullet"], "cites": {}}],
+              "skills_ranked": [{"name": "Java"}, {"name": "Python"}]}
+    after = {"experiences": [{"title": "T", "company": "C", "bullets": ["c three, with SQL", "a one"],
+                              "cites": {"c three, with SQL": ["exp:t|c#b2"]}}],
+             "projects": [{"name": "New", "bullets": ["new thing"], "cites": {"new thing": ["proj:new#b0"]}}],
+             "skills_ranked": [{"name": "Python"}, {"name": "SQL"}]}
+    sources = {"exp:t|c": ["a one", "b two", "c three"], "proj:new": ["new thing"], "proj:old": ["old bullet"]}
+    diff = {"items": [
+        {"key": "exp:t|c", "change": "revised", "bullets_added": ["c three, with SQL"],
+         "bullets_removed": ["b two", "c three"]},
+        {"key": "proj:new", "change": "added", "bullets_added": ["new thing"], "bullets_removed": []},
+        {"key": "proj:old", "change": "removed", "bullets_added": [], "bullets_removed": ["old bullet"]}],
+        "skills_added": ["SQL"], "skills_removed": ["Java"]}
+    nodes = [{"id": "n1", "op": "revise", "item_key": "exp:t|c", "keywords": ["SQL"]},
+             {"id": "n2", "op": "replace", "item_key": "proj:old", "replacement_key": "proj:new", "keywords": ["SQL"]}]
+    reqs = [{"id": "sql", "short": "SQL", "terms": ["SQL"], "criticality": 5}]
+    inp = {"before": before, "after": after, "diff": diff, "sources": sources, "nodes": nodes}
+    groups = {g["id"]: g["entries"] for g in BUILD.build_groups(inp, reqs, {"default": "not asked for"})}
+    assert groups["added"][0]["title"] == "New" and groups["added"][0]["replaces"] == "Old"
+    assert groups["added"][0]["ordinal"] == "first"
+    assert [(e["from"], e["to"]) for e in groups["moved"]] == [(3, 1)]
+    assert groups["moved"][0]["serves"] == [{"id": "sql", "short": "SQL"}]
+    assert groups["reworded"][0]["before"] == "c three" and groups["reworded"][0]["after"] == "c three, with SQL"
+    cut = {(e["scope"], e.get("text") or e["title"]): e for e in groups["cut"]}
+    assert ("bullet", "b two") in cut and ("item", "Old") in cut
+    assert cut[("item", "Old")]["replaced_by"] == "New"
+    assert groups["skills"][0]["added"][0]["name"] == "SQL" and groups["skills"][0]["removed"] == ["Java"]
+    # A page that disagrees with ART's own diff is an error, not a quiet difference.
+    try:
+        BUILD.build_groups({**inp, "diff": {**diff, "skills_added": ["Rust"]}}, reqs, {"default": "x"})
+    except AssertionError:
+        pass
+    else:
+        raise AssertionError("build_groups accepted a diff that does not match the pages")
+
+
+
 # --- the page ---------------------------------------------------------------------------
 
 INDEX = (SITE / "src" / "pages" / "index.astro").read_text(encoding="utf-8")
