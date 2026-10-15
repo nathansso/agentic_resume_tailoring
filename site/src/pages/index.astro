@@ -1,24 +1,129 @@
 ---
+// Home page (issue #273).
+//
+// Copy rule from the root CLAUDE.md: describe only what ARTie ships today. Every
+// factual claim below traces to docs/harness.md or plugin/README.md; anything the
+// docs list as planned (#252) stays off the page. Never promise an ATS score.
 import Base from "../layouts/Base.astro";
+import Icon from "../components/home/Icon.astro";
+
+const pains = [
+  {
+    title: "You've never written a real resume",
+    body: "Coursework, a hackathon, a part-time job. It all counts, but nobody shows you what belongs on the page or how to word it.",
+  },
+  {
+    title: "You don't know what recruiters want",
+    body: "Ten templates, ten opinions. The posting says what the team needs, but turning that into your resume is its own skill.",
+  },
+  {
+    title: "One resume, fifty postings",
+    body: "Tailoring each application by hand is the advice everyone gives and few people follow. It takes a lot of time per job.",
+  },
+];
+
+const steps = [
+  {
+    icon: "layers",
+    label: "Read you",
+    title: "Your agent reads what you've done",
+    body: "Claude Code or Codex reads your resume, your LinkedIn export and your project folders, and saves what you've done to a knowledge graph on your computer. Tell it to fix anything it got wrong.",
+    points: ["Built once with /art:setup", "Stays on your machine"],
+  },
+  {
+    icon: "target",
+    label: "Read the job",
+    title: "Then it reads the posting",
+    body: "Give /art:tailor a job posting or a link. Your agent pulls out what the role requires, and ART saves the job so you can come back to it.",
+    points: ["Paste text or a URL", "One saved job per application"],
+  },
+  {
+    icon: "list-checks",
+    label: "Tailor",
+    title: "It tailors from what you've approved",
+    body: "Your agent starts from your approved bullets and your saved preferences, like \"lead with Python\" or \"never mention Kafka\". It shows you the plan and waits for your OK before anything changes.",
+    points: ["Rewords and reorders, not a blank-page rewrite", "You approve the plan first"],
+  },
+  {
+    icon: "shield-check",
+    label: "Check",
+    title: "ART's gates check the result",
+    body: "Each rewritten bullet has to cite something in your graph, and its numbers and names have to match that evidence. Your pins and bans are enforced. The result has to fit on one page, at two lines per bullet or fewer. A change that fails is reverted, and your agent is told why.",
+    points: ["No fabrication", "Your pins and bans", "One page"],
+  },
+  {
+    icon: "printer",
+    label: "Render",
+    title: "It renders a LaTeX PDF",
+    body: "ART writes the .tex and the PDF to a folder on your computer. Every version is kept: /art:history lists them and /art:revert brings an old one back.",
+    points: ["PDF needs tectonic or pdflatex", "Otherwise you get the .tex file"],
+  },
+];
+
+const changes = [
+  ["Wording", "Your bullets, reworded from your approved versions"],
+  ["Emphasis", "The most relevant projects and roles move up"],
+  ["Skills", "Ranked and trimmed to what the posting asks for"],
+  ["Layout", "Section order chosen for the role, on one page"],
+];
+
+const needs = [
+  {
+    title: "Claude Code or Codex",
+    body: "Your own plan. Your agent's model does the reading and writing; ARTie never pays for or calls a text-writing model.",
+  },
+  {
+    title: "uv",
+    body: "The Python tool runner that starts ARTie. On the first start, uv downloads ARTie, so you need a network connection once.",
+  },
+  {
+    title: "tectonic or pdflatex",
+    body: "Only for PDFs. Without either you still get the .tex file.",
+  },
+];
+
+const faqs = [
+  {
+    q: "Does it write my resume from scratch?",
+    a: "No. ARTie starts from what you've recorded: your resume, your LinkedIn export, your project folders, and the bullets you've approved. Your agent rewords those for each posting, cites where each bullet came from, and shows you the plan before applying it. If you don't have a resume yet, start with whatever you do have, like a rough draft or a project folder.",
+  },
+  {
+    q: "Do I need an API key?",
+    a: "Not for ARTie. It makes no calls to a text-writing model, so there's nothing to pay for beyond your own Claude Code or Codex plan. You can optionally add a TypeSafe API key for a few extra checks. Everything works without one, and without one ARTie sends nothing to TypeSafe.",
+  },
+  {
+    q: "Where is my data stored?",
+    a: "On your computer. The knowledge graph, your preferences and every resume version are in ~/.art/art.db (or the folder in ART_DATA_DIR), and the rendered files go to ~/.art/applications/. What your own agent sends to its model provider is governed by that provider. If you add a TypeSafe key, the checks it runs send some text there too; the privacy note above says exactly what.",
+  },
+  {
+    q: "Will ARTie get me past applicant tracking systems (ATS)?",
+    a: "ARTie can't promise that, and it doesn't try to. It reports an ATS-style keyword score for each version, but it never optimizes for it and never promises one. That score only ever goes up as you add words, so chasing it rewards stuffing in keywords and penalizes cutting weak bullets. ARTie's checks look at different things: whether each bullet is supported by your history, whether you cover the posting's actual requirements, and whether it fits on one page.",
+  },
+];
 ---
 
 <Base
-  title="ARTie: land your first role"
-  description="ARTie helps students and new grads tailor their resume to the internships and entry-level roles they apply for."
+  title="ARTie: land your first internship or new-grad role"
+  description="ARTie runs inside Claude Code or Codex and tailors your resume to each internship or entry-level posting using only what you've actually done. It runs on your computer."
 >
+  <!-- Hero -->
   <section class="relative overflow-hidden border-b border-border/60">
     <div class="bg-grid absolute inset-0 [mask-image:radial-gradient(ellipse_at_top,black,transparent_72%)]"></div>
     <div class="absolute left-1/2 top-0 h-[420px] w-[820px] -translate-x-1/2 rounded-full bg-primary/15 blur-[130px]"></div>
 
     <div class="relative mx-auto max-w-4xl px-4 py-20 text-center sm:px-6 sm:py-32">
-      <h1 class="text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-6xl md:text-7xl">
+      <p class="inline-flex max-w-full items-center rounded-full border border-border bg-card/70 px-4 py-1.5 text-xs font-medium text-muted-foreground">
+        For students and new grads applying to internships
+      </p>
+
+      <h1 class="mt-8 text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-6xl md:text-7xl">
         Land your first role
         <br />
         <span class="text-gradient">with ARTie</span>
       </h1>
 
       <p class="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground sm:text-xl">
-        ARTie helps you tailor your resume to each internship or entry-level role you apply for.
+        Your own coding agent tailors your resume to each posting, using only what you've actually done. It runs on your computer, and there's no account to create.
       </p>
 
       <div class="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -35,13 +140,214 @@ import Base from "../layouts/Base.astro";
           How it works
         </a>
       </div>
+
+      <p class="mt-6 text-sm text-muted-foreground">
+        Free to use · Works with Claude Code and Codex · <a href="/install" class="underline underline-offset-4 hover:text-foreground">Install steps</a>
+      </p>
     </div>
   </section>
 
-  <!-- PLACEHOLDER: the "how it works" content is written in a separate issue.
-       Keep the id: the hero's secondary button links here. -->
-  <section id="how-it-works" class="mx-auto max-w-4xl scroll-mt-20 px-4 py-20 text-center sm:px-6">
-    <h2 class="text-2xl font-bold tracking-tight sm:text-3xl">How it works</h2>
-    <p class="mt-3 text-muted-foreground">Coming soon.</p>
+  <!-- Pain points -->
+  <section class="border-b border-border/60 py-20 sm:py-24" aria-labelledby="pain-heading">
+    <div class="mx-auto max-w-6xl px-4 sm:px-6">
+      <div class="mx-auto max-w-2xl text-center">
+        <h2 id="pain-heading" class="text-3xl font-bold tracking-tight sm:text-4xl">
+          Writing your first real resume is hard
+        </h2>
+        <p class="mt-4 text-lg text-muted-foreground">
+          Not because you haven't done anything. Turning what you've done into what a recruiter scans for is a separate skill.
+        </p>
+      </div>
+
+      <ul class="mt-12 grid gap-6 md:grid-cols-3">
+        {pains.map((p) => (
+          <li class="rounded-lg border border-border bg-card p-7 transition-colors hover:border-primary/40">
+            <h3 class="font-semibold leading-snug">{p.title}</h3>
+            <p class="mt-3 text-sm leading-relaxed text-muted-foreground">{p.body}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section id="how-it-works" class="scroll-mt-16 border-b border-border/60 py-20 sm:py-24" aria-labelledby="how-heading">
+    <div class="mx-auto max-w-6xl px-4 sm:px-6">
+      <div class="mx-auto max-w-2xl text-center">
+        <p class="text-sm font-semibold uppercase tracking-widest text-accent">The method</p>
+        <h2 id="how-heading" class="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
+          How ARTie tailors a resume
+        </h2>
+        <p class="mt-4 text-lg text-muted-foreground">
+          Your coding agent does the reading and writing. ARTie keeps your facts and your preferences, and checks every change.
+        </p>
+      </div>
+
+      <ol class="mt-12 space-y-5">
+        {steps.map((step, i) => (
+          <li class="grid gap-5 rounded-lg border border-border bg-card p-6 sm:p-8 md:grid-cols-[10rem_1fr] md:gap-10">
+            <div class="flex items-center gap-4 md:flex-col md:items-start md:gap-3">
+              <div class="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent">
+                <Icon name={step.icon as any} class="h-6 w-6" />
+              </div>
+              <div class="md:mt-1">
+                <div class="font-mono text-xs text-muted-foreground">Step {i + 1}</div>
+                <div class="text-sm font-semibold text-accent">{step.label}</div>
+              </div>
+            </div>
+
+            <div class="min-w-0">
+              <h3 class="text-xl font-semibold tracking-tight">{step.title}</h3>
+              <p class="mt-3 leading-relaxed text-muted-foreground">{step.body}</p>
+              <ul class="mt-5 flex flex-wrap gap-x-6 gap-y-2">
+                {step.points.map((pt) => (
+                  <li class="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Icon name="check" class="h-4 w-4 shrink-0 text-success" />
+                    {pt}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </li>
+        ))}
+      </ol>
+
+      <!-- Privacy -->
+      <aside
+        class="mt-8 flex flex-col gap-4 rounded-lg border border-border bg-card p-6 sm:flex-row sm:gap-6 sm:p-8"
+        aria-labelledby="privacy-heading"
+      >
+        <div class="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent">
+          <Icon name="lock" class="h-6 w-6" />
+        </div>
+        <div class="min-w-0">
+          <h3 id="privacy-heading" class="text-xl font-semibold tracking-tight">ARTie runs on your computer</h3>
+          <p class="mt-3 leading-relaxed text-muted-foreground">
+            Your knowledge graph, preferences, resume versions and rendered files are stored on your machine. ARTie makes no calls to a text-writing model. The only things that leave your computer are what your own agent sends to its model provider, which includes whatever it reads from your resume and the posting.
+          </p>
+          <p class="mt-3 leading-relaxed text-muted-foreground">
+            One optional exception: if you set a TypeSafe API key, ARTie also asks TypeSafe's Jev a few narrow classification questions. Those requests carry excerpts of your resume bullets, the posting's requirements and job title, and your messages when ARTie checks whether one states a lasting preference. Jev never writes resume text. Without a key, or with <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-sm">ART_JEV_MODE=off</code>, nothing is sent and each check uses a built-in fallback.
+          </p>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- Never invents -->
+  <section id="grounded" class="scroll-mt-16 border-b border-border/60 py-20 sm:py-24" aria-labelledby="grounded-heading">
+    <div class="mx-auto grid max-w-6xl gap-12 px-4 sm:px-6 md:grid-cols-2 md:items-center md:gap-14">
+      <div>
+        <p class="text-sm font-semibold uppercase tracking-widest text-accent">Why you can trust it</p>
+        <h2 id="grounded-heading" class="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
+          It never invents experience you don't have
+        </h2>
+        <p class="mt-5 leading-relaxed text-muted-foreground">
+          The quickest way to make a resume match a posting is to add things that aren't true. It's also the quickest way to fall apart in an interview, so ARTie is built to refuse it.
+        </p>
+        <p class="mt-4 leading-relaxed text-muted-foreground">
+          Every rewritten bullet has to cite something in your knowledge graph, and ARTie rejects a plan that names something your graph doesn't hold. Numbers and names are checked against the cited evidence, and anything you've banned stays off the page.
+        </p>
+        <p class="mt-4 leading-relaxed text-muted-foreground">
+          You approve the plan before it's applied, and you can edit any line yourself in the local editor (<code class="rounded bg-muted px-1.5 py-0.5 font-mono text-sm">art ui</code>). Read the PDF before you send it, as you would with any resume.
+        </p>
+      </div>
+
+      <div class="rounded-lg border border-border bg-card p-6 sm:p-8">
+        <h3 class="font-mono text-xs font-normal uppercase tracking-widest text-muted-foreground">
+          What tailoring changes
+        </h3>
+        <dl class="mt-6 space-y-4">
+          {changes.map(([k, v]) => (
+            <div class="flex gap-4">
+              <dt class="w-20 shrink-0 text-sm font-semibold">{k}</dt>
+              <dd class="text-sm text-muted-foreground">{v}</dd>
+            </div>
+          ))}
+        </dl>
+        <div class="mt-8 border-t border-border pt-6">
+          <h3 class="font-mono text-xs font-normal uppercase tracking-widest text-muted-foreground">
+            What it never changes
+          </h3>
+          <p class="mt-3 text-sm text-muted-foreground">
+            The facts. What's in your knowledge graph, such as your employers, titles and what you built, stays as you recorded it, and tailoring can only cite it. The one thing that can vary by posting is a rule you answer yourself, like an expected graduation date.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Who it's for / what you need -->
+  <section class="border-b border-border/60 py-20 sm:py-24" aria-labelledby="needs-heading">
+    <div class="mx-auto max-w-6xl px-4 sm:px-6">
+      <div class="mx-auto max-w-2xl text-center">
+        <p class="text-sm font-semibold uppercase tracking-widest text-accent">Before you start</p>
+        <h2 id="needs-heading" class="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
+          Who it's for and what you need
+        </h2>
+        <p class="mt-4 text-lg text-muted-foreground">
+          ARTie is for students and new grads applying to internships and entry-level roles, who are comfortable running Claude Code or Codex. It's a plugin for those tools, not a website. It's free to use, and the code is public on GitHub.
+        </p>
+      </div>
+
+      <ul class="mt-12 grid gap-6 md:grid-cols-3">
+        {needs.map((n) => (
+          <li class="rounded-lg border border-border bg-card p-7">
+            <h3 class="font-semibold leading-snug">{n.title}</h3>
+            <p class="mt-3 text-sm leading-relaxed text-muted-foreground">{n.body}</p>
+          </li>
+        ))}
+      </ul>
+
+      <p class="mt-8 text-center">
+        <a href="/install" class="font-semibold text-accent underline underline-offset-4 hover:opacity-80">
+          See the install steps
+        </a>
+      </p>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="border-b border-border/60 py-20 sm:py-24" aria-labelledby="faq-heading">
+    <div class="mx-auto max-w-3xl px-4 sm:px-6">
+      <h2 id="faq-heading" class="text-center text-3xl font-bold tracking-tight sm:text-4xl">Questions</h2>
+
+      <div class="mt-10 divide-y divide-border rounded-lg border border-border bg-card">
+        {faqs.map((f) => (
+          <details class="group px-5 py-4 sm:px-6">
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold [&::-webkit-details-marker]:hidden">
+              <span>{f.q}</span>
+              <Icon name="chevron-down" class="h-5 w-5 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+            </summary>
+            <p class="mt-3 leading-relaxed text-muted-foreground">{f.a}</p>
+          </details>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- Closing CTA -->
+  <section class="relative overflow-hidden py-24 sm:py-28" aria-labelledby="cta-heading">
+    <div class="absolute left-1/2 top-1/2 h-[320px] w-[720px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/15 blur-[130px]"></div>
+    <div class="relative mx-auto max-w-2xl px-4 text-center sm:px-6">
+      <h2 id="cta-heading" class="text-3xl font-bold tracking-tight sm:text-4xl">
+        Your experience is enough.
+        <br />
+        Let's write it down properly.
+      </h2>
+      <p class="mt-5 text-lg text-muted-foreground">
+        Start with whatever you have, even a rough draft and a project folder. Installing takes two commands in Claude Code.
+      </p>
+      <a
+        href="/install"
+        class="mt-9 inline-flex items-center justify-center rounded-lg bg-primary px-8 py-4 font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+      >
+        Install in Claude Code
+      </a>
+      <ul class="mt-10 flex flex-wrap items-center justify-center gap-x-7 gap-y-3 text-sm text-muted-foreground">
+        <li class="flex items-center gap-2"><Icon name="file-text" class="h-4 w-4" /> Resume</li>
+        <li class="flex items-center gap-2"><Icon name="briefcase" class="h-4 w-4" /> LinkedIn export</li>
+        <li class="flex items-center gap-2"><Icon name="folder" class="h-4 w-4" /> Project folders</li>
+      </ul>
+    </div>
   </section>
 </Base>

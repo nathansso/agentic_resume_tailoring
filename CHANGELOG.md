@@ -14,6 +14,30 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 273 — Landing site home page content
+**Status:** complete | **Tests:** 2666 pass (30 new), 24 skipped, on SQLite; the Postgres leg was not run (nothing here touches storage)
+
+Second child of the landing-site epic (#271): the real home page for students applying to internships and new-grad roles, replacing #272's placeholder. The install and usage pages are #274.
+
+### What shipped
+
+- **`site/src/pages/index.astro`**, seven sections: the hero (headline "Land your first role with ARTie", a primary "Install in Claude Code" button to `/install`, a "How it works" button to `#how-it-works`, no account of any kind); three student pain points ported from `LandingPage.tsx` (first resume, no idea what recruiters want, one resume for fifty postings); "How ARTie tailors a resume" in five steps for the harness model (your agent reads you, reads the posting, tailors from approved bullets and preferences, ART's gates check it, a LaTeX PDF is rendered); "It never invents experience you don't have" with the changes/never-changes card; who it's for and what you need (Claude Code or Codex, `uv`, tectonic or pdflatex); a `<details>` FAQ; and a closing install band.
+- **A privacy note under "How it works".** ARTie runs locally and stores data on your machine; the only things that leave are what your own agent sends to its model provider; and the optional TypeSafe Jev key, when set, sends excerpts of resume bullets, the posting's requirements and title, and your messages when the memory gate runs. With no key or `ART_JEV_MODE=off`, nothing is sent. Worded from `docs/harness.md` section 4, "Privacy".
+- **The ATS answer.** The FAQ says ARTie reports an ATS-style score but never optimizes for it or promises one, and why: the composite only rises as text is added (`docs/harness.md` section 5).
+- **`site/src/components/home/Icon.astro`**, a small inline-SVG icon set (Lucide shapes, ISC) so the page needs no icon dependency.
+- **`tests/test_site_home.py`** (no npm, no network): one h1, the CTA targets, the `#how-it-works` anchor, every internal link going to `/install` or an anchor, banned phrases (open source, sign up, hosted, guarantee, "beat the ATS", an ATS percentage), no statistics, no mention of planned tools (`record_feedback`, `check_draft`), the five harness steps, the accuracy of the privacy and Jev wording, the FAQ questions, and the aria wiring.
+- Checked at 375px in light and dark: no horizontal scroll, and nothing outside the clipped hero glows is wider than the viewport.
+
+### Deviations from spec
+
+- **"GitHub" is not named as a source.** The issue lists resume, GitHub and LinkedIn, but `docs/harness.md` and `plugin/README.md` say the host reads the resume, the LinkedIn export and local project folders (repos). The page says exactly that.
+- **The "one page" gate.** The docs file page count under "Finalize" (nothing commits on a violation), not under the hard gates, and the two-line bullet limit is a hard gate. The page says "the result has to fit on one page, at two lines per bullet or fewer" rather than calling both hard gates.
+- **No license claim.** `pyproject.toml` says Proprietary. The page says "free to use" and "the code is public on GitHub", and never "open source". The epic's "free, open-source" wording is untouched; settling the license is still open.
+- **Lighthouse was not run.** The accessibility score (95 or higher) needs a Lighthouse run against the deployed preview. Semantics were checked by hand: one h1, labelled sections, decorative icons aria-hidden, native `<details>`.
+- **Not described, because planned (#252):** `record_feedback`, `check_draft`, and the Jev points for eligibility rules, semantic duplicates, action ranking and role family.
+
+---
+
 ## Issue 295 — Preference anchor resolver: a preference binds to what its subject denotes, or stays pending, or is a document subject
 **Status:** complete | **Tests:** 2766 pass on SQLite (59 new), 24 skipped
 
