@@ -42,7 +42,7 @@ web/
         ChatPanel.tsx          # Chat UI with SSE streaming
         DataExplorer.tsx       # Tabs: Evidence map (default), Bullet picker, Skills, Experiences, Education, Projects, Achievements, Summary, Charts
         EvidenceMap.tsx        # Evidence map tab (#136): SVG evidence map, search, folding, compare-to-a-job
-        EvidencePanel.tsx      # Its side panel: skill evidence, item editor (saves via the PATCH routes)
+        EvidencePanel.tsx      # Its side panel: skill evidence, item editor (saves via the PATCH routes), dismiss/restore an unproven skill (#321)
         BulletPicker.tsx       # Bullet picker tab (#319): bullets ranked for a job, budget, coverage column, résumé preview
         ProfilePanel.tsx       # View/edit user profile fields
         IngestPanel.tsx        # Resume upload, GitHub ingestion

@@ -79,6 +79,32 @@ The before and after on the landing page (#275) did not sell the product: two li
 
 ---
 
+## Issue 321 — Dismiss a skill claim that nothing proves
+**Status:** complete | **Tests:** 3137 pass on SQLite (15 new), 16 skipped, 0 fail; frontend 174 pass (4 new); `npm run build` and `npm ci --dry-run` pass; the Postgres leg was not run locally (the Docker daemon was not running), CI's required Postgres leg covers it
+
+A skill no bullet cites (a LinkedIn skill list entry, a GitHub language) can be dismissed from the evidence map's side panel. It leaves the map, the job overlay, the picker and tailoring inputs, and a re-import does not bring it back. A "Dismissed · N" button in the summary strip opens a list with Restore.
+
+### What shipped
+
+- **`services.dismiss_skill` / `list_dismissed_skills` / `restore_skill`** and three owner-scoped routes: `POST /api/profile/skills/{skill_id}/dismiss` (404 when it is not the caller's, 409 when a bullet cites it), `GET /api/profile/skills/dismissed` (`[{skill_id, name, dismissed_at, sources}]`, A to Z) and `POST /api/profile/skills/{skill_id}/restore`. Dismissing deletes the user's `UserSkill` rows for the skill (every source) and writes a `DeletedEntry` tombstone (`entity_type="skill"`, `key_a` the canonical key); the global `Skill` row is untouched. Whether a bullet cites the skill is read from the evidence view itself (`evidence_view.cited_skill_keys`), not from a second matcher, so the panel and the server agree. A GitHub-only link does not count as a citation.
+- **`DeletedEntry.payload`**, a nullable JSON column (`ALTER TABLE deletedentry ADD COLUMN payload JSON` in `_migrate_db`). A skill tombstone snapshots the deleted rows (source, detail, proficiency, confidence, `is_core`, `source_context`, both timestamps), so a restore re-creates them exactly and drops the tombstone. Existing tombstones keep a NULL payload and block as before; other entity types do not use it. It exports and imports like the table's other columns.
+- **Ingest respects it.** `agents/kg_store._save_skills` loads the user's skill tombstones once and returns `skipped_tombstone` for a dismissed skill, so the legacy parser, GitHub and LinkedIn ingest and the harness `upsert_items` all skip it. Matching is on `agents.skill_matching.skill_fold` (the canonical name, punctuation and spacing folded), so an alias ("torch" for PyTorch) and a re-spelling ("Time-Series Analysis") are caught. `harness/ingest.py` gives it a message ("The user dismissed this skill; it was not re-added.") and reports every spelling of it in one batch as skipped.
+- **An explicit add clears the dismissal.** `add_skill_to_profile` and `create_artifact_from_chat` (a skill) delete the matching tombstone before adding, so asking for the skill in chat brings it back.
+- **UI.** `SkillDetail` shows "Dismiss this skill" for a skill with no citing bullet (`lib/evidenceMap.ts::canDismiss`), with an inline confirmation (no `window.confirm`) that says what it does, then re-reads the map and opens the dismissed list. `DismissedList` has a Restore button per skill. A selection key `DISMISSED_KEY` names the list; `isPanelKey` keeps it out of the neighbourhood highlight. Tailwind utilities and `--graph-*` tokens only; no new npm dependency, `package-lock.json` untouched.
+- **Tests.** 15 Python in `tests/test_skill_dismiss.py`: rows gone with a tombstone snapshot and absent from the view, `get_skills`, the graph and harness `list_items`; a cited skill is refused with nothing changed; a GitHub-only skill can be dismissed; the kg_store path skips a skill, an alias and a re-spelling; the harness `upsert_items` path skips it; restore returns identical rows; a restored skill ingests again; a chat add clears it (both chat paths); route round trip; cross-user isolation (another user's dismiss, restore and list, and an ingest for a user who did not dismiss); an old table without `payload` migrates, idempotently, and an old tombstone still blocks. 4 vitest in `lib/evidenceMap.test.ts` (`canDismiss`, `skillIdOf`, `isPanelKey`).
+- **Verified by hand** in `python -m web.local_ui` against a throwaway SQLite store: dismissing a no-evidence skill through the inline confirmation, the "Dismissed · 1" button and list, the skill gone from the map and the Skills tab count, a harness re-ingest of the same skill reporting `skipped_tombstone`, Restore putting it back, a cited skill showing no Dismiss button and answering the route with 409, and a cross-origin POST refused by the local-mode guard (403).
+
+### Deviations from spec
+
+- **The Dismissed list is a panel selection, not a separate view.** It opens in the side panel like a skill or an item, from the summary strip. When the last skill is restored, the panel returns to its empty state.
+- **Dismissing also clears nothing else.** A preference or term pin that names the skill is left alone: a ban on a skill is still a ban.
+- **The tombstone key is the canonical name, matched folded.** The plan said "canonical key"; ingest also dedups on a punctuation-folded form, so the match uses `skill_fold`, which is a superset.
+- **A skill that was already tombstoned and is dismissed again** replaces the old tombstone rather than stacking.
+- **No MCP or harness tool** for dismiss or restore in this issue (a possible follow-up, since a host cannot dismiss a claim today).
+- **Not done:** the Postgres leg (Docker daemon not running); a screen reader pass; component tests (the repo has no DOM test setup, so the panel flow was checked in the browser). Two `Skill` rows that fold to one name would show as two skills and need dismissing separately, though a re-ingest of either is skipped.
+
+---
+
 ## Issue 319 — Bullet picker for a job
 **Status:** complete | **Tests:** 2988 pass on SQLite (5 new), 16 skipped, 0 fail; frontend 170 pass (19 new); `npm run build` and `npm ci --dry-run` pass; the Postgres leg was not run locally (the Docker daemon was not running), CI's required Postgres leg covers it
 
