@@ -15,7 +15,7 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 ---
 
 ## Issue 297 — Preferences follow the graph: re-link on ingest, follow renames and deletes, items carry their preferences
-**Status:** complete | **Tests:** 2786 pass on SQLite (21 new), 24 skipped
+**Status:** complete | **Tests:** 2835 pass on SQLite (21 new), 24 skipped
 
 A preference about something the graph lacked stayed pending forever, a renamed item silently orphaned its keyed preferences, a deleted one left a dangling key that enforced nothing, and `get_item` / `kg_search` / `list_items` showed none of what the user had said about an item. This is phase 4 of 7 of the preference-anchoring plan (#295–#300).
 
