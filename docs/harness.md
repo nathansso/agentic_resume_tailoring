@@ -182,9 +182,10 @@ And pooling hid real results: the per-stratum spread in #172 vanished when poole
 **The acceptance rule (#113).** An action commits if and only if all of the following hold:
 
 1. It passes every hard gate.
-2. No guard regresses by more than its tolerance, unless it is a requested delete (below).
+2. No guard regresses by more than its tolerance, unless it is a requested delete or a
+   carried-over editor edit (below).
 3. It improves at least one target, or it is a delete or reorder that the user or a
-   preference requested.
+   preference requested, or a carried-over editor edit.
 
 **A requested delete is not vetoed by a guard (#279, #289).** A delete or a `delete_bullet`
 (§ 7) carrying `because: "user:..."` or `"pref:..."` faces every hard gate and no guard. A delete cannot fabricate, and removing text
@@ -200,6 +201,25 @@ recognised as "only removes bullets" and waived. The regressions
 are never hidden: the node is `accepted` with `reason: "guard_waived: requested delete; ..."`,
 `guard_regressions` and a `waived` map in its result, so the host can tell the user what the cut
 cost. No tolerance changes; a delete with no `because` is judged as before.
+
+**A carried-over editor edit is not vetoed by a guard either (#306).** The user's own words are
+not an optimiser's: a hand-typed bullet is short, repeats itself and ignores the posting, so it
+lowers MTLD and keyword density, and a `revise` carrying it back (§ 13, #278) was reverted, which
+pushed the host toward discarding the edit. The executor therefore verifies it, without trusting
+the host. A `revise` (or `replace`) is a carried-over edit when its bullets differ from the
+page's item only by texts that are, whitespace aside, the user's edited text for a bullet of that
+item in the parent's `edited_tex` as `harness/texdiff.py` reads it (the `revised` and `added`
+bullets of `diff_nodes.tex_edits`), and by the bullets those edits replaced or removed. The node
+needs no label and a label would count for nothing: the bullet is identified by its text against
+the `<item key>#b<n>` edit it matches, which the result reports as `carried_edit`. Reword it by one
+word, change another bullet, or drop one the user kept, and it is an ordinary revise that faces
+every guard. For a carried-over edit the guards and the target rule are waived on the same terms as
+a requested delete, and every regression is reported under `waived` (a target that fell, with no
+target rising, is listed there too). **Every hard gate still applies in full**: support, numbers
+and entities (`consistency`), citations, preferences and pins, the line gates, and the page budget
+at finalize. When one refuses the edit, the node's `reason` names the gate and the claim, says not
+to reword the user's text, and tells the host to record the supporting fact with `upsert_items`
+(or ask the user whether it is true), cite it, and retry. No tolerance changes.
 
 A stuffing edit fails the target test (unsupported terms weigh zero) or the stuffing guard.
 A preference-driven delete passes, and relevance density usually rises. Tolerances today are
@@ -698,6 +718,31 @@ python -m web.local_ui --job <job_id>        # from a checkout
   asks before reloading.
 - **Edits reach the host.** Every `.tex` save and drag commits an `editor` node, so the
   host's next `get_head(since_event=...)` lists it under `editor_edits`.
+- **A `.tex` edit says which bullets it changed (#278).** The node keeps the user's text
+  as `edited_tex` next to a `content` that still holds the pre-edit bullets (the raw text
+  is never folded back into `content`: it would render without the support check).
+  `diff_nodes` therefore reads the source back, with `harness/texdiff.py` (a parser, no
+  model): the `%% ART-SECTION` markers and the formatter's headings give the item, and
+  `tex_edits` lists per item the bullets **revised** (id `<item key>#b<n>` on the earlier
+  version, text before and after), **added** and **removed**, the items whose bullets only
+  **moved**, and sections that moved. A region it cannot read as bullets (a heading, the
+  header, skills, the preamble, a deleted marker) comes back as a unified diff under
+  `unmapped`: a tex change is never reported as nothing. `get_head`'s `editor_edits` and
+  the prompt hook carry the same list, shortened, for the whole run of saves since the last
+  version that was not an editor edit.
+- **A commit never drops a `.tex` edit silently.** A committed version renders from its
+  `content`, so `execute_plan` on a parent whose `edited_tex` says more than its content
+  (after the parent's layout override is laid over it) refuses with the violation
+  `discards_editor_edits` and lists the edited bullets. The host either **carries the
+  edits over** as plan nodes (a `revise` with the user's text, a `delete_bullet` for a
+  removed bullet; they face every hard gate, and a `revise` that is verbatim the user's text
+  faces no guard (§ 5, #306), then the check is satisfied) or,
+  **after asking the user**, sets `discard_editor_edits: true`: the commit goes ahead and
+  the response records `discarded_editor_edits`. Unmapped regions and edits to an item a
+  plan cannot address (achievements) cannot be carried, so they need the flag. A drag
+  (a layout override) is not an edit to protect: the override is applied to the new
+  version (#277). A plan that changes nothing (`no_change`) commits nothing and refuses
+  nothing.
 
 ## 14. Learning offline
 

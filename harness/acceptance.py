@@ -13,6 +13,8 @@ has a role:
   A *requested delete* (#279) is exempt: removing text cannot fabricate and
   lowers MTLD and the other diversity measures almost by definition, so a guard
   regression there is expected. The regressions are still reported, under `waived`.
+  A *carried-over editor edit* (#306) is exempt the same way: the user wrote that
+  text, and the executor verified it verbatim against their `.tex`.
   `variant_drift` (#229) is absolute, not relative to the parent: how far a
   bullet that names an approved variant has moved from it.
 - **Targets** (`coverage`, `relevance_density`, `semantic_coverage`): an action
@@ -362,7 +364,7 @@ def _guard_regression(name: str, before, after) -> float:
 
 def accept(before: Dict, after: Dict, *, improves: Iterable[str] = (),
            tolerances: Optional[Dict[str, float]] = None,
-           requested: bool = False) -> Dict[str, Any]:
+           requested: bool = False, carried: bool = False) -> Dict[str, Any]:
     """Apply the three-part rule to one action's before/after vectors.
 
     1. No hard gate gains a violation.
@@ -375,6 +377,13 @@ def accept(before: Dict, after: Dict, *, improves: Iterable[str] = (),
     cannot fabricate, and a guard regression on one (MTLD above all) is expected, not
     a quality failure (#279). A waived regression is accepted but still reported, in
     `guard_regressions` and `waived`, and `reason` says so.
+
+    `carried` marks a revise whose new text the executor verified as the user's own hand
+    edit, verbatim (#306). It waives rules 2 and 3 on the same terms: hard gates apply in
+    full, and every regression is reported under `waived`, a target that fell included
+    (a target's name there means it moved down by that much, and only when no target
+    improved, the case rule 3 would have vetoed), since the user's wording
+    owes the posting nothing and the user, not the host, should hear what it cost.
     """
     tol = {**DEFAULT_TOLERANCES, **(tolerances or {})}
     new_violations = {}
@@ -402,16 +411,26 @@ def accept(before: Dict, after: Dict, *, improves: Iterable[str] = (),
     deltas = {t: _r((after["targets"].get(t) or 0.0) - (before["targets"].get(t) or 0.0))
               for t in live}
 
+    waive = requested or carried
+    # A fallen target is waived only when it would have vetoed: no wanted target improved (rule 3).
+    if carried and not improved:
+        regressed_targets = {t: _r((before["targets"].get(t) or 0.0) - (after["targets"].get(t) or 0.0))
+                             for t in live
+                             if (after["targets"].get(t) or 0.0)
+                             < (before["targets"].get(t) or 0.0) - _EPS}
+    else:
+        regressed_targets = {}
     waived = {}
     if new_violations:
         reason = "hard_gate: " + "; ".join(f"{g} {v}" for g, v in new_violations.items())
-    elif regressed and requested:
-        waived = dict(regressed)
-        reason = ("guard_waived: requested delete; "
-                  + ", ".join(f"{g} regressed {v}" for g, v in regressed.items()))
+    elif (regressed or regressed_targets) and waive:
+        waived = {**regressed, **regressed_targets}
+        reason = (("guard_waived: carried editor edit; " if carried
+                   else "guard_waived: requested delete; ")
+                  + ", ".join(f"{g} regressed {v}" for g, v in waived.items()))
     elif regressed:
         reason = "guard: " + ", ".join(f"{g} regressed {v}" for g, v in regressed.items())
-    elif not improved and not requested:
+    elif not improved and not waive:
         reason = "no_target_improved: " + ", ".join(wanted)
     else:
         reason = None

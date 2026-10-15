@@ -1070,7 +1070,10 @@ legacy readers keep working.
    one target improves (a delete the user or a preference requested, whether of a whole item
    (`delete`) or of whole bullets (`delete_bullet`, #289), is exempt from the third, and from the
    second: a guard regression on one is accepted and reported under `waived`, #279; hard gates
-   still apply). A
+   still apply. So is a `revise` the executor verifies as the user's own editor edit, verbatim
+   against the parent's `edited_tex` (`texdiff.carried_by`, #306): its result carries
+   `carried_edit`, and a hard gate that refuses it says which gate and claim, and to record the
+   fact with `upsert_items` and retry). A
    node that fails is reverted and the independent ones continue. There is no scalar and no
    weight; the vectors are compared metric by metric.
 3. **Finalize** checks the whole page: the preferences (including the whole-page negative-pin
@@ -1082,6 +1085,10 @@ legacy readers keep working.
    refused or kept; no skills, section-order or job-rule change) is not a version: it returns
    `committed: false`, `reason: no_change` (`executor.NO_CHANGE`), and writes no node and no
    `TreeEvent`. A job's first plan always commits, even `nodes: []`.
+   A parent that carries a hand-edited `.tex` (`edited_tex`) the plan does not hold is refused
+   as a finalize violation, `discards_editor_edits` (#278, `harness/texdiff.py`), unless the plan
+   carried the edits over as nodes or sets `discard_editor_edits` (then
+   `discarded_editor_edits` records them). See `docs/harness.md` § 13.
 
 The vector's roles (`metric_vector`):
 

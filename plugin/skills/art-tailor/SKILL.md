@@ -20,6 +20,9 @@ The tools named below are the ART MCP server's tools.
   `software_engineering`, `machine_learning`, `data_science`, `data_engineering`,
   `research`, `product_management`, `design`, `devops_infrastructure`, `security`,
   `hardware` and `other`.
+- When you work on an existing job, or once `open_job` returns the job id, call
+  `art_briefing` with `job_id` instead. It adds the job's own preferences and its recorded
+  role family, which is exactly the set `execute_plan` enforces.
 - **Pins are hard rules.** Quote them to yourself and honour them verbatim.
 - Note `job_rules`: yes/no questions about the posting, such as whether it requires
   enrollment after the internship. Answer each from the posting's own words, keeping
@@ -71,7 +74,24 @@ The tools named below are the ART MCP server's tools.
   experience or project. Approved wording beats regenerated wording (see step 4).
 - Call `get_head(job_id)`. If the job already has a version, build on it; the plan's
   `parent` must be its `node_id`. Respect anything under `editor_edits`: the user made
-  those changes by hand.
+  those changes by hand. When the user edited the `.tex`, `editor_edits[].changes.tex_edits`
+  lists the bullets they revised, added or removed (`diff_nodes` has the whole list), and
+  anything outside the bullets as an `unmapped` diff.
+- A commit on top of a `.tex` edit is refused (`discards_editor_edits`, listing the edited
+  bullets) because a new version is built from structured content and would drop the
+  user's text. Carry the edits over as nodes: a `revise` for each reworded or added bullet
+  with the user's text, a `delete_bullet` with a `because` for each bullet they removed,
+  then run again. Send the user's text **verbatim** (the `after` of each `tex_edits`
+  entry, the rest of the item's bullets unchanged) and the executor recognises it against
+  their `.tex` (`carried_edit` on the node): no guard vetoes the user's own words, and
+  any MTLD or keyword-density drop is listed under `waived`, so tell them what it cost.
+  Hard gates still apply. If one refuses it, the node's `reason` names the gate and the
+  claim (a number or name its cited evidence does not state): record that fact with
+  `upsert_items` (or ask the user whether it is true), cite it, and retry. Do not reword
+  the user's text to get past a gate: reworded, it is an ordinary revise and every guard
+  applies again. An `unmapped` region cannot be carried. When
+  the user does not want an edit kept, ask them, and only then set
+  `discard_editor_edits: true`; the response lists what was discarded, so tell them.
 
 ## 4. Draft the plan and get approval
 
