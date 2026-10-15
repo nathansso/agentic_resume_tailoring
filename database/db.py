@@ -165,6 +165,9 @@ def _migrate_db() -> None:
         "ALTER TABLE education ADD COLUMN seq INTEGER",
         "ALTER TABLE achievement ADD COLUMN seq INTEGER",
         "ALTER TABLE project ADD COLUMN seq INTEGER",
+        # issue 327: a project's bullets are its blurbs; position among them is
+        # what `proj:<name>#b<n>` cites name. Backfilled by _backfill_blurb_seq.
+        "ALTER TABLE projectblurb ADD COLUMN seq INTEGER",
         # issue 180: per-(user, job) run ordinal, so "the latest result" is
         # decided by the run that produced it. Backfilled by
         # _backfill_result_seq below.
@@ -431,6 +434,72 @@ def _backfill_document_seq() -> None:
             session.commit()
 
 
+def blurb_sort_key(row) -> tuple:
+    """The one order a project's bullets are numbered in (issue #327).
+
+    `seq` first, with unassigned rows last (the explicit NULL term, for the
+    reason `_assign_missing_seq`'s callers give: SQLite and Postgres disagree
+    about NULL placement). Ties, and rows with no ordinal, fall to `(style,
+    blurb_id)` -- the order every read used before the column existed, so a row
+    the backfill has not reached resolves exactly as it always did.
+    """
+    return (row.seq is None, row.seq if row.seq is not None else 0,
+            row.style or "", str(row.blurb_id))
+
+
+def ordered_blurbs(rows) -> dict:
+    """`{project_id: [ProjectBlurb, ...]}` with each project's blurbs in bullet order.
+
+    The only place project bullets are ordered. Every builder or resolver of a
+    `proj:<name>#b<n>` cite (the harness records, the knowledge-graph builder)
+    goes through it, so `#b<n>` names the same bullet in all of them whatever
+    order the database returned the rows in.
+    """
+    out: dict = {}
+    for row in sorted(rows, key=blurb_sort_key):
+        out.setdefault(row.project_id, []).append(row)
+    return out
+
+
+def next_blurb_seq(session, project_id) -> int:
+    """The ordinal for a bullet appended to this project (issue #327).
+
+    Rows that predate the column are given theirs first, in their legacy
+    `(style, blurb_id)` order, so a new bullet always lands after every existing
+    one rather than ahead of the unnumbered rows (which sort last).
+    """
+    from sqlmodel import select
+    from database.models import ProjectBlurb
+
+    rows = session.exec(
+        select(ProjectBlurb).where(ProjectBlurb.project_id == project_id)).all()
+    taken = [r.seq for r in rows if r.seq is not None]
+    next_free = max(taken) + 1 if taken else 0
+    for row in sorted((r for r in rows if r.seq is None), key=blurb_sort_key):
+        row.seq = next_free
+        session.add(row)
+        next_free += 1
+    return next_free
+
+
+def _backfill_blurb_seq() -> None:
+    """Assign `seq` to project bullets that predate the column (issue #327).
+
+    Per project, in the order those rows were already read in: `(style,
+    blurb_id)`. That is deliberate and not the order they were written in. A
+    plan's `proj:<name>#b<n>` cites, and the `cut_bullets` and version nodes that
+    hold them, were resolved against that order, so reproducing it is what keeps
+    them naming the bullets they named when they were written. Re-deriving true
+    source order from `created_at` would silently re-point every stored cite.
+    """
+    from sqlmodel import Session
+    from database.models import ProjectBlurb
+
+    with Session(engine) as session:
+        if _assign_missing_seq(session, ProjectBlurb, ("project_id",), blurb_sort_key):
+            session.commit()
+
+
 def _backfill_result_seq() -> None:
     """Assign `seq` to tailoring results that predate the column (issue #180).
 
@@ -465,6 +534,7 @@ def init_db():
     _migrate_pg_vector_columns()
     _backfill_chat_seq()
     _backfill_document_seq()
+    _backfill_blurb_seq()
     _backfill_result_seq()
     _backfill_tailor_tree()
 

@@ -6,7 +6,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 
 from llm import get_llm
-from database.db import engine
+from database.db import engine, next_blurb_seq
 from database.models import Project, ProjectBlurb
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,7 @@ class ProjectEnhancerAgent:
         
         chain = prompt | self.llm
 
+        seq = next_blurb_seq(session, project.project_id)
         for style in styles:
             try:
                 # Basic description fallback if empty
@@ -58,8 +59,10 @@ class ProjectEnhancerAgent:
                 blurb = ProjectBlurb(
                     project_id=project.project_id,
                     style=style,
-                    content=content
+                    content=content,
+                    seq=seq,
                 )
+                seq += 1
                 session.add(blurb)
             except Exception as e:
                 logger.error(f"Failed to generate {style} for {project.name}: {e}")

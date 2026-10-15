@@ -18,6 +18,27 @@ npm run preview   # serve dist/ locally
 
 `src/styles/global.css` ports the light and dark tokens from `web/frontend/src/index.css`. Dark mode is the `.dark` class on `<html>`, set before first paint by the inline script in `src/layouts/Base.astro`. `tests/test_site.py` fails if the core tokens drift from the app's.
 
+## Demo media ("See it run")
+
+The home page's "See it run" section is a replay of one real ART run on a synthetic student (`scripts/site_demo/sample_resume.md`) and a made-up posting (`scripts/site_demo/sample_posting.txt`), plus the before and after resume from that run. It is not a screen recording: a real Claude Code session cannot be recorded in a repeatable way, so the run is captured as data and replayed.
+
+What is captured and what is written:
+
+- **Captured:** every ART tool call's name and what ART answered, driven through the real `art` entry point (`python -m harness.entry <tool> --args <json>`) in the order `/art:setup` and `/art:tailor` take, against a scratch `ART_DATA_DIR`, with Jev off. The two resume PDFs are rendered by ART's own `render` tool with tectonic or pdflatex.
+- **Written by hand** (`scripts/site_demo/demo_script.py`): the lines the user types, the agent's narration, the records the agent extracts from the sample resume, and the plan it drafts. The page says so. One bullet in the first draft deliberately carries a figure the sources do not state, so the replay shows ART's consistency gate rejecting it; the replay marks that draft as written for the demo.
+- **Shortened for display:** long tool answers lose list items, long strings and fields, each marked with an ellipsis. Playback pacing is a fixed rate, not the real duration of a call.
+
+Refresh it when ART's output changes (a tool's answer, a gate's message, the resume template):
+
+```bash
+python scripts/build_site_demo.py --tectonic /path/to/tectonic     # or put tectonic / pdflatex on PATH
+python scripts/build_site_demo.py --keep /some/scratch/dir         # also keep the PDFs, .tex and raw answers
+```
+
+It rewrites `src/components/demo/transcript.json`, `src/components/demo/before-after.json` and `public/demo/resume-*.webp`. Never point it at your own data: it makes a new temporary data directory, drops `DATABASE_URL`, API keys and `ART_*` variables from the environment, and refuses a data directory under `~/.art`. If the authored narration no longer matches what ART answers (say the gate's verdict changes), it stops with an assertion rather than writing a replay that lies. `tests/test_site_demo.py` checks the committed files without running ART.
+
+The replay is plain text in the page (selectable, readable with scripts off) and a small script reveals it step by step. With `prefers-reduced-motion` it starts in its final state and never autoplays. The home page must stay under 2 MB, counting `index.html` and everything it references; `npm run check:weight` checks `dist/` after a build, and CI runs it.
+
 ## Deploy (Vercel)
 
 Hosting is Vercel (Hobby plan) with the Git integration. One-time setup in the Vercel dashboard:

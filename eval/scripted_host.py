@@ -84,7 +84,7 @@ def seed_profile(fixture, name: str = "Benchmark Candidate",
             s.add(proj)
             s.flush()
             for j, b in enumerate(p["bullets"]):
-                s.add(ProjectBlurb(project_id=proj.project_id, style=f"b{j:02d}", content=b))
+                s.add(ProjectBlurb(project_id=proj.project_id, style=f"b{j:02d}", content=b, seq=j))
         for i, e in enumerate(fixture.education):
             s.add(Education(user_id=uid, institution=e.get("institution") or "",
                             degree=e.get("degree"), start_date=e.get("start_date"),

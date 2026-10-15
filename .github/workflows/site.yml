@@ -37,3 +37,7 @@ jobs:
       - name: Build
         working-directory: site
         run: npm run build
+
+      - name: Home page weight (2 MB budget)
+        working-directory: site
+        run: npm run check:weight

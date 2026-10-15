@@ -36,6 +36,78 @@ A preference about something the graph lacked stayed pending forever, a renamed 
 - **The rename hooks are in `services`, not the router.** `update_*` / `delete_*` are the one place the web editor, the CLI and the harness all go through, so no caller can skip them. `harness/` is not imported by `services`.
 - **Role-family and job-scoped preferences are listed on the item**, marked by `scope_type`, as the issue asks, not filtered to the job being tailored. A host that wants the scope-filtered set still reads `art_briefing` / `art_pins`.
 - **The Postgres leg was not run locally** (see the PR for whether Docker was up). CI runs it.
+## Issue 326 — diff_nodes handles skill objects
+**Status:** complete | **Tests:** 2923 pass on SQLite (4 new), 24 skipped, 0 fail; the Postgres leg was not run locally (Docker was not running), CI's required Postgres leg covers it
+
+`diff_nodes` raised a pydantic validation error whenever two versions' skill sets differed. A version's `skills_ranked` is a list of `{name, category, score}` objects (the executor, the pipeline and the layout resolver all write that shape), but `harness/tree.py` compared the entries whole and passed them into `DiffOutput.skills_added` / `skills_removed`, which are `List[str]`. `/art:history` and `/art:revert` both call `diff_nodes`, so both crashed on any pair of versions with different skills; the change feed's `get_head(...).editor_edits[].changes` swallowed the same error and fell back to an empty summary.
+
+### What shipped
+
+- **`harness/tree.py::_skill_names`.** `diff_nodes` now compares skills by name and returns the names, so the contract stays `List[str]` and the hook line (`harness/hooks.py`) and the commands' one-line summaries read as before. Names fold on case and spacing, so a skill that was only reordered, re-scored or re-cased is not reported as added and removed. A plain-string entry is read as the name, so a version from an older build or hand-written content diffs against an executor version, in either direction. Entries with no name are skipped.
+- **The change feed is fixed by the same change.** `tree._changes` (behind `get_head`'s `changes`) calls `diff_nodes`, so it now carries the skill names instead of the empty fallback.
+- **Other `DiffOutput` fields checked, none needed a change.** `items` (bullets are strings, `reordered` a bool), `tex_edits`, `tex_changed` and `layout_changed` already match the contract; `skills_added` / `skills_removed` were the only mismatch. `harness/contract.py` is untouched.
+- **Tests (4 new, `tests/test_executor.py`).** Two executor-built versions with different skill sets, called through the tool contract, name the right skills added and removed in both directions, and the stored skills are objects; a reordered and re-scored version reports none; an old string-skill version against an object one, both directions; the change feed carries the names. All four fail on `origin/main` with the `DiffOutput` validation error.
+
+### Deviations from spec
+
+- **No test through `scripts/build_site_demo.py`.** The regression test builds its two versions with the real executor (`execute_plan` with a `skills` list) on the benchmark profile instead, which needs no tectonic and reproduces the same validation error on `origin/main`. The demo script was not run.
+- **The executor does not accept a string-skill parent.** `metric_vector` reads `skills_ranked` entries with `.get`, so a plan on top of a version that stores plain strings fails in `ats_scorer`. Nothing in ART writes strings, so only `diff_nodes` was made tolerant; the string version in the mixed test is committed last with `commit_node`.
+- **Names are matched on case and whitespace only, not punctuation.** `agents.layout._norm` also drops punctuation, which would equate `C` and `C++`; the executor's own `held` set folds the same way as the new helper.
+- **A skill renamed to a differently cased spelling reports nothing.** The first-seen spelling is the one returned for an added or removed skill.
+
+---
+
+## Issue 327 — Stable bullet citation keys
+**Status:** complete | **Tests:** 2919 pass on SQLite (9 new), 24 skipped, 0 fail; the Postgres leg was not run locally (Docker was not running), CI's required Postgres leg covers it
+
+`<item key>#b<n>` named a different project bullet from one ingest to the next. A plan's cites, the no-fabrication and consistency gates, `cut_bullets` and `texdiff` all resolve that ordinal, so a stored cite could silently point at other evidence.
+
+The cause was narrower than the issue guessed. An experience's bullets are a JSON list on its row and never moved. A **project's** bullets are its `ProjectBlurb` rows, read back sorted on `(project_id, style, blurb_id)`. Ingest stores every bullet under one `style` (`host`), and `blurb_id` is a random uuid, so the random id decided which bullet was `#b0`.
+
+### What shipped
+
+- **`ProjectBlurb.seq`, set at write time.** A nullable `INTEGER`, the bullet's position within its project, assigned by `next_blurb_seq` in the order the host sent the bullets (`harness/ingest.py::_add_blurbs`), by the enhancer in generation order, and by the scripted eval host. A later ingest appends after what is stored. Same mechanism as #180's `seq`; added by the `ALTER TABLE` list in `database/db.py`, so old SQLite and Postgres stores load.
+- **One ordering function, `database/db.py::ordered_blurbs`.** Sorts on `seq` (unassigned rows last, explicitly, since the engines disagree about NULLs), then `(style, blurb_id)`. `harness/tools.py::_project_blurbs` (which feeds `_KG.source_bullets`, the executor, the gates, `cut_bullets`) and `knowledge_graph/builder.py::_project_blurbs` (which was a hand copy of the old key) both call it. Experience bullets needed no change.
+- **`_backfill_blurb_seq`**, run from `init_db()` and idempotent, numbers existing rows per project.
+- **Tests (9 new in `tests/test_ordering_determinism.py`, one assertion in `tests/test_export_import.py`).** Storage is rewritten so the physical order, the `blurb_id` order and `created_at` all disagree with the ordinal, then `_KG`, the harness records, the graph builder, a `delete_bullet` plan and `texdiff.node_edits` are asserted to agree on which text is `#b1`. Verified: 6 of them fail with the old sort key restored.
+
+### Deviations from spec
+
+- **Existing stores are not re-keyed, and are not put into source order either.** The backfill numbers old rows in the order they were already read in, `(style, blurb_id)`, not by `created_at`. Cites already stored in tree nodes, versions, `cut_bullets` and approved variants were written against that order, and it is stable within a store (the style and the id never change), so reproducing it keeps every one of them naming the bullet it always named. The cost: a store ingested before this fix keeps whatever order its random ids gave, which may not be the source order. The true order is mostly recoverable from `created_at`, but using it would re-point every stored cite; a future one-off migration can do that deliberately. Rows with `seq` NULL (old exports, directly built fixtures) read in that same legacy order, so an unbackfilled store and a backfilled one agree.
+- **Option (a), not (b).** No existing column holds source order: `style` is shared and `blurb_id` is random, and the issue asks for ordinals that follow the source. Experience bullets already have it, as list order.
+- **"Two clean ingests in separate engines" is tested as three users in one engine.** `isolated_engine` is one per test. Eight bullets make the old key fail it essentially every run.
+- **Readers of `#b<n>` not changed**, because they index a list that is already ordered: `executor._KG.item`, `resolves`, `_cut_indexes`, `decisions/support.resolve_evidence`, `agents/checks.py`, `library.py` (parse the ordinal only), `program.py` (shape only), and `texdiff` (it indexes a version's own stored page bullets, not the graph). `agents/tailor.py` keeps `{style: content}` for the legacy web tailor, which never makes `#b` cites.
+
+---
+
+## Issue 275 — Landing site demo: session replay and before/after resume
+**Status:** complete | **Tests:** 2837 pass on SQLite (24 new), 25 skipped, 0 fail; the Postgres leg was not run (nothing here touches storage)
+
+The demo media for the landing site (#271): a 75-second replay of one real tailoring run, and the before and after resume from that run, in a new "See it run" section on the home page. #181, which gated product recordings, is merged.
+
+### What shipped
+
+- **A replay of a real run, not a screen recording.** `scripts/build_site_demo.py` drives the real `art` tools (`python -m harness.entry <tool> --args <json>`, the entry point the `art` script runs) in the order `/art:setup` and `/art:tailor` take, against a synthetic student (`scripts/site_demo/sample_resume.md`, "Riley Park", example.com and a 555 number) and a made-up posting, in a scratch `ART_DATA_DIR` with the environment stripped of `DATABASE_URL`, keys and `ART_*` and Jev off. It writes `site/src/components/demo/transcript.json`: 28 steps in six phases (set up, posting, plan, approval, gate check, render).
+- **`SessionReplay.astro`.** A terminal-style component that renders every step into the HTML as selectable text (so the page reads fully with scripts off) and a small script that reveals them one at a time: play and pause, restart, show everything, and a chip per phase. It autoplays once when scrolled into view, announces each phase through a live region, and under `prefers-reduced-motion` starts in its final state and never autoplays. Tool calls and what ART returned carry a green edge; the user's and the agent's lines don't, and the legend says so.
+- **Two real gate responses.** The first plan carries one report bullet with a figure no source states ("from 3 hours to 20 minutes"). ART's consistency gate reverted that role's node, and its acceptance rule reverted a reorder of the Transit Delay project's bullets (`no_target_improved`); everything else committed as version 2. The agent resubmits the role with the original wording and ART accepts it as version 3. The unsupported figure is a deliberate slip, and the replay labels that draft as written for the demo.
+- **`BeforeAfter.astro`.** Version 1 (the graph untailored) and version 3 rendered by ART's own `render` tool with tectonic 0.17.0, rasterised to WebP at two widths, side by side from 768px and stacked below, lazy-loaded with width and height set. The highlighted boxes come from diffing the two PDFs' text bullet by bullet (pdfium), not from hand-picked coordinates; the same changes are listed as text under "Read the changes as text", and each page links to its full-size image.
+- **Budget.** `site/scripts/check-weight.mjs` (`npm run check:weight`, run in CI after the build) sums `dist/index.html` and every file it references, fonts included, at raw size and fails at 2 MB. The home page is 516,480 bytes, of which the four images are 275 KB; there is no video.
+- **`tests/test_site_demo.py`** (24 new, no network, no npm, no tectonic): the transcript is well formed and its phases run in order; every tool and `/art:*` command in it exists in the contract and the plugin; playback is 60 to 90 seconds and each step's duration equals the build script's formula (a hand edit fails); the rejection and its label are present; no owner identifier (hardcoded plus `git config user.name`), local path, or ATS-style score reaches the data or the components; the profile's records are word for word in the sample resume and every figure in the plan, but the staged one, is in a source bullet; the images exist as WebP, the highlights are real boxes that match the text changes, and the weight stays under budget; the page says it is a replay of a real run with a sample profile; the replay is rendered text with reduced-motion and keyboard support; the build script isolates its run. Mutation-checked against nine edits (an owner name, an unknown tool, a dropped label, a planned tool, a leaked path, an ATS key, a missing alt, an unlabelled slip, a missing image).
+- Checked at 375px and 1280px in light and dark in headless Chromium: no horizontal scroll, no console errors, autoplay, controls and phase chips work, and with reduced motion or scripts off every step is visible.
+
+### Deviations from spec
+
+- **A replay replaces the screen recording.** The issue asks for a 60-90 second recording in Claude Code. An interactive session can't be recorded repeatably or kept in step with ART, and a video needs a poster, captions and far more bytes. The replay is the same run as data: it needs no video file, stays crisp, is selectable and accessible, and `build_site_demo.py` regenerates it when ART's output changes. What is captured and what is written by hand is stated on the page and in `site/README.md`.
+- **The agent's lines are scripted, and say so.** Nothing runs a model: the user lines, the agent's narration, the records it extracts from the sample resume and its plan are in `scripts/site_demo/demo_script.py`. Only ART's side is captured. Long answers are shortened for display (lists cut, long strings and fields left out, each marked with an ellipsis), and the full answers are not kept. Playback runs at a fixed rate and says it does not show how long ART took.
+- **The ATS-style score is left out of the displayed answers**, marked as left out, per the rule that it is reported and never promoted.
+- **`diff_nodes` is not in the replay.** Called on these two versions it fails with a validation error (`DiffOutput.skills_added` expects strings; the versions' skills are `{name, category, score}` objects). It is unrelated to this issue and was not fixed here; it fails whenever two versions' skills differ.
+- **The two PDFs overwrite each other.** `render` writes `resume.pdf` per job, so the replay renders version 1 first and version 3 last, and the agent says so. The build script copies each PDF out before the next render.
+- **The pages are cropped at the lowest line.** The blank foot of a one-page resume is cropped from both images (same height), and the section says so; highlight boxes are fractions of the cropped image.
+- **Project bullet order is not fixed between runs.** ART stores a project's bullets with no order of their own, so the order in the "before" PDF can differ after a rebuild; the build script finds each source bullet's evidence id by its text, not by position.
+- **Not done:** the live deploy and a Lighthouse run (neither can run from a branch), and a screen reader pass; semantics were checked by hand (labelled section, live region, keyboard-reachable transcript, native `<details>`, alt text).
+
+---
+
 ## Issue 296 — Anchor labelled set, and the absent-thing premise tested against the evidence gates
 **Status:** complete | **Tests:** 2838 pass on SQLite (72 new), 24 skipped, 2 xfailed (the two open gaps below)
 
