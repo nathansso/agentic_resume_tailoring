@@ -15,7 +15,7 @@
  * heuristic for few crossings, and a pure function of the data.
  */
 import type {
-  EvidenceEdge, EvidenceItem, EvidenceSkill, EvidenceView, JobSkillRow,
+  EvidenceEdge, EvidenceItem, EvidenceSkill, EvidenceView, JobSkillRow, ProjectCandidate, ProjectContext,
 } from "../types";
 
 // ── geometry ───────────────────────────────────────────────────────────────────
@@ -483,6 +483,44 @@ export function canDismiss(view: EvidenceView, skillKey: string): boolean {
 /** The server id behind a skill node key (`skill/<id>`). */
 export function skillIdOf(skillKey: string): string {
   return skillKey.startsWith("skill/") ? skillKey.slice("skill/".length) : skillKey;
+}
+
+// ── where a project was done (#322) ────────────────────────────────────────────
+
+/**
+ * A project nobody has placed: unreviewed and standalone. Confirmed-personal and linked projects
+ * are not "to place". An item with no `context_status` (a role, a degree) never is.
+ */
+export const needsPlacement = (i: EvidenceItem): boolean =>
+  i.kind === "proj" && i.context_status === "unreviewed" && !i.parent_key;
+
+/** The projects still to place, in the order the map lists them (the summary's "select the first"). */
+export function projectsToPlace(view: EvidenceView): EvidenceItem[] {
+  return evidenceRows(view.items).rows.map((r) => r.item).filter(needsPlacement);
+}
+
+export interface PlacementOption {
+  key: string;        // `exp/<id>` or `edu/<id>`
+  label: string;
+}
+
+/** Every role and degree the user could place a project under, newest first within each group. */
+export function placementOptions(view: EvidenceView): { experiences: PlacementOption[]; education: PlacementOption[] } {
+  const of = (kind: EvidenceItem["kind"]) =>
+    view.items.filter((i) => i.kind === kind).sort(byRecency).map((i) => ({ key: i.key, label: placementLabel(i) }));
+  return { experiences: of("exp"), education: of("edu") };
+}
+
+/** How a role or degree is named where a project is placed: "Data Science Intern · IDX Exchange". */
+export const placementLabel = (i: EvidenceItem): string =>
+  (i.org && i.org !== i.title ? `${i.title} · ${i.org}` : i.title || i.org);
+
+/**
+ * The suggestion to offer as a one-click link: the rules' best candidate, and only for a project
+ * nobody has placed. Once the user has answered (linked or personal) it would only nag.
+ */
+export function topSuggestion(ctx: ProjectContext | undefined): ProjectCandidate | null {
+  return ctx && ctx.status === "unreviewed" ? ctx.candidates[0] ?? null : null;
 }
 
 /** The most recent experiences and projects that have text, for "edit one of these to back this skill". */

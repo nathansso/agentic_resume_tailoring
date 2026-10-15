@@ -1,6 +1,6 @@
 import type {
   ProfileData, SkillRow, ExpRow, ProjectRow, EducationRow, AchievementRow, GraphData, EvidenceView,
-  DismissedSkill,
+  DismissedSkill, ProjectContext, ProjectContextStatus,
 } from "../types";
 import { json } from "./http";
 
@@ -113,6 +113,23 @@ export const dismissSkill = (skillId: string): Promise<{ skill_id: string; name:
   post(`/api/profile/skills/${skillId}/dismiss`);
 export const restoreSkill = (skillId: string): Promise<{ skill_id: string; name: string }> =>
   post(`/api/profile/skills/${skillId}/restore`);
+
+// ── Where a project was done (issue #322) ──────────────────────────────────────
+
+/** Each project's place and the suggestions for it. Read-only: nothing is stored until a PUT. */
+export const getProjectContexts = async (): Promise<ProjectContext[]> =>
+  json(await fetch("/api/profile/projects/contexts", { credentials: "include" }));
+
+/** Confirm where a project was done: `exp/<id>`, `edu/<id>`, `personal` or `unreviewed`. */
+export const setProjectContext = async (
+  projectId: string, context: string,
+): Promise<{ project_id: string; status: ProjectContextStatus; parent: string | null }> =>
+  json(await fetch(`/api/profile/projects/${projectId}/context`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ context }),
+    credentials: "include",
+  }));
 
 /** Edit the text of one project bullet. Content only: the bullet keeps its position (#327). */
 export const updateProjectBlurb = (

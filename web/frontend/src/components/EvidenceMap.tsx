@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Search } from "lucide-react";
 import { listJobs } from "../api/jobs";
-import { getDismissedSkills, getEvidenceView } from "../api/profile";
+import { getDismissedSkills, getEvidenceView, getProjectContexts } from "../api/profile";
 import type {
-  DismissedSkill, EvidenceItem, EvidenceKind, EvidenceView, JobListItem, JobSkillRow,
+  DismissedSkill, EvidenceItem, EvidenceKind, EvidenceView, JobListItem, JobSkillRow, ProjectContext,
 } from "../types";
 import {
-  DISMISSED_KEY, areaFoldKey, dateRange, estimateTextWidth, firstMatch, fitText, ghostBlock, isPanelKey,
+  DISMISSED_KEY, areaFoldKey, dateRange, estimateTextWidth, firstMatch, fitText, ghostBlock, isPanelKey, needsPlacement, projectsToPlace,
   jobOverlay, layoutMap, neighborhood, sourceArcs, type JobOverlay, type MapLayout, type PlacedArea, type PlacedRow,
 } from "../lib/evidenceMap";
 import { cn } from "../lib/utils";
@@ -64,6 +64,7 @@ function Pips({ value, x }: { value: number; x: number }) {
 export function EvidenceMap({ defaultJobId = null, onChanged }: { defaultJobId?: string | null; onChanged?: () => void }) {
   const [view, setView] = useState<EvidenceView | null>(null);
   const [dismissed, setDismissed] = useState<DismissedSkill[]>([]);
+  const [contexts, setContexts] = useState<ProjectContext[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
@@ -81,9 +82,10 @@ export function EvidenceMap({ defaultJobId = null, onChanged }: { defaultJobId?:
 
   const reload = useCallback(async () => {
     try {
-      const [next, gone] = await Promise.all([getEvidenceView(), getDismissedSkills()]);
+      const [next, gone, places] = await Promise.all([getEvidenceView(), getDismissedSkills(), getProjectContexts()]);
       setView(next);
       setDismissed(gone);
+      setContexts(places);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load the evidence map");
@@ -152,6 +154,7 @@ export function EvidenceMap({ defaultJobId = null, onChanged }: { defaultJobId?:
   });
 
   const select = (key: string) => setSelected((cur) => (cur === key ? null : key));
+  const toPlace = useMemo(() => (view ? projectsToPlace(view) : []), [view]);
 
   if (error) return <p className="p-4 text-sm text-destructive">{error}</p>;
   if (!view || !layout) return <p className="p-4 text-sm text-muted-foreground">Loading…</p>;
@@ -172,6 +175,7 @@ export function EvidenceMap({ defaultJobId = null, onChanged }: { defaultJobId?:
         <Toolbar
           view={view} query={query} setQuery={setQuery}
           dismissedCount={dismissed.length} onOpenDismissed={() => setSelected(DISMISSED_KEY)}
+          toPlace={toPlace.length} onPlace={() => { if (toPlace[0]) setSelected(toPlace[0].key); }}
           onEnter={() => { const k = firstMatch(layout); if (k) setSelected(k); }}
           jobOn={jobOn} setJobOn={setJobOn} jobs={jobs} jobId={jobId} setJobId={setJobId}
           jobSkills={jobSkills} jobError={jobError} overlay={overlay}
@@ -197,7 +201,7 @@ export function EvidenceMap({ defaultJobId = null, onChanged }: { defaultJobId?:
         </div>
       </div>
       <EvidencePanel
-        view={view} selected={current} overlay={overlay} jobOn={jobOn} dismissed={dismissed}
+        view={view} selected={current} overlay={overlay} jobOn={jobOn} dismissed={dismissed} contexts={contexts}
         onSelect={setSelected} onSaved={async () => { await reload(); onChanged?.(); }}
       />
     </div>
@@ -226,6 +230,7 @@ function Count({ n, label, tone }: { n: number; label: string; tone?: "proven" |
 function Toolbar(props: {
   view: EvidenceView;
   dismissedCount: number; onOpenDismissed: () => void;
+  toPlace: number; onPlace: () => void;
   query: string; setQuery: (q: string) => void; onEnter: () => void;
   jobOn: boolean; setJobOn: (on: boolean) => void;
   jobs: JobListItem[] | null; jobId: string | null; setJobId: (id: string) => void;
@@ -241,6 +246,15 @@ function Toolbar(props: {
         <Count n={stats.unevidenced} label="with no evidence" />
         <Count n={stats.github_only} label="GitHub only" />
         <Count n={stats.needs_text} label={stats.needs_text === 1 ? "item needs a description" : "items need a description"} tone="gap" />
+        {props.toPlace > 0 && (
+          <button
+            type="button" onClick={props.onPlace}
+            className="rounded-md border border-border px-2 py-0.5 text-[12px] transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <span className="font-mono tabular-nums">{props.toPlace}</span>{" "}
+            {props.toPlace === 1 ? "project to place" : "projects to place"}
+          </button>
+        )}
         {props.dismissedCount > 0 && (
           <button
             type="button" onClick={props.onOpenDismissed}
@@ -423,12 +437,13 @@ function Row({ row, layout, selected, dim, onSelect, onHover }: {
   const x0 = row.indent * 20;
   const room = layout.leftW - x0 - 28;
   const award = it.achievements[0];
+  const unplaced = needsPlacement(it);
   const sub = [it.org || (it.kind === "proj" && !it.parent_key ? "project" : ""), dateRange(it.start, it.end)]
     .filter(Boolean).join(" · ");
   return (
     <g
       role="button" tabIndex={0} aria-pressed={selected}
-      aria-label={`${KIND_LABEL[it.kind]}: ${it.title}${row.fix ? ", needs a description" : ""}`}
+      aria-label={`${KIND_LABEL[it.kind]}: ${it.title}${row.fix ? ", needs a description" : ""}${unplaced ? ", not placed under a role or degree" : ""}`}
       transform={`translate(0,${row.y})`}
       className={cn(
         "group cursor-pointer outline-none transition-opacity duration-150 motion-reduce:transition-none",
@@ -456,8 +471,9 @@ function Row({ row, layout, selected, dim, onSelect, onHover }: {
         )}
       </text>
       <text x={x0 + 20} y={15} className="fill-muted-foreground text-[12px]">
-        {fitText(sub, room - (row.fix ? 130 : 0), 12)}
+        {fitText(sub, room - (row.fix ? 130 : 0) - (unplaced ? 66 : 0), 12)}
         {row.fix && <tspan dx={8} className="fill-graph-gap">● needs a description</tspan>}
+        {unplaced && <tspan dx={8} className="fill-muted-foreground">○ unplaced</tspan>}
       </text>
       <circle cx={layout.leftW + 3} cy={0} r={2.2} className="fill-graph-claim" aria-hidden="true" />
     </g>

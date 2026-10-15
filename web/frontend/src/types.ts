@@ -160,7 +160,26 @@ export interface EvidenceItem {
   parent_key: string | null;
   achievements: { id: string; title: string; issuer: string; date: string }[];
   repo_url: string;
+  /** Projects only (#322): has the user said where it was done? Absent on experiences and education. */
+  context_status?: ProjectContextStatus;
   fields: Record<string, string>;   // the editable columns, under their API names
+}
+
+export type ProjectContextStatus = "unreviewed" | "linked" | "personal";
+
+/** A suggested place for a project, in the view's item keys (#322). */
+export interface ProjectCandidate {
+  key: string;                      // `exp/<id>` or `edu/<id>`
+  title: string;
+  reason: string;
+}
+
+/** One project's place and the rule-based suggestions for it, from /api/profile/projects/contexts. */
+export interface ProjectContext {
+  project_id: string;
+  status: ProjectContextStatus;
+  parent: string | null;            // the view key of the role or degree it is linked to
+  candidates: ProjectCandidate[];   // best first; never "personal"
 }
 
 export interface EvidenceSkill {
