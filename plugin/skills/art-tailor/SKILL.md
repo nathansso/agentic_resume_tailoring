@@ -20,6 +20,9 @@ The tools named below are the ART MCP server's tools.
   `software_engineering`, `machine_learning`, `data_science`, `data_engineering`,
   `research`, `product_management`, `design`, `devops_infrastructure`, `security`,
   `hardware` and `other`.
+- When you work on an existing job, or once `open_job` returns the job id, call
+  `art_briefing` with `job_id` instead. It adds the job's own preferences and its recorded
+  role family, which is exactly the set `execute_plan` enforces.
 - **Pins are hard rules.** Quote them to yourself and honour them verbatim.
 - Note `job_rules`: yes/no questions about the posting, such as whether it requires
   enrollment after the internship. Answer each from the posting's own words, keeping
@@ -71,7 +74,24 @@ The tools named below are the ART MCP server's tools.
   experience or project. Approved wording beats regenerated wording (see step 4).
 - Call `get_head(job_id)`. If the job already has a version, build on it; the plan's
   `parent` must be its `node_id`. Respect anything under `editor_edits`: the user made
-  those changes by hand.
+  those changes by hand. When the user edited the `.tex`, `editor_edits[].changes.tex_edits`
+  lists the bullets they revised, added or removed (`diff_nodes` has the whole list), and
+  anything outside the bullets as an `unmapped` diff.
+- A commit on top of a `.tex` edit is refused (`discards_editor_edits`, listing the edited
+  bullets) because a new version is built from structured content and would drop the
+  user's text. Carry the edits over as nodes: a `revise` for each reworded or added bullet
+  with the user's text, a `delete_bullet` with a `because` for each bullet they removed,
+  then run again. Send the user's text **verbatim** (the `after` of each `tex_edits`
+  entry, the rest of the item's bullets unchanged) and the executor recognises it against
+  their `.tex` (`carried_edit` on the node): no guard vetoes the user's own words, and
+  any MTLD or keyword-density drop is listed under `waived`, so tell them what it cost.
+  Hard gates still apply. If one refuses it, the node's `reason` names the gate and the
+  claim (a number or name its cited evidence does not state): record that fact with
+  `upsert_items` (or ask the user whether it is true), cite it, and retry. Do not reword
+  the user's text to get past a gate: reworded, it is an ordinary revise and every guard
+  applies again. An `unmapped` region cannot be carried. When
+  the user does not want an edit kept, ask them, and only then set
+  `discard_editor_edits: true`; the response lists what was discarded, so tell them.
 
 ## 4. Draft the plan and get approval
 
@@ -109,6 +129,12 @@ Draft a plan program for `execute_plan`. Its input schema is published with the 
   - `replace`: swap one project for another (`replacement_key`).
   - `delete`: drop the item. Set `because` to `user:<what they asked>` or
     `pref:<preference_id>`.
+  - `delete_bullet`: remove whole bullets from the item and change nothing else. Give
+    `cut_bullets` (ids like `exp:...#b3`, the index in the item's list on the version you build
+    on) and a `because`. Never send a cut as a `revise` with one bullet fewer: a `revise` faces
+    every guard and MTLD reverts it. A `delete` or `delete_bullet` with a `because` is judged on
+    the hard gates; a guard regression it causes is accepted and listed under `waived`, which
+    you should tell the user.
   - `accept.improves`: the targets a node should raise (`coverage`,
     `relevance_density`, `semantic_coverage`). `semantic_coverage` counts a requirement as
     met when some bullet shows it, in any words; a node that only makes a requirement
@@ -185,7 +211,10 @@ Call `execute_plan({program})`. Read the result:
   - Absent (no key, or no required or preferred requirement): plan on `coverage` alone.
 - `committed: false` with `violations`: nothing was saved. Fix the plan with
   `patch_plan(program_id, edits)`, which takes JSON-pointer edits to the saved program.
-  `cut_hints` say which bullets or projects to cut to fit the page. `stale_parent`
+  `cut_hints` say which bullets or projects to cut to fit the page, each with the op that
+  carries it out: a `cut_bullet` is a `delete_bullet` (one node per item, all its bullets in
+  `cut_bullets`) and a `drop_item` is a `delete`, both with `because: "user:fit the one-page
+  budget"`. Add those nodes with `patch_plan`. `stale_parent`
   means the user edited in the meantime: read `get_head`, then replace `/parent`.
 - `committed: false` with `reason: "no_change"`: the plan left the page identical to its
   parent (every node reverted, refused or kept), so no version was made. Read `nodes[]` for
@@ -197,8 +226,8 @@ Call `execute_plan({program})`. Read the result:
 
 - Call `render(job_id)`. It writes `resume.tex` and `resume.pdf` and returns their
   paths, `pages` and `line_budget`.
-- If `pages` > 1, cut using `line_budget.cut_hints` through `patch_plan`, then render
-  again.
+- If `pages` > 1, cut using `line_budget.cut_hints` through `patch_plan` (the same
+  `delete_bullet` and `delete` nodes as in step 5), then render again.
 - If `pdf_path` is null, give the user the `.tex` path and the `hint`.
 - Tell the user where the PDF is.
 - If they want to edit by hand, give them the editor command to run in a terminal,

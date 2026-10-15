@@ -4,6 +4,7 @@ import {
   mergeBulletGroup,
   sectionOrderFromTex,
 } from "./layoutOverride";
+import FORMATTER_RAW from "./__fixtures__/formatter_resume.tex?raw";
 
 const SAMPLE = [
   "%% ART-SECTION: header",
@@ -77,5 +78,24 @@ describe("mergeBulletGroup", () => {
     const merged = mergeBulletGroup([first], other);
     expect(merged).toHaveLength(2);
     expect(merged).toContainEqual(first);
+  });
+});
+
+describe("bulletGroupFromTex on formatter output (#277)", () => {
+  const tex = FORMATTER_RAW.replace(/\r\n/g, "\n");
+
+  it("names the experience by the title the server validates against", () => {
+    expect(bulletGroupFromTex(tex, 0)).toEqual({
+      section: "experience",
+      item: "R&D Engineer",
+      // Bullet text keeps the tex escape; agents/layout.py matches bullets by words.
+      order: ["Cut inference cost by 18\\% with batching",
+              "Shipped a feature store on Postgres", "Mentored two interns"],
+    });
+  });
+
+  it("names the project by its name, not the heading's tech stack or links", () => {
+    expect(bulletGroupFromTex(tex, 2)?.item).toBe("C# Tools");
+    expect(bulletGroupFromTex(tex, 3)?.item).toBe("Pixel_Adventure");
   });
 });

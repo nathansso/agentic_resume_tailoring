@@ -38,6 +38,136 @@ Second child of the landing-site epic (#271): the real home page for students ap
 
 ---
 
+## Issue 306 — The user's own editor edit, carried over verbatim, is not vetoed by a guard
+**Status:** complete | **Tests:** 2704 pass on SQLite (14 new), 24 skipped, 0 fail. The Postgres leg was not run locally; CI runs it
+
+#278 made `execute_plan` refuse to drop a `.tex` edit, so the host carries it over as a `revise` with the user's text. But a `revise` faces every guard, and what a user types is short, repetitive and off the posting: it lowers MTLD and keyword density, so the carry-over came back `reverted` and the host was pushed toward `discard_editor_edits`, the opposite of the point. The executor now verifies a carried-over edit itself and waives the guards for it. Hard gates are unchanged.
+
+### What shipped
+
+- **The executor decides what is a carried-over edit (`harness/texdiff.py::carried_by`, `harness/executor.py::_carried_edits`).** For a `revise` or `replace` on a parent with `edited_tex`, it reads the user's edits as `diff_nodes.tex_edits` does and checks the node's bullets for the item against the page's. The node is a carried-over edit when every text it adds is, whitespace-normalized and nothing else, the `after` of a `revised` or `added` edit of that item, every bullet it drops is the `before` of a `revised` or `removed` edit of that item, and it adds at least one such text. Reordering the item's bullets is free. Nothing the host writes on the node counts; there is no new field to set.
+- **Waived guards, reported (`harness/acceptance.py::accept(..., carried=True)`).** Hard gates apply in full. Guard regressions, and the "must improve a target" rule, do not veto. Every regression is reported under `waived`, a fallen target (`relevance_density`, `coverage`) included when no target rose (the case that rule 3 would have vetoed), with `reason: "guard_waived: carried editor edit; ..."`. A carried-over node with nothing regressed and nothing improved is accepted. No tolerance in `harness/policy.json` changed.
+- **A node says what it carried.** The accepted result gains `carried_edit`: the edits it carries (`change`, `bullet` = the `<item key>#b<n>` id `tex_edits` gives for a revised bullet, `null` for an added one, `after`).
+- **A hard-gate refusal is actionable.** When a hard gate refuses a verified carried-over edit, `reason` keeps the `hard_gate: <gate> <claim>` prefix and adds, per gate, what to do: for `consistency` / `faithfulness` / `citations`, record the fact the edit states with `upsert_items` (or ask the user whether it is true), cite it, and retry via `patch_plan`; for `preferences`, tell the user and change the preference only if they agree; for `bullet_lines`, ask the user to shorten it. It says not to reword the user's text.
+- **Anything not verbatim is an ordinary revise.** One word changed, a bullet the user did not edit rewritten, or a bullet the user kept dropped, and the node faces every guard as before.
+- **Docs and tool text.** `docs/harness.md` § 5 (the acceptance rule and a new paragraph) and § 13, `docs/architecture.md`, the `execute_plan` description and `NodeResult.waived` / `carried_edit` in `harness/contract.py` (shared by MCP and the CLI), the `art-tailor` skill, and the Codex `AGENTS.md` snippet.
+- **Tests (14 new, `tests/test_executor.py`).** A verbatim carry-over commits though MTLD and `relevance_density` both fall, and reports both under `waived`; the same text with no tex edit behind it is reverted; text differing by a word more, a word swapped or a trailing period faces every guard; whitespace alone is forgiven; carrying the edit but rewriting or dropping another bullet is an ordinary revise; an unsupported number (`47%`) is refused by the `consistency` gate with an actionable reason and nothing waived; an unresolved cite and a negative pin still refuse; the end-to-end loop (editor edit, `diff_nodes.tex_edits`, a revise built from it, commit, no `discard_editor_edits`); an added bullet; `accept(carried=True)` and `carried_by` directly. The waiver tests fail without the change.
+
+### Deviations from spec
+
+- **No label on the node.** The issue allowed any way of naming the bullet; the executor needs none. It matches each added text against the `revised`/`added` edits of the same item, so a host sends the user's text and the `<item key>#b<n>` id appears only in the result's `carried_edit`.
+- **The whole node must be accounted for.** Not just "contains a verbatim bullet": one verbatim bullet next to a rewritten one would otherwise carry a guard waiver for text the user never wrote (the concern #289 raised for `delete_bullet`). Several of the user's edits to one item still go in one node. A host that also wants its own change to that item (a plan has one node per item) makes it in a second plan, on top of the committed carry-over.
+- **The target rule is waived too, not only the guards.** The issue's acceptance case is a `relevance_density` regression, and that is a target; without waiving rule 3 a user edit that lowered the posting's keyword density with no other target rising would still be `no_target_improved`.
+- **`replace` is supported but narrow.** Its target item is not on the page, so the user's text must come from an item the user added to the `.tex` by hand (every bullet an `added` edit). It is not exercised by a test.
+- **A refused carry-over of an otherwise unchanged page reports `no_change`,** as any plan that changes nothing does (#257); the refusal is on the node's `reason`.
+- **The Postgres leg was not run locally** (CI runs it).
+
+---
+
+## Issue 291 — One preference scope for what the host sees and what the executor enforces
+**Status:** complete | **Tests:** 2651 pass on SQLite (3 new), 16 skipped
+
+Before this fix, a strength-5 pin scoped to a role family was shown in the briefing but never enforced. It was reproduced over MCP: "For ML roles, never include SemanticSearch-Lite" was kept on an ML job, while a global pin in the same plan was refused. Three readers each scoped preferences their own way:
+- `execute_plan` passed only the job id, so role-family pins never bound.
+- `art_briefing` passed only a role family, so a job's own preferences were never shown.
+- The post-compaction hook restored pins by job id alone.
+
+This is phase 1 of 7 of the preference-anchoring plan (#295–#300).
+
+### What shipped
+- **`harness/tools.py::preferences_for(user_id, job_id, role_family)`**, the one scope every reader now uses. Global preferences always apply, plus the job's own, plus its role family's. The role family is the one given, else the one `open_job` recorded for the job (`library.role_family_of`), which is deterministic and model-free.
+- **`execute_plan` / `_hard_preferences` use it**, so a role-family pin is refused on a job of that family, and only there. `suggest_actions` reads the same function.
+- **`art_briefing` takes an optional `job_id`** and echoes the `job_id` and `role_family` it used. `art_pins`, and the hook's restore through it, resolve the job's family the same way.
+- **The `art-tailor` skill** tells the host to call `art_briefing` with `job_id` once the job exists.
+- **Tests** (`tests/test_executor.py`):
+  - A role-family pin is refused, with a `preferences` violation, on a job of its family, and kept on a job of another family.
+  - The briefing and `art_pins` show the job's and its family's pins when given the job, and not otherwise.
+
+### Deviations from spec
+- **The helper lives in `harness/tools.py`, not on `services.resolve_role_family`.** The plan named the services function, but that function can call a model classifier on a new posting, and `harness/` must stay model-free. `library.role_family_of` reads the family `open_job` recorded, or the deterministic title map.
+- **No shared helper for persona traits or job cards.** They were already scoped by role family and now receive the resolved one; job-scoped persona traits remain out of scope.
+- **The Postgres leg was not run locally** (Docker was not running). CI runs it. `test_no_source_file_reads_a_naive_utc_clock` fails locally only because it walks untracked `personal/` and `tmp/` folders.
+
+---
+
+## Issue 278 — A host commit no longer drops the user's `.tex` edits, and `diff_nodes` says which bullets they changed
+**Status:** complete | **Tests:** 2690 pass on SQLite (27 new), 24 skipped, 0 fail. The Postgres leg was not run locally; CI runs it
+
+A live MCP run found that a bullet the user changed in the editor's `.tex` vanished on the host's next `execute_plan`, and that the host was never told what the edit was: `get_head` listed the editor node with a note, `diff_nodes` returned `items: []` and `tex_changed: true`. An editor save keeps the user's text as `edited_tex` beside a `content` that still holds the pre-edit bullets, and a committed version renders from content. The host now sees which bullets changed, and a commit that would drop them is refused until the host carries them over or the user agrees to discard them.
+
+### What shipped
+
+- **`harness/texdiff.py`: the edited source read back into bullets (model-free).** It splits on the `%% ART-SECTION` markers (falling back to `\section` when they are gone), reads the formatter's headings (`\resumeSubheading` over two lines, `\resumeProjectHeading`) into the same item keys the plan uses, and turns `\resumeItem{...}` back into the markdown-ish text `content` holds (`untex` inverts `_escape_tex` and `_convert_inline`, including `\href`).
+- **`diff_nodes.tex_edits`.** Per item, bullets `revised` (the `<item key>#b<n>` id on the earlier version, text before and after), `added` and `removed`; `reordered` items; `section_order` when sections moved; `unmapped` regions (headings, header, skills, preamble, a deleted marker) as a unified diff. The earlier side is the node's own `edited_tex`, or the formatter's output for its content with its layout override laid over it.
+- **`get_head` and the prompt hook.** The last node of each run of editor saves carries `changes` (`tex_edits` plus the content diff), shortened: eight bullet edits, texts clipped at 160 characters, diffs at 12 lines, with `truncated` counting the rest. The run is measured from the last version that was not an editor save, so several autosaves read as one change.
+- **`execute_plan` refuses to drop an edit.** When the parent has `edited_tex` and the plan would commit, the unreflected part of the edit becomes the violation `discards_editor_edits` (detail: the bullets, the reordered items, the unmapped regions; hint: what to do). A revised or added bullet counts as carried when its text is on the item in the new content, a removed one when it is gone, a reorder when the order matches. So the host carries edits over as ordinary nodes (`revise` with the user's text, `delete_bullet`), which face the usual gates. The new `discard_editor_edits: true` commits anyway after the user agreed, and the response records `discarded_editor_edits`. Dry runs report the violation too.
+- **Unchanged behavior.** A parent with no `edited_tex` is untouched. A plan that changes nothing still returns `no_change` and refuses nothing (#257). A drag saves a reordered `.tex` together with a layout override; the parent's own override is laid over its content before comparing, so a drag is no edit to protect and a commit over it still renders the dragged order (#277).
+- **The editor seeds the page the job renders.** `GET /api/jobs/{id}/tex` and the `.tex` export lay the version's education fields (job-rule overrides) over the store's rows, via `harness.render.generated_tex`, so an editor save that changes one bullet reports exactly that bullet and nothing for education.
+- **Docs and tool text.** `execute_plan`, `diff_nodes` and `get_head` in `harness/contract.py` (shared by MCP and the CLI), `docs/harness.md` § 13, `docs/architecture.md`, the `art-tailor` skill, the plugin README and `/art:open`, and the Codex `AGENTS.md` snippet.
+- **Tests (27 new).** `test_host_ingest.py`: `GET /tex` and the export show a job-rule graduation date; an editor save of one bullet in such a job reports only that bullet, and a plan carrying it over commits without the flag. `test_tailor_tree.py`: a text edit, an added bullet, a removed bullet, moved bullets, a header edit and a rewrite with no markers (both unmapped), a whitespace-only save, `get_head` across two saves, the short form's caps. `test_executor.py`: refuse, carry over, partly carried (revise carried, delete left; delete carried, revise left), explicit discard, an unmapped region, whitespace-only, `no_change`, a drag unaffected, a hand reorder. `test_plugin.py`: the prompt hook lists tex edits across a run. `test_latex_formatter.py`: `untex` inverts the formatter on special characters, and the parser reads the committed formatter fixture.
+
+### Deviations from spec
+
+- **Edited text is not folded back into `content`.** As decided: the raw tex would render without the support check. The host carries the user's wording over as `revise` nodes, which go through it.
+- **Unmapped regions and non-addressable items need the flag.** A plan has no node for the header, education, skills or achievements, so an edit there can only be discarded explicitly. A user who edits their phone number in the tex will see `discards_editor_edits` on every later commit until the host asks.
+- **Skills and education are compared as text, not as items,** so a skills edit is an unmapped diff rather than a list of skills.
+- **A heading edit reads as a removed and an added item.** The item key is the title and company, so renaming an experience in the tex shows its bullets under two keys plus an unmapped diff of the heading lines.
+- **`GET /tex` (and the `.tex` export) now apply the version's job-rule overrides.** The comparison renders the earlier version the way `render` does, with the node's education fields (a job-rule graduation date, #192) laid over the store's rows, but the editor used to seed its tex from the store alone. In a job with an answered graduation-date rule every editor save then showed an education change the user never typed, and the next host commit was refused with a flag-only fix. Both now go through `harness.render.generated_tex`, so the editor shows the date the page renders and both sides of the comparison come from one rendering. This changes what `GET /api/jobs/{id}/tex` seeds for such jobs (the overridden date instead of the store's); jobs without a rule or without education in their content are unchanged. No existing test pinned the old seeding.
+- **`program_id` changes for every program** because `Program` gained `discard_editor_edits` (false by default). Saved programs still load.
+- **Not verified in a browser.** A real drag was not replayed against the Python comparison; the drag test builds the editor's tex from the same layout function the executor uses.
+- **The Postgres leg was not run locally** (CI runs it).
+
+---
+
+## Issues 276 & 277 — The editor round trip through MCP: host-tailored jobs reach `art ui`, and drags last
+**Status:** complete | **Tests:** 2638 pass on SQLite (7 new), 16 skipped; frontend 112 pass (6 new)
+
+A live MCP run against `art ui` found that a host-tailored job never showed its editor. It also found that a bullet drag made in the editor was lost on the host's next commit. Both work now, verified end to end over stdio MCP and the browser: `open_job` → `execute_plan` → the editor opens on the job. A drag saves its layout override (200, was 422), and the next `execute_plan` commit renders the dragged order.
+
+### What shipped
+
+- **#276: a materialized node marks its job tailored (`harness/tree.py::_materialize`).** `execute_plan` and `checkout` write the node into the job's current result, but only the web pipeline set `JobDescription.status`, so a host-built job stayed `created`. `JobWorkspace` renders the editor only for `tailored` / `exported`. `created` and `analyzed` now move to `tailored`; `tailored` and `exported` are left alone.
+- **#277: the editor reads the formatter's real headings (`web/frontend/src/lib/texStructure.ts`).**
+  - `headingLabel` matched `\resumeSubheading{…}` only on one line. `agents/formatter.py` puts the arguments on the next line, so no experience heading was read.
+  - It also matched the preamble's `\newcommand{\resumeProjectHeading}`, so every experience was labelled `"Project"` and `PUT /layout` refused the drag. Headings must now start the line, and a heading whose arguments are on the next line is read from that line.
+  - Labels are unescaped (`R\&D` → `R&D`, `C\#` → `C#`), because the server validates against the stored title or name.
+- **#277: `execute_plan` applies the user's layout override (`harness/executor.py::_apply_layout`).** The override was carried to the new node but never applied to its content, and a node renders from content, so the drag was lost anyway. Bullets, skills and section order are now permuted the way the pipeline does it (#118), after the plan's own `section_order`.
+- **A formatter-generated fixture for the editor tests (`web/frontend/src/lib/__fixtures__/formatter_resume.tex`).** `tests/test_layout_overrides.py` fails when the formatter's output drifts from it; regenerate it with `ART_REGEN_EDITOR_FIXTURE=1`. `texStructure.test.ts` and `layoutOverride.test.ts` run on it. Their old single-line samples stay, since hand-edited tex can look like that.
+- **Tests:**
+  - `test_tailor_tree.py`: status after a materialized commit, for four starting statuses; a commit that does not materialize leaves the status alone.
+  - `test_executor.py`: the first plan's job is `tailored`; a plan on top of a drag keeps the dragged bullets and section order in its content.
+  - `test_layout_overrides.py`: the fixture matches the formatter.
+  - vitest: labels on formatter output, single-line arguments, the preamble ignored, a bullet move, and `bulletGroupFromTex` items.
+
+### Deviations from spec
+
+- **#277 also needed a harness change.** The issue scoped the frontend parser only. Once drags saved, the live run showed `execute_plan` still rendered the plan's order, because the executor carried `layout_overrides` without applying them. Without `_apply_layout` the acceptance criterion "survives a host `execute_plan` commit" could not pass.
+- **The user's override outranks the plan's `section_order`.** The pipeline already ranks it above its own ranking. A host that wants a different order should ask the user, or reset the layout in the editor.
+- **Server-side label matching is unchanged.** `PUT /layout` still compares `.strip().lower()`, while the reconciler uses `_norm`. The frontend now sends the exact title, so the stricter check passes, and loosening it was out of scope.
+- **The Postgres leg was not run locally** (Docker was not running). CI runs it. `test_timezone_datetimes.py::test_no_source_file_reads_a_naive_utc_clock` fails locally only because it walks the untracked `personal/` and `tmp/` folders.
+
+---
+
+## Issue 289 — Removing a bullet is a requested delete: `delete_bullet`, and `cut_hints` name it
+**Status:** complete | **Tests:** 2650 pass on SQLite (15 new), 24 skipped, 0 fail; the Postgres leg was not run locally (CI runs it)
+
+#279 stopped guards vetoing a requested `delete`, but `cut_hints` also recommends `cut_bullet`, and a host could only carry that out as a `revise` (the item with one bullet fewer). A `revise` faces every guard and removing a bullet lowers MTLD, so on an over-budget profile with more than two bullets per experience every `cut_bullet` came back `reverted` with `guard: mtld regressed` and nothing committed. Bullet removal now has its own plan op, treated as a requested delete, and `cut_hints` name the op that performs each cut.
+
+### What shipped
+
+- **`delete_bullet` plan op (`harness/program.py`).** A node with `op: "delete_bullet"`, an `item_key` and `cut_bullets`: bullet ids `<item key>#b<n>`, the same `bullet` value `cut_hints` give. It is structural-validated (needs `cut_bullets`; each id must belong to the node's own item; no `bullets`; `cut_bullets` is rejected on any other op). It is added to the plan's op set only (`PLAN_OPS`); the planner's `OPS` and `suggest_actions` are unchanged.
+- **Executor (`harness/executor.py`).** `delete_bullet` removes the named bullets by index from the parent version's item and touches nothing else: the survivors keep their text, order and cites (cites of removed text are dropped). With a `because` it is passed to `accept(..., requested=True)`, so hard gates apply in full and guard regressions are accepted and reported under `waived`, exactly as for `delete`. Arbitration refuses `unknown_bullet` (an id the item does not have, or a blank one) and `would_empty_item` (cutting every bullet; use `delete`), and a hard-suppressed item as for `keep`/`revise`. Without a `because` it is judged like any edit.
+- **`cut_hints` name the op (`agents/checks.py`).** Each hint gains `op`: `delete_bullet` for `cut_bullet`, `delete` for `drop_item`. Other fields are unchanged.
+- **Docs and tool text.** `execute_plan`, `patch_plan` and the `cut_hints` output field (`harness/contract.py`, shared by MCP and the CLI), `docs/harness.md` § 5 and § 7, `docs/architecture.md`, and the `art-tailor` skill say how to send a cut: one `delete_bullet` node per item with all its bullets, a `delete` for a dropped item (which replaces any bullet cut of the same item), `because` set, never a `revise`.
+- **Tests (15 new).** `tests/test_executor.py`: schema rejections (5); a host following the hints on an over-budget profile with four bullets per experience commits with the budget met, the surviving bullets verbatim and every hint kind (`cut_bullet` and `drop_item`) accepted; the same cuts sent as a `revise` are reverted by a guard and never waived; a `delete_bullet` that regresses MTLD is accepted with `waived`; a `revise` that removes a bullet and adds text is still reverted; `delete_bullet` removes only what it names and keeps cites in step; `unknown_bullet` and `would_empty_item` refusals (2); no `because`, no waiver; `patch_plan` adds the hinted nodes and commits. `tests/test_line_budget.py`: every hint carries the op that performs it.
+
+### Deviations from spec
+
+- **A dedicated op, not a `delete` with a bullet pointer, and not a revise recognised by diff.** `delete` means "drop the item" (section-empty and emphasize checks, ids by item key); overloading it would change those rules. Recognising a `revise` that only removes bullets would need a diff of arbitrary text and invites a revise carrying new text to borrow the waiver, which the issue rules out.
+- **Bullet identity is the page index, as `cut_hints` already give it** (`<item key>#b<n>`), relative to the parent version. A plan holds one node per item, so one `delete_bullet` carries all of an item's cuts and the indexes never shift mid-node.
+- **A hint-driven cut uses a host-supplied `because`** (`user:fit the one-page budget`), the same convention #279's `drop_item` run uses. The executor does not check that the user said so.
+- `cut_hints` do not emit ready-made plan nodes; they carry the `op` and the host groups cuts per item.
+
 ## Issue 290 — Codex plugins carry hooks: ART's ride in the plugin, and `art hooks codex --write` no longer duplicates them
 **Status:** complete | **Tests:** 2640 pass on SQLite (5 new), 24 skipped, 0 fail. The Postgres leg was not run locally; CI runs it
 
@@ -63,7 +193,6 @@ Second child of the landing-site epic (#271): the real home page for students ap
 - **The Postgres leg was not run locally** (CI runs it).
 
 ---
-
 ## Issue 185 — `select_skills` no longer renders past the cap: the inferred floor is bounded by `max_k`
 **Status:** complete | **Tests:** 2624 pass (4 new), 24 skipped, on SQLite; the Postgres leg was not run (nothing here touches storage)
 

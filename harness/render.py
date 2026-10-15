@@ -64,11 +64,19 @@ def _education_rows(user_id: UUID, content: Dict):
     return rows
 
 
+def generated_tex(user_id: UUID, content: Dict) -> str:
+    """What the formatter makes of `content`, with its education fields laid over the store's."""
+    from agents.formatter import ResumeFormatterAgent
+
+    agent = ResumeFormatterAgent(user_id)
+    rows = _education_rows(user_id, content)
+    agent._get_education = lambda: rows          # this render only
+    return agent.format_tex(content, section_order=content.get("_section_order"))
+
+
 def render(user_id: UUID, job_id: str, node_id: Optional[str] = None,
            format: str = "pdf") -> Dict[str, Any]:
-    from agents.formatter import (
-        ResumeFormatterAgent, _compile_tex_to_pdf, _find_latex_engine, _pdf_page_count,
-    )
+    from agents.formatter import _compile_tex_to_pdf, _find_latex_engine, _pdf_page_count
 
     try:
         jid = UUID(str(job_id))
@@ -96,11 +104,7 @@ def render(user_id: UUID, job_id: str, node_id: Optional[str] = None,
     if edited:
         tex, source = edited, "edited"
     else:
-        agent = ResumeFormatterAgent(user_id)
-        rows = _education_rows(user_id, content)
-        agent._get_education = lambda: rows          # this render only
-        tex, source = agent.format_tex(content, section_order=content.get("_section_order")), \
-            "generated"
+        tex, source = generated_tex(user_id, content), "generated"
 
     out_dir = applications_dir() / f"{_slug(company)}_{_slug(title)}"
     out_dir.mkdir(parents=True, exist_ok=True)

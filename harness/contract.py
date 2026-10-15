@@ -50,6 +50,9 @@ class BriefingInput(_Model):
     role_family: Optional[str] = Field(
         None, description="Scope preferences and job cards to this role family "
                           "(e.g. data_science).")
+    job_id: Optional[str] = Field(
+        None, description="Also the preferences scoped to this job, and (unless role_family "
+                          "is given) its role family's: the scope execute_plan enforces.")
 
 
 class Pin(_Model):
@@ -85,6 +88,7 @@ class JobRuleRef(_Model):
 
 class BriefingOutput(_Output):
     role_family: Optional[str] = None
+    job_id: Optional[str] = None
     pins: List[Pin] = Field(default_factory=list,
                             description="Strength-5 preferences. Honour verbatim.")
     preferences: List[Preference] = Field(default_factory=list)
@@ -389,6 +393,66 @@ class TreeEventOut(_Model):
     created_at: str
 
 
+class ItemChange(_Model):
+    key: str
+    change: Literal["added", "removed", "revised"]
+    title: str
+    bullets_added: List[str] = Field(default_factory=list)
+    bullets_removed: List[str] = Field(default_factory=list)
+    reordered: bool = False
+
+
+class BulletEdit(_Model):
+    item: str = Field(description="The item key (exp:... or proj:...), or a section name for "
+                                  "bullets outside any item (achievements).")
+    title: str = ""
+    change: Literal["revised", "added", "removed"]
+    bullet: Optional[str] = Field(
+        None, description="'<item key>#b<n>': the bullet on the earlier version (revised, "
+                          "removed); absent for added.")
+    before: Optional[str] = None
+    after: Optional[str] = None
+    position: Optional[int] = Field(None, description="Index of the bullet in the edited source.")
+
+
+class ReorderedItem(_Model):
+    item: str
+    title: str = ""
+
+
+class UnmappedRegion(_Model):
+    region: str = Field(description="The ART-SECTION key (header, education, skills, ...), "
+                                    "'preamble' or 'document'.")
+    reason: str
+    diff: str = Field("", description="Unified diff of the region's lines outside the bullets.")
+
+
+class TexEdits(_Model):
+    bullets: List[BulletEdit] = Field(default_factory=list)
+    reordered: List[ReorderedItem] = Field(
+        default_factory=list, description="Items whose bullets only moved.")
+    section_order: Optional[Dict[str, List[str]]] = Field(
+        None, description="{before, after} when sections moved.")
+    unmapped: List[UnmappedRegion] = Field(
+        default_factory=list, description="Regions that cannot be read as bullets, as a "
+                                          "unified diff. A plan cannot carry these over.")
+    truncated: int = Field(0, description="Bullet edits left out of a short summary.")
+
+
+class EditChanges(_Model):
+    since_node: str = Field(description="The last version that was not an editor edit.")
+    items: List[ItemChange] = Field(default_factory=list)
+    skills_added: List[str] = Field(default_factory=list)
+    skills_removed: List[str] = Field(default_factory=list)
+    tex_changed: bool = False
+    layout_changed: bool = False
+    tex_edits: Optional[TexEdits] = None
+
+
+class EditorEdit(NodeSummary):
+    changes: Optional[EditChanges] = None
+
+
 class GetHeadInput(_Model):
     job_id: str
     since_event: Optional[int] = Field(
@@ -399,8 +463,10 @@ class GetHeadOutput(_Output):
     job_id: Optional[str] = None
     head: Optional[Node] = None
     events: List[TreeEventOut] = Field(default_factory=list)
-    editor_edits: List[NodeSummary] = Field(
-        default_factory=list, description="Edits the user made in the editor since the cursor.")
+    editor_edits: List[EditorEdit] = Field(
+        default_factory=list, description="Edits the user made in the editor since the cursor. "
+                                          "The last node of each run of editor edits carries "
+                                          "`changes`, what the run changed (#278).")
     cursor: int = 0
 
 
@@ -417,15 +483,6 @@ class DiffInput(_Model):
     to_node: str
 
 
-class ItemChange(_Model):
-    key: str
-    change: Literal["added", "removed", "revised"]
-    title: str
-    bullets_added: List[str] = Field(default_factory=list)
-    bullets_removed: List[str] = Field(default_factory=list)
-    reordered: bool = False
-
-
 class DiffOutput(_Output):
     from_node: Optional[str] = None
     to_node: Optional[str] = None
@@ -434,6 +491,10 @@ class DiffOutput(_Output):
     skills_removed: List[str] = Field(default_factory=list)
     tex_changed: bool = False
     layout_changed: bool = False
+    tex_edits: Optional[TexEdits] = Field(
+        None, description="When the hand-edited .tex differs: the bullets it revised, added or "
+                          "removed (with the '<item key>#b<n>' id on the earlier version), items "
+                          "whose bullets only moved, and unmapped regions as a unified diff (#278).")
 
 
 class CheckoutInput(_Model):
@@ -669,9 +730,19 @@ class NodeResult(_Model):
     deltas: Dict[str, Optional[float]] = Field(default_factory=dict)
     waived: Optional[Dict[str, float]] = Field(
         None, description="Guard regressions (guard -> how far it moved) that did not veto an "
-                          "accepted requested delete (#279). Guards never veto a delete the user "
-                          "or a preference asked for; hard gates still do. Absent when none. "
-                          "Tell the user what the cut cost.")
+                          "accepted requested delete (#279) or a carried-over editor edit (#306). "
+                          "For a carried edit a target that fell (relevance_density, coverage) "
+                          "is listed too, when no target improved. Guards never veto a delete "
+                          "the user or a preference asked for, nor the user's own words; hard "
+                          "gates still do. Absent when none. Tell the user what it cost.")
+    carried_edit: Optional[List[Dict[str, Any]]] = Field(
+        None, description="Present when the executor verified this revise as the user's own "
+                          "editor edit, carried over verbatim (#306): the tex edits it carries "
+                          "(change, bullet = the '<item key>#b<n>' id diff_nodes.tex_edits gives "
+                          "for a revised bullet, null for an added one, after). The executor "
+                          "decides this from the parent's .tex; nothing in the node says so. "
+                          "If a hard gate refused it, reason says which gate and claim, and what "
+                          "to record with upsert_items before retrying.")
     review: Optional[List[Dict[str, Any]]] = Field(
         None, description="Bullets Jev could not clearly call supported by their cited "
                           "evidence (item, bullet, label, p), and bullets or item fields it "
@@ -702,6 +773,10 @@ class ExecuteOutput(_Output):
                           "the plan left the page identical to its parent (every node reverted, "
                           "refused or kept, no skills or job-rule change), so no version was made. "
                           "Absent otherwise; see nodes for the per-node reasons.")
+    discarded_editor_edits: Optional[TexEdits] = Field(
+        None, description="Present when the commit went ahead with discard_editor_edits: the "
+                          "parent's hand edits to its .tex that this version does not hold "
+                          "(#278). Tell the user what was dropped.")
     nodes: List[NodeResult] = Field(default_factory=list)
     skills: Dict[str, List[str]] = Field(default_factory=dict)
     metrics: Dict[str, Any] = Field(
@@ -709,7 +784,15 @@ class ExecuteOutput(_Output):
                                           "report) for the base and the final version.")
     line_budget: Dict[str, Any] = Field(default_factory=dict)
     violations: List[Violation] = Field(default_factory=list)
-    cut_hints: List[Dict[str, Any]] = Field(default_factory=list)
+    cut_hints: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Cuts that would fit the page, in the order to apply them. Each names the plan "
+                    "op that carries it out (#289): a cut_bullet is op delete_bullet (item, "
+                    "bullet = the id to put in cut_bullets), a drop_item is op delete. Send them "
+                    "as those ops with a `because` (e.g. user:fit the one-page budget), one node "
+                    "per item with all of its cut bullets in cut_bullets; a drop_item replaces "
+                    "any cut_bullet of the same item. Not a revise: a revise faces every guard "
+                    "and MTLD reverts it.")
     rules_applied: List[Dict[str, Any]] = Field(
         default_factory=list, description="Job-scoped rule values written into the base.")
     baseline: Optional[Dict[str, Any]] = Field(
@@ -894,7 +977,7 @@ TOOLS: List[ToolSpec] = [
         "Pinned preferences (verbatim), scoped preferences, persona traits and prior-job "
         "cards for this candidate. Call before planning any resume.",
         BriefingInput, BriefingOutput,
-        lambda uid, role_family=None: _tools().art_briefing(uid, role_family)),
+        lambda uid, role_family=None, job_id=None: _tools().art_briefing(uid, role_family, job_id)),
     ToolSpec(
         "art_pins",
         "The candidate's pins word for word: strength-5 preferences, negative pins included. "
@@ -1011,7 +1094,9 @@ TOOLS: List[ToolSpec] = [
     ToolSpec(
         "get_head",
         "A job's current resume version, plus what changed after a cursor — including "
-        "edits the user made in the editor. Call before building on a version.",
+        "edits the user made in the editor. An editor edit to the .tex says which bullets it "
+        "revised, added or removed (editor_edits[].changes.tex_edits, kept short; diff_nodes has "
+        "all of it). Call before building on a version.",
         GetHeadInput, GetHeadOutput,
         _tree_call(lambda t, uid, job_id, since_event=None: t.get_head(uid, job_id, since_event))),
     ToolSpec(
@@ -1021,7 +1106,11 @@ TOOLS: List[ToolSpec] = [
         _tree_call(lambda t, uid, job_id: {"nodes": t.history(uid, job_id)})),
     ToolSpec(
         "diff_nodes",
-        "What changed between two versions, by item and bullet.",
+        "What changed between two versions, by item and bullet. When the user's hand-edited "
+        ".tex differs, tex_edits reads it back: per item the bullets it revised, added or "
+        "removed (with the '<item key>#b<n>' id, the text before and after), items whose "
+        "bullets only moved, and any region it cannot map to a bullet (heading, header, "
+        "skills) as a unified diff marked unmapped.",
         DiffInput, DiffOutput,
         _tree_call(lambda t, uid, from_node, to_node: {
             **{k: v for k, v in t.diff_nodes(uid, from_node, to_node).items()
@@ -1070,15 +1159,30 @@ TOOLS: List[ToolSpec] = [
         "Run a whole tailoring plan as one program: arbitration, each node under the "
         "per-metric acceptance rule, then finalize (preferences, sections, skills cap, line "
         "budget). Commits one version unless a check fails, dry_run is set, or the result would "
-        "be identical to its parent (committed false, reason no_change). Writes.",
+        "be identical to its parent (committed false, reason no_change). To remove whole "
+        "bullets use op delete_bullet with cut_bullets (ids '<item key>#b<n>' on the parent "
+        "version) and a because; to drop an item use op delete with a because. A delete or "
+        "delete_bullet with a because faces the hard gates only: guard regressions are accepted "
+        "and reported under waived. An ordinary revise never gets that. When the parent carries "
+        "hand edits to its .tex that the plan does not hold, nothing commits: the violation "
+        "discards_editor_edits lists the edited bullets. Carry them over as nodes (a revise "
+        "with the user's text, a delete_bullet for a removed bullet) or, after asking the "
+        "user, set discard_editor_edits true. A revise whose new bullets are exactly the "
+        "user's edited text, whitespace aside, and which changes nothing else on the item "
+        "(the executor checks it against the parent's .tex; you cannot label it) is a "
+        "carried-over edit: guards and the target rule do not veto it, regressions are "
+        "reported under waived and the node under carried_edit. Hard gates still apply; if "
+        "one refuses it, reason names the gate and the claim: record the supporting fact with "
+        "upsert_items (or ask the user), cite it, and retry rather than rewording the user's "
+        "text. Any other wording is a normal revise. Writes.",
         ExecuteInput, ExecuteOutput,
         lambda uid, program, dry_run=False:
             _executor().execute_plan(uid, program, dry_run=dry_run),
         read_only=False),
     ToolSpec(
         "patch_plan",
-        "Amend a saved program by JSON pointer and run it again (e.g. apply a cut hint, or "
-        "replace /parent to rebase on a new HEAD). Writes.",
+        "Amend a saved program by JSON pointer and run it again (e.g. add the delete_bullet or "
+        "delete node a cut hint names, or replace /parent to rebase on a new HEAD). Writes.",
         PatchInput, ExecuteOutput,
         lambda uid, program_id, edits, dry_run=False:
             _executor().patch_plan(uid, program_id, edits, dry_run=dry_run),

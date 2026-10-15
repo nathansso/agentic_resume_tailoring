@@ -182,20 +182,44 @@ And pooling hid real results: the per-stratum spread in #172 vanished when poole
 **The acceptance rule (#113).** An action commits if and only if all of the following hold:
 
 1. It passes every hard gate.
-2. No guard regresses by more than its tolerance, unless it is a requested delete (below).
+2. No guard regresses by more than its tolerance, unless it is a requested delete or a
+   carried-over editor edit (below).
 3. It improves at least one target, or it is a delete or reorder that the user or a
-   preference requested.
+   preference requested, or a carried-over editor edit.
 
-**A requested delete is not vetoed by a guard (#279).** A delete carrying `because: "user:..."`
-or `"pref:..."` faces every hard gate and no guard. A delete cannot fabricate, and removing text
+**A requested delete is not vetoed by a guard (#279, #289).** A delete or a `delete_bullet`
+(§ 7) carrying `because: "user:..."` or `"pref:..."` faces every hard gate and no guard. A delete cannot fabricate, and removing text
 lowers MTLD (and can move the other diversity guards) almost by definition, so a guard
 regression there is expected, not a quality failure; the relative MTLD tolerance would
 otherwise revert the very `drop_item`s `cut_hints` recommend and leave the budget unmet. It
-mirrors the hard-preference override of a suppress delete. Only a delete gets the waiver: a
-`revise` or `replace` writes text and faces every guard, whatever its `because`. The regressions
+mirrors the hard-preference override of a suppress delete. Only the two delete ops get the
+waiver: a `revise` or `replace` writes text and faces every guard, whatever its `because`. That
+is why removing a bullet has an op of its own (#289): `cut_hints` recommend `cut_bullet`s, and a
+host that sent one as a `revise` (the item with a bullet fewer) was reverted by MTLD exactly as
+the `drop_item`s were before #279. A `revise` can also carry new text, so it cannot be
+recognised as "only removes bullets" and waived. The regressions
 are never hidden: the node is `accepted` with `reason: "guard_waived: requested delete; ..."`,
 `guard_regressions` and a `waived` map in its result, so the host can tell the user what the cut
 cost. No tolerance changes; a delete with no `because` is judged as before.
+
+**A carried-over editor edit is not vetoed by a guard either (#306).** The user's own words are
+not an optimiser's: a hand-typed bullet is short, repeats itself and ignores the posting, so it
+lowers MTLD and keyword density, and a `revise` carrying it back (§ 13, #278) was reverted, which
+pushed the host toward discarding the edit. The executor therefore verifies it, without trusting
+the host. A `revise` (or `replace`) is a carried-over edit when its bullets differ from the
+page's item only by texts that are, whitespace aside, the user's edited text for a bullet of that
+item in the parent's `edited_tex` as `harness/texdiff.py` reads it (the `revised` and `added`
+bullets of `diff_nodes.tex_edits`), and by the bullets those edits replaced or removed. The node
+needs no label and a label would count for nothing: the bullet is identified by its text against
+the `<item key>#b<n>` edit it matches, which the result reports as `carried_edit`. Reword it by one
+word, change another bullet, or drop one the user kept, and it is an ordinary revise that faces
+every guard. For a carried-over edit the guards and the target rule are waived on the same terms as
+a requested delete, and every regression is reported under `waived` (a target that fell, with no
+target rising, is listed there too). **Every hard gate still applies in full**: support, numbers
+and entities (`consistency`), citations, preferences and pins, the line gates, and the page budget
+at finalize. When one refuses the edit, the node's `reason` names the gate and the claim, says not
+to reword the user's text, and tells the host to record the supporting fact with `upsert_items`
+(or ask the user whether it is true), cite it, and retry. No tolerance changes.
 
 A stuffing edit fails the target test (unsupported terms weigh zero) or the stuffing guard.
 A preference-driven delete passes, and relevance density usually rises. Tolerances today are
@@ -269,7 +293,10 @@ code or a cached Jev decision.
       "replacement_key": "proj:recsys gnn",
       "accept": { "improves": ["relevance_density"] } },
     { "id": "drop", "op": "delete", "item_key": "proj:coursework db",
-      "because": "pref:3f0a…" }
+      "because": "pref:3f0a…" },
+    { "id": "trim", "op": "delete_bullet", "item_key": "exp:data scientist|acme analytics",
+      "cut_bullets": ["exp:data scientist|acme analytics#b3"],
+      "because": "user:fit the one-page budget" }
   ],
   "skills": ["Python", "SQL", "PyTorch"],
   "finalize": { "line_budget": 60, "max_skills": 18, "min_skills": 8, "max_bullet_lines": 2 },
@@ -306,6 +333,18 @@ metric vector and the rule, and `harness/executor.py` runs it. The details:
   (§ 8), else from the whole KG with skills ranked (`kg_default_content`).
 - **Gates compare sets.** A node fails only if it *adds* a violation. Finalize is where
   what remains stops a commit.
+- **Removing bullets (#289).** `delete_bullet` removes whole bullets from one item and rewrites
+  nothing else. `cut_bullets` lists bullet ids `<item key>#b<n>`, the same id `cut_hints` give for
+  a `cut_bullet`; `n` is the 0-based index in the item's bullet list on the parent version, and a
+  plan holds one node per item, so all of an item's cuts go in one node. The remaining bullets
+  keep their text, order and cites. It is refused (`unknown_bullet`) when an id names a bullet the
+  item does not have, and (`would_empty_item`) when it would remove the last one; dropping the
+  item is `delete`. With a `because` it is a requested delete (§ 5): hard gates in full, guard
+  regressions accepted and reported under `waived`. Without one it is judged like any edit.
+  `delete_bullet` is a plan op only: the planner's own action space (`keep`, `revise`,
+  `replace`, `delete`) and `suggest_actions` are unchanged. `cut_hints` carry the op that
+  performs each cut: `cut_bullet` is `delete_bullet`, `drop_item` is `delete`; if an item has
+  both, send just the `delete`. Older stored programs have no `cut_bullets` and replay as before.
 - **Hard-preference deletes.** A delete that a hard preference requires is accepted even
   if a guard objects, since compliance is itself a hard gate.
 - **Citations (#198).**
@@ -679,6 +718,31 @@ python -m web.local_ui --job <job_id>        # from a checkout
   asks before reloading.
 - **Edits reach the host.** Every `.tex` save and drag commits an `editor` node, so the
   host's next `get_head(since_event=...)` lists it under `editor_edits`.
+- **A `.tex` edit says which bullets it changed (#278).** The node keeps the user's text
+  as `edited_tex` next to a `content` that still holds the pre-edit bullets (the raw text
+  is never folded back into `content`: it would render without the support check).
+  `diff_nodes` therefore reads the source back, with `harness/texdiff.py` (a parser, no
+  model): the `%% ART-SECTION` markers and the formatter's headings give the item, and
+  `tex_edits` lists per item the bullets **revised** (id `<item key>#b<n>` on the earlier
+  version, text before and after), **added** and **removed**, the items whose bullets only
+  **moved**, and sections that moved. A region it cannot read as bullets (a heading, the
+  header, skills, the preamble, a deleted marker) comes back as a unified diff under
+  `unmapped`: a tex change is never reported as nothing. `get_head`'s `editor_edits` and
+  the prompt hook carry the same list, shortened, for the whole run of saves since the last
+  version that was not an editor edit.
+- **A commit never drops a `.tex` edit silently.** A committed version renders from its
+  `content`, so `execute_plan` on a parent whose `edited_tex` says more than its content
+  (after the parent's layout override is laid over it) refuses with the violation
+  `discards_editor_edits` and lists the edited bullets. The host either **carries the
+  edits over** as plan nodes (a `revise` with the user's text, a `delete_bullet` for a
+  removed bullet; they face every hard gate, and a `revise` that is verbatim the user's text
+  faces no guard (§ 5, #306), then the check is satisfied) or,
+  **after asking the user**, sets `discard_editor_edits: true`: the commit goes ahead and
+  the response records `discarded_editor_edits`. Unmapped regions and edits to an item a
+  plan cannot address (achievements) cannot be carried, so they need the flag. A drag
+  (a layout override) is not an edit to protect: the override is applied to the new
+  version (#277). A plan that changes nothing (`no_change`) commits nothing and refuses
+  nothing.
 
 ## 14. Learning offline
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseSections, moveSectionTo, parseBulletGroups, moveBulletTo } from "./texStructure";
+import FORMATTER_RAW from "./__fixtures__/formatter_resume.tex?raw";
 
 const SAMPLE = String.raw`\documentclass{article}
 \begin{document}
@@ -132,5 +133,39 @@ describe("moveBulletTo", () => {
   it("returns null when the bullet lines were edited away", () => {
     const noItems = SAMPLE.split("\\resumeItem{").join("% item ");
     expect(moveBulletTo(noItems, 0, 0, 1)).toBeNull();
+  });
+});
+
+// What agents/formatter.py really emits: each heading command alone on its line
+// with its arguments on the next, \newcommand definitions in the preamble, and
+// escaped labels. tests/test_layout_overrides.py fails when it drifts (#277).
+const FORMATTER_TEX = FORMATTER_RAW.replace(/\r\n/g, "\n");
+
+describe("parseBulletGroups on formatter output (#277)", () => {
+  it("labels each group with its experience title or project name, unescaped", () => {
+    expect(parseBulletGroups(FORMATTER_TEX).map(g => [g.sectionKey, g.label, g.bullets.length]))
+      .toEqual([
+        ["experience", "R&D Engineer", 3],
+        ["experience", "Data Scientist", 2],
+        ["projects", "C# Tools", 2],
+        ["projects", "Pixel_Adventure", 1],
+      ]);
+  });
+
+  it("reads the label when the arguments share the command's line", () => {
+    const oneLine = FORMATTER_TEX.replace(
+      "\resumeSubheading\n      {Data Scientist}", "\resumeSubheading{Data Scientist}");
+    expect(parseBulletGroups(oneLine)[1].label).toBe("Data Scientist");
+  });
+
+  it("does not take the preamble's \newcommand for a heading", () => {
+    const noHeadings = FORMATTER_TEX
+      .split("\n").filter(l => !/^\s*\resume(Sub|Project)[Hh]eading\s*$/.test(l)).join("\n");
+    expect(parseBulletGroups(noHeadings).map(g => g.label)).not.toContain("Project");
+  });
+
+  it("moves a bullet within its group", () => {
+    const moved = moveBulletTo(FORMATTER_TEX, 0, 2, 0)!;
+    expect(parseBulletGroups(moved)[0].bullets.map(b => b.text)[0]).toBe("Mentored two interns");
   });
 });

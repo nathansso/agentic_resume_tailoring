@@ -31,7 +31,7 @@ from sqlalchemy import func
 from sqlmodel import Session, select
 
 import database.db as _db
-from harness import ART_VERSION, policy
+from harness import ART_VERSION, policy, texdiff
 from agents.checks import exp_key, proj_key
 from database.clock import utc_now
 from database.models import JobDescription, JobHead, TailorNode, TreeEvent, UserJobResult
@@ -39,6 +39,8 @@ from database.models import JobDescription, JobHead, TailorNode, TreeEvent, User
 log = logging.getLogger(__name__)
 
 SOURCES = ("host", "pipeline", "editor", "revert", "backfill")
+# Job statuses that already say the job has a resume; materializing never moves them.
+_HAS_RESUME = ("tailored", "exported")
 _UNSET = object()
 
 
@@ -134,6 +136,13 @@ def _materialize(session, user_id: UUID, job_id: UUID, node: TailorNode,
     result.layout_overrides = node.layout_overrides
     result.updated_at = now
     session.add(result)
+    # The editor shows a job's resume only once its status says it has one, and
+    # only the web pipeline used to set it, so a host-built job stayed "created" (#276).
+    job = session.get(JobDescription, job_id)
+    if job is not None and job.user_id == user_id and job.status not in _HAS_RESUME:
+        job.status = "tailored"
+        job.updated_at = now
+        session.add(job)
     return result
 
 
@@ -317,7 +326,11 @@ def events_since(user_id, cursor: int = 0, job_id=None) -> List[Dict[str, Any]]:
 
 def get_head(user_id, job_id, since_event: Optional[int] = None) -> Dict[str, Any]:
     """HEAD, plus what changed after `since_event` — including editor edits a host
-    has not seen yet — and the cursor to pass next time."""
+    has not seen yet — and the cursor to pass next time.
+
+    An editor edit is more than a note: the last editor node of each run of consecutive editor
+    nodes carries `changes`, what that run changed since the last version that was not an editor
+    edit (the bullets a `.tex` edit revised, added or removed, #278), kept short."""
     user_id, job_id = _uuid(user_id), _uuid(job_id)
     with Session(_db.engine) as session:
         head = _head_row(session, user_id, job_id)
@@ -326,11 +339,38 @@ def get_head(user_id, job_id, since_event: Optional[int] = None) -> Dict[str, An
     editor = []
     if since_event is not None:
         ids = {e["node_id"] for e in events if e["kind"] == "commit"}
-        editor = [n for n in history(user_id, job_id)
-                  if n["node_id"] in ids and n["source"] == "editor"]
+        nodes = history(user_id, job_id)
+        editor = [n for n in nodes if n["node_id"] in ids and n["source"] == "editor"]
+        by_id = {n["node_id"]: n for n in nodes}
+        parents = {n["parent_id"] for n in editor}
+        for n in editor:
+            if n["node_id"] in parents:
+                continue                         # a later edit in the same run carries the summary
+            base = by_id.get(n["parent_id"])
+            while base is not None and base["source"] == "editor":
+                base = by_id.get(base["parent_id"])
+            n["changes"] = _changes(user_id, base["node_id"] if base else n["parent_id"],
+                                    n["node_id"])
     last = max([e["event_id"] for e in events], default=since_event or 0)
     return {"job_id": str(job_id), "head": _full(node) if node else None,
             "events": events, "editor_edits": editor, "cursor": last}
+
+
+def _changes(user_id: UUID, base, node_id: str) -> Optional[Dict[str, Any]]:
+    """`diff_nodes` from `base` to `node_id`, cut down for the change feed; None for a first
+    version. Never raises: the feed must still list the edit."""
+    if not base:
+        return None
+    try:
+        diff = diff_nodes(user_id, base, node_id)
+    except Exception:  # noqa: BLE001
+        log.exception("tailoring tree: could not summarise the change to node %s", node_id)
+        return {"since_node": str(base), "tex_changed": True, "items": [], "tex_edits": None}
+    cap = texdiff.brief
+    return {"since_node": str(base), "items": diff["items"][:6],
+            "skills_added": diff["skills_added"], "skills_removed": diff["skills_removed"],
+            "tex_changed": diff["tex_changed"], "layout_changed": diff["layout_changed"],
+            "tex_edits": cap(diff.get("tex_edits"))}
 
 
 def sibling_pairs(user_id, job_id) -> List[Dict[str, str]]:
@@ -356,13 +396,15 @@ def _items(content: Dict) -> Dict[str, Dict[str, Any]]:
 
 
 def diff_nodes(user_id, a, b) -> Dict[str, Any]:
-    """What changed from node `a` to node `b`, by item key and bullet."""
+    """What changed from node `a` to node `b`, by item key and bullet. When the hand-edited `.tex`
+    differs, `tex_edits` maps it back to bullets (texdiff.compare)."""
     user_id = _uuid(user_id)
     with Session(_db.engine) as session:
         na, nb = _node(session, user_id, a), _node(session, user_id, b)
         ca, cb = _json(na.content, {}), _json(nb.content, {})
         tex_changed = na.edited_tex != nb.edited_tex
         layout_changed = na.layout_overrides != nb.layout_overrides
+        full = (_full(na), _full(nb)) if tex_changed else None
     ia, ib = _items(ca), _items(cb)
     changes = []
     for key in sorted(set(ia) | set(ib)):
@@ -380,10 +422,15 @@ def diff_nodes(user_id, a, b) -> Dict[str, Any]:
                             "reordered": sorted(before) == sorted(after)})
     skills_a = list(ca.get("skills_ranked") or [])
     skills_b = list(cb.get("skills_ranked") or [])
-    return {"from": str(na.node_id), "to": str(nb.node_id), "items": changes,
-            "skills_added": [s for s in skills_b if s not in skills_a],
-            "skills_removed": [s for s in skills_a if s not in skills_b],
-            "tex_changed": tex_changed, "layout_changed": layout_changed}
+    out = {"from": str(na.node_id), "to": str(nb.node_id), "items": changes,
+           "skills_added": [s for s in skills_b if s not in skills_a],
+           "skills_removed": [s for s in skills_a if s not in skills_b],
+           "tex_changed": tex_changed, "layout_changed": layout_changed}
+    if full:
+        # The .tex is the user's own text: say which bullets it changed (#278). Reading it back
+        # is the formatter's inverse, not a judgement, so this stays model-free.
+        out["tex_edits"] = texdiff.public(texdiff.node_edits(user_id, *full))
+    return out
 
 
 def list_jobs(user_id, status: Optional[str] = None) -> List[Dict[str, Any]]:

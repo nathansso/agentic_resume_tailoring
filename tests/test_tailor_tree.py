@@ -86,6 +86,48 @@ def test_unknown_source_is_refused(job):
         tree.commit_node(uid, jid, content={}, source="mystery")
 
 
+def _status(engine, job_id):
+    from database.models import JobDescription
+    with Session(engine) as s:
+        return s.get(JobDescription, job_id).status
+
+
+@pytest.mark.parametrize("before,after", [("created", "tailored"), ("analyzed", "tailored"),
+                                          ("tailored", "tailored"), ("exported", "exported")])
+def test_a_materialized_commit_marks_the_job_as_having_a_resume(isolated_engine, before, after):
+    """A host-built version must reach the editor, which renders only for a job whose
+    status says it has a resume (#276). An exported job is not moved back."""
+    from conftest import _seed_user_and_skill
+    from database.models import JobDescription
+    from harness import tree
+
+    user = _seed_user_and_skill(isolated_engine)
+    with Session(isolated_engine) as s:
+        j = JobDescription(user_id=user.user_id, title="ML Engineer", company="Acme",
+                           description="Build ML systems", status=before)
+        s.add(j)
+        s.commit()
+        jid = j.job_id
+
+    tree.commit_node(user.user_id, jid, content=_content("a"), source="host",
+                     expected_parent=None, materialize=True)
+    assert _status(isolated_engine, jid) == after
+
+
+def test_a_commit_that_does_not_materialize_leaves_the_status_alone(isolated_engine, job):
+    from database.models import JobDescription
+    from harness import tree
+
+    uid, jid, _ = job
+    with Session(isolated_engine) as s:
+        j = s.get(JobDescription, jid)
+        j.status = "analyzed"
+        s.add(j)
+        s.commit()
+    tree.commit_node(uid, jid, content=_content("a"), source="host")
+    assert _status(isolated_engine, jid) == "analyzed"
+
+
 # ── checkout, revert, siblings ───────────────────────────────────────────────
 
 def test_checkout_materializes_the_node_into_the_current_result(isolated_engine, job):
@@ -254,6 +296,151 @@ def test_an_editor_tex_save_commits_an_editor_node(isolated_engine, job, monkeyp
     nodes = tree.history(uid, jid)
     assert nodes[-1]["source"] == "editor" and nodes[-1]["note"] == "tex edit"
     assert tree.get_node(uid, nodes[-1]["node_id"])["edited_tex"] == tex
+
+
+# ── a hand edit of the .tex is reported as bullets (#278) ────────────────────
+
+EXP_KEY = "exp:data science intern|idx exchange"
+
+
+def _pipeline_version(engine, job):
+    """A first version in the pipeline's shape (skills_ranked as dicts), which the formatter renders."""
+    from harness import tree
+
+    uid, jid, rid = job
+    _set_result(engine, rid, tailored_resume_content={
+        **_content("Built an ensemble", "Built a pipeline"),
+        "skills_ranked": [{"name": "Python", "category": "Languages", "score": 1.0}]})
+    return tree.record_result(uid, jid, source="pipeline")
+
+
+def _tex_edit(engine, job, change, base=None):
+    """The editor saving a hand-edited .tex on top of `base` (default: a pipeline version).
+    Returns (base node, editor node)."""
+    from harness import texdiff, tree
+
+    uid, jid, rid = job
+    base = base or _pipeline_version(engine, job)
+    tex = texdiff.node_tex(uid, tree.get_node(uid, base["node_id"]))
+    edited = change(tex)
+    assert edited != tex
+    _set_result(engine, rid, edited_tex=edited)
+    return base, tree.record_result(uid, jid, source="editor", note="tex edit")
+
+
+def _tex_diff(uid, base, edit):
+    from harness.contract import invoke
+    out = invoke("diff_nodes", uid, {"from_node": base["node_id"], "to_node": edit["node_id"]})
+    assert out["error"] is None and out["tex_changed"] is True
+    return out["tex_edits"]
+
+
+def test_a_text_edit_to_a_bullet_names_the_bullet(isolated_engine, job):
+    base, edit = _tex_edit(isolated_engine, job, lambda t: t.replace(
+        r"\resumeItem{Built an ensemble}", r"\resumeItem{Built a \textbf{tuned} ensemble \& more}"))
+    out = _tex_diff(job[0], base, edit)
+    assert out["bullets"] == [{
+        "item": EXP_KEY, "title": "Data Science Intern @ IDX Exchange", "change": "revised",
+        "bullet": f"{EXP_KEY}#b0", "before": "Built an ensemble",
+        "after": "Built a **tuned** ensemble & more", "position": 0}]
+    assert out["unmapped"] == [] and out["reordered"] == [] and out["section_order"] is None
+
+
+def test_an_added_bullet_is_reported_with_its_item(isolated_engine, job):
+    base, edit = _tex_edit(isolated_engine, job, lambda t: t.replace(
+        "\\resumeItem{Built a pipeline}\n",
+        "\\resumeItem{Built a pipeline}\n        \\resumeItem{Shipped a recommender}\n"))
+    out = _tex_diff(job[0], base, edit)
+    assert [(b["item"], b["change"], b["after"], b["position"]) for b in out["bullets"]] == [
+        (EXP_KEY, "added", "Shipped a recommender", 2)]
+    assert out["bullets"][0]["bullet"] is None and out["unmapped"] == []
+
+
+def test_a_removed_bullet_carries_its_id_on_the_earlier_version(isolated_engine, job):
+    base, edit = _tex_edit(isolated_engine, job, lambda t: t.replace(
+        "        \\resumeItem{Built an ensemble}\n", ""))
+    out = _tex_diff(job[0], base, edit)
+    assert [(b["change"], b["bullet"], b["before"], b["after"]) for b in out["bullets"]] == [
+        ("removed", f"{EXP_KEY}#b0", "Built an ensemble", None)]
+    assert out["unmapped"] == []
+
+
+def test_bullets_that_only_moved_are_reordered_not_edited(isolated_engine, job):
+    def swap(t):
+        a, b = "        \\resumeItem{Built an ensemble}\n", "        \\resumeItem{Built a pipeline}\n"
+        return t.replace(a + b, b + a)
+    base, edit = _tex_edit(isolated_engine, job, swap)
+    out = _tex_diff(job[0], base, edit)
+    assert out["bullets"] == [] and out["unmapped"] == []
+    assert [r["item"] for r in out["reordered"]] == [EXP_KEY]
+
+
+def test_an_edit_outside_the_bullets_is_an_unmapped_diff_never_nothing(isolated_engine, job):
+    base, edit = _tex_edit(isolated_engine, job, lambda t: t.replace(
+        "\\begin{center}", "\\begin{center}\n    \\small Phone 555-0100", 1))
+    out = _tex_diff(job[0], base, edit)
+    assert out["bullets"] == []
+    [region] = out["unmapped"]
+    assert region["region"] == "header" and "+\\small Phone 555-0100" in region["diff"]
+
+
+def test_source_that_cannot_be_mapped_falls_back_to_a_diff(isolated_engine, job):
+    """A rewrite with no section markers and no item headings: the bullets are gone, and the
+    lines are reported as unmapped rather than as nothing."""
+    base, edit = _tex_edit(isolated_engine, job, lambda t: "\\documentclass{article}\n"
+                           "\\begin{document}\nJust some text.\n\\end{document}\n")
+    out = _tex_diff(job[0], base, edit)
+    assert out["unmapped"] and any("Just some text." in r["diff"] for r in out["unmapped"])
+    assert {b["change"] for b in out["bullets"]} == {"removed"}
+
+
+def test_an_unchanged_tex_save_reports_no_edits(isolated_engine, job):
+    from harness import tree
+
+    uid, jid, rid = job
+    base, edit = _tex_edit(isolated_engine, job, lambda t: t + "\n\n")      # whitespace only
+    out = tree.diff_nodes(uid, base["node_id"], edit["node_id"])
+    assert out["tex_changed"] is True
+    assert out["tex_edits"] == {"bullets": [], "reordered": [], "section_order": None,
+                                "unmapped": []}
+
+
+def test_get_head_tells_the_host_which_bullets_changed_since_the_last_non_editor_version(
+        isolated_engine, job):
+    from harness import tree
+    from harness.contract import invoke
+
+    uid, jid, rid = job
+    base = _pipeline_version(isolated_engine, job)
+    cursor = tree.get_head(uid, jid, since_event=0)["cursor"]
+    _, first = _tex_edit(isolated_engine, job, lambda t: t.replace(
+        "Built an ensemble", "Built a tuned ensemble"), base=base)
+    _, second = _tex_edit(isolated_engine, job, lambda t: t.replace(
+        "Built a pipeline", "Built a data pipeline"), base=first)
+
+    out = invoke("get_head", uid, {"job_id": str(jid), "since_event": cursor})
+    assert out["error"] is None
+    early, late = out["editor_edits"]
+    assert early["node_id"] == first["node_id"] and early["changes"] is None
+    changes = late["changes"]
+    assert changes["since_node"] == base["node_id"] and changes["tex_changed"] is True
+    assert [(b["bullet"], b["before"], b["after"]) for b in changes["tex_edits"]["bullets"]] == [
+        (f"{EXP_KEY}#b0", "Built an ensemble", "Built a tuned ensemble"),
+        (f"{EXP_KEY}#b1", "Built a pipeline", "Built a data pipeline")]
+
+
+def test_the_short_summary_is_capped(isolated_engine, job):
+    from harness import texdiff
+
+    edits = {"bullets": [{"item": "exp:a|b", "title": "", "change": "removed", "bullet": f"x#b{n}",
+                          "before": "w" * 400, "after": None, "position": None} for n in range(12)],
+             "reordered": [], "section_order": None,
+             "unmapped": [{"region": "header", "reason": "r", "diff": "\n".join("l" * 3 for _ in range(40))}]}
+    short = texdiff.brief(edits)
+    assert len(short["bullets"]) == 8 and short["truncated"] == 4
+    assert all(len(b["before"]) <= 160 for b in short["bullets"])
+    assert len(short["unmapped"][0]["diff"].splitlines()) == 13
+    assert len(texdiff.public(edits)["bullets"]) == 12
 
 
 # ── write safety ─────────────────────────────────────────────────────────────

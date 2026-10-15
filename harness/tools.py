@@ -30,7 +30,7 @@ to the executor later (#197).
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 from uuid import UUID
 
 from sqlmodel import Session, select
@@ -273,21 +273,39 @@ def _pins(prefs: Sequence[Dict]) -> List[Dict[str, Any]]:
     ]
 
 
+def preferences_for(user_id: UUID, job_id: Optional[str] = None,
+                    role_family: Optional[str] = None) -> Tuple[List[Dict], Optional[str]]:
+    """The active preferences in scope, and the role family that scoped them (#291).
+
+    The one scope every reader uses — the briefing, the pins, the hook's restore after
+    compaction and the executor — so what the host is shown is what `execute_plan` enforces.
+    Global preferences always; a job's when `job_id` names it; a role family's when
+    `role_family` names it, else the family `open_job` recorded for the job."""
+    if job_id and not role_family:
+        from harness import library  # library imports this module
+        try:
+            role_family = library.role_family_of(user_id, UUID(str(job_id)))[0]
+        except ValueError:      # not a job id: scope by job alone
+            pass
+    prefs = preferences_in_scope(services.load_preferences(user_id),
+                                 job_id=str(job_id) if job_id else None, role_family=role_family)
+    return prefs, role_family
+
+
 def art_pins(user_id: UUID, role_family: Optional[str] = None,
              job_id: Optional[str] = None) -> Dict[str, Any]:
     """The pins alone, word for word: what a host must restore after compaction (#202).
-    The same set `art_briefing` pushes, scoped the same way: global pins always, a role family's
-    when `role_family` names it, a job's when `job_id` names it."""
-    prefs = preferences_in_scope(services.load_preferences(user_id), job_id=job_id,
-                                 role_family=role_family)
+    The same set `art_briefing` pushes, scoped the same way (`preferences_for`)."""
+    prefs, role_family = preferences_for(user_id, job_id, role_family)
     prefs = sorted(prefs, key=lambda p: str(p.get("preference_id")))
     pins = _pins(prefs)
     return {"role_family": role_family, "job_id": job_id, "pins": pins, "count": len(pins)}
 
 
-def art_briefing(user_id: UUID, role_family: Optional[str] = None) -> Dict[str, Any]:
+def art_briefing(user_id: UUID, role_family: Optional[str] = None,
+                 job_id: Optional[str] = None) -> Dict[str, Any]:
     """What the host must hold before planning, pushed rather than searched."""
-    prefs = preferences_in_scope(services.load_preferences(user_id), role_family=role_family)
+    prefs, role_family = preferences_for(user_id, job_id, role_family)
     prefs = sorted(prefs, key=lambda p: (-(p.get("strength") or 0), str(p.get("preference_id"))))
     pins = _pins(prefs)
     persona = services.get_active_persona(user_id, role_family=role_family)
@@ -298,6 +316,7 @@ def art_briefing(user_id: UUID, role_family: Optional[str] = None) -> Dict[str, 
     rules = list_rules(user_id)
     return {
         "role_family": role_family,
+        "job_id": job_id,
         "pins": pins,
         "preferences": [
             {k: p.get(k) for k in ("preference_id", "text", "polarity", "target_key",

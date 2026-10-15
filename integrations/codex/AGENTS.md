@@ -11,6 +11,10 @@ ART tools (the `art` MCP server) and the `art-tailor` / `art-setup` skills.
 - At the start of every job, call `art_briefing`. Its pins are hard rules; honour them
   verbatim.
 - Before building on a job's resume, call `get_head`. Keep any `editor_edits`: they are my
-  hand edits.
+  hand edits. `execute_plan` refuses a commit that would drop an edit to the `.tex`
+  (`discards_editor_edits`): carry the edit over as plan nodes with my text verbatim (no
+  guard vetoes it, hard gates still do; if one refuses, record the supporting fact with
+  `upsert_items` and retry rather than rewording me), or ask me before setting
+  `discard_editor_edits`.
 - Show me the plan before `execute_plan` unless I said to skip approval. Render with
   `render`, and tell me where the PDF is.
