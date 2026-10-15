@@ -29,14 +29,15 @@ const font = {
   size: { sm: "0.8125rem", base: "0.9375rem", lg: "1rem", xl: "1.25rem" },
 } as const;
 import { EvidenceMap } from "./EvidenceMap";
+import { BulletPicker } from "./BulletPicker";
 import {
   getSkills, getExperiences, getProjects, getEducation, getAchievements, getGraph, setSkillCore,
   updateExperience, deleteExperience, updateEducation, deleteEducation, updateProject, deleteProject,
 } from "../api/profile";
 
-type Tab = "skills" | "experiences" | "education" | "projects" | "achievements" | "graph" | "summary" | "charts";
+type Tab = "skills" | "experiences" | "education" | "projects" | "achievements" | "graph" | "picker" | "summary" | "charts";
 
-/** `currentJobId` is the job open in the workspace; the evidence map's "compare to a job" starts on it. */
+/** `currentJobId` is the job open in the workspace; the evidence map's "compare to a job" and the bullet picker start on it. */
 export function DataExplorer({ currentJobId = null }: { currentJobId?: string | null }) {
   const [tab, setTab] = useState<Tab>("graph");
   const [skills, setSkills] = useState<SkillRow[]>([]);
@@ -71,6 +72,7 @@ export function DataExplorer({ currentJobId = null }: { currentJobId?: string | 
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "graph", label: "Evidence map" },
+    { key: "picker", label: "Bullet picker" },
     { key: "skills", label: `Skills (${skills.length})` },
     { key: "experiences", label: `Experiences (${exps.length})` },
     { key: "education", label: `Education (${education.length})` },
@@ -79,6 +81,8 @@ export function DataExplorer({ currentJobId = null }: { currentJobId?: string | 
     { key: "summary", label: "Summary" },
     { key: "charts", label: "Charts" },
   ];
+
+  const own = tab === "graph" || tab === "picker";
 
   return (
     <div style={s.panel}>
@@ -94,10 +98,10 @@ export function DataExplorer({ currentJobId = null }: { currentJobId?: string | 
         ))}
       </div>
 
-      {/* The evidence map manages its own scrolling and edge-to-edge layout. */}
-      <div className={tab === "graph" ? "min-h-0 flex-1 overflow-hidden" : "flex-1 overflow-y-auto p-4"}>
-        {tab !== "graph" && loading && <p style={s.muted}>Loading…</p>}
-        {tab !== "graph" && error && <p style={{ ...s.muted, color: colors.error }}>{error}</p>}
+      {/* The evidence map and the bullet picker manage their own scrolling and edge-to-edge layout. */}
+      <div className={own ? "min-h-0 flex-1 overflow-hidden" : "flex-1 overflow-y-auto p-4"}>
+        {!own && loading && <p style={s.muted}>Loading…</p>}
+        {!own && error && <p style={{ ...s.muted, color: colors.error }}>{error}</p>}
         {!loading && !error && tab === "skills" && <SkillsTab skills={skills} onToggleCore={toggleCore} />}
         {!loading && !error && tab === "experiences" && <ExpsTab exps={exps} setExps={setExps} />}
         {!loading && !error && tab === "education" && <EducationTab education={education} setEducation={setEducation} />}
@@ -105,6 +109,7 @@ export function DataExplorer({ currentJobId = null }: { currentJobId?: string | 
         {!loading && !error && tab === "achievements" && <AchievementsTab achievements={achievements} />}
         {/* The map loads itself; an edit made in it refreshes the other tabs' lists. */}
         {tab === "graph" && <EvidenceMap defaultJobId={currentJobId} onChanged={() => { void loadAll().catch(() => undefined); }} />}
+        {tab === "picker" && <BulletPicker defaultJobId={currentJobId} onChanged={() => { void loadAll().catch(() => undefined); }} />}
         {!loading && !error && tab === "summary" && <GraphTab graph={graph ?? { top_skills: [], by_category: {}, evidence: {} }} />}
         {!loading && !error && tab === "charts" && <ChartsTab skills={skills} graph={graph} />}
       </div>
