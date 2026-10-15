@@ -14,6 +14,29 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 327 — Stable bullet citation keys
+**Status:** complete | **Tests:** 2919 pass on SQLite (9 new), 24 skipped, 0 fail; the Postgres leg was not run locally (Docker was not running), CI's required Postgres leg covers it
+
+`<item key>#b<n>` named a different project bullet from one ingest to the next. A plan's cites, the no-fabrication and consistency gates, `cut_bullets` and `texdiff` all resolve that ordinal, so a stored cite could silently point at other evidence.
+
+The cause was narrower than the issue guessed. An experience's bullets are a JSON list on its row and never moved. A **project's** bullets are its `ProjectBlurb` rows, read back sorted on `(project_id, style, blurb_id)`. Ingest stores every bullet under one `style` (`host`), and `blurb_id` is a random uuid, so the random id decided which bullet was `#b0`.
+
+### What shipped
+
+- **`ProjectBlurb.seq`, set at write time.** A nullable `INTEGER`, the bullet's position within its project, assigned by `next_blurb_seq` in the order the host sent the bullets (`harness/ingest.py::_add_blurbs`), by the enhancer in generation order, and by the scripted eval host. A later ingest appends after what is stored. Same mechanism as #180's `seq`; added by the `ALTER TABLE` list in `database/db.py`, so old SQLite and Postgres stores load.
+- **One ordering function, `database/db.py::ordered_blurbs`.** Sorts on `seq` (unassigned rows last, explicitly, since the engines disagree about NULLs), then `(style, blurb_id)`. `harness/tools.py::_project_blurbs` (which feeds `_KG.source_bullets`, the executor, the gates, `cut_bullets`) and `knowledge_graph/builder.py::_project_blurbs` (which was a hand copy of the old key) both call it. Experience bullets needed no change.
+- **`_backfill_blurb_seq`**, run from `init_db()` and idempotent, numbers existing rows per project.
+- **Tests (9 new in `tests/test_ordering_determinism.py`, one assertion in `tests/test_export_import.py`).** Storage is rewritten so the physical order, the `blurb_id` order and `created_at` all disagree with the ordinal, then `_KG`, the harness records, the graph builder, a `delete_bullet` plan and `texdiff.node_edits` are asserted to agree on which text is `#b1`. Verified: 6 of them fail with the old sort key restored.
+
+### Deviations from spec
+
+- **Existing stores are not re-keyed, and are not put into source order either.** The backfill numbers old rows in the order they were already read in, `(style, blurb_id)`, not by `created_at`. Cites already stored in tree nodes, versions, `cut_bullets` and approved variants were written against that order, and it is stable within a store (the style and the id never change), so reproducing it keeps every one of them naming the bullet it always named. The cost: a store ingested before this fix keeps whatever order its random ids gave, which may not be the source order. The true order is mostly recoverable from `created_at`, but using it would re-point every stored cite; a future one-off migration can do that deliberately. Rows with `seq` NULL (old exports, directly built fixtures) read in that same legacy order, so an unbackfilled store and a backfilled one agree.
+- **Option (a), not (b).** No existing column holds source order: `style` is shared and `blurb_id` is random, and the issue asks for ordinals that follow the source. Experience bullets already have it, as list order.
+- **"Two clean ingests in separate engines" is tested as three users in one engine.** `isolated_engine` is one per test. Eight bullets make the old key fail it essentially every run.
+- **Readers of `#b<n>` not changed**, because they index a list that is already ordered: `executor._KG.item`, `resolves`, `_cut_indexes`, `decisions/support.resolve_evidence`, `agents/checks.py`, `library.py` (parse the ordinal only), `program.py` (shape only), and `texdiff` (it indexes a version's own stored page bullets, not the graph). `agents/tailor.py` keeps `{style: content}` for the legacy web tailor, which never makes `#b` cites.
+
+---
+
 ## Issue 275 — Landing site demo: session replay and before/after resume
 **Status:** complete | **Tests:** 2837 pass on SQLite (24 new), 25 skipped, 0 fail; the Postgres leg was not run (nothing here touches storage)
 
