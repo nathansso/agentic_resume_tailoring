@@ -1,0 +1,145 @@
+---
+import Docs from "../layouts/Docs.astro";
+import DocSection from "../components/docs/DocSection.astro";
+import Callout from "../components/docs/Callout.astro";
+
+const REPO = "https://github.com/nathansso/agentic_resume_tailoring";
+
+// One list drives both the table of contents and the section headings.
+const S = {
+  short: { id: "short-version", title: "The short version" },
+  passes: { id: "what-passes-through", title: "What passes through the lookup service" },
+  kept: { id: "what-is-kept", title: "What is kept, and for how long" },
+  others: { id: "other-parties", title: "Who else sees it" },
+  own: { id: "your-own-profile", title: "Fetch your own profile only" },
+  export: { id: "linkedin-export", title: "The LinkedIn data export instead" },
+  limits: { id: "limits", title: "Limits" },
+  contact: { id: "questions", title: "Questions" },
+};
+const toc = Object.values(S);
+---
+
+<Docs
+  title="Privacy: ARTie"
+  description="What the optional LinkedIn lookup sends, what ARTie keeps (quota counters only), and the LinkedIn data export you can use instead."
+  heading="Privacy"
+  lede="ARTie keeps your resume data on your computer. This page covers the one part that doesn't: the optional LinkedIn lookup."
+  toc={toc}
+>
+  <DocSection section={S.short}>
+    <p>
+      ARTie runs on your computer, and your resume, your knowledge graph and your tailored
+      versions stay there. The one exception is the LinkedIn lookup, which you can skip. When you
+      give ARTie your LinkedIn URL, a small service run by ARTie asks a data provider for that
+      profile and passes it straight back to you. <strong>The service keeps counters, not
+      profiles.</strong>
+    </p>
+    <p>Last updated October 2026.</p>
+  </DocSection>
+
+  <DocSection section={S.passes}>
+    <p>Each lookup sends three things through the service, and the service handles them only for as long as the request lasts:</p>
+    <ul>
+      <li>
+        <strong>Your LinkedIn profile URL.</strong> Only addresses of the form
+        <code>linkedin.com/in/your-name</code> are accepted. Anything else is refused.
+      </li>
+      <li>
+        <strong>A GitHub token</strong> from <code>art github login</code>. The service sends it
+        to GitHub to learn your numeric GitHub user id, so it knows whose daily limit to use. It
+        reads nothing else from your GitHub account, and it does not store the token.
+      </li>
+      <li>
+        <strong>The profile</strong> the data provider returns. The service hands it back to you
+        and doesn't keep a copy.
+      </li>
+    </ul>
+    <p>
+      The service never writes the URL, the token or the profile to its logs, and it adds no
+      analytics or tracking. It also sees the network address your request comes from, which it
+      uses for one thing: slowing down a single address that sends too many requests.
+    </p>
+  </DocSection>
+
+  <DocSection section={S.kept}>
+    <p>
+      Counters are all the service keeps. They are stored under keys that carry no profile text, and each one expires on its own:
+    </p>
+    <ul>
+      <li>
+        <strong>A daily count per GitHub user id.</strong> It holds a number and the date, and
+        expires about two days after its last use.
+      </li>
+      <li>
+        <strong>A rate-limit count per network address, stored as a one-way hash</strong> rather
+        than the address. It expires after two minutes.
+      </li>
+      <li>
+        <strong>A monthly count of lookups across everyone</strong>, which is how the service
+        stops before its budget runs out. It carries no user id and expires after about six weeks.
+      </li>
+      <li>
+        <strong>A five-minute memory of a token check</strong>, stored under a hash of the token
+        and holding your GitHub user id, so a burst of requests doesn't ask GitHub every time.
+      </li>
+    </ul>
+    <p>
+      The service keeps no account for you, no profile data, no URLs and no tokens after the
+      response is sent. Deleting the counters needs nothing from you: they expire by themselves.
+    </p>
+  </DocSection>
+
+  <DocSection section={S.others}>
+    <ul>
+      <li>
+        <strong>GitHub</strong> receives your token to confirm who you are, the same as any app
+        you sign in to with GitHub.
+      </li>
+      <li>
+        <strong>Bright Data</strong>, the data provider, receives the LinkedIn URL and returns the
+        profile. Its own terms and privacy notice apply to what it does on its side.
+      </li>
+      <li>
+        <strong>Vercel</strong> hosts the service and keeps its standard request records for
+        a short time (the path, the status and the time of each request). ARTie adds no request
+        bodies to them.
+      </li>
+    </ul>
+  </DocSection>
+
+  <DocSection section={S.own}>
+    <Callout title="Please look up only your own profile" tone="warn">
+      <p>
+        LinkedIn's terms of service prohibit scraping, and the legal standing of the data
+        provider's collection is unsettled. ARTie offers the lookup so you can bring your own
+        profile in without downloading anything. Use it for your own profile, and no one else's.
+        If you would rather stay clear of that question, use the data export below.
+      </p>
+    </Callout>
+  </DocSection>
+
+  <DocSection section={S.export}>
+    <p>
+      The LinkedIn data export is always an alternative, and ARTie supports it fully. Request
+      the archive from LinkedIn's own settings, then give your agent the file when you run
+      setup. That route doesn't touch the lookup service, and it needs no GitHub login.
+      <a href="/usage#ingest">The usage page</a> shows how.
+    </p>
+  </DocSection>
+
+  <DocSection section={S.limits}>
+    <p>
+      The lookup is small by design. Each GitHub user gets a few profiles per day, one network
+      address can only send so many requests a minute, and the service switches itself off for
+      the rest of the month when its budget is used up. When any of these stops a request, ARTie
+      says so and points you to the export.
+    </p>
+  </DocSection>
+
+  <DocSection section={S.contact}>
+    <p>
+      To ask about data the service holds or to report a problem, open an issue in
+      <a href={REPO} rel="noopener">the project's repository</a>.
+    </p>
+  </DocSection>
+</Docs>
