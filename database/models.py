@@ -357,9 +357,12 @@ class DeletedEntry(SQLModel, table=True):
     """
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: UUID = Field(foreign_key="user.user_id", index=True)
-    entity_type: str  # "experience" | "education" | "project"
-    key_a: str        # experience: title | education: institution | project: name
+    entity_type: str  # "experience" | "education" | "project" | "skill"
+    key_a: str        # experience: title | education: institution | project: name | skill: canonical key
     key_b: Optional[str] = None  # experience: company | education: degree | project: repo_url
+    # A skill tombstone (issue #321) snapshots the UserSkill rows it removed, so a restore
+    # re-creates them exactly. NULL for every other entity type and for older tombstones.
+    payload: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=utc_now)
 
 
