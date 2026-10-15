@@ -20,6 +20,9 @@ The tools named below are the ART MCP server's tools.
   `software_engineering`, `machine_learning`, `data_science`, `data_engineering`,
   `research`, `product_management`, `design`, `devops_infrastructure`, `security`,
   `hardware` and `other`.
+- When you work on an existing job, or once `open_job` returns the job id, call
+  `art_briefing` with `job_id` instead. It adds the job's own preferences and its recorded
+  role family, which is exactly the set `execute_plan` enforces.
 - **Pins are hard rules.** Quote them to yourself and honour them verbatim.
 - Note `job_rules`: yes/no questions about the posting, such as whether it requires
   enrollment after the internship. Answer each from the posting's own words, keeping

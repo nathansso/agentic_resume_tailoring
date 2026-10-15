@@ -1279,3 +1279,51 @@ def test_patch_plan_applies_cut_hints_as_delete_bullet_nodes(isolated_engine, mo
     out = patch_plan(uid, over["program_id"], [{"op": "add", "path": "/nodes/-", "value": n}
                                                for n in _nodes_from_hints(over["cut_hints"])])
     assert out["committed"] and out["violations"] == []
+
+
+# ── preference scope: shown and enforced alike (#291) ────────────────────────
+
+def _scoped_pin(engine, uid, key, scope_type, scope_value=None):
+    with Session(engine) as s:
+        s.add(UserPreference(user_id=uid, text=f"Never include {key}", polarity="suppress",
+                             target_type="experience", target_key=key, target_term=key,
+                             scope_type=scope_type, scope_value=scope_value, strength=5))
+        s.commit()
+
+
+def _family(uid, job_id, family):
+    from harness import library
+    library.record_role_family(uid, UUID(job_id), "", supplied=family)
+
+
+@pytest.mark.parametrize("pin_family,refused", [("machine_learning", True), ("data_science", False)])
+def test_a_role_family_pin_binds_only_on_jobs_of_that_family(isolated_engine, env, pin_family,
+                                                            refused):
+    uid, job_id, _ = env
+    _family(uid, job_id, "machine_learning")
+    _scoped_pin(isolated_engine, uid, EXP, "role_family", pin_family)
+    out = _run(uid, {"job_id": job_id, "nodes": [{"id": "k", "op": "keep", "item_key": EXP}]},
+               dry_run=True)
+    status = out["nodes"][0]["status"]
+    assert (status == "refused") is refused, out["nodes"][0]
+    assert any(v["check"] == "preferences" for v in out["violations"]) is refused
+
+
+def test_the_briefing_and_pins_show_the_scope_the_executor_enforces(isolated_engine, env):
+    from harness.tools import art_briefing, art_pins
+
+    uid, job_id, _ = env
+    _family(uid, job_id, "machine_learning")
+    _scoped_pin(isolated_engine, uid, EXP, "role_family", "machine_learning")
+    _scoped_pin(isolated_engine, uid, EXP2, "job", job_id)
+
+    def keys(out):
+        return sorted(p["target_key"] for p in out["pins"])
+
+    # Given the job, both readers resolve its family and include its own pins.
+    briefing = art_briefing(uid, job_id=job_id)
+    assert keys(briefing) == sorted([EXP, EXP2]) and briefing["role_family"] == "machine_learning"
+    assert keys(art_pins(uid, job_id=job_id)) == sorted([EXP, EXP2])   # the hook's restore path
+    # Without it, a job's own pin is not shown, and a family's only when named.
+    assert keys(art_briefing(uid)) == []
+    assert keys(art_briefing(uid, role_family="machine_learning")) == [EXP]
