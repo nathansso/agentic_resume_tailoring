@@ -40,6 +40,31 @@ A project's panel in the evidence map now asks "Where was this done?". The user 
 
 ---
 
+## Issue 354 — Hosted LinkedIn gateway (Bright Data)
+**Status:** complete in code, not deployed | **Tests:** 3126 pass on SQLite (12 new, `tests/test_gateway_contract.py`), 24 skipped, 2 xfailed; the gateway's own suite is 118 pass (`gateway/tests`, run by `.github/workflows/gateway.yml`); site build and the 2 MB weight check pass (635,653 bytes)
+
+ART's ingestion will ask for a LinkedIn URL and return Bright Data's profile, on our key so users never hold one (decided 2026-10-15). This is the hosted half: a small service that checks a GitHub token, enforces limits, and makes the Bright Data call. The client is #355, the token comes from #353.
+
+### What shipped
+- **`gateway/`, its own Vercel project (`artie-gateway`)**, Python, standard library only. `POST /v1/linkedin {url}` returns Bright Data's record unchanged. The request is a port of `LinkedInIngestor._scrape` (same endpoint, dataset and body).
+- **Auth:** `Authorization: Bearer <GitHub token>` is checked with `GET api.github.com/user`; every counter keys on the numeric GitHub user id. A check is cached five minutes under a hash of the token; a rejected token is remembered for one minute. 401 without a valid token.
+- **Limits** (`artie_gateway/service.py`), through a `Store` interface with `InMemoryStore` (tests, local dev) and `UpstashStore` (Vercel KV / Upstash REST): a per-user daily quota (default 3, `ART_GATEWAY_DAILY_QUOTA`) returning 429; a per-IP limit (10 a minute, address stored only as a hash) returning 429; a monthly spend cap (calls times `ART_GATEWAY_COST_PER_RECORD_USD` against `ART_GATEWAY_MONTHLY_CAP_USD`) returning 503. A KV outage fails closed with 503.
+- **URL validation** (`urls.py`): only `linkedin.com/in/<slug>`, normalized to `https://www.linkedin.com/in/<slug>`; lookalike hosts, userinfo, ports, sub-pages and bare handles are 400.
+- **Errors:** Bright Data and GitHub failures map to 502/504 with fixed messages, never an upstream body; a 202 snapshot from Bright Data is a 504.
+- **Privacy:** one log line per request with outcome, status and milliseconds; no body, URL, token, user id or record is logged, and exception logs carry the type only. `gateway/tests/test_gw_privacy.py` captures logs and stdout and asserts none appears, and that the store holds only counters and hashes, all with expiry.
+- **`site/src/pages/privacy.astro`** and a "Privacy" footer link in `Base.astro`: what passes through, what is kept and for how long, who else sees it, fetch your own profile only (LinkedIn's terms prohibit scraping), the data export as the alternative. `tests/test_gateway_contract.py` checks the page's retention claims against the code.
+- **`gateway/README.md`:** endpoint contract, every environment variable, local dev, and the exact Vercel setup steps.
+- **CI:** `.github/workflows/gateway.yml`, filtered to `gateway/**`, runs the gateway's tests with only pytest installed.
+
+### Deviations from spec
+- **Not deployed.** No Vercel project, KV database, secret or environment variable was created, and Bright Data and GitHub were never called. The owner does the setup in `gateway/README.md`, and sets `ART_GATEWAY_COST_PER_RECORD_USD` from Bright Data's real price (the default 0.0015 is a placeholder guess). The privacy page is in the site but the lookup is not live until then, and #355 is not built.
+- **Runtime: Python, not Node.** The Bright Data logic is a port of Python; Python shares the URL form with `ingestion/linkedin.py` (a repo test keeps them equal) and needs no dependencies at all. The cost is that the gateway cannot import `ingestion/linkedin.py` directly, so the logic is duplicated rather than shared.
+- **The function's `maxDuration` is 120 seconds** (Bright Data's sync scrape can run over a minute), which needs Fluid Compute on the Hobby project. A scrape that outlives it returns 504.
+- **A failed fetch refunds the user's daily slot but not the spend count**, so the cap errs on the safe side; the IP limit bounds retry loops.
+- **Also added:** a 405 for non-POST, a 413 above 4 KB, and an `ART_GATEWAY_IP_PER_MINUTE` setting (default 10) beyond the spec's variable list.
+
+---
+
 ## Issue 350 — Fallback benchmark for every Jev decision point
 **Status:** complete | **Tests:** 3139 pass on SQLite (26 new in `test_fallback_benchmark.py`), 25 skipped, 2 xfailed, 0 fail
 
