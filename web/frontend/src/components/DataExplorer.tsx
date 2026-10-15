@@ -28,14 +28,16 @@ const colors = {
 const font = {
   size: { sm: "0.8125rem", base: "0.9375rem", lg: "1rem", xl: "1.25rem" },
 } as const;
+import { EvidenceMap } from "./EvidenceMap";
 import {
   getSkills, getExperiences, getProjects, getEducation, getAchievements, getGraph, setSkillCore,
   updateExperience, deleteExperience, updateEducation, deleteEducation, updateProject, deleteProject,
 } from "../api/profile";
 
-type Tab = "skills" | "experiences" | "education" | "projects" | "achievements" | "graph" | "charts";
+type Tab = "skills" | "experiences" | "education" | "projects" | "achievements" | "graph" | "summary" | "charts";
 
-export function DataExplorer() {
+/** `currentJobId` is the job open in the workspace; the evidence map's "compare to a job" starts on it. */
+export function DataExplorer({ currentJobId = null }: { currentJobId?: string | null }) {
   const [tab, setTab] = useState<Tab>("skills");
   const [skills, setSkills] = useState<SkillRow[]>([]);
   const [exps, setExps] = useState<ExpRow[]>([]);
@@ -71,6 +73,7 @@ export function DataExplorer() {
     { key: "projects", label: `Projects (${projects.length})` },
     { key: "achievements", label: `Achievements (${achievements.length})` },
     { key: "graph", label: "Graph" },
+    { key: "summary", label: "Summary" },
     { key: "charts", label: "Charts" },
   ];
 
@@ -88,7 +91,8 @@ export function DataExplorer() {
         ))}
       </div>
 
-      <div style={s.content}>
+      {/* The evidence map manages its own scrolling and edge-to-edge layout. */}
+      <div style={tab === "graph" ? s.contentFlush : s.content}>
         {loading && <p style={s.muted}>Loading…</p>}
         {error && <p style={{ ...s.muted, color: colors.error }}>{error}</p>}
         {!loading && !error && tab === "skills" && <SkillsTab skills={skills} onToggleCore={toggleCore} />}
@@ -96,7 +100,8 @@ export function DataExplorer() {
         {!loading && !error && tab === "education" && <EducationTab education={education} setEducation={setEducation} />}
         {!loading && !error && tab === "projects" && <ProjectsTab projects={projects} setProjects={setProjects} />}
         {!loading && !error && tab === "achievements" && <AchievementsTab achievements={achievements} />}
-        {!loading && !error && tab === "graph" && <GraphTab graph={graph ?? { top_skills: [], by_category: {}, evidence: {} }} />}
+        {!loading && !error && tab === "graph" && <EvidenceMap defaultJobId={currentJobId} />}
+        {!loading && !error && tab === "summary" && <GraphTab graph={graph ?? { top_skills: [], by_category: {}, evidence: {} }} />}
         {!loading && !error && tab === "charts" && <ChartsTab skills={skills} graph={graph} />}
       </div>
     </div>
@@ -683,6 +688,7 @@ const s: Record<string, CSSProperties> = {
   },
   tabBtnActive: { color: colors.accent, borderBottomColor: colors.accent },
   content: { flex: 1, overflowY: "auto", padding: "1rem" },
+  contentFlush: { flex: 1, minHeight: 0, overflow: "hidden", padding: 0 },
   muted: { color: colors.textMuted, fontSize: font.size.sm },
 };
 

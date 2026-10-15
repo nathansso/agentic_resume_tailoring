@@ -21,7 +21,7 @@ import type {
 // ── geometry ───────────────────────────────────────────────────────────────────
 
 export const MIN_WIDTH = 688;
-const SKILL_COLUMN = 250;
+const SKILL_COLUMN = 330;
 const TOP = 40;
 const AREA_HEADER = 26;
 const SKILL_GAP = 21;
@@ -78,6 +78,13 @@ export function sourceArcs(cx: number, cy: number, r: number, sources: number): 
 /** Text width at a given size, estimated: a layout input must not depend on a font having loaded. */
 export function estimateTextWidth(text: string, size = 12): number {
   return Math.round(text.length * size * 0.56 * 10) / 10;
+}
+
+/** `text` cut to fit `maxWidth` at `size`, with an ellipsis (SVG text does not clip itself). */
+export function fitText(text: string, maxWidth: number, size = 13): string {
+  if (estimateTextWidth(text, size) <= maxWidth) return text;
+  const fit = Math.max(1, Math.floor(maxWidth / (size * 0.56)) - 1);
+  return `${text.slice(0, fit).trimEnd()}…`;
 }
 
 function r2(n: number): number {

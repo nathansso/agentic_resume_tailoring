@@ -3,7 +3,7 @@ import type {
   EvidenceEdge, EvidenceItem, EvidenceKind, EvidenceSkill, EvidenceText, EvidenceView, JobSkillRow,
 } from "../types";
 import {
-  arcPath, areaFoldKey, dateKey, edgeWidth, editableFields, estimateTextWidth, evidenceRows, firstMatch,
+  arcPath, areaFoldKey, dateKey, edgeWidth, editableFields, estimateTextWidth, evidenceRows, firstMatch, fitText,
   ghostBlock, githubOnlyLinks, highlightSegments, initialDraft, jobOverlay, layoutMap, linkPath,
   linksByBullet, neighborhood, planSave, searchSkills, skillEvidence, skillMatchKey, skillRadius,
   sourceArcs, weightedMedian, type LayoutOptions,
@@ -181,7 +181,7 @@ describe("layoutMap", () => {
   });
 
   it("puts the items with no text under their own heading after the others", () => {
-    expect(layout.rows.at(-1)?.item.key).toBe("proj/bare");
+    expect(layout.rows[layout.rows.length - 1].item.key).toBe("proj/bare");
     expect(layout.fixLabelY).not.toBeNull();
     const before = layout.rows[layout.fixStart - 1].y;
     expect(layout.rows[layout.fixStart].y).toBeGreaterThan(before + layout.rowH);
@@ -383,6 +383,10 @@ describe("path helpers", () => {
     expect(sourceArcs(0, 0, 10, 3)).toHaveLength(3);
     expect(arcPath(0, 0, 10, 0, Math.PI)).toBe("M0,-10A10,10,0,0,1,0,10");
     expect(estimateTextWidth("abcd", 10)).toBe(22.4);
+    expect(fitText("short", 200)).toBe("short");
+    const cut = fitText("A very long project title that cannot fit", 100, 13);
+    expect(cut.endsWith("…")).toBe(true);
+    expect(estimateTextWidth(cut, 13)).toBeLessThanOrEqual(100);
   });
 });
 
