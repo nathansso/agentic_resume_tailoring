@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Search } from "lucide-react";
-import { getJobSkills, listJobs } from "../api/jobs";
+import { listJobs } from "../api/jobs";
 import { getEvidenceView } from "../api/profile";
 import type { EvidenceItem, EvidenceKind, EvidenceView, JobListItem, JobSkillRow } from "../types";
 import {
@@ -8,6 +8,7 @@ import {
   neighborhood, sourceArcs, type JobOverlay, type MapLayout, type PlacedArea, type PlacedRow,
 } from "../lib/evidenceMap";
 import { cn } from "../lib/utils";
+import { useJobSkills } from "../hooks/useJobSkills";
 import { EvidencePanel } from "./EvidencePanel";
 
 /*
@@ -69,8 +70,9 @@ export function EvidenceMap({ defaultJobId = null, onChanged }: { defaultJobId?:
   const [jobOn, setJobOn] = useState(false);
   const [jobs, setJobs] = useState<JobListItem[] | null>(null);
   const [jobId, setJobId] = useState<string | null>(defaultJobId);
-  const [jobSkills, setJobSkills] = useState<JobSkillRow[] | null>(null);
-  const [jobError, setJobError] = useState<string | null>(null);
+  const [jobListError, setJobListError] = useState<string | null>(null);
+  const { skills: jobSkills, error: jobSkillsError } = useJobSkills(jobOn ? jobId : null);
+  const jobError = jobListError ?? jobSkillsError;
   const stage = useRef<HTMLDivElement>(null);
   const loaded = view !== null;
 
@@ -100,18 +102,8 @@ export function EvidenceMap({ defaultJobId = null, onChanged }: { defaultJobId?:
     listJobs().then((list) => {
       setJobs(list);
       setJobId((cur) => (cur && list.some((j) => j.job_id === cur) ? cur : list[0]?.job_id ?? null));
-    }).catch((e) => setJobError(e instanceof Error ? e.message : "Failed to load jobs"));
+    }).catch((e) => setJobListError(e instanceof Error ? e.message : "Failed to load jobs"));
   }, [jobOn, jobs]);
-
-  useEffect(() => {
-    if (!jobOn || !jobId) { setJobSkills(null); return; }
-    let live = true;
-    setJobError(null);
-    getJobSkills(jobId)
-      .then((rows) => { if (live) setJobSkills(rows); })
-      .catch((e) => { if (live) { setJobSkills(null); setJobError(e instanceof Error ? e.message : "Failed to load the job's skills"); } });
-    return () => { live = false; };
-  }, [jobOn, jobId]);
 
   const layout = useMemo(
     () => (view ? layoutMap(view, { width, folded, query }) : null),

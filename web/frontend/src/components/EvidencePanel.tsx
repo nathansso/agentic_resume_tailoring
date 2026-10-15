@@ -237,8 +237,11 @@ async function runOp(op: SaveOp): Promise<void> {
   else await updateProject(op.id, op.body as ProjectEdit);
 }
 
-function ItemEditor({ view, item, onSelect, onSaved }: {
+/** The item editor: shared with the bullet picker (issue #319), which opens it on an item's bullets. */
+export function ItemEditor({ view, item, onSelect, onSaved, savedNote = "Saved. The map has been re-read." }: {
   view: EvidenceView; item: EvidenceItem; onSelect: (key: string | null) => void; onSaved: () => Promise<void>;
+  /** What to say after a save, for the surface that hosts the editor. */
+  savedNote?: string;
 }) {
   const [draft, setDraft] = useState<Draft>(() => initialDraft(item));
   const [saving, setSaving] = useState(false);
@@ -418,7 +421,7 @@ function ItemEditor({ view, item, onSelect, onSaved }: {
         >
           Discard
         </button>
-        {saved && !dirty && <span role="status" className="text-[12.5px] text-accent">Saved. The map has been re-read.</span>}
+        {saved && !dirty && <span role="status" className="text-[12.5px] text-accent">{savedNote}</span>}
       </div>
     </div>
   );

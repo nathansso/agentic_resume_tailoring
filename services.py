@@ -648,26 +648,69 @@ def get_evidence_view(user_id: Optional[UUID]) -> dict:
     return build_evidence_view(user_id)
 
 
-def get_job_skills(job_id: UUID) -> list[dict]:
-    """The skills a job asks for, for the evidence map's compare-to-a-job layer (issue #136).
+def _profile_job_skills(job_id: UUID) -> list[dict]:
+    """The job's requirements from its `JDProfile`, shaped as skill rows (issue #319).
 
-    `[{name, required, weight, area}]` from the job's `JobSkill` rows, required first,
-    then by name. Ownership is the caller's to check. A job that has not been analyzed
-    has no rows, which the UI reads as "analyze this job first".
+    One row per required or preferred requirement: `name` is its primary term (its text
+    when it has none), `terms` all of its terms, `weight` its criticality over five.
+    Incidental requirements are mentioned in passing and are not asked for, so they are
+    left out. Two requirements with one primary term merge: required wins, the heavier
+    weight wins, the terms are united.
+    """
+    from agents.jd_payload import iter_requirements
+    from knowledge_graph.areas import skill_area
+
+    profile = load_jd_profile(job_id)
+    merged: dict[str, dict] = {}
+    for req in iter_requirements((profile or {}).get("payload"), types=["required", "preferred"]):
+        terms = [str(t).strip() for t in (req.get("terms") or []) if str(t or "").strip()]
+        name = terms[0] if terms else str(req.get("text") or "").strip()[:80]
+        if not name:
+            continue
+        try:
+            criticality = int(req.get("criticality") or 3)
+        except (TypeError, ValueError):
+            criticality = 3
+        row = {"name": name, "required": req.get("type") == "required",
+               "weight": round(max(1, min(5, criticality)) / 5, 2),
+               "area": skill_area(name, ""), "terms": terms or [name]}
+        key = name.lower()
+        prior = merged.get(key)
+        if prior is None:
+            merged[key] = row
+            continue
+        prior["required"] = prior["required"] or row["required"]
+        prior["weight"] = max(prior["weight"], row["weight"])
+        prior["terms"] = list(dict.fromkeys(prior["terms"] + row["terms"]))
+    return list(merged.values())
+
+
+def get_job_skills(job_id: UUID) -> list[dict]:
+    """The skills a job asks for: the evidence map's compare-to-a-job layer (issue #136)
+    and the bullet picker (issue #319).
+
+    `[{name, required, weight, area, terms}]`, required first, then by name. The job's
+    `JDProfile` requirements are read first, because that is where a job opened through
+    the harness keeps them (`open_job` writes no `JobSkill` rows); a job with no profile,
+    or none with a usable requirement, falls back to its `JobSkill` rows (legacy analyze
+    and chat), whose `terms` are just the name. Ownership is the caller's to check. A job
+    with neither has no rows, which the UI reads as "analyze this job first".
     """
     from knowledge_graph.areas import skill_area
-    with Session(engine) as session:
-        rows = session.exec(
-            select(JobSkill, Skill).join(Skill, Skill.skill_id == JobSkill.skill_id)
-            .where(JobSkill.job_id == job_id)).all()
-    out = {}
-    for js, skill in rows:
-        key = skill.name.lower().strip()
-        prior = out.get(key)
-        if prior is None or (js.required and not prior["required"]):
-            out[key] = {"name": skill.name, "required": bool(js.required),
-                        "weight": float(js.weight if js.weight is not None else 1.0),
-                        "area": skill_area(skill.name, skill.category)}
+    out = {row["name"].lower().strip(): row for row in _profile_job_skills(job_id)}
+    if not out:
+        with Session(engine) as session:
+            rows = session.exec(
+                select(JobSkill, Skill).join(Skill, Skill.skill_id == JobSkill.skill_id)
+                .where(JobSkill.job_id == job_id)).all()
+        for js, skill in rows:
+            key = skill.name.lower().strip()
+            prior = out.get(key)
+            if prior is None or (js.required and not prior["required"]):
+                out[key] = {"name": skill.name, "required": bool(js.required),
+                            "weight": float(js.weight if js.weight is not None else 1.0),
+                            "area": skill_area(skill.name, skill.category),
+                            "terms": [skill.name]}
     return sorted(out.values(), key=lambda r: (not r["required"], r["name"].lower(), r["name"]))
 
 
