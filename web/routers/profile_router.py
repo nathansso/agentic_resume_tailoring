@@ -288,6 +288,31 @@ def edit_project_blurb(
     return row
 
 
+@router.get("/projects/contexts")
+def get_project_contexts(user: User = Depends(get_current_user)):
+    """Where each project was done, and the rule-based suggestion for it (issue #322).
+    Read-only: a suggestion is never stored until the user confirms it."""
+    return services.get_project_contexts(user.user_id)
+
+
+class ProjectContextUpdate(BaseModel):
+    context: str     # "exp/<uuid>", "edu/<uuid>" (the evidence view's keys), "personal" or "unreviewed"
+
+
+@router.put("/projects/{project_id}/context")
+def put_project_context(
+    project_id: str, body: ProjectContextUpdate, user: User = Depends(get_current_user),
+):
+    """Confirm where a project was done, or clear it (issue #322). The same write the
+    `set_project_context` harness tool makes."""
+    try:
+        return services.set_project_context(user.user_id, project_id, body.context)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.delete("/projects/{project_id}")
 def remove_project(project_id: str, user: User = Depends(get_current_user)):
     if not services.delete_project(user.user_id, project_id):
