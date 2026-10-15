@@ -744,9 +744,19 @@ class NodeResult(_Model):
     deltas: Dict[str, Optional[float]] = Field(default_factory=dict)
     waived: Optional[Dict[str, float]] = Field(
         None, description="Guard regressions (guard -> how far it moved) that did not veto an "
-                          "accepted requested delete (#279). Guards never veto a delete the user "
-                          "or a preference asked for; hard gates still do. Absent when none. "
-                          "Tell the user what the cut cost.")
+                          "accepted requested delete (#279) or a carried-over editor edit (#306). "
+                          "For a carried edit a target that fell (relevance_density, coverage) "
+                          "is listed too, when no target improved. Guards never veto a delete "
+                          "the user or a preference asked for, nor the user's own words; hard "
+                          "gates still do. Absent when none. Tell the user what it cost.")
+    carried_edit: Optional[List[Dict[str, Any]]] = Field(
+        None, description="Present when the executor verified this revise as the user's own "
+                          "editor edit, carried over verbatim (#306): the tex edits it carries "
+                          "(change, bullet = the '<item key>#b<n>' id diff_nodes.tex_edits gives "
+                          "for a revised bullet, null for an added one, after). The executor "
+                          "decides this from the parent's .tex; nothing in the node says so. "
+                          "If a hard gate refused it, reason says which gate and claim, and what "
+                          "to record with upsert_items before retrying.")
     review: Optional[List[Dict[str, Any]]] = Field(
         None, description="Bullets Jev could not clearly call supported by their cited "
                           "evidence (item, bullet, label, p), and bullets or item fields it "
@@ -1168,11 +1178,18 @@ TOOLS: List[ToolSpec] = [
         "bullets use op delete_bullet with cut_bullets (ids '<item key>#b<n>' on the parent "
         "version) and a because; to drop an item use op delete with a because. A delete or "
         "delete_bullet with a because faces the hard gates only: guard regressions are accepted "
-        "and reported under waived. A revise never gets that. When the parent carries hand "
-        "edits to its .tex that the plan does not hold, nothing commits: the violation "
+        "and reported under waived. An ordinary revise never gets that. When the parent carries "
+        "hand edits to its .tex that the plan does not hold, nothing commits: the violation "
         "discards_editor_edits lists the edited bullets. Carry them over as nodes (a revise "
         "with the user's text, a delete_bullet for a removed bullet) or, after asking the "
-        "user, set discard_editor_edits true. Writes.",
+        "user, set discard_editor_edits true. A revise whose new bullets are exactly the "
+        "user's edited text, whitespace aside, and which changes nothing else on the item "
+        "(the executor checks it against the parent's .tex; you cannot label it) is a "
+        "carried-over edit: guards and the target rule do not veto it, regressions are "
+        "reported under waived and the node under carried_edit. Hard gates still apply; if "
+        "one refuses it, reason names the gate and the claim: record the supporting fact with "
+        "upsert_items (or ask the user), cite it, and retry rather than rewording the user's "
+        "text. Any other wording is a normal revise. Writes.",
         ExecuteInput, ExecuteOutput,
         lambda uid, program, dry_run=False:
             _executor().execute_plan(uid, program, dry_run=dry_run),

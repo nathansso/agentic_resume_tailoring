@@ -395,6 +395,44 @@ def uncarried(edits: Dict[str, Any], content: Dict, section_order: Optional[List
     return left
 
 
+# ── a revise that is the user's own edit ─────────────────────────────────────
+
+def carried_by(edits: Optional[Dict[str, Any]], item_key: str, before: List[str],
+               after: List[str]) -> Optional[List[Dict[str, Any]]]:
+    """The tex edits a node's bullets for `item_key` carry over verbatim, or None.
+
+    `before` is the item's bullets on the page the node revises (empty for an item the page
+    does not hold yet), `after` the bullets the node writes. The node is a carried-over editor
+    edit (#306) only when the executor can account for every change from the user's own
+    source, comparing whitespace-normalized text and nothing else:
+
+    - it writes at least one text the item did not have, and each such text is the `after` of
+      a revised or added bullet of this item in `edits` (the same `<item key>#b<n>` edits
+      `diff_nodes.tex_edits` reports);
+    - each text it drops is the `before` of a revised bullet or a removed bullet of this item.
+
+    A node that also rewrites, adds or drops anything else is an ordinary revise: otherwise
+    one verbatim bullet would carry a guard waiver for text the user never wrote. Bullets only
+    reordered are not a change. Returns the matched edits, so the caller can name them.
+    """
+    mine = [e for e in (edits or {}).get("bullets") or [] if e["item"] == item_key]
+    wrote = {norm(e["after"]): e for e in mine if e["change"] in ("revised", "added")}
+    dropped = {norm(e["before"]) for e in mine if e["change"] in ("revised", "removed")}
+    have = [norm(t) for t in before if norm(t)]
+    want = [norm(t) for t in after if norm(t)]
+    new, gone = list(want), list(have)
+    for t in have:
+        if t in new:
+            new.remove(t)
+    for t in want:
+        if t in gone:
+            gone.remove(t)
+    if not new or any(t not in wrote for t in new) or any(t not in dropped for t in gone):
+        return None
+    return [{"change": wrote[t]["change"], "bullet": wrote[t]["bullet"], "after": wrote[t]["after"]}
+            for t in new]
+
+
 # ── a short form for get_head and the prompt hook ────────────────────────────
 
 def brief(edits: Optional[Dict[str, Any]], max_bullets: int = 8, max_chars: int = 160,

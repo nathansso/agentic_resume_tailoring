@@ -1070,7 +1070,10 @@ legacy readers keep working.
    one target improves (a delete the user or a preference requested, whether of a whole item
    (`delete`) or of whole bullets (`delete_bullet`, #289), is exempt from the third, and from the
    second: a guard regression on one is accepted and reported under `waived`, #279; hard gates
-   still apply). A
+   still apply. So is a `revise` the executor verifies as the user's own editor edit, verbatim
+   against the parent's `edited_tex` (`texdiff.carried_by`, #306): its result carries
+   `carried_edit`, and a hard gate that refuses it says which gate and claim, and to record the
+   fact with `upsert_items` and retry). A
    node that fails is reverted and the independent ones continue. There is no scalar and no
    weight; the vectors are compared metric by metric.
 3. **Finalize** checks the whole page: the preferences (including the whole-page negative-pin
