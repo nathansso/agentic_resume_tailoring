@@ -87,6 +87,21 @@
     --ring: 152 60% 42%;
 
     --radius: 0.375rem;
+
+    /*
+     * Evidence map (issue #136): "green means proven". The brand green marks exactly
+     * one thing, a skill backed by a cited bullet. The mint --primary is 2.0:1 on
+     * white, under WCAG's 3:1 for graphics, hence the deeper light-mode green; the
+     * glyph hues each measure at least 3.5:1 on the page and card grounds. Kind is
+     * also carried by shape, so none of this rests on hue alone. Claim and gap alias
+     * existing tokens rather than adding a hue.
+     */
+    --graph-evidence: 154 65% 34%;
+    --graph-experience: 212 65% 42%;
+    --graph-project: 205 50% 50%;
+    --graph-education: 326 40% 46%;
+    --graph-claim: var(--muted-foreground);
+    --graph-gap: var(--warning);
   }
 
   .dark {
@@ -118,6 +133,13 @@
     --border: 0 0% 20%;
     --input: 0 0% 20%;
     --ring: 152 60% 53%;
+
+    --graph-evidence: 152 60% 53%;   /* = --primary */
+    --graph-experience: 210 75% 70%;
+    --graph-project: 200 60% 78%;
+    --graph-education: 326 45% 72%;
+    --graph-claim: var(--muted-foreground);
+    --graph-gap: var(--warning);
   }
 
   * {
