@@ -64,8 +64,10 @@ omnium_interview_prep/
 /*.docx
 /*.pdf
 
-# Tailoring benchmark artifacts (issue #51) - outputs, not source
-eval/results/
+# Tailoring benchmark artifacts (issue #51) - outputs, not source. The preference
+# compliance results (#299) are the exception: the issue commits them.
+eval/results/*
+!eval/results/preference_compliance_*
 # JD-text fetch cache (issue #177). A build artifact of the corpus refresh, not
 # source: eval/jd_dataset/ is the checked-in output.
 eval/.jd_cache.db
