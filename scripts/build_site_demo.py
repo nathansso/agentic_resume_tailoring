@@ -1,22 +1,27 @@
 #!/usr/bin/env python
-"""Rebuild the landing site's demo from a real ART run (issue #275).
+"""Rebuild the landing site's demo from a real ART run (issues #275, #337).
 
-    python scripts/build_site_demo.py                  # capture + media
-    python scripts/build_site_demo.py --tectonic C:\\tools\\tectonic.exe
-    python scripts/build_site_demo.py --media-only     # re-render images from the saved PDFs
+    python scripts/build_site_demo.py --tectonic C:\tools\tectonic.exe     # capture + media
+    python scripts/build_site_demo.py --media-only DIR   # re-render images from kept PDFs
 
 What it does, in order:
 
 1. Creates a scratch `ART_DATA_DIR` (a new temp directory, never `~/.art`), strips every
    database, key and `ART_*` variable from the environment, and turns Jev off.
 2. Drives the real `art` tools through `python -m harness.entry <tool> --args <json>`, the
-   same entry point the `art` script runs, in the order `/art:setup` and `/art:tailor` take.
-   The "user" and "agent" lines and the agent's records and plan are in
-   `scripts/site_demo/demo_script.py`; everything ART answers is captured as it comes back.
+   same entry point the `art` script runs, in the order `/art:setup` and `/art:tailor` take:
+   a sample resume and the READMEs of three repos that are not on it go into the graph, a
+   sample posting is opened, version 1 is the student's usual one-page resume (the resume's
+   content, the repo projects left off, nothing reworded), and the tailoring plan is run
+   through the gates to version 3. The "user" and "agent" lines and the agent's records,
+   requirements and plan are in `scripts/site_demo/demo_script.py`; everything ART answers
+   is captured as it comes back.
 3. Writes `site/src/components/demo/transcript.json`, the replay's only data.
-4. Renders the untailored and the tailored version to PDF (tectonic or pdflatex), rasterises
-   page 1 of each to WebP under `site/public/demo/`, finds the lines that differ by diffing
-   the PDFs' own text, and writes `site/src/components/demo/before-after.json`.
+4. Renders version 1 and version 3 to PDF (tectonic or pdflatex), rasterises each whole
+   page to WebP under `site/public/demo/`, finds the lines that differ by diffing the PDFs'
+   own text, groups the changes from the two versions' contents and ART's `diff_nodes`, and
+   writes `site/src/components/demo/before-after.json`. It stops if either page ends above
+   the bottom tenth of the page.
 
 Nothing in the transcript or the images is edited by hand. The display form of a long tool
 result drops fields and shortens lists, and says so in place (`"…"`); the full answers are
@@ -66,6 +71,7 @@ MS_USER_BASE, MS_USER_CHAR = 600, 30
 MS_AGENT_BASE, MS_AGENT_CHAR = 400, 11
 MS_TOOL_BASE, MS_TOOL_LINE = 700, 45
 PAGE_W_PX = (1100, 600)          # the two image widths written
+MIN_FILL = 0.90                  # a page's last line of text must end in the bottom tenth
 
 SCRATCH_PREFIXES = ("DATABASE_URL", "TYPESAFE", "ART_", "OPENAI", "ANTHROPIC", "SUPABASE",
                     "LANGCHAIN", "LANGSMITH", "GITHUB", "GH_", "UV_", "VIRTUAL_ENV")
@@ -147,13 +153,34 @@ def pick(obj: dict, keys: list[str]) -> dict:
 NODE_KEYS = ["id", "op", "item_key", "status", "reason", "improved"]
 
 
-def slim_plan_result(result: dict, keys: list[str]) -> dict:
+def slim_plan_result(result: dict, keys: list[str], node_keys: list[str] = NODE_KEYS) -> dict:
     """An execute_plan answer: the verdict fields, and per node only the ones that say what
     happened. Every cut is marked (`"…": "N more fields"`), at the top and on each node."""
     out = pick(result, keys)
     if "nodes" in out:
-        out["nodes"] = [pick(n, NODE_KEYS) for n in result["nodes"]]
+        out["nodes"] = [pick(n, node_keys) for n in result["nodes"]]
     return out
+
+
+def slim_program(program: dict, show_bullets_of: str) -> dict:
+    """A plan as the replay shows it: each node's id, op and target, with its bullets counted
+    (`"… 4 bullets"`) rather than listed, except `show_bullets_of`, whose draft is the point."""
+    nodes = []
+    for n in program["nodes"]:
+        d = {k: n[k] for k in ("id", "op", "item_key", "replacement_key", "because") if k in n}
+        bullets = n.get("bullets")
+        if bullets and n["id"] == show_bullets_of:
+            d["bullets"] = [bullets[1], f"… {len(bullets) - 1} more bullets"]
+        elif bullets:
+            d["bullets"] = f"… {len(bullets)} bullets, each citing its source"
+        if len(n) > len(d):
+            d["…"] = f"{len(n) - len(d)} more fields"
+        nodes.append(d)
+    skills = program.get("skills") or []
+    return {"program": {"job_id": program["job_id"], "parent": program["parent"], "nodes": nodes,
+                        "skills": skills[:3] + [f"… {len(skills) - 3} more"] if len(skills) > 3 else skills,
+                        **({"section_order": program["section_order"]} if program.get("section_order") else {}),
+                        "host": program.get("host")}}
 
 
 def sanitize(obj, data_dir: Path):
@@ -194,20 +221,31 @@ def capture(art: Art, tex_dir: Path) -> tuple[list[dict], dict]:
                        "args": sanitize(sa, art.data_dir), "result": sanitize(sr, art.data_dir)})
         return result
 
-    # -- set up
+    def skill_records(skills):
+        return [{"kind": "skill", "data": {"name": n, "category": c, "proficiency": 3}}
+                for n, c in skills]
+
+    # -- set up: the resume, then repos that are not on it
     say("setup", "user", S.USER_SETUP)
     say("setup", "agent", S.AGENT_SETUP_1)
-    records = list(S.RECORDS) + [{"kind": "skill", "data": {"name": n, "category": c, "proficiency": 3}}
-                                 for n, c in S.SKILLS]
-    r = tool("setup", "upsert_items", {"records": records, "source": "resume.md"},
-             show_result=lambda r: pick(r, ["counts", "results"]), items=3, chars=110)
-    created = r["counts"].get("created", 0)
-    assert created == len(records), r["counts"]
-    say("setup", "agent", S.AGENT_SETUP_2.format(created=created))
+    resume_records = list(S.RESUME_RECORDS) + skill_records(S.RESUME_SKILLS)
+    r = tool("setup", "upsert_items", {"records": resume_records, "source": "resume.md"},
+             show_result=lambda r: pick(r, ["counts", "results"]), items=2, chars=100)
+    assert r["counts"].get("created", 0) == len(resume_records), r["counts"]
+    say("setup", "agent", S.AGENT_SETUP_2.format(created=r["counts"]["created"]))
+    repo_records = list(S.REPO_RECORDS) + skill_records(S.REPO_SKILLS)
+    r = tool("setup", "upsert_items", {"records": repo_records, "source": "github READMEs"},
+             show_result=lambda r: pick(r, ["counts", "results"]), items=2, chars=100)
+    assert r["counts"].get("created", 0) == len(repo_records), r["counts"]
+    say("setup", "agent", S.AGENT_SETUP_3.format(created=r["counts"]["created"]))
     tool("setup", "update_profile", {"fields": S.PROFILE})
     listed = tool("setup", "list_items", {}, items=3, chars=110)
     kinds = [i["kind"] for i in listed["items"]]
-    say("setup", "agent", S.AGENT_SETUP_3.format(
+    keys = {i["key"] for i in listed["items"]}
+    for needed in (S.KESTREL, S.TA, S.FERNHOLLOW, S.RECYCLING, S.BUDGET, S.PORTFOLIO, S.DINING,
+                   S.ABTEST, S.CHURN, S.RETAIL):
+        assert needed in keys, f"{needed} is not a key ART returned: {sorted(keys)}"
+    say("setup", "agent", S.AGENT_SETUP_4.format(
         n_exp=kinds.count("experience"), n_proj=kinds.count("project"), n_skill=kinds.count("skill")))
 
     # -- posting
@@ -218,8 +256,10 @@ def capture(art: Art, tex_dir: Path) -> tuple[list[dict], dict]:
     tool("posting", "art_briefing", {"role_family": S.ROLE_FAMILY},
          show_result=lambda r: pick(r, ["pins", "preferences", "counts", "role_family"]))
     say("posting", "agent", S.AGENT_POSTING_2.format(n_req=len(S.REQUIREMENTS)))
+    art_requirements = [{k: v for k, v in q.items() if k not in ("id", "short")}
+                        for q in S.REQUIREMENTS]
     opened = tool("posting", "open_job",
-                  {"jd_text": posting, "requirements": S.REQUIREMENTS,
+                  {"jd_text": posting, "requirements": art_requirements,
                    "metadata": {"title": S.POSTING_TITLE, "company": S.POSTING_COMPANY,
                                 "role_family": S.ROLE_FAMILY}},
                   show_result=lambda r: pick(r, ["job_id", "title", "company", "requirements",
@@ -227,19 +267,31 @@ def capture(art: Art, tex_dir: Path) -> tuple[list[dict], dict]:
                   items=3, chars=110)
     job_id = opened["job_id"]
     say("posting", "agent", S.AGENT_POSTING_3.format(n_match=len(opened["skill_matches"])))
+
+    # -- version 1: the usual resume, from the same graph, nothing reworded
     say("posting", "agent", S.AGENT_BASE)
-    base = tool("posting", "execute_plan",
-                {"program": {"job_id": job_id, "parent": None, "nodes": []}},
+    usual = {"job_id": job_id, "parent": None,
+             "nodes": [{"id": f"d{i}", "op": "delete", "item_key": key, "because": S.LEAVE_OFF_REASON}
+                       for i, key in enumerate((S.ABTEST, S.CHURN, S.RETAIL), 1)],
+             "skills": S.GENERIC_SKILLS}
+    base = tool("posting", "execute_plan", {"program": usual},
                 show_result=lambda r: {"committed": r["committed"], "node_id": r["node_id"],
                                        "line_budget": r["line_budget"], "violations": r["violations"],
                                        "metrics": {"final": {"gates": r["metrics"]["final"]["gates"]},
                                                    "…": "guards, targets and the ATS-style report left out"}})
     assert base["committed"], base
     base_node = base["node_id"]
+    before_content = art("get_head", {"job_id": job_id})["head"]["content"]
     say("posting", "agent", S.AGENT_READ)
-    exp = tool("posting", "get_item", {"key": S.TAMARACK}, chars=120)
-    prj = art("get_item", {"key": S.TRANSIT})          # read too; the replay shows the first only
-    assert not prj.get("error")
+    exp = tool("posting", "get_item", {"key": S.KESTREL}, chars=120)
+
+    # Source bullets of every item, as ART lists them (evidence ids are `<key>#b<n>`).
+    sources: dict[str, list[str]] = {}
+    for key in sorted(keys):
+        if key.startswith(("exp:", "proj:")):
+            rec = (exp if key == S.KESTREL else art("get_item", {"key": key}))["record"]
+            sources[key] = ([b["content"] for b in rec["blurbs"]] if key.startswith("proj:")
+                            else list(rec["bullets"]))
 
     # -- plan
     tool("plan", "suggest_actions", {"job_id": job_id}, items=2, chars=100)
@@ -250,69 +302,83 @@ def capture(art: Art, tex_dir: Path) -> tuple[list[dict], dict]:
     say("approve", "user", S.USER_APPROVE)
 
     # -- gate check
-    def evidence(item_key: str, record_bullets: list[str], start_of_source: str) -> str:
-        for i, text in enumerate(record_bullets):
+    def evidence(item_key: str, start_of_source: str) -> str:
+        for i, text in enumerate(sources[item_key]):
             if text.startswith(start_of_source):
                 return f"{item_key}#b{i}"
         raise SystemExit(f"{item_key}: no source bullet starts with {start_of_source!r}")
 
-    exp_bullets = exp["record"]["bullets"]
-    prj_bullets = [b["content"] for b in prj["record"]["blurbs"]]
+    def bullets(item_key, pairs):
+        out = []
+        for text, starts in pairs:
+            starts = [starts] if isinstance(starts, str) else starts
+            out.append({"text": text, "cites": [evidence(item_key, s) for s in starts]})
+        return out
 
-    def bullets(item_key, source_bullets, pairs):
-        return [{"text": text, "cites": [evidence(item_key, source_bullets, start)]}
-                for text, start in pairs]
+    staged_ab = [(t.replace(S.AB_RESULT, S.AB_RESULT_SLIP), s) for t, s in S.AB_BULLETS]
+    assert staged_ab != S.AB_BULLETS and S.SLIP_FIGURE in staged_ab[1][0]
 
-    program = {
-        "job_id": job_id, "parent": base_node,
-        "nodes": [
-            {"id": "n1", "op": "revise", "item_key": S.TAMARACK, "strategy": "quantify",
-             "keywords": ["predict", "SQL", "delays"],
-             "bullets": bullets(S.TAMARACK, exp_bullets, S.TAMARACK_BULLETS)},
-            {"id": "n2", "op": "keep", "item_key": S.TA},
-            {"id": "n3", "op": "revise", "item_key": S.TRANSIT, "strategy": "keyword_weave",
-             "keywords": ["dashboards", "delays"],
-             "bullets": bullets(S.TRANSIT, prj_bullets, S.TRANSIT_BULLETS)},
-            {"id": "n4", "op": "keep", "item_key": S.DINING},
-            {"id": "n5", "op": "keep", "item_key": S.RECYCLING},
-            {"id": "n6", "op": "delete", "item_key": S.BUDGET, "because": S.DROP_REASON},
-        ],
-        "skills": S.SKILL_ORDER,
-        "host": {"name": "claude-code"},
-    }
+    def node(nid, op, item_key, bullet_pairs=None, **extra):
+        n = {"id": nid, "op": op, "item_key": item_key, **extra}
+        if bullet_pairs is not None:
+            target = extra.get("replacement_key", item_key)
+            n["bullets"] = bullets(target, bullet_pairs)
+        if nid in S.NODE_KEYWORDS:
+            n["keywords"] = S.NODE_KEYWORDS[nid]
+        return n
+
+    def plan_nodes(ab_pairs):
+        return [
+            node("n1", "revise", S.KESTREL, S.KESTREL_BULLETS, strategy="keyword_weave"),
+            node("n2", "revise", S.TA, S.TA_BULLETS, strategy="keyword_weave"),
+            node("n3", "replace", S.RECYCLING, ab_pairs, replacement_key=S.ABTEST),
+            node("n4", "replace", S.BUDGET, S.CHURN_BULLETS, replacement_key=S.CHURN),
+            node("n5", "keep", S.DINING),
+            node("n6", "replace", S.PORTFOLIO, S.RETAIL_BULLETS, replacement_key=S.RETAIL),
+            node("n7", "delete", S.FERNHOLLOW, because=S.DROP_REASON),
+        ]
+
+    program = {"job_id": job_id, "parent": base_node, "nodes": plan_nodes(staged_ab),
+               "skills": S.SKILL_ORDER, "section_order": S.SECTION_ORDER,
+               "host": {"name": "claude-code"}}
     say("gates", "agent", S.AGENT_GATES_1)
     first = art("execute_plan", {"program": program})
     assert not first.get("error"), first
-    node_status = {n["id"]: n for n in first["nodes"]}
-    assert node_status["n1"]["status"] == "reverted", node_status["n1"]
-    assert "consistency" in json.dumps(node_status["n1"]), node_status["n1"]
-    assert node_status["n3"]["status"] == "reverted", node_status["n3"]
-    assert "no_target_improved" in json.dumps(node_status["n3"]), node_status["n3"]
-    assert node_status["n6"]["status"] == "accepted", node_status["n6"]
+    status = {n["id"]: n for n in first["nodes"]}
+    assert status["n3"]["status"] == "reverted", status["n3"]
+    assert "consistency" in json.dumps(status["n3"]) and S.SLIP_FIGURE in json.dumps(status["n3"]), status["n3"]
+    for nid in ("n1", "n2", "n4", "n6", "n7"):
+        assert status[nid]["status"] == "accepted", status[nid]
+    assert status["n5"]["status"] == "kept", status["n5"]
+    assert first["committed"], "the other nodes should still commit"
     events.append({
         "phase": "gates", "type": "tool", "name": "execute_plan",
-        "args": sanitize(shrink({"program": program}, items=6, chars=118), art.data_dir),
-        "result": sanitize(shrink(pick(first, ["committed", "node_id", "nodes", "violations"]),
-                                  items=7, chars=230), art.data_dir)})
+        "args": sanitize(shrink(slim_program(program, "n3"), items=8, chars=330), art.data_dir),
+        "result": sanitize(shrink(slim_plan_result(first, ["committed", "node_id", "nodes", "violations"],
+                                                   ["id", "op", "item_key", "status", "reason"]),
+                                  items=8, chars=230), art.data_dir)})
     say("gates", "agent", S.AGENT_GATES_2)
-    assert first["committed"], "the other nodes should still commit"
     v2 = first["node_id"]
-    fixed = json.loads(json.dumps(program["nodes"][0]))
-    fixed["bullets"][1]["text"] = S.ORIGINAL_REPORT + "."
-    assert S.SLIP_SUFFIX not in fixed["bullets"][1]["text"]
+    fixed = [n for n in plan_nodes(S.AB_BULLETS) if n["id"] == "n3"]
+    assert S.SLIP_FIGURE not in json.dumps(fixed)
     second = tool("gates", "execute_plan",
-                  {"program": {"job_id": job_id, "parent": v2, "nodes": [fixed]}},
+                  {"program": {"job_id": job_id, "parent": v2, "nodes": fixed}},
                   show_result=lambda r: slim_plan_result(r, ["committed", "node_id", "parent", "nodes", "violations"]),
-                  items=7, chars=230)
+                  items=8, chars=230)
     assert second["committed"], second
     assert second["nodes"][0]["status"] == "accepted", second["nodes"][0]
     after_node = second["node_id"]
     say("gates", "agent", S.AGENT_GATES_3)
+    diff = tool("gates", "diff_nodes", {"from_node": base_node, "to_node": after_node},
+                show_result=lambda r: pick(r, ["items", "skills_added", "skills_removed"]),
+                items=3, chars=96)
+    after_content = art("get_head", {"job_id": job_id})["head"]["content"]
+    say("gates", "agent", S.AGENT_GATES_4)
 
     # -- render
     out = {}
-    for label, node in (("before", base_node), ("after", after_node)):
-        rendered = tool("render", "render", {"job_id": job_id, "node_id": node},
+    for label, node_id in (("before", base_node), ("after", after_node)):
+        rendered = tool("render", "render", {"job_id": job_id, "node_id": node_id},
                         show_result=lambda r: pick(r, ["node_id", "pdf_path", "pages", "source"]))
         assert rendered["pdf_path"], rendered.get("hint")
         pdf = tex_dir / f"{label}.pdf"
@@ -320,9 +386,12 @@ def capture(art: Art, tex_dir: Path) -> tuple[list[dict], dict]:
         (tex_dir / f"{label}.tex").write_text(Path(rendered["tex_path"]).read_text(encoding="utf-8"),
                                               encoding="utf-8")
         out[label] = {"pdf": pdf, "pages": rendered["pages"], "shown_path": rendered["pdf_path"]}
+    assert out["before"]["pages"] == 1, f"the usual resume is {out['before']['pages']} pages"
     assert out["after"]["pages"] == 1, f"tailored resume is {out['after']['pages']} pages"
     say("render", "agent", S.AGENT_DONE.format(pdf=sanitize(out["after"]["shown_path"], art.data_dir)))
-    keep.update(job_id=job_id, base_node=base_node, after_node=after_node, files=out)
+    keep.update(job_id=job_id, base_node=base_node, after_node=after_node, files=out,
+                groups_input={"before": before_content, "after": after_content, "diff": diff,
+                              "sources": sources, "nodes": program["nodes"]})
     return events, keep
 
 
@@ -410,7 +479,182 @@ def rect(lines: list[dict]) -> dict:
             "w": round(x1 - x0 + 2 * pad, 4), "h": round(y1 - y0 + 2 * pad, 4)}
 
 
-def media(files: dict) -> dict:
+# --- what changed, grouped, from the two versions ------------------------------------------
+
+def _norm(text: str) -> str:
+    return " ".join((text or "").split())
+
+
+def _title(key: str, item: dict) -> str:
+    if key.startswith("exp:"):
+        return f"{item.get('title', '')}, {item.get('company', '')}".strip(", ")
+    return item.get("name", "")
+
+
+def _index(content: dict) -> dict:
+    """item key -> {section, pos, n, item} for every experience and project on a version."""
+    from agents.checks import exp_key, proj_key
+
+    out = {}
+    for section, fn in (("experiences", exp_key), ("projects", proj_key)):
+        items = content.get(section) or []
+        for pos, item in enumerate(items):
+            out[fn(item)] = {"section": section, "pos": pos, "n": len(items), "item": item}
+    return out
+
+
+def _source_of(item: dict, text: str, sources: dict) -> str | None:
+    """The text of the first source bullet a page bullet cites, or None when it cites none."""
+    cites = (item.get("cites") or {}).get(text) or []
+    for cite in cites:
+        key, _, idx = cite.rpartition("#b")
+        if idx.isdigit() and int(idx) < len(sources.get(key, [])):
+            return sources[key][int(idx)]
+    return None
+
+
+def build_groups(inp: dict, requirements: list[dict], cut_reasons: dict) -> list[dict]:
+    """The changes between two versions, grouped by kind and each tied to the posting
+    requirement it serves.
+
+    `inp` carries the two versions' contents as ART stores them (`get_head`), ART's own
+    `diff_nodes` answer for the pair, every item's source bullets (`get_item`) and the plan's
+    nodes. Everything here is read from those. Two things are not: which requirement a change
+    serves is the posting terms the plan named for that item (`keywords`) matched against the
+    terms each requirement lists, and the reason for a cut is `cut_reasons`, written for the
+    demo.
+    """
+    before, after = _index(inp["before"]), _index(inp["after"])
+    sources, diff = inp["sources"], inp["diff"]
+    nodes = inp["nodes"]
+    keywords: dict[str, set] = {}
+    replaces: dict[str, str] = {}
+    for n in nodes:
+        target = (n.get("replacement_key") or n["item_key"]).lower()
+        keywords[target] = {k.lower() for k in n.get("keywords") or []}
+        if n["op"] == "replace":
+            replaces[target] = n["item_key"].lower()
+    replaced_by = {v: k for k, v in replaces.items()}
+
+    def serves(key: str, text: str | None = None) -> list[dict]:
+        wanted = keywords.get(key, set())
+        hits = [r for r in requirements if wanted & {t.lower() for t in r["terms"]}]
+        hits.sort(key=lambda r: -r["criticality"])
+        if text is not None:
+            low = text.lower().replace("-", " ")
+            narrowed = [r for r in hits if any(t.lower().replace("-", " ") in low for t in r["terms"])]
+            hits = narrowed or hits[:1]
+        return [{"id": r["id"], "short": r["short"]} for r in hits[:2]]
+
+    added, moved, reworded, cut = [], [], [], []
+    ordinals = ["first", "second", "third", "fourth", "fifth"]
+
+    for key, a in after.items():
+        item = a["item"]
+        title = _title(key, item)
+        texts = [b for b in item.get("bullets") or [] if (b or "").strip()]
+        b_side = before.get(key)
+        if b_side is None:
+            added.append({
+                "key": key, "title": title, "kind": "project" if key.startswith("proj:") else "role",
+                "position": a["pos"] + 1, "ordinal": ordinals[a["pos"]] if a["pos"] < len(ordinals) else str(a["pos"] + 1),
+                "of": a["n"], "bullets": texts,
+                "replaces": _title(replaces[key], before[replaces[key]]["item"]) if replaces.get(key) in before else None,
+                "serves": serves(key)})
+        else:
+            old_texts = [t for t in b_side["item"].get("bullets") or [] if (t or "").strip()]
+            old_norm = [_norm(t) for t in old_texts]
+            # rank among the bullets present on both pages, so a move up is not an artefact of a cut
+            shared = []
+            for pos, text in enumerate(texts):
+                prior = _norm(_source_of(item, text, sources) or text)
+                if prior in old_norm:
+                    shared.append((pos, prior, text))
+            by_old = sorted(shared, key=lambda s: old_norm.index(s[1]))
+            old_rank = {s[1]: r for r, s in enumerate(by_old)}
+            for new_rank, (pos, prior, text) in enumerate(shared):
+                if new_rank < old_rank[prior]:
+                    moved.append({"scope": "bullet", "key": key, "title": title, "text": text,
+                                  "from": old_norm.index(prior) + 1, "to": pos + 1,
+                                  "serves": serves(key, text)})
+            kept_priors = {s[1] for s in shared}
+            for text in old_texts:
+                if _norm(text) not in kept_priors:
+                    cut.append({"key": key, "title": title, "scope": "bullet", "text": text,
+                                "reason": cut_reasons.get(key) or cut_reasons["default"]})
+        for text in texts:
+            src = _source_of(item, text, sources)
+            if src and _norm(src) != _norm(text):
+                reworded.append({"key": key, "title": title, "before": src, "after": text,
+                                 "from_graph": b_side is None or _norm(src) not in
+                                 [_norm(t) for t in b_side["item"].get("bullets") or []],
+                                 "serves": serves(key, text)})
+    for key, b in before.items():
+        if key not in after:
+            new = replaced_by.get(key)
+            cut.append({"key": key, "title": _title(key, b["item"]), "scope": "item",
+                        "n_bullets": len(b["item"].get("bullets") or []),
+                        "replaced_by": _title(new, after[new]["item"]) if new in after else None,
+                        "reason": cut_reasons.get(key) or cut_reasons["default"]})
+
+    # ART's own diff must agree with what was read off the two pages.
+    diff_items = {i["key"]: i for i in diff.get("items") or []}
+    assert ({k for k, i in diff_items.items() if i["change"] == "added"}
+            == {e["key"] for e in added if e.get("kind")}), "diff_nodes and the pages disagree on added items"
+    assert ({k for k, i in diff_items.items() if i["change"] == "removed"}
+            == {e["key"] for e in cut if e["scope"] == "item"}), "diff_nodes and the pages disagree on cut items"
+    for k, i in diff_items.items():
+        if i["change"] == "revised":
+            on_page = {_norm(t) for t in (after[k]["item"].get("bullets") or [])}
+            assert {_norm(t) for t in i["bullets_added"]} == on_page - {
+                _norm(t) for t in (before[k]["item"].get("bullets") or [])}, f"{k}: bullets differ from diff_nodes"
+
+    # Sections: Projects above Experience, say. Read from the two versions' section order.
+    labels = {"education": "Education", "experience": "Experience", "projects": "Projects",
+              "skills": "Skills", "achievements": "Achievements"}
+    default_order = ["education", "experience", "projects", "skills", "achievements"]
+    a_order = [x for x in (inp["after"].get("_section_order") or default_order)
+               if x in default_order]
+    b_order = [x for x in (inp["before"].get("_section_order") or default_order) if x in a_order]
+    a_rank = {x: i for i, x in enumerate(x for x in a_order if x in b_order)}
+    b_rank = {x: i for i, x in enumerate(b_order)}
+    by_id = {r["id"]: r for r in requirements}
+    section_of = {"experience": "experiences", "projects": "projects"}
+    for sec in b_order:
+        if a_rank[sec] < b_rank[sec]:
+            jumped = [labels[x] for x in b_order if b_rank[x] < b_rank[sec] and a_rank[x] > a_rank[sec]]
+            # What the section's items serve, the two heaviest requirements first.
+            ids = {r["id"] for k, v in after.items() if v["section"] == section_of.get(sec)
+                   for r in serves(k)}
+            top = sorted(ids, key=lambda i: -by_id[i]["criticality"])[:2]
+            moved.insert(0, {"scope": "section", "section": labels[sec], "above": jumped,
+                             "serves": [{"id": i, "short": by_id[i]["short"]} for i in top]})
+
+    names = lambda c: [s.get("name") for s in c.get("skills_ranked") or [] if s.get("name")]  # noqa: E731
+    b_names, a_names = names(inp["before"]), names(inp["after"])
+    gained = list(diff.get("skills_added") or [])
+    lost = list(diff.get("skills_removed") or [])
+    assert set(gained) == {n for n in a_names if n.lower() not in {x.lower() for x in b_names}}, "diff_nodes and the pages disagree"
+    skills = {
+        "before_count": len(b_names), "after_count": len(a_names), "first": a_names[:5],
+        "added": [{"name": n, "serves": [{"id": r["id"], "short": r["short"]} for r in requirements
+                                          if n.lower() in {t.lower() for t in r["terms"]}][:1]} for n in gained],
+        "removed": lost,
+        "led_by": [{"name": n, "serves": [{"id": r["id"], "short": r["short"]} for r in requirements
+                                          if n.lower() in {t.lower() for t in r["terms"]}][:1]}
+                   for n in a_names[:3]],
+    }
+    groups = []
+    for gid, title, entries in (("added", "Added from your graph", added), ("moved", "Moved up", moved),
+                                ("reworded", "Reworded", reworded), ("cut", "Cut", cut)):
+        if entries:
+            groups.append({"id": gid, "title": title, "entries": entries})
+    if gained or lost:
+        groups.append({"id": "skills", "title": "Skills trimmed", "entries": [skills]})
+    return groups
+
+
+def media(files: dict, groups_input: dict | None = None) -> dict:
     import pypdfium2 as pdfium
 
     IMG_DIR.mkdir(parents=True, exist_ok=True)
@@ -419,11 +663,12 @@ def media(files: dict) -> dict:
     pdfs = {label: files[label]["pdf"] if isinstance(files[label], dict) else files[label]
             for label in ("before", "after")}
     items = {label: group_items(pdf_lines(pdf)) for label, pdf in pdfs.items()}
-    # Both pages are cropped at the same height, just below the lowest line of either, so the
-    # blank foot of a one-page resume does not take up the screen. Boxes are fractions of
-    # the cropped image.
-    lowest = max(ln["y"] + ln["h"] for its in items.values() for it in its for ln in it["lines"])
-    keep = min(1.0, lowest + 0.045)
+
+    # Both pages are whole pages, never cropped. How full each one is: the bottom edge of its
+    # last line of text as a fraction of the page height (0 is the top). `tests/test_site_demo.py`
+    # holds both to the bottom tenth of the page.
+    fill = {label: round(max(ln["y"] + ln["h"] for it in its for ln in it["lines"]), 4)
+            for label, its in items.items()}
 
     pages = {}
     for label, pdf in pdfs.items():
@@ -433,7 +678,6 @@ def media(files: dict) -> dict:
         sources = []
         for px in PAGE_W_PX:
             image = page.render(scale=px / w_pt).to_pil().convert("RGB")
-            image = image.crop((0, 0, image.width, round(image.height * keep)))
             name = f"resume-{label}-{px}.webp"
             image.save(IMG_DIR / name, "WEBP", quality=80, method=6)
             sources.append({"src": f"/demo/{name}", "width": image.width, "height": image.height})
@@ -453,20 +697,24 @@ def media(files: dict) -> dict:
                         "added": [i["text"] for i in after[j1:j2]]})
 
     def marks(chosen):
-        out = []
-        for it in chosen:
-            r = rect(it["lines"])
-            out.append({"x": r["x"], "y": round(r["y"] / keep, 4), "w": r["w"], "h": round(r["h"] / keep, 4)})
-        return out
+        return [{k: rect(it["lines"])[k] for k in ("x", "y", "w", "h")} for it in chosen]
 
-    return {
+    out = {
         "label": LABEL,
-        "cropped_to": round(keep, 4),
+        "fill": fill,
+        "posting": {
+            "title": S.POSTING_TITLE, "company": S.POSTING_COMPANY, "location": S.POSTING_LOCATION,
+            "requirements": [{"id": q["id"], "short": q["short"], "text": q["text"], "type": q["type"]}
+                             for q in S.REQUIREMENTS],
+        },
         "before": {"sources": pages["before"], "marks": marks(removed)},
         "after": {"sources": pages["after"], "marks": marks(added)},
         "changes": changes,
         "counts": {"removed": len(removed), "added": len(added)},
     }
+    if groups_input is not None:
+        out["groups"] = build_groups(groups_input, S.REQUIREMENTS, S.CUT_REASONS)
+    return out
 
 
 # --- main -------------------------------------------------------------------------------
@@ -519,10 +767,11 @@ def main(argv=None) -> int:
             "generated_by": "scripts/build_site_demo.py",
             "art_version": ART_VERSION, "contract_version": CONTRACT_VERSION,
             "latex_engine": engine, "jev": "off (no TypeSafe key)",
-            "profile": "scripts/site_demo/sample_resume.md (synthetic: no real person)",
+            "profile": "scripts/site_demo/sample_resume.md and sample_repos.md (synthetic: no real person)",
             "posting": "scripts/site_demo/sample_posting.txt (written for this demo)",
-            "authored": "Lines from the user and the agent, the records the agent extracted and "
-                        "its plan were written by hand. Tool calls and what ART returned were captured.",
+            "authored": "Lines from the user and the agent, the records the agent extracted, the "
+                        "requirements it read from the posting and its plan were written by hand. "
+                        "Tool calls and what ART returned were captured.",
             "elision": "Long tool answers are shortened for display: lists are cut, strings "
                        "shortened and fields left out, each marked with an ellipsis.",
             "pacing": "Playback runs at a fixed rate; it is not the real duration of any call.",
@@ -535,7 +784,13 @@ def main(argv=None) -> int:
     TRANSCRIPT.write_text(json.dumps(transcript, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"wrote {TRANSCRIPT.relative_to(ROOT)}: {len(events)} steps, {total / 1000:.0f} s of playback")
 
-    ba = media(kept["files"])
+    (scratch / "groups_input.json").write_text(
+        json.dumps(kept["groups_input"], indent=1, ensure_ascii=False), encoding="utf-8")
+    ba = media(kept["files"], kept["groups_input"])
+    for label, bottom in ba["fill"].items():
+        assert bottom >= MIN_FILL, (f"the {label} page ends at {bottom:.0%} of the page height; tune "
+                                    f"scripts/site_demo/sample_resume.md or the plan until both pages "
+                                    f"fill past {MIN_FILL:.0%}")
     BEFORE_AFTER.write_text(json.dumps(ba, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"wrote {BEFORE_AFTER.relative_to(ROOT)}: {ba['counts']} changed items")
     for p in sorted(IMG_DIR.glob("resume-*.webp")):
