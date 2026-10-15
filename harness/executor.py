@@ -52,8 +52,9 @@ from agents.skill_matching import match_requirement_terms, priority_skills
 from agents.skill_scorer import MAX_SKILLS, rank_and_select_skills, score_skills
 from database.models import JDProfile, JobDescription, PlanProgram, UserJobResult
 from harness import ART_VERSION, library, texdiff, tree
+from harness import rules as rules_mod
 from harness.acceptance import (
-    Context, accept, metric_vector, preference_violations,
+    Context, accept, metric_vector, negative_pin_violations, preference_violations, rule_violations,
 )
 from harness.decisions.coverage import (
     make_coverage_checker, node_detail as coverage_node_detail, summary as coverage_summary,
@@ -65,7 +66,9 @@ from harness.decisions.negative_pins import (
 from harness.decisions.support import make_support_checker, reviews as support_reviews
 from harness.ingest import apply_job_rules, list_rules, resolve_rules
 from harness.program import Program, apply_patch, program_id
-from harness.tools import _records, edu_key, preferences_for, project_source_bullets, skill_key
+from harness.tools import (
+    _records, edu_key, preferences_for, project_source_bullets, rules_for, skill_key,
+)
 
 log = logging.getLogger(__name__)
 
@@ -482,6 +485,12 @@ def _refusal(node: Dict, content: Dict, kg: _KG, prefs: Dict, pref_ids: set) -> 
         if kg.tombstoned(key):
             return f"tombstoned: the user deleted {node['item_key']}"
         return f"unknown_key: {node['item_key']} is not in the knowledge graph"
+    excluded = prefs.get("excluded") or {}
+    for named in (key, (node.get("replacement_key") or "").strip().lower()):
+        section = {"exp": "experience", "proj": "projects"}.get(named.split(":", 1)[0])
+        if section in excluded:
+            return (f"page_rule: {rules_mod.describe(excluded[section])} leaves the {section} "
+                    f"section off the page, so {named} cannot be on it")
     loc = _locate(content, key)
     if loc is None:
         return f"not_on_page: {node['item_key']} is not in the parent version"
@@ -660,14 +669,38 @@ def _section_rank(content: Dict, key: str) -> Tuple[int, int]:
 
 # ── finalize ─────────────────────────────────────────────────────────────────
 
+def _page_rule_hint(eff: Optional[Dict], param: str) -> str:
+    """` (rule <id>: '<words>')` for the rule behind a finalize number, or ''."""
+    for entry in (eff or {}).get("applied", []):
+        if entry["param"] == param:
+            return f" ({rules_mod.describe(entry)})"
+    return ""
+
+
 def _finalize(content: Dict, program: Dict, ctx: Context, kg: _KG,
-              lines: Optional[Dict[str, int]]) -> Tuple[List[Dict], List[Dict], Optional[Dict]]:
-    fin = program["finalize"]
-    violations: List[Dict] = []
+              lines: Optional[Dict[str, int]], eff: Optional[Dict] = None,
+              resolved: Optional[Dict] = None, extra: Sequence[Dict] = (),
+              ) -> Tuple[List[Dict], List[Dict], Optional[Dict]]:
+    """`(violations, cut_hints, budget)` for the finished page. `eff` is the settled finalize
+    (`rules_mod.effective_finalize`: the program's values over the document rules' defaults);
+    without it the program's own values over the built-in defaults are used. `extra` are rule
+    violations found before the page existed (a loosened finalize, a section order)."""
+    eff = eff or rules_mod.effective_finalize(program["finalize"], rules_mod.resolve([]))
+    fin = eff["values"]
+    excluded = set(eff["excluded"])
+    violations: List[Dict] = [dict(v) for v in extra]
+    if resolved is not None:
+        violations += [dict(v) for v in rule_violations(content, resolved, fin)]
     for v in preference_violations(content, ctx):
         if v.startswith("negative_pin:"):
             term, _, where = v[len("negative_pin:"):].partition("@")
-            hint = f"revise {where.split(' :: ', 1)[0]} so it no longer mentions {term!r}"
+            where = where.split(" :: ", 1)[0]
+            if where in ("education", "achievements", "skills", "summary"):
+                hint = (f"{where} is not a plan node: remove or correct the item that mentions "
+                        f"{term!r} in the knowledge graph (upsert_items, or art ui), or ask the user "
+                        "whether the rule should change")
+            else:
+                hint = f"revise {where} so it no longer mentions {term!r}"
         else:
             hint = "delete it" if v.startswith("suppressed:") else "restore it"
         violations.append({"check": "preferences", "detail": v, "hint": hint})
@@ -679,18 +712,23 @@ def _finalize(content: Dict, program: Dict, ctx: Context, kg: _KG,
                 term, _, where = v[len("negative_pin:"):].partition("@")
                 violations.append({"check": "preferences", "detail": v,
                                    "hint": f"revise {where.split(' :: ', 1)[0]} so it no longer mentions {term!r}"})
-    for section, kind in (("experiences", "experience"), ("projects", "project")):
+    for section, kind, name in (("experiences", "experience", "experience"),
+                                ("projects", "project", "projects")):
+        if name in excluded:
+            continue
         if kg.of(kind) and not content.get(section):
             violations.append({"check": "non_empty_sections", "detail": section,
                                "hint": f"keep at least one {kind}"})
-    n_skills = len(content.get("skills_ranked") or [])
-    floor = min(fin["min_skills"], len(kg.of("skill")))
-    if n_skills > fin["max_skills"]:
-        violations.append({"check": "skills_cap", "detail": f"{n_skills} > {fin['max_skills']}",
-                           "hint": f"cut {n_skills - fin['max_skills']} skills"})
-    if n_skills < floor:
-        violations.append({"check": "skills_floor", "detail": f"{n_skills} < {floor}",
-                           "hint": f"add {floor - n_skills} skills"})
+    if "skills" not in excluded:
+        n_skills = len(content.get("skills_ranked") or [])
+        floor = min(fin["min_skills"], len(kg.of("skill")))
+        if n_skills > fin["max_skills"]:
+            violations.append({"check": "skills_cap", "detail": f"{n_skills} > {fin['max_skills']}",
+                               "hint": f"cut {n_skills - fin['max_skills']} skills"
+                                       + _page_rule_hint(eff, "max_skills")})
+        if n_skills < floor:
+            violations.append({"check": "skills_floor", "detail": f"{n_skills} < {floor}",
+                               "hint": f"add {floor - n_skills} skills"})
     order = content.get("_section_order")
     if order is not None and sorted(order) != sorted(expected_sections(content)):
         violations.append({"check": "section_order", "detail": order,
@@ -698,15 +736,117 @@ def _finalize(content: Dict, program: Dict, ctx: Context, kg: _KG,
     if lines is not None:
         for v in bullet_line_violations(lines, fin["max_bullet_lines"]):
             violations.append({"check": "bullet_lines", "detail": v["bullet"],
-                               "hint": f"shorten to {v['max']} lines (renders {v['lines']})"})
+                               "hint": f"shorten to {v['max']} lines (renders {v['lines']})"
+                                       + _page_rule_hint(eff, "max_bullet_lines")})
     budget = _page_budget(content, fin["line_budget"])
     cut_hints: List[Dict] = []
     if budget is not None and budget["over_by"] > 0:
         cut_hints = budget["cut_hints"]
         violations.append({"check": "line_budget",
                            "detail": f"{budget['lines_used']} lines > {budget['budget']}",
-                           "hint": f"free {budget['over_by']} lines; see cut_hints"})
+                           "hint": f"free {budget['over_by']} lines; see cut_hints"
+                                   + _page_rule_hint(eff, "pages")})
     return violations, cut_hints, budget
+
+
+def _strip_sections(content: Dict, excluded: set) -> None:
+    """Leave the `excluded` sections' rows off `content` (in place) and mark them, so the
+    formatter leaves education off too (it reads education from the store)."""
+    for section in sorted(excluded):
+        key = rules_mod.CONTENT_KEY[section]
+        if key in ("education", "achievements"):
+            content.pop(key, None)
+        else:
+            content[key] = []
+    if excluded:
+        content["_excluded_sections"] = sorted(excluded)
+    else:
+        content.pop("_excluded_sections", None)
+
+
+def _apply_exclusions(content: Dict, excluded: set, user_id: UUID, job: JobDescription,
+                      kg: _KG, requirements: Optional[Sequence[Dict]]) -> None:
+    """The document rules' section exclusions (#298), applied to the base in place. A section the
+    base had left off (`_excluded_sections`) that no rule excludes any more comes back from the
+    knowledge graph, so retracting a rule undoes it."""
+    came_back = set(content.get("_excluded_sections") or []) - excluded
+    if came_back:
+        default = kg_default_content(user_id, job.description or "", kg, requirements)
+        for section in came_back:
+            key = rules_mod.CONTENT_KEY.get(section)
+            if key and default.get(key):
+                content[key] = copy.deepcopy(default[key])
+    _strip_sections(content, excluded)
+
+
+def _all_items(content: Dict):
+    for section, fn in (("experiences", exp_key), ("projects", proj_key)):
+        for item in content.get(section) or []:
+            yield fn(item), item
+
+
+def _soft_limit(entry: Dict, content: Dict, lines: Optional[Dict[str, int]],
+                budget: Optional[Dict]) -> Dict:
+    """A soft limit rule's report entry (#298): `applied` or `not_applied` from what the finished
+    page measures, `unmeasured` when no LaTeX engine could. Never a gate. A soft section
+    exclusion arrives already decided (`effective_finalize`), and is passed through."""
+    if "field" not in entry:
+        return entry
+    field, bound = entry["field"], entry["bound"]
+    out = {k: v for k, v in entry.items() if k not in ("field", "bound")}
+    measured: Optional[float]
+    if field == "line_budget":
+        measured = budget["lines_used"] if budget else None
+    elif field == "max_bullet_lines":
+        measured = max(lines.values(), default=0) if lines is not None else None
+    elif field == "max_skills":
+        measured = len(content.get("skills_ranked") or [])
+    else:                                            # bullets_per_item
+        measured = max((len([b for b in item.get("bullets") or [] if (b or "").strip()])
+                        for _, item in _all_items(content)), default=0)
+    if measured is None:
+        return {**out, "status": "unmeasured"}
+    if measured <= bound:
+        return {**out, "status": "applied"}
+    return {**out, "status": "not_applied",
+            "reason": f"the page measures {measured:g} ({field.replace('_', ' ')}), above the rule's {bound:g}"}
+
+
+def _soft_preferences(user_id: UUID, job_id: UUID, content: Dict) -> List[Dict]:
+    """Strength 1-4 preferences in scope, each `applied` or `not_applied` on the finished page
+    (#298). Reported, never blocking. A `reframe`, and a preference whose subject is not
+    something a page can be checked for, are left out."""
+    prefs, _ = preferences_for(user_id, str(job_id))
+    keys = {key for key, _ in _all_items(content)}
+    skills = {str(s.get("name", "")).strip().lower() for s in content.get("skills_ranked") or []}
+    out: List[Dict] = []
+    for p in prefs:
+        strength = p.get("strength") or 0
+        if strength >= HARD_STRENGTH or p.get("polarity") not in ("suppress", "emphasize"):
+            continue
+        key = (p.get("target_key") or "").strip().lower()
+        term = (p.get("target_term") or "").strip().lower()
+        if key.startswith(("exp:", "proj:")):
+            present = key in keys
+        elif key.startswith("skill:"):
+            name = key.split(":", 1)[1].strip()
+            present = name in skills or bool(negative_pin_violations(content, [name], [name]))
+        elif key.startswith("section:"):
+            name = key.split(":", 1)[1].strip()
+            present = bool(content.get(rules_mod.CONTENT_KEY.get(name, "")))
+        elif term:
+            present = bool(negative_pin_violations(content, [term]))
+        else:
+            continue
+        applied = (not present) if p["polarity"] == "suppress" else present
+        entry = {"source": "preference", "preference_id": str(p.get("preference_id")),
+                 "text": p.get("text"), "strength": strength,
+                 "status": "applied" if applied else "not_applied"}
+        if not applied:
+            entry["reason"] = ("it is still on the page" if p["polarity"] == "suppress"
+                               else "it is not on the page")
+        out.append(entry)
+    return sorted(out, key=lambda r: (r["status"], r["preference_id"]))
 
 
 # ── entry points ─────────────────────────────────────────────────────────────
@@ -769,7 +909,16 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
                         [head_id] if head_id else [])
 
     kg = _KG(user_id)
-    ctx, prefs = _context(user_id, job, kg, prog["finalize"]["max_bullet_lines"])
+    # The user's document rules in scope (#298): what the finalize defaults are, which sections
+    # are off the page, and the default section order. A plan may only tighten a hard one.
+    page_rules, _family = rules_for(user_id, str(job_id))
+    resolved = rules_mod.resolve(page_rules)
+    eff = rules_mod.effective_finalize(prog["finalize"], resolved)
+    if eff["errors"]:
+        raise PlanError("invalid_program", " ".join(eff["errors"]))
+    excluded = set(eff["excluded"])
+    ctx, prefs = _context(user_id, job, kg, eff["values"]["max_bullet_lines"])
+    prefs["excluded"] = eff["excluded"]
     pref_ids = {str(p.get("preference_id")).lower()
                 for p in services.load_preferences(user_id)}
     requirements = job_requirements(user_id, job_id)
@@ -782,6 +931,7 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     # Job-scoped rules answered for this posting (#192), e.g. the graduation
     # date a post-internship enrollment requirement calls for.
     rules_applied = apply_job_rules(base, resolve_rules(user_id, job_id))
+    _apply_exclusions(base, excluded, user_id, job, kg, requirements)
     working = copy.deepcopy(base)
     # The cited-bullet support check (#193): Jev, through the cached engine.
     # Built here, not in `_context`, because it reads the base for "original".
@@ -872,14 +1022,32 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
         evidence.update(accepted_origin)
 
     skill_notes = _apply_skills(working, prog.get("skills"), kg, ctx)
+    _strip_sections(working, excluded)          # `skills` may have brought a section back
+    slot = resolved["limits"].get("max_skills") or {}
+    caps = [e["value"] for e in (slot.get("hard"), slot.get("soft")) if e]
+    if caps and prog.get("skills") is None and prog["finalize"].get("max_skills") is None:
+        # A rule's skills limit is the default list length: the ranked head, as the ranking made
+        # it. A plan that lists its own skills is judged on them, and a soft limit only reports.
+        if len(working.get("skills_ranked") or []) > min(caps):
+            working["skills_ranked"] = working["skills_ranked"][:min(caps)]
+    expected = expected_sections(working)
     if prog.get("section_order") is not None:
         working["_section_order"] = list(prog["section_order"])
+    else:
+        default_order = rules_mod.default_order(resolved, expected)
+        if default_order:
+            working["_section_order"] = default_order
+    order_violations, order_soft = rules_mod.order_check(prog.get("section_order"), resolved, expected)
+    # The user's editor layout outranks the plan's order and the rules' (#277): laid over last.
     working = _apply_layout((head or {}).get("layout_overrides"), working)
     ctx.variant_origin = accepted_origin
     final_vector = metric_vector(working, ctx)
     ctx.variant_origin = {}
     lines = ctx.line_counter(working) if ctx.line_counter else None
-    violations, cut_hints, budget = _finalize(working, prog, ctx, kg, lines)
+    violations, cut_hints, budget = _finalize(
+        working, prog, ctx, kg, lines, eff=eff, resolved=resolved,
+        extra=[{"check": v["check"], "detail": v["detail"], "hint": v["hint"], "rule_id": v["rule_id"]}
+               for v in eff["violations"] + order_violations])
 
     out = {
         "program_id": pid, "parent": parent, "dry_run": dry_run,
@@ -889,6 +1057,14 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
         "line_budget": budget or {"status": "unmeasured"},
         "violations": violations, "cut_hints": cut_hints, "rules_applied": rules_applied,
     }
+    if page_rules or eff["soft"] or order_soft:
+        out["rules"] = {
+            "applied": eff["applied"], "overridden": resolved["overridden"],
+            "style_notes": resolved["notes"], "excluded_sections": sorted(excluded)}
+    soft = ([_soft_limit(e, working, lines, budget) for e in eff["soft"]] + order_soft
+            + _soft_preferences(user_id, job_id, working))
+    if soft:
+        out["soft_preferences"] = soft
     if baseline:
         out["baseline"] = baseline
     # Only when Jev (or its cache) answered for at least one bullet: with no key

@@ -563,7 +563,6 @@ def test_the_negative_pin_flag_is_what_the_executor_enforces(env, isolated_engin
         ("Never mention GPA", "suppress", "GPA", 5),                          # a topic bound to nothing
         ("Drop the streaming project", "suppress", "proj:streamboard", 5),
         ("Drop the Bluefin role", "suppress", EXP2, 5),
-        ("Never show achievements", "suppress", "section:achievements", 5),   # keyed, with the label as its term
         ("Always lead with SQL", "emphasize", "skill:sql", 5),                # a pin, not a negative one
         ("Avoid Snowflake", "suppress", "Snowflake", 4),                      # not a pin at all
     ]
@@ -572,6 +571,11 @@ def test_the_negative_pin_flag_is_what_the_executor_enforces(env, isolated_engin
         out = memory.record_preference(uid, text, polarity, target, strength)
         assert out["status"] == "stored", (text, out)
         reported[text] = out["negative_pin"]
+    # A page subject is a document rule since #298 (a section left off), not a pin on the page's
+    # text: nothing about it is reported as a negative pin.
+    section = memory.record_preference(uid, "Never show achievements", "suppress", "section:achievements", 5)
+    assert section["status"] == "stored" and section["rule"]["params"] == {"achievements": 0}
+    assert "preference_id" not in section or not section.get("preference_id")
     # A key the executor cannot enforce by key (`edu:`) with a term, and the same with none.
     from sqlmodel import Session
 
@@ -581,10 +585,16 @@ def test_the_negative_pin_flag_is_what_the_executor_enforces(env, isolated_engin
                            ("Never mention that degree", None)):
             sess.add(UserPreference(user_id=uid, text=text, polarity="suppress", scope_type="global",
                                     strength=5, target_key="edu:some school|b.s.", target_term=term))
+        # A `section:` row from before #298 (record_preference no longer writes one; #300 migrates
+        # them): keyed, with the label as its term, still enforced as that term.
+        sess.add(UserPreference(user_id=uid, text="Never show achievements", polarity="suppress",
+                                scope_type="global", strength=5, target_key="section:achievements",
+                                target_term="section: achievements", target_type="section"))
         sess.commit()
     kinds += [("Never mention my high school", "suppress", None, 5),
-              ("Never mention that degree", "suppress", None, 5)]
-    for text in ("Never mention my high school", "Never mention that degree"):
+              ("Never mention that degree", "suppress", None, 5),
+              ("Never show achievements", "suppress", None, 5)]
+    for text in ("Never mention my high school", "Never mention that degree", "Never show achievements"):
         reported[text] = None                          # not stored through record_preference
     suppress, emphasize, skills = executor._hard_preferences(uid, UUID(job_id))
     enforced = {p["text"] for p in [*suppress.values(), *skills.values()]}

@@ -446,8 +446,10 @@ def test_record_preference_resolves_an_exact_target_and_never_a_partial_one(kg):
     assert exact["target_key"] == "skill:python" and exact["target_resolved"]
     by_name = memory.record_preference(kg, "Lead with the recommender", "emphasize", "Next-Item Recommendation", 3)
     assert by_name["target_key"] == "proj:next-item recommendation"
+    # A section is the page, not an item on it: a plain "skip it" is a document rule (#298).
     section = memory.record_preference(kg, "Skip achievements", "suppress", "section:achievements", 3)
-    assert section["target_key"] == "section:achievements"
+    assert section["status"] == "stored" and section["rule"]["params"] == {"achievements": 0}
+    assert not section.get("target_key") and section["anchor"]["key"] == "section:achievements"
     loose = memory.record_preference(kg, "Skip the recommender", "suppress", "recommend", 3)
     assert loose["target_key"] is None and loose["target_resolved"] is False
     assert "proj:next-item recommendation" in loose["suggestions"]

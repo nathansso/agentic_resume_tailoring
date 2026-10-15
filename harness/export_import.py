@@ -199,6 +199,7 @@ def specs() -> Tuple[Spec, ...]:
         Spec(m.JobCard, "user"),
         Spec(m.JDProfile, "user_or_job"),
         Spec(m.UserPreference, "user"),
+        Spec(m.ResumeRule, "user"),
         Spec(m.PersonaTrait, "user"),
         Spec(m.Persona, "user"),
         Spec(m.DeletedEntry, "user", natural=("entity_type", "key_a", "key_b")),

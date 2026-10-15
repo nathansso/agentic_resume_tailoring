@@ -291,13 +291,17 @@ def test_an_unknown_thing_is_stored_pending_with_its_term(kg, isolated_engine):
     assert out["target_key"] is None and out["target_term"] == "Kafka" and out["negative_pin"]
 
 
-def test_a_document_subject_reports_its_status_and_is_stored_as_before(kg):
+def test_a_document_subject_is_a_rule_when_the_words_state_one_limit_and_is_sent_back_otherwise(kg):
+    """#298: a page subject is a `ResumeRule`, not an item preference. The one plain reading is
+    stored; anything looser is refused with nothing stored and a pointer to `record_rule`."""
     section = memory.record_preference(kg, "Skip achievements", "suppress", "section: achievements", 3)
     assert section["anchor"] == {"status": "document", "key": "section:achievements"}
-    assert section["target_key"] == "section:achievements"
+    assert section["status"] == "stored" and section["rule"]["params"] == {"achievements": 0}
     page = memory.record_preference(kg, "Keep it to one page", "reframe", "page length", 4)
     assert page["status"] == "stored" and page["anchor"] == {"status": "document"}
-    assert page["target_key"] is None and page["target_term"] == "page length"
+    assert page["rule"]["params"] == {"pages": 1} and not page.get("target_term")
+    loose = memory.record_preference(kg, "Use a formal tone", "reframe", "tone", 4)
+    assert loose["status"] == "refused" and loose["route"]["tool"] == "record_rule"
     bare = memory.record_preference(kg, "Format as one page", "reframe", None, 4)
     assert bare["status"] == "stored" and "anchor" in bare and bare["anchor"] is None
 

@@ -69,6 +69,7 @@ Two vocabularies organise everything below:
 | Jev decisions engine | harness (judgment) | `harness/decisions/` (client, cache, engine, recordings) | the points below | every gate or target a Jev answer feeds |
 | Bullet library, baselines | harness (memory) | `harness/library.py`, `BulletVariant` / `TrackBaseline` / `JobRoleFamily` | `upsert_items` (kind `variant`), `promote_bullet`, `approve_variant`, `save_baseline` | `suggest_actions`, `open_job`, the executor |
 | Memory gate | harness (memory write path) | `harness/memory.py`, `harness/decisions/memory_gate.py` | `observe`, `record_preference`, the `user-prompt` hook | `art_briefing`, `art_pins`, the executor's pins |
+| Document rules | harness (memory) | `harness/rules.py`, `ResumeRule` | `record_rule`, `retract_rule`, `record_preference` (a page subject) | `art_briefing`, `art_pins`, the executor's finalize defaults and `rule_violations` (#298) |
 | Skill retrieval | retrieval | `agents/skill_matching.py`, `knowledge_graph/builder.py` | — | `kg_default_content`, `open_job` |
 | Seniority detection | scoring input | `agents/seniority.py` | — | `ATSScoringEngine._role_level`, `agents/jd_payload.py`, the profile checks and the corpus audit |
 | Policy artifact | harness (config) | `harness/policy.json`, `harness/policy.py` | a re-fit | every threshold and guard tolerance (§8.8) |

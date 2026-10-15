@@ -32,6 +32,12 @@ CALLS = {
                            "scope": "role_family", "scope_value": "data_science"},
                           {"text": "", "polarity": "suppress", "target": "Kafka"},
                           {"text": "Never mention Kafka", "polarity": "suppress"}],
+    # Document rules (#298). A refused shape and a retract of nothing, so all three adapters see
+    # the same store; the stored paths are in tests/test_resume_rules.py.
+    "record_rule": [{"text": "Be concise", "kind": "limit"},
+                    {"text": "One page", "kind": "limit", "params": {"pages": 9}},
+                    {"text": "Skills first", "kind": "section_order"}],
+    "retract_rule": [{"rule_id": "00000000-0000-0000-0000-000000000000"}],
     # Project context. The writes are idempotent, so all three adapters agree.
     "suggest_project_contexts": [{}, {"include_reviewed": True}],
     "set_project_context": [{"project": "proj:next-item recommendation",
