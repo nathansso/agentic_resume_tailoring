@@ -123,6 +123,13 @@ def _education_item(e: Education) -> Dict[str, Any]:
     }
 
 
+def cited_skill_keys(user_id: Optional[UUID]) -> set:
+    """Keys (`skill/<id>`) of the user's skills that at least one bullet cites: the ones a
+    dismissal is refused for (#321). Read off the view itself, not a second matcher."""
+    view = build_evidence_view(user_id)
+    return {e["skill_key"] for e in view["edges"] if e["cites"]}
+
+
 def build_evidence_view(user_id: Optional[UUID]) -> Dict[str, Any]:
     """The evidence map payload for one user. Every row read is scoped to `user_id`."""
     if user_id is None:

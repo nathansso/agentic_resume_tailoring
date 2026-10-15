@@ -1,5 +1,6 @@
 import type {
   ProfileData, SkillRow, ExpRow, ProjectRow, EducationRow, AchievementRow, GraphData, EvidenceView,
+  DismissedSkill,
 } from "../types";
 import { json } from "./http";
 
@@ -97,6 +98,21 @@ export const updateProject = (id: string, body: ProjectEdit): Promise<ProjectRow
   patch(`/api/profile/projects/${id}`, body);
 export const deleteProject = (id: string): Promise<{ result: string }> =>
   del(`/api/profile/projects/${id}`);
+
+// ── Dismissing a skill claim nothing proves (issue #321) ───────────────────────
+
+export const getDismissedSkills = async (): Promise<DismissedSkill[]> =>
+  json(await fetch("/api/profile/skills/dismissed", { credentials: "include" }));
+
+async function post<T>(url: string): Promise<T> {
+  return json(await fetch(url, { method: "POST", credentials: "include" }));
+}
+
+/** Refused with 409 when a bullet cites the skill; the message says to edit the bullet. */
+export const dismissSkill = (skillId: string): Promise<{ skill_id: string; name: string }> =>
+  post(`/api/profile/skills/${skillId}/dismiss`);
+export const restoreSkill = (skillId: string): Promise<{ skill_id: string; name: string }> =>
+  post(`/api/profile/skills/${skillId}/restore`);
 
 /** Edit the text of one project bullet. Content only: the bullet keeps its position (#327). */
 export const updateProjectBlurb = (

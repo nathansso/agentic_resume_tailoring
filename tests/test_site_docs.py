@@ -301,3 +301,49 @@ def test_the_docs_pieces_follow_the_themes_tokens_not_fixed_colors():
         text = path.read_text(encoding="utf-8")
         assert not re.search(r"#[0-9a-fA-F]{3,8}\b", re.sub(r"&#\d+;|href=\"#[\w-]+\"|\(#\w+", "", text)), path
         assert not re.search(r"\b(?:text|bg|border)-(?:white|black)\b", text), path
+
+
+# --- Jev is an optional upgrade, not a step (#356) -----------------------------------------
+
+def test_install_jev_section_is_titled_optional_and_comes_after_the_first_run_check():
+    text = PAGES["install"].read_text(encoding="utf-8")
+    sections = {k: (i, t) for k, i, t in re.findall(r'(\w+): \{ id: "([\w-]+)", title: "([^"]+)"', text)}
+    assert "jev" in sections
+    assert sections["jev"][1].lower().startswith("optional"), sections["jev"]
+    order = list(sections)
+    assert order.index("jev") > order.index("verify"), "the Jev section must follow the first-run check"
+    rendered = re.findall(r"<DocSection section=\{S\.(\w+)\}", text)
+    assert rendered.index("jev") > rendered.index("verify")
+    assert rendered.index("jev") > rendered.index("optional")
+    # The old heading is gone, and the key command is still rendered from commands.json.
+    assert "<h3>TypeSafe Jev key</h3>" not in text
+    assert 'block("typesafe-key")' in text
+
+
+_KEY_REQUIRED = [
+    r"\bkeys?\s+(?:is|are)\s+(?:required|needed|necessary|mandatory)\b",
+    r"\b(?:needs?|requires?|required|must\s+(?:have|add|set))\s+(?:a|an|your|the)?\s*(?:\w+\s+){0,2}(?:api\s+)?key\b",
+    r"\bwithout\s+(?:a|an)\s+(?:\w+\s+)?key[^.]*\b(?:fail|break|stop|cannot|can't|won't)",
+]
+
+
+def test_no_page_says_a_key_is_required_or_needed():
+    """#356: the TypeSafe key is an optional upgrade. The FAQ's question title is the one
+    place the words 'need' and 'key' meet, and its answer starts with 'No.'"""
+    pages = [*_site_files(), ROOT / "INSTALL.md", ROOT / "plugin" / "README.md"]
+    for path in pages:
+        text = path.read_text(encoding="utf-8").replace("\r\n", "\n")
+        text = text.replace("Do I need an API key?", "")
+        flat = re.sub(r"\s+", " ", re.sub(r"<[^>]*>", " ", text))
+        for pattern in _KEY_REQUIRED:
+            hit = re.search(pattern, flat, re.I)
+            assert not hit, f"{path.relative_to(ROOT)} implies a key is required: {hit.group(0)!r}"
+
+
+def test_the_docs_frame_jev_as_optional_and_keep_the_headings_other_docs_cite():
+    install = _read("INSTALL.md")
+    # docs/harness.md and plugin/README.md cite this heading by its "Jev (optional)" prefix.
+    assert re.search(r"(?m)^### Jev \(optional\): strengthen the checks$", install)
+    assert "ART works fully without Jev" in install
+    readme = _read("plugin/README.md")
+    assert "Optional upgrade" in readme and 'see "Jev (optional)"' in readme

@@ -52,11 +52,12 @@ the ART database or an export; see "GitHub repos" in [INSTALL.md](../INSTALL.md)
   before discarding it.
 - **Also before every message:** ART's memory gate reads your message. If it may state a
   lasting preference ("never mention Kafka"), Claude is asked to confirm it with you and
-  record it. A clear, low-stakes one ("lead with Python") ART saves itself and Claude
-  tells you. A rule you call absolute ("never", a negative pin) is never saved without
-  your confirmation. The gate asks TypeSafe's Jev when `TYPESAFE_API_KEY` is set (your
-  message leaves your machine in that request); without a key it only flags messages for
-  Claude to confirm and saves nothing on its own. A message that leans on Claude's last
+  record it. A rule you call absolute ("never", a negative pin) is never saved without
+  your confirmation. This works without a key: the gate only flags messages for Claude
+  to confirm and saves nothing on its own. **Optional upgrade:** with a TypeSafe key
+  (`TYPESAFE_API_KEY`), the gate asks TypeSafe's Jev, and a clear, low-stakes preference
+  ("lead with Python") ART saves itself and Claude tells you (your message leaves your
+  machine in that request). With a key, a message that leans on Claude's last
   reply ("never list that again") is sent with the end of that reply (at most 600
   characters of its text, read from the transcript Claude Code passes the hook), so ART can
   tell what "that" is. No other message carries a reply. To set a key, see what Jev is sent, or
