@@ -1,0 +1,843 @@
+{
+ "meta": {
+  "label": "Replay of a real ART run on a sample student profile",
+  "generated_by": "scripts/build_site_demo.py",
+  "art_version": "0.1.0",
+  "contract_version": "1",
+  "latex_engine": "Tectonic 0.17.0",
+  "jev": "off (no TypeSafe key)",
+  "profile": "scripts/site_demo/sample_resume.md (synthetic: no real person)",
+  "posting": "scripts/site_demo/sample_posting.txt (written for this demo)",
+  "authored": "Lines from the user and the agent, the records the agent extracted and its plan were written by hand. Tool calls and what ART returned were captured.",
+  "elision": "Long tool answers are shortened for display: lists are cut, strings shortened and fields left out, each marked with an ellipsis.",
+  "pacing": "Playback runs at a fixed rate; it is not the real duration of any call.",
+  "total_ms": 75170
+ },
+ "phases": [
+  {
+   "id": "setup",
+   "label": "Set up"
+  },
+  {
+   "id": "posting",
+   "label": "Posting"
+  },
+  {
+   "id": "plan",
+   "label": "Plan"
+  },
+  {
+   "id": "approve",
+   "label": "Approval"
+  },
+  {
+   "id": "gates",
+   "label": "Gate check"
+  },
+  {
+   "id": "render",
+   "label": "Render"
+  }
+ ],
+ "events": [
+  {
+   "phase": "setup",
+   "type": "user",
+   "text": "/art:setup resume.md",
+   "ms": 1200
+  },
+  {
+   "phase": "setup",
+   "type": "agent",
+   "text": "I'll read resume.md and store what it says: your degree, roles, projects and skills, with the bullets exactly as written. I won't add anything the file doesn't state.",
+   "ms": 2248
+  },
+  {
+   "phase": "setup",
+   "type": "tool",
+   "name": "upsert_items",
+   "args": {
+    "records": [
+     {
+      "kind": "education",
+      "data": {
+       "institution": "Alder Valley State University",
+       "degree": "B.S. Computer Science, Data Science minor",
+       "end_date": "Expected June 2027",
+       "gpa": "3.7"
+      }
+     },
+     {
+      "kind": "experience",
+      "data": {
+       "company": "Tamarack Logistics",
+       "title": "Data Analyst Intern",
+       "start_date": "2026-06",
+       "end_date": "2026-09",
+       "bullets": [
+        "Built a weekly delivery-delay report in pandas and SQL that replaced a manual spreadsheet for the operations…",
+        "Cleaned 14 months of shipment records, about 380,000 rows, and documented 9 data-quality checks.",
+        "Trained a gradient-boosted model in scikit-learn to flag late shipments, reaching 0.81 AUC on a held-out mont…",
+        "… 1 more"
+       ]
+      }
+     },
+     {
+      "kind": "experience",
+      "data": {
+       "company": "Alder Valley State University, Department of Computer Science",
+       "title": "Teaching Assistant",
+       "start_date": "2025-09",
+       "end_date": "Present",
+       "bullets": [
+        "Held weekly office hours for a 120-student Data Structures course taught in Python.",
+        "Graded labs and wrote pytest autograder tests for 4 assignments.",
+        "Led review sessions on recursion and hash tables that about 40 students attended."
+       ]
+      }
+     },
+     "… 21 more"
+    ],
+    "source": "resume.md"
+   },
+   "result": {
+    "counts": {
+     "created": 24
+    },
+    "results": [
+     {
+      "index": 0,
+      "key": "edu:alder valley state university|b.s. computer science, data science minor",
+      "kind": "education",
+      "message": null,
+      "status": "created"
+     },
+     {
+      "index": 1,
+      "key": "exp:data analyst intern|tamarack logistics",
+      "kind": "experience",
+      "message": null,
+      "status": "created"
+     },
+     {
+      "index": 2,
+      "key": "exp:teaching assistant|alder valley state university, department of computer science",
+      "kind": "experience",
+      "message": null,
+      "status": "created"
+     },
+     "… 21 more"
+    ],
+    "…": "1 more fields"
+   },
+   "ms": 4030
+  },
+  {
+   "phase": "setup",
+   "type": "agent",
+   "text": "Stored 24 records. Now your resume header.",
+   "ms": 884
+  },
+  {
+   "phase": "setup",
+   "type": "tool",
+   "name": "update_profile",
+   "args": {
+    "fields": {
+     "name": "Riley Park",
+     "email": "riley.park@example.com",
+     "phone": "(555) 010-0142",
+     "linkedin_url": "https://linkedin.com/in/riley-park-demo",
+     "github_username": "riley-park-demo"
+    }
+   },
+   "result": {
+    "email": "riley.park@example.com",
+    "error": null,
+    "github_username": "riley-park-demo",
+    "linkedin_url": "https://linkedin.com/in/riley-park-demo",
+    "location": null,
+    "name": "Riley Park",
+    "phone": "(555) 010-0142",
+    "portfolio_url": null
+   },
+   "ms": 1555
+  },
+  {
+   "phase": "setup",
+   "type": "tool",
+   "name": "list_items",
+   "args": {},
+   "result": {
+    "error": null,
+    "items": [
+     {
+      "key": "edu:alder valley state university|b.s. computer science, data science minor",
+      "kind": "education",
+      "title": "Alder Valley State University — B.S. Computer Science, Data Science minor"
+     },
+     {
+      "key": "exp:data analyst intern|tamarack logistics",
+      "kind": "experience",
+      "title": "Data Analyst Intern @ Tamarack Logistics"
+     },
+     {
+      "key": "exp:teaching assistant|alder valley state university, department of computer science",
+      "kind": "experience",
+      "title": "Teaching Assistant @ Alder Valley State University, Department of Computer Science"
+     },
+     "… 21 more"
+    ]
+   },
+   "ms": 1645
+  },
+  {
+   "phase": "setup",
+   "type": "agent",
+   "text": "Your graph holds 2 roles, 4 projects, 17 skills and your degree. Paste a posting whenever you're ready.",
+   "ms": 1555
+  },
+  {
+   "phase": "posting",
+   "type": "user",
+   "text": "/art:tailor Data Science Intern, Summer 2027, Cedarline Freight (sample posting, 23 lines pasted)",
+   "ms": 3510
+  },
+  {
+   "phase": "posting",
+   "type": "agent",
+   "text": "Reading the posting, then checking whether you've saved any preferences.",
+   "ms": 1214
+  },
+  {
+   "phase": "posting",
+   "type": "tool",
+   "name": "art_briefing",
+   "args": {
+    "role_family": "data_science"
+   },
+   "result": {
+    "pins": [],
+    "preferences": [],
+    "counts": {
+     "job_cards": 0,
+     "job_rules": 0,
+     "pins": 0,
+     "preferences": 0
+    },
+    "role_family": "data_science",
+    "…": "5 more fields"
+   },
+   "ms": 1375
+  },
+  {
+   "phase": "posting",
+   "type": "agent",
+   "text": "No saved preferences yet. Opening the job with the 8 requirements I pulled out of the posting.",
+   "ms": 1456
+  },
+  {
+   "phase": "posting",
+   "type": "tool",
+   "name": "open_job",
+   "args": {
+    "jd_text": "Data Science Intern, Summer 2027\nCedarline Freight (sample posting written for this demo)\nHybrid, 12 weeks\n\nA…",
+    "requirements": [
+     {
+      "text": "The candidate is pursuing a B.S. or M.S. in computer science, statistics, data science or a related field.",
+      "type": "required",
+      "criticality": 3,
+      "terms": [
+       "computer science",
+       "data science"
+      ],
+      "source_section": "Required qualifications"
+     },
+     {
+      "text": "The candidate has experience with Python and SQL.",
+      "type": "required",
+      "criticality": 5,
+      "terms": [
+       "Python",
+       "SQL"
+      ],
+      "source_section": "Required qualifications"
+     },
+     {
+      "text": "The candidate is familiar with machine learning libraries such as scikit-learn.",
+      "type": "required",
+      "criticality": 4,
+      "terms": [
+       "scikit-learn",
+       "machine learning"
+      ],
+      "source_section": "Required qualifications"
+     },
+     "… 5 more"
+    ],
+    "metadata": {
+     "title": "Data Science Intern, Summer 2027",
+     "company": "Cedarline Freight",
+     "role_family": "data_science"
+    }
+   },
+   "result": {
+    "job_id": "787b76c2-f521-4eb2-8784-c09f76637588",
+    "title": "Data Science Intern, Summer 2027",
+    "company": "Cedarline Freight",
+    "requirements": 8,
+    "role_family": "data_science",
+    "skill_matches": [
+     {
+      "requirement": 1,
+      "skill": "Python",
+      "term": "python",
+      "type": "required"
+     },
+     {
+      "requirement": 1,
+      "skill": "SQL",
+      "term": "sql",
+      "type": "required"
+     },
+     {
+      "requirement": 2,
+      "skill": "scikit-learn",
+      "term": "scikit-learn",
+      "type": "required"
+     },
+     "… 4 more"
+    ],
+    "unmatched_terms": [
+     {
+      "requirement": 2,
+      "term": "machine learning",
+      "type": "required"
+     },
+     {
+      "requirement": 4,
+      "term": "predict",
+      "type": "required"
+     },
+     {
+      "requirement": 4,
+      "term": "delays",
+      "type": "required"
+     },
+     "… 8 more"
+    ],
+    "…": "8 more fields"
+   },
+   "ms": 4660
+  },
+  {
+   "phase": "posting",
+   "type": "agent",
+   "text": "ART matched 7 of the posting's terms to skills you already have. It doesn't guess at the ones it couldn't match, like \"machine learning\", so I'll only use those words where your own bullets support them.",
+   "ms": 2655
+  },
+  {
+   "phase": "posting",
+   "type": "agent",
+   "text": "First I'll save your graph as version 1, so there's something to compare the tailored resume against.",
+   "ms": 1533
+  },
+  {
+   "phase": "posting",
+   "type": "tool",
+   "name": "execute_plan",
+   "args": {
+    "program": {
+     "job_id": "787b76c2-f521-4eb2-8784-c09f76637588",
+     "parent": null,
+     "nodes": []
+    }
+   },
+   "result": {
+    "committed": true,
+    "node_id": "658795f6-c555-4701-a12e-1a3e3c9f724d",
+    "line_budget": {
+     "budget": 60.0,
+     "cut_hints": [],
+     "lines_used": 44.44,
+     "over_by": -15.56
+    },
+    "violations": [],
+    "metrics": {
+     "final": {
+      "gates": {
+       "bullet_lines": [],
+       "citations": [],
+       "consistency": [],
+       "faithfulness": [],
+       "preferences": []
+      }
+     },
+     "…": "guards, targets and the ATS-style report left out"
+    }
+   },
+   "ms": 2050
+  },
+  {
+   "phase": "posting",
+   "type": "agent",
+   "text": "Reading your internship in full, so I cite its bullets by id.",
+   "ms": 1093
+  },
+  {
+   "phase": "posting",
+   "type": "tool",
+   "name": "get_item",
+   "args": {
+    "key": "exp:data analyst intern|tamarack logistics"
+   },
+   "result": {
+    "error": null,
+    "key": "exp:data analyst intern|tamarack logistics",
+    "kind": "experience",
+    "record": {
+     "bullets": [
+      "Built a weekly delivery-delay report in pandas and SQL that replaced a manual spreadsheet for the operations team.",
+      "Cleaned 14 months of shipment records, about 380,000 rows, and documented 9 data-quality checks.",
+      "Trained a gradient-boosted model in scikit-learn to flag late shipments, reaching 0.81 AUC on a held-out month.",
+      "Walked 12 operations staff through the findings and wrote the handoff notes the team still uses."
+     ],
+     "company": "Tamarack Logistics",
+     "description": "",
+     "end": "2026-09",
+     "id": "c2c3374e-45ec-4a22-bc96-989345110b1a",
+     "incomplete": false,
+     "missing": [],
+     "projects": [],
+     "start": "2026-06",
+     "title": "Data Analyst Intern"
+    },
+    "variants": []
+   },
+   "ms": 1870
+  },
+  {
+   "phase": "plan",
+   "type": "tool",
+   "name": "suggest_actions",
+   "args": {
+    "job_id": "787b76c2-f521-4eb2-8784-c09f76637588"
+   },
+   "result": {
+    "error": null,
+    "floor": 0.1,
+    "items": [
+     {
+      "actions": [
+       {
+        "op": "keep",
+        "propensity": 0.3333333333333333
+       },
+       {
+        "op": "revise",
+        "propensity": 0.3333333333333333
+       },
+       "… 1 more"
+      ],
+      "approved_variants": 0,
+      "best_score": 0.0,
+      "item_key": "exp:data analyst intern|tamarack logistics",
+      "match": "no_match",
+      "propensity": null,
+      "source": "fallback",
+      "title": "Data Analyst Intern @ Tamarack Logistics",
+      "variant": null
+     },
+     {
+      "actions": [
+       {
+        "op": "keep",
+        "propensity": 0.3333333333333333
+       },
+       {
+        "op": "revise",
+        "propensity": 0.3333333333333333
+       },
+       "… 1 more"
+      ],
+      "approved_variants": 0,
+      "best_score": 0.0,
+      "item_key": "exp:teaching assistant|alder valley state university, department of computer science",
+      "match": "no_match",
+      "propensity": null,
+      "source": "fallback",
+      "title": "Teaching Assistant @ Alder Valley State University, Department of Computer Science",
+      "variant": null
+     },
+     "… 4 more"
+    ],
+    "job_id": "787b76c2-f521-4eb2-8784-c09f76637588",
+    "node_id": "658795f6-c555-4701-a12e-1a3e3c9f724d"
+   },
+   "ms": 3130
+  },
+  {
+   "phase": "plan",
+   "type": "agent",
+   "text": "No approved bullet variants yet, so I'll write from your source bullets. Here's the plan. Nothing changes until you say so.",
+   "items": [
+    "Data Analyst Intern: lead with the late-shipment model, and say \"predict\", the posting's word, instead of \"flag\".",
+    "Same role: quantify the report bullet, \"cutting its weekly preparation from 3 hours to 20 minutes\".",
+    "Transit Delay Predictor: put the dashboard before the API, since the posting names dashboards.",
+    "Drop Budget Tracker. It's a Java project and the posting doesn't ask for Java.",
+    "Skills: Python, SQL and scikit-learn first; Flask, Java, TypeScript and React come off."
+   ],
+   "outro": "Everything else stays as you wrote it. Go ahead?",
+   "note": "Written for this demo: the second item adds a figure that no source states, so the replay can show the check that catches it.",
+   "ms": 8914
+  },
+  {
+   "phase": "approve",
+   "type": "user",
+   "text": "Looks good. Go ahead, and yes, drop Budget Tracker.",
+   "ms": 2130
+  },
+  {
+   "phase": "gates",
+   "type": "agent",
+   "text": "Running the plan through ART's checks.",
+   "ms": 840
+  },
+  {
+   "phase": "gates",
+   "type": "tool",
+   "name": "execute_plan",
+   "args": {
+    "program": {
+     "job_id": "787b76c2-f521-4eb2-8784-c09f76637588",
+     "parent": "658795f6-c555-4701-a12e-1a3e3c9f724d",
+     "nodes": [
+      {
+       "id": "n1",
+       "op": "revise",
+       "item_key": "exp:data analyst intern|tamarack logistics",
+       "strategy": "quantify",
+       "keywords": [
+        "predict",
+        "SQL",
+        "delays"
+       ],
+       "bullets": [
+        {
+         "text": "Trained a gradient-boosted scikit-learn model to predict late shipments, reaching 0.81 AUC on a held-out month.",
+         "cites": [
+          "exp:data analyst intern|tamarack logistics#b2"
+         ]
+        },
+        {
+         "text": "Built a weekly delivery-delay report in pandas and SQL that replaced a manual spreadsheet for the operations team, cu…",
+         "cites": [
+          "exp:data analyst intern|tamarack logistics#b0"
+         ]
+        },
+        {
+         "text": "Cleaned 14 months of shipment records, about 380,000 rows, and documented 9 data-quality checks.",
+         "cites": [
+          "exp:data analyst intern|tamarack logistics#b1"
+         ]
+        },
+        {
+         "text": "Explained the findings to 12 operations staff and wrote the handoff notes the team still uses.",
+         "cites": [
+          "exp:data analyst intern|tamarack logistics#b3"
+         ]
+        }
+       ]
+      },
+      {
+       "id": "n2",
+       "op": "keep",
+       "item_key": "exp:teaching assistant|alder valley state university, department of computer science"
+      },
+      {
+       "id": "n3",
+       "op": "revise",
+       "item_key": "proj:transit delay predictor",
+       "strategy": "keyword_weave",
+       "keywords": [
+        "dashboards",
+        "delays"
+       ],
+       "bullets": [
+        {
+         "text": "Predicted bus delays with a scikit-learn random forest trained on 2 years of public transit data, reaching a mean abs…",
+         "cites": [
+          "proj:transit delay predictor#b0"
+         ]
+        },
+        {
+         "text": "Built a Streamlit dashboard that shows delay hot spots by route and hour.",
+         "cites": [
+          "proj:transit delay predictor#b2"
+         ]
+        },
+        {
+         "text": "Served delay predictions through a FastAPI endpoint packaged with Docker and covered by 14 pytest tests.",
+         "cites": [
+          "proj:transit delay predictor#b1"
+         ]
+        }
+       ]
+      },
+      {
+       "id": "n4",
+       "op": "keep",
+       "item_key": "proj:campus dining recommender"
+      },
+      {
+       "id": "n5",
+       "op": "keep",
+       "item_key": "proj:recycling sorter"
+      },
+      {
+       "id": "n6",
+       "op": "delete",
+       "item_key": "proj:budget tracker",
+       "because": "user:approved dropping Budget Tracker, a Java project the posting does not ask for"
+      }
+     ],
+     "skills": [
+      "Python",
+      "SQL",
+      "scikit-learn",
+      "pandas",
+      "Streamlit",
+      "Tableau",
+      "… 7 more"
+     ],
+     "host": {
+      "name": "claude-code"
+     }
+    }
+   },
+   "result": {
+    "committed": true,
+    "node_id": "995f6793-ae56-43e7-851f-13cbd2cc9eec",
+    "nodes": [
+     {
+      "carried_edit": null,
+      "deltas": {
+       "coverage": 0.0,
+       "relevance_density": 0.006
+      },
+      "id": "n1",
+      "improved": [
+       "relevance_density"
+      ],
+      "item_key": "exp:data analyst intern|tamarack logistics",
+      "op": "revise",
+      "reason": "hard_gate: consistency ['consistency:Built a weekly delivery-delay report in…:20 minutes', 'consistency:Built a weekly delivery-delay report in…:3 hours']",
+      "review": null,
+      "semantic": null,
+      "status": "reverted",
+      "waived": null
+     },
+     {
+      "carried_edit": null,
+      "deltas": {},
+      "id": "n2",
+      "improved": [],
+      "item_key": "exp:teaching assistant|alder valley state university, department of computer science",
+      "op": "keep",
+      "reason": null,
+      "review": null,
+      "semantic": null,
+      "status": "kept",
+      "waived": null
+     },
+     {
+      "carried_edit": null,
+      "deltas": {
+       "coverage": 0.0,
+       "relevance_density": 0.0
+      },
+      "id": "n3",
+      "improved": [],
+      "item_key": "proj:transit delay predictor",
+      "op": "revise",
+      "reason": "no_target_improved: coverage, relevance_density",
+      "review": null,
+      "semantic": null,
+      "status": "reverted",
+      "waived": null
+     },
+     {
+      "carried_edit": null,
+      "deltas": {},
+      "id": "n4",
+      "improved": [],
+      "item_key": "proj:campus dining recommender",
+      "op": "keep",
+      "reason": null,
+      "review": null,
+      "semantic": null,
+      "status": "kept",
+      "waived": null
+     },
+     {
+      "carried_edit": null,
+      "deltas": {},
+      "id": "n5",
+      "improved": [],
+      "item_key": "proj:recycling sorter",
+      "op": "keep",
+      "reason": null,
+      "review": null,
+      "semantic": null,
+      "status": "kept",
+      "waived": null
+     },
+     {
+      "carried_edit": null,
+      "deltas": {
+       "coverage": 0.0,
+       "relevance_density": 0.0083
+      },
+      "id": "n6",
+      "improved": [
+       "relevance_density"
+      ],
+      "item_key": "proj:budget tracker",
+      "op": "delete",
+      "reason": null,
+      "review": null,
+      "semantic": null,
+      "status": "accepted",
+      "waived": null
+     }
+    ],
+    "violations": [],
+    "…": "15 more fields"
+   },
+   "ms": 10015
+  },
+  {
+   "phase": "gates",
+   "type": "agent",
+   "text": "ART reverted two of my changes. The report bullet: \"3 hours\" and \"20 minutes\" aren't in the bullet it cites, I made those numbers up, and that sank the rest of the role's edits with it. And the Transit Delay reorder improved nothing the checks measure, so that project stays as it was. Everything else went in as version 2. I'll resubmit the role with your original wording on the report bullet and leave the projects alone.",
+   "ms": 5086
+  },
+  {
+   "phase": "gates",
+   "type": "tool",
+   "name": "execute_plan",
+   "args": {
+    "program": {
+     "job_id": "787b76c2-f521-4eb2-8784-c09f76637588",
+     "parent": "995f6793-ae56-43e7-851f-13cbd2cc9eec",
+     "nodes": [
+      {
+       "id": "n1",
+       "op": "revise",
+       "item_key": "exp:data analyst intern|tamarack logistics",
+       "strategy": "quantify",
+       "keywords": [
+        "predict",
+        "SQL",
+        "delays"
+       ],
+       "bullets": [
+        {
+         "text": "Trained a gradient-boosted scikit-learn model to predict late shipments, reaching 0.81 AUC on a held-out month.",
+         "cites": [
+          "exp:data analyst intern|tamarack logistics#b2"
+         ]
+        },
+        {
+         "text": "Built a weekly delivery-delay report in pandas and SQL that replaced a manual spreadsheet for the operations team.",
+         "cites": [
+          "exp:data analyst intern|tamarack logistics#b0"
+         ]
+        },
+        {
+         "text": "Cleaned 14 months of shipment records, about 380,000 rows, and documented 9 data-quality checks.",
+         "cites": [
+          "exp:data analyst intern|tamarack logistics#b1"
+         ]
+        },
+        {
+         "text": "Explained the findings to 12 operations staff and wrote the handoff notes the team still uses.",
+         "cites": [
+          "exp:data analyst intern|tamarack logistics#b3"
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "result": {
+    "committed": true,
+    "node_id": "e14d5aef-3402-4eb7-ba43-1cd80f74afbb",
+    "parent": "995f6793-ae56-43e7-851f-13cbd2cc9eec",
+    "nodes": [
+     {
+      "id": "n1",
+      "op": "revise",
+      "item_key": "exp:data analyst intern|tamarack logistics",
+      "status": "accepted",
+      "reason": null,
+      "improved": [
+       "relevance_density"
+      ],
+      "…": "5 more fields"
+     }
+    ],
+    "violations": [],
+    "…": "14 more fields"
+   },
+   "ms": 3625
+  },
+  {
+   "phase": "gates",
+   "type": "agent",
+   "text": "Committed as version 3. Now I'll render version 1, then version 3, as PDFs.",
+   "ms": 1247
+  },
+  {
+   "phase": "render",
+   "type": "tool",
+   "name": "render",
+   "args": {
+    "job_id": "787b76c2-f521-4eb2-8784-c09f76637588",
+    "node_id": "658795f6-c555-4701-a12e-1a3e3c9f724d"
+   },
+   "result": {
+    "node_id": "658795f6-c555-4701-a12e-1a3e3c9f724d",
+    "pdf_path": "~/.art/applications/Cedarline_Freight_Data_Science_Intern_Summer_2027/resume.pdf",
+    "pages": 1,
+    "source": "generated",
+    "…": "5 more fields"
+   },
+   "ms": 1195
+  },
+  {
+   "phase": "render",
+   "type": "tool",
+   "name": "render",
+   "args": {
+    "job_id": "787b76c2-f521-4eb2-8784-c09f76637588",
+    "node_id": "e14d5aef-3402-4eb7-ba43-1cd80f74afbb"
+   },
+   "result": {
+    "node_id": "e14d5aef-3402-4eb7-ba43-1cd80f74afbb",
+    "pdf_path": "~/.art/applications/Cedarline_Freight_Data_Science_Intern_Summer_2027/resume.pdf",
+    "pages": 1,
+    "source": "generated",
+    "…": "5 more fields"
+   },
+   "ms": 1195
+  },
+  {
+   "phase": "render",
+   "type": "agent",
+   "text": "Done. The tailored resume fits on one page and is at ~/.art/applications/Cedarline_Freight_Data_Science_Intern_Summer_2027/resume.pdf. I rendered version 1 first for the comparison, so that file now holds the tailored one. Read it through before you send it.",
+   "ms": 3260
+  }
+ ]
+}

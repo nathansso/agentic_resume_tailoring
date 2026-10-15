@@ -14,6 +14,34 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 275 — Landing site demo: session replay and before/after resume
+**Status:** complete | **Tests:** 2837 pass on SQLite (24 new), 25 skipped, 0 fail; the Postgres leg was not run (nothing here touches storage)
+
+The demo media for the landing site (#271): a 75-second replay of one real tailoring run, and the before and after resume from that run, in a new "See it run" section on the home page. #181, which gated product recordings, is merged.
+
+### What shipped
+
+- **A replay of a real run, not a screen recording.** `scripts/build_site_demo.py` drives the real `art` tools (`python -m harness.entry <tool> --args <json>`, the entry point the `art` script runs) in the order `/art:setup` and `/art:tailor` take, against a synthetic student (`scripts/site_demo/sample_resume.md`, "Riley Park", example.com and a 555 number) and a made-up posting, in a scratch `ART_DATA_DIR` with the environment stripped of `DATABASE_URL`, keys and `ART_*` and Jev off. It writes `site/src/components/demo/transcript.json`: 28 steps in six phases (set up, posting, plan, approval, gate check, render).
+- **`SessionReplay.astro`.** A terminal-style component that renders every step into the HTML as selectable text (so the page reads fully with scripts off) and a small script that reveals them one at a time: play and pause, restart, show everything, and a chip per phase. It autoplays once when scrolled into view, announces each phase through a live region, and under `prefers-reduced-motion` starts in its final state and never autoplays. Tool calls and what ART returned carry a green edge; the user's and the agent's lines don't, and the legend says so.
+- **Two real gate responses.** The first plan carries one report bullet with a figure no source states ("from 3 hours to 20 minutes"). ART's consistency gate reverted that role's node, and its acceptance rule reverted a reorder of the Transit Delay project's bullets (`no_target_improved`); everything else committed as version 2. The agent resubmits the role with the original wording and ART accepts it as version 3. The unsupported figure is a deliberate slip, and the replay labels that draft as written for the demo.
+- **`BeforeAfter.astro`.** Version 1 (the graph untailored) and version 3 rendered by ART's own `render` tool with tectonic 0.17.0, rasterised to WebP at two widths, side by side from 768px and stacked below, lazy-loaded with width and height set. The highlighted boxes come from diffing the two PDFs' text bullet by bullet (pdfium), not from hand-picked coordinates; the same changes are listed as text under "Read the changes as text", and each page links to its full-size image.
+- **Budget.** `site/scripts/check-weight.mjs` (`npm run check:weight`, run in CI after the build) sums `dist/index.html` and every file it references, fonts included, at raw size and fails at 2 MB. The home page is 516,480 bytes, of which the four images are 275 KB; there is no video.
+- **`tests/test_site_demo.py`** (24 new, no network, no npm, no tectonic): the transcript is well formed and its phases run in order; every tool and `/art:*` command in it exists in the contract and the plugin; playback is 60 to 90 seconds and each step's duration equals the build script's formula (a hand edit fails); the rejection and its label are present; no owner identifier (hardcoded plus `git config user.name`), local path, or ATS-style score reaches the data or the components; the profile's records are word for word in the sample resume and every figure in the plan, but the staged one, is in a source bullet; the images exist as WebP, the highlights are real boxes that match the text changes, and the weight stays under budget; the page says it is a replay of a real run with a sample profile; the replay is rendered text with reduced-motion and keyboard support; the build script isolates its run. Mutation-checked against nine edits (an owner name, an unknown tool, a dropped label, a planned tool, a leaked path, an ATS key, a missing alt, an unlabelled slip, a missing image).
+- Checked at 375px and 1280px in light and dark in headless Chromium: no horizontal scroll, no console errors, autoplay, controls and phase chips work, and with reduced motion or scripts off every step is visible.
+
+### Deviations from spec
+
+- **A replay replaces the screen recording.** The issue asks for a 60-90 second recording in Claude Code. An interactive session can't be recorded repeatably or kept in step with ART, and a video needs a poster, captions and far more bytes. The replay is the same run as data: it needs no video file, stays crisp, is selectable and accessible, and `build_site_demo.py` regenerates it when ART's output changes. What is captured and what is written by hand is stated on the page and in `site/README.md`.
+- **The agent's lines are scripted, and say so.** Nothing runs a model: the user lines, the agent's narration, the records it extracts from the sample resume and its plan are in `scripts/site_demo/demo_script.py`. Only ART's side is captured. Long answers are shortened for display (lists cut, long strings and fields left out, each marked with an ellipsis), and the full answers are not kept. Playback runs at a fixed rate and says it does not show how long ART took.
+- **The ATS-style score is left out of the displayed answers**, marked as left out, per the rule that it is reported and never promoted.
+- **`diff_nodes` is not in the replay.** Called on these two versions it fails with a validation error (`DiffOutput.skills_added` expects strings; the versions' skills are `{name, category, score}` objects). It is unrelated to this issue and was not fixed here; it fails whenever two versions' skills differ.
+- **The two PDFs overwrite each other.** `render` writes `resume.pdf` per job, so the replay renders version 1 first and version 3 last, and the agent says so. The build script copies each PDF out before the next render.
+- **The pages are cropped at the lowest line.** The blank foot of a one-page resume is cropped from both images (same height), and the section says so; highlight boxes are fractions of the cropped image.
+- **Project bullet order is not fixed between runs.** ART stores a project's bullets with no order of their own, so the order in the "before" PDF can differ after a rebuild; the build script finds each source bullet's evidence id by its text, not by position.
+- **Not done:** the live deploy and a Lighthouse run (neither can run from a branch), and a screen reader pass; semantics were checked by hand (labelled section, live region, keyboard-reachable transcript, native `<details>`, alt text).
+
+---
+
 ## Issue 296 — Anchor labelled set, and the absent-thing premise tested against the evidence gates
 **Status:** complete | **Tests:** 2838 pass on SQLite (72 new), 24 skipped, 2 xfailed (the two open gaps below)
 

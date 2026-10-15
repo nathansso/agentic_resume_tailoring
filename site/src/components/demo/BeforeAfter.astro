@@ -1,0 +1,198 @@
+---
+// Before and after: the two PDFs from the same real run, as images (issue #275).
+//
+// before-after.json is written by scripts/build_site_demo.py. The highlighted boxes come
+// from diffing the two PDFs' own text, bullet by bullet; nothing here is hand-picked. The
+// same changes are listed as text below the images.
+import data from "./before-after.json";
+
+type Mark = { x: number; y: number; w: number; h: number };
+type Source = { src: string; width: number; height: number };
+type Side = { sources: Source[]; marks: Mark[] };
+
+const sides = [
+  {
+    key: "before",
+    title: "Before",
+    sub: "Built from Riley's whole knowledge graph, untailored",
+    alt: "The untailored one-page resume ARTie builds from the sample student's whole knowledge graph. Lines that tailoring changes are highlighted in red. The changes are also listed as text below.",
+    side: data.before as Side,
+  },
+  {
+    key: "after",
+    title: "After",
+    sub: "Tailored to the Cedarline Freight posting",
+    alt: "The same resume after tailoring to the sample posting, still one page. Lines that tailoring changed or added are highlighted in green. The changes are also listed as text below.",
+    side: data.after as Side,
+  },
+];
+const changes = data.changes as { removed: string[]; added: string[] }[];
+---
+
+<div class="ba" data-ba>
+  <div class="grid gap-8 md:grid-cols-2">
+    {sides.map(({ key, title, sub, alt, side }) => {
+      const big = side.sources[0];
+      return (
+        <figure class="min-w-0">
+          <figcaption class="mb-3">
+            <span class="text-lg font-semibold">{title}</span>
+            <span class="block text-sm text-muted-foreground">{sub}</span>
+          </figcaption>
+          <div class="sheet">
+            <img
+              src={big.src}
+              srcset={side.sources.map((s) => `${s.src} ${s.width}w`).join(", ")}
+              sizes="(min-width: 768px) 480px, calc(100vw - 2rem)"
+              width={big.width}
+              height={big.height}
+              alt={alt}
+              loading="lazy"
+              decoding="async"
+            />
+            <div class="marks" aria-hidden="true">
+              {side.marks.map((m) => (
+                <span
+                  class={`mark mark-${key}`}
+                  style={`left:${m.x * 100}%;top:${m.y * 100}%;width:${m.w * 100}%;height:${m.h * 100}%`}
+                />
+              ))}
+            </div>
+          </div>
+          <p class="mt-2 text-sm">
+            <a
+              href={big.src}
+              target="_blank"
+              rel="noopener"
+              class="text-accent underline underline-offset-4 hover:opacity-80"
+            >
+              Open the {title.toLowerCase()} page full size
+            </a>
+          </p>
+        </figure>
+      );
+    })}
+  </div>
+
+  <label class="toggle" data-toggle hidden>
+    <input type="checkbox" checked />
+    Highlight the changed lines
+  </label>
+
+  <details class="changes">
+    <summary>Read the changes as text</summary>
+    <ul class="mt-4 space-y-4">
+      {changes.map((c) => (
+        <li class="rounded-lg border border-border bg-card p-4 text-sm">
+          {c.removed.map((t) => (
+            <p class="del"><span class="tag">Before</span> {t}</p>
+          ))}
+          {c.added.map((t) => (
+            <p class="ins"><span class="tag">After</span> {t}</p>
+          ))}
+        </li>
+      ))}
+    </ul>
+    <p class="mt-3 text-sm text-muted-foreground">
+      These come from comparing the two PDFs' text bullet by bullet. A bullet moved to a new
+      place shows once as removed and once as added.
+    </p>
+  </details>
+</div>
+
+<style>
+  .sheet {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
+    background: #fff;
+    box-shadow: 0 6px 24px -10px rgb(0 0 0 / 0.25);
+    line-height: 0;
+  }
+  .sheet img {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .marks {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .mark {
+    position: absolute;
+    border-left: 3px solid;
+    border-radius: 2px;
+  }
+  .mark-before {
+    background: rgb(220 38 38 / 0.16);
+    border-color: rgb(220 38 38 / 0.85);
+  }
+  .mark-after {
+    background: rgb(16 150 90 / 0.18);
+    border-color: rgb(16 150 90 / 0.9);
+  }
+  [data-ba].marks-off .marks {
+    display: none;
+  }
+  .toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 1.25rem;
+    font-size: 0.875rem;
+    cursor: pointer;
+  }
+  .toggle input {
+    accent-color: hsl(var(--accent));
+  }
+  .toggle[hidden] {
+    display: none;
+  }
+  .changes {
+    margin-top: 1.25rem;
+  }
+  .changes summary {
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 600;
+    width: max-content;
+    max-width: 100%;
+  }
+  .del,
+  .ins {
+    margin: 0 0 0.5rem;
+    overflow-wrap: anywhere;
+  }
+  .del {
+    color: hsl(var(--muted-foreground));
+  }
+  .tag {
+    display: inline-block;
+    margin-right: 0.4rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: 9999px;
+    padding: 0 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .ins .tag {
+    color: hsl(var(--success));
+  }
+  .del .tag {
+    color: hsl(var(--destructive));
+  }
+</style>
+
+<script>
+  const ba = document.querySelector<HTMLElement>("[data-ba]");
+  const toggle = ba?.querySelector<HTMLElement>("[data-toggle]");
+  const box = toggle?.querySelector<HTMLInputElement>("input");
+  if (ba && toggle && box) {
+    toggle.hidden = false;
+    box.addEventListener("change", () => ba.classList.toggle("marks-off", !box.checked));
+  }
+</script>

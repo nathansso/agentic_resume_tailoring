@@ -10,7 +10,8 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "check:weight": "node scripts/check-weight.mjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "4.3.3",
