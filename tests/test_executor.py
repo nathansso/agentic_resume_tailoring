@@ -558,6 +558,96 @@ def test_a_skills_reranking_alone_still_commits(isolated_engine, env):
     assert _nodes(isolated_engine) == 2 and _events(isolated_engine) == 2
 
 
+def _skill_version(uid, job_id, parent, names):
+    out = _run(uid, {"job_id": job_id, "parent": parent, "skills": names,
+                     "finalize": {"min_skills": 0}})
+    assert out["committed"], out
+    return out["node_id"]
+
+
+def _skill_diff(uid, a, b):
+    from harness.contract import invoke
+
+    out = invoke("diff_nodes", uid, {"from_node": a, "to_node": b})
+    assert out["error"] is None, out
+    return out
+
+
+def test_diff_nodes_names_the_skills_two_executor_versions_added_and_removed(
+        isolated_engine, env):
+    """#326: skills_ranked holds {name, category, score} objects, and diff_nodes failed
+    validating them against List[str] whenever the two versions' skill sets differed."""
+    from harness import tree
+
+    uid, job_id, _ = env
+    first = _run(uid, {"job_id": job_id})
+    names = [s["name"] for s in tree.get_node(uid, first["node_id"])["content"]["skills_ranked"]]
+    assert len(names) >= 5
+    a = _skill_version(uid, job_id, first["node_id"], names[:3])
+    b = _skill_version(uid, job_id, a, names[2:5])
+    stored = tree.get_node(uid, b)["content"]["skills_ranked"]
+    assert all(isinstance(s, dict) for s in stored)          # real versions hold objects
+
+    out = _skill_diff(uid, a, b)
+    assert out["skills_added"] == names[3:5]
+    assert out["skills_removed"] == names[:2]
+    assert _skill_diff(uid, b, a)["skills_added"] == names[:2]
+
+
+def test_diff_nodes_ignores_a_skill_that_was_only_reordered_or_rescored(isolated_engine, env):
+    from harness import tree
+
+    uid, job_id, _ = env
+    first = _run(uid, {"job_id": job_id})
+    names = [s["name"] for s in tree.get_node(uid, first["node_id"])["content"]["skills_ranked"]]
+    a = _skill_version(uid, job_id, first["node_id"], names[:4])
+    content = tree.get_node(uid, a)["content"]
+    rescored = [{**s, "score": 0.5 + i} for i, s in enumerate(reversed(content["skills_ranked"]))]
+    b = tree.commit_node(uid, job_id, source="host", expected_parent=a,
+                         content={**content, "skills_ranked": rescored})["node_id"]
+    assert tree.get_node(uid, b)["content"]["skills_ranked"] != content["skills_ranked"]
+
+    out = _skill_diff(uid, a, b)
+    assert out["skills_added"] == [] and out["skills_removed"] == []
+
+
+def test_the_edit_feed_summary_carries_skill_names_not_a_fallback(isolated_engine, env):
+    """`get_head`'s `changes` is `diff_nodes` cut down; on a skill-object diff it fell back to an
+    empty summary because the diff raised."""
+    from harness import tree
+
+    uid, job_id, _ = env
+    first = _run(uid, {"job_id": job_id})
+    names = [s["name"] for s in tree.get_node(uid, first["node_id"])["content"]["skills_ranked"]]
+    a = _skill_version(uid, job_id, first["node_id"], names[:3])
+    b = _skill_version(uid, job_id, a, names[1:4])
+
+    changes = tree._changes(uid, a, b)
+    assert changes["skills_added"] == [names[3]] and changes["skills_removed"] == [names[0]]
+
+
+def test_diff_nodes_compares_an_old_string_skill_list_with_a_new_object_one(
+        isolated_engine, env):
+    """A version stored with plain-string skills (hand-written content, or an older build)
+    still diffs against an executor version, matching on the name."""
+    from harness import tree
+
+    uid, job_id, _ = env
+    first = _run(uid, {"job_id": job_id})
+    content = tree.get_node(uid, first["node_id"])["content"]
+    names = [s["name"] for s in content["skills_ranked"]]
+    new = _skill_version(uid, job_id, first["node_id"], [names[0], names[2]])
+    old = tree.commit_node(uid, job_id, source="host", expected_parent=new,
+                           content={**content, "skills_ranked": [names[0].upper(), names[1], "Zzz"]})
+
+    out = _skill_diff(uid, new, old["node_id"])
+    assert out["skills_added"] == [names[1], "Zzz"]
+    assert out["skills_removed"] == [names[2]]
+    back = _skill_diff(uid, old["node_id"], new)
+    assert back["skills_added"] == [names[2]]
+    assert back["skills_removed"] == [names[1], "Zzz"]
+
+
 def test_a_node_that_changes_the_page_still_commits(isolated_engine, env):
     uid, job_id, _ = env
     first = _run(uid, {"job_id": job_id})
