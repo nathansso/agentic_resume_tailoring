@@ -207,6 +207,41 @@ The source is never `DATABASE_URL`, is opened read-only, and is never written to
 destination is always local SQLite (`$ART_DATA_DIR/art.db`). Use the id of the real
 account's profile, not the local fallback one (`user@example.com`), which import refuses.
 
+### GitHub repos (optional, #353)
+
+`art github login` signs you in with GitHub's device flow, so ART can list your repos
+(`list_github_repos`) and your agent can pick which to read. You open a page and type a code;
+no password or secret passes through ART. Run it in your own terminal:
+
+```bash
+art github login               # public repos (read:user)
+art github login --private     # also private repos (adds the repo scope)
+art github status              # who is signed in; never prints the token
+art github logout              # removes the stored token
+```
+
+The token goes to the OS keychain through the optional `keyring` package (service `art-mcp`,
+user `github-token`), else it is read from `ART_GITHUB_TOKEN`, which also takes a personal
+access token. It is never stored in the database, never in an `art export` bundle, and never
+logged. `keyring` is an extra, so the keychain needs it in the environment that runs both the
+login and the MCP server (`uvx --with keyring ...`, or `art-mcp[keyring]`); without it,
+`art github login` says so before it starts. Nothing about your repos is sent anywhere but your
+own agent: ART reads them from `api.github.com` with your token and hands the result to it.
+
+**Maintainer note: register the GitHub OAuth App (once).** `art github login` needs a client ID
+and no client secret.
+
+1. GitHub, Settings, Developer settings, OAuth Apps, New OAuth App. Name it `ARTie`; the
+   homepage URL is https://artie-sand.vercel.app. The authorization callback URL is required
+   by the form and unused by the device flow (any URL, for example the homepage).
+2. On the App's page, tick **Enable Device Flow**, and save.
+3. Copy its **Client ID** (it is public; do not generate or keep a client secret for this).
+4. Put it in `DEFAULT_CLIENT_ID` in `harness/github.py` and ship a release. Until then
+   `ART_GITHUB_CLIENT_ID=<client id>` in the environment makes `art github login` work, and
+   with neither set it fails naming this step.
+
+---
+
 ## Option A — Docker (recommended, no Python setup needed)
 
 **Requirements:** Docker Desktop installed and running.

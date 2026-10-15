@@ -10,3 +10,6 @@ sources, store the records with `upsert_items`, set my resume header with
 Sources: $ARGUMENTS
 
 If no sources are given above, ask me where they are.
+
+If I want my GitHub repos included, tell me to run `art github login` in my own terminal
+(add `--private` for private repos), then call `list_github_repos`.

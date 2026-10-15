@@ -488,6 +488,7 @@ construction.
 | | `list_items` | kind → every key and title, no query needed (#191); each item also carries its `preferences` and `job_rules` (#297) |
 | | `get_item` | key → record, evidence; an experience or project also lists its approved variants (id, text, tags, cites) (#229); its `preferences` (active, keyed to it, any scope) and `job_rules` (#297) |
 | | `get_profile` | → name and contact details for the header (#191) |
+| | `list_github_repos` | page, per_page, include_private, include_readme → the signed-in user's own repos with languages, topics, stars, last push, fork and archived flags, clone command and README excerpt; needs `art github login`, and no profile (#353) |
 | Ingest & library | `ingest_schema` | kind → JSON schema the host fills |
 | | `upsert_items` | records with evidence → keys, merges, conflicts; kind `variant` imports the user's curated bullets, approved (#229) |
 | | `promote_bullet` | node, bullet, optional item key and track → a **draft** variant, or the existing one (#229) |
@@ -661,6 +662,7 @@ migrate as a linear chain.
 | Jev decision cache, block render cache | SQLite (clearable) |
 | Chat transcripts | The host's storage; ART keeps extracted preferences, feedback and the session ID |
 | Keys (TypeSafe; optionally Anthropic for the chat panel, planned in #205) | `TYPESAFE_API_KEY` in the environment, else the OS keychain through the optional `keyring` package (service `art-mcp`); never in the DB |
+| GitHub token (`art github login`, #353) | The OS keychain through the optional `keyring` package (service `art-mcp`, user `github-token`), else `ART_GITHUB_TOKEN`; never in the DB, an export bundle or a log |
 
 ### Backup, restore and the one-time migration (#195)
 
@@ -956,7 +958,7 @@ tools `list_jobs`, `get_head`, `history`, `diff_nodes` and `checkout` (#196); th
 `upsert_items` and `open_job` (#192); `render` and `update_profile` (#201); `observe`,
 `record_preference` and `art_pins` (#202); the library's `suggest_actions`, `promote_bullet`,
 `approve_variant` and `save_baseline` (#229); and project context's `suggest_project_contexts`,
-`set_project_context` and `link_achievement` (#230).
+`set_project_context` and `link_achievement` (#230); and `list_github_repos` (#353).
 
 **Ingestion and jobs (#192).** The host fills `ingest_schema(kind)` and calls
 `upsert_items`, which stores records through the resume parser's own dedup, merge, heal
@@ -970,6 +972,20 @@ graduation date that depends on post-internship enrollment). Rules are recorded 
 `rule_answers` (Jev takes this over in #193), and applied to the executor's base content.
 Each job has an application status (drafting, applied, interview, closed) that
 `list_jobs(status)` filters on.
+
+**GitHub (#353).** `art github login|logout|status` signs the user in with GitHub's device
+flow, which needs only a public client ID (`ART_GITHUB_CLIENT_ID`, else the one the package
+ships once the owner has registered the OAuth App: no secret, no server, no redirect). It asks
+for `read:user`; `--private` adds `repo`. The token is kept as the Keys row above says, and
+`harness/github.py` (`resolve_token()`) is the one place that reads it: the
+LinkedIn gateway client (#355) takes the same token to identify the user to #354.
+`list_github_repos` returns the user's own repos, most recently pushed first, with name,
+description, languages, topics, stars, last push, fork and archived flags, URLs, a clone
+command and a README excerpt capped at 3000 characters. It pages (`next_page`), lists private
+repos only when the token holds `repo`, and needs no profile (`ToolSpec.needs_user` is
+false). It reads nothing from disk: the host picks repos, clones with the user's say-so, and
+stores what it reads with `upsert_items`, source `github:<repo>`. `harness/github.py` and the
+Jev client are the only network clients under `harness/` (`tests/test_harness_boundary.py`).
 
 **Writes.** `checkout` is the first tool that writes. Local SQLite is writable. A remote or
 Postgres database is read-only, and write tools return a `read_only` error, unless the
@@ -1010,7 +1026,7 @@ art kg_search --args '{"query": "python"}'
 | Module | Today | On the harness path |
 |---|---|---|
 | `agents/parser.py` | Resume → structured lists | Host fills `ingest_schema`, calls `upsert_items` (#192) |
-| `agents/knowledge_extractor.py` | GitHub API → skills, projects | Host reads repos on disk; upserts with file-level evidence |
+| `agents/knowledge_extractor.py` | GitHub API → skills, projects | Host reads repos on disk (or picks them from `list_github_repos`, #353); upserts with file-level evidence |
 | `agents/job_analyzer.py`, `agents/jd_profile.py` | JD → metadata, skills, profile | Host fills `open_job`; ART validates |
 | `agents/preferences.py` | Chat → typed preferences | Jev gate + `record_preference` |
 | `agents/job_card.py` | Cached role-family classify | Jev choice |
@@ -1032,6 +1048,7 @@ harness/
   tree.py  library.py  memory.py  ingest.py  tools.py   # history, bullets, preferences, ingestion
   render.py  render_cache.py  hooks.py  transcript.py  runtime.py
   export_import.py                   # art export / art import (#195)
+  github.py  github_cli.py           # GitHub device-flow login, token store, repo list (#353)
   decisions/                         # Jev client, cache, engine, recordings, one module per point
 web/                                 # art ui (local mode, SSE); the SDK chat panel is planned (#205)
 site/                                # the public landing site (#271): Astro, on Vercel, apart from the harness
@@ -1039,7 +1056,7 @@ plugin/                              # Claude Code plugin: skills, commands, hoo
 integrations/codex/
 eval/hosts/                          # planned (#206): taskground-style host runner
 eval/*_labels/                       # labelled sets, recordings and fits for each Jev point
-pyproject.toml                       # art, art-mcp · extras [embed] [pdf] [ui] [postgres]
+pyproject.toml                       # art, art-mcp · extras [embed] [pdf] [ui] [keyring] [postgres]
 ```
 
 ## 18. Roadmap
