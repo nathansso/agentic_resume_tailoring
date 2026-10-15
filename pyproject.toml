@@ -26,6 +26,9 @@ dependencies = [
     "python-dotenv>=1.0",
     # PDF page counts for the render tool (pure Python).
     "pypdf>=4.0",
+    # The OS keychain for `art github login`'s token and the TypeSafe key (#353). A default
+    # dependency, not only an extra, so the plugin's pinned `art-mcp[ui]` install has it.
+    "keyring>=24",
 ]
 
 [project.optional-dependencies]
@@ -35,7 +38,7 @@ embed = ["sentence-transformers>=3.0"]
 pdf = ["docling>=2.0", "pypdf>=4.0", "python-docx>=1.1"]
 # `art ui`, the local editor.
 ui = ["fastapi>=0.110", "uvicorn[standard]>=0.29", "python-multipart>=0.0.9", "itsdangerous>=2.1"]
-# The OS keychain, where `art github login` keeps the GitHub token and the TypeSafe key can live (#353).
+# Kept for installs that name it; keyring is now a default dependency.
 keyring = ["keyring>=24"]
 # Reading a Postgres store with --database-url.
 postgres = ["psycopg2-binary>=2.9"]

@@ -220,12 +220,12 @@ art github status              # who is signed in; never prints the token
 art github logout              # removes the stored token
 ```
 
-The token goes to the OS keychain through the optional `keyring` package (service `art-mcp`,
+The token goes to the OS keychain through the `keyring` package (service `art-mcp`,
 user `github-token`), else it is read from `ART_GITHUB_TOKEN`, which also takes a personal
 access token. It is never stored in the database, never in an `art export` bundle, and never
-logged. `keyring` is an extra, so the keychain needs it in the environment that runs both the
-login and the MCP server (`uvx --with keyring ...`, or `art-mcp[keyring]`); without it,
-`art github login` says so before it starts. Nothing about your repos is sent anywhere but your
+logged. `keyring` ships with ART from the release after v0.1.0; on a machine with no usable
+keychain backend (some headless Linux setups), `art github login` says so before it starts,
+and `ART_GITHUB_TOKEN` is the way in. Nothing about your repos is sent anywhere but your
 own agent: ART reads them from `api.github.com` with your token and hands the result to it.
 
 **Maintainer note: register the GitHub OAuth App (once).** `art github login` needs a client ID

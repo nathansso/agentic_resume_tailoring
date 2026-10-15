@@ -45,10 +45,11 @@ def login(private: bool = False, client_id: Optional[str] = None, *,
     if not gh.keychain_available():
         # Checked before the flow starts, so a code is not spent on a token with nowhere to go.
         return _fail("no_keychain", (
-            "ART keeps the GitHub token in the OS keychain through the optional `keyring` "
-            "package, which is not available here. Install it next to ART (for example "
-            "`uvx --with keyring ...`, or the art-mcp[keyring] extra) and run the login again, "
-            f"or set {gh.TOKEN_ENV} to a personal access token instead."))
+            "ART keeps the GitHub token in the OS keychain through the `keyring` package, and "
+            "no usable keychain was found here (an ART older than v0.1.1 lacks keyring; some "
+            "headless Linux setups have no keychain backend). Upgrade ART, or install keyring "
+            f"next to it, and run the login again, or set {gh.TOKEN_ENV} to a personal access "
+            "token instead."))
     try:
         code = gh.request_device_code(gh.scopes_for(private), client=client_id, transport=transport)
         say(f"To sign in, open {code.verification_uri} and enter the code {code.user_code}")
