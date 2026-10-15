@@ -63,7 +63,8 @@ from database.models import User, Skill, UserSkill
 ENGINE_BINDERS = (
     "agents.chat", "agents.enhancer", "agents.formatter", "agents.job_analyzer",
     "agents.matcher", "agents.parser", "agents.tailor",
-    "database.user_utils", "graph.pipeline", "knowledge_graph.builder", "services",
+    "database.user_utils", "graph.pipeline", "knowledge_graph.builder",
+    "knowledge_graph.evidence_view", "services",
     "web.auth", "web.routers.auth_router", "web.routers.chat_router",
     "web.routers.jobs_router", "web.routers.preferences_router",
     "web.routers.profile_router",

@@ -224,6 +224,19 @@ class SearchInput(_Model):
     limit: int = Field(10, ge=1, le=50)
 
 
+class ItemPreference(Preference):
+    """A preference attached to one item (#297). `scope_type` says where it binds: global,
+    or only for a role family or one job."""
+    negative_pin: bool = Field(
+        False, description="A strength-5 suppression: what it names must never reach the page.")
+
+
+_PREFS_DOC = ("Active preferences keyed to this item (#297), in every scope; scope_type and "
+              "scope_value say where each binds. Honour them when working on the item.")
+_RULES_DOC = ("Job rules for this item (#297): yes/no questions whose answer, per posting, sets "
+              "one of its fields.")
+
+
 class SearchHit(_Model):
     key: str
     kind: Kind
@@ -232,6 +245,8 @@ class SearchHit(_Model):
     snippet: str
     context: Optional[str] = Field(
         None, description="For a project: key of the role or degree it was done under.")
+    preferences: List[ItemPreference] = Field(default_factory=list, description=_PREFS_DOC)
+    job_rules: List[JobRuleRef] = Field(default_factory=list, description=_RULES_DOC)
 
 
 class SearchOutput(_Output):
@@ -246,6 +261,8 @@ class ItemRef(_Model):
     key: str
     kind: Kind
     title: str
+    preferences: List[ItemPreference] = Field(default_factory=list, description=_PREFS_DOC)
+    job_rules: List[JobRuleRef] = Field(default_factory=list, description=_RULES_DOC)
 
 
 class ListItemsOutput(_Output):
@@ -281,6 +298,8 @@ class ItemOutput(_Output):
                           "the user's confirmed wording. Start a revision from one "
                           "(bullets[].from_variant) instead of writing from the raw bullets. "
                           "Absent for other kinds.")
+    preferences: List[ItemPreference] = Field(default_factory=list, description=_PREFS_DOC)
+    job_rules: List[JobRuleRef] = Field(default_factory=list, description=_RULES_DOC)
 
 
 # ── project context ──────────────────────────────────────────────────────────
@@ -563,9 +582,21 @@ class UpsertResult(_Model):
     message: Optional[str] = None
 
 
+class RelinkedPreference(_Model):
+    preference_id: str = Field(description="The new, keyed preference.")
+    supersedes_id: Optional[str] = Field(None, description="The pending one it replaced.")
+    text: str
+    polarity: Optional[str] = None
+    key: str = Field(description="The item the preference now attaches to.")
+
+
 class UpsertOutput(_Output):
     results: List[UpsertResult] = Field(default_factory=list)
     counts: Dict[str, int] = Field(default_factory=dict)
+    relinked: List[RelinkedPreference] = Field(
+        default_factory=list,
+        description="Preferences that named something the graph lacked and now attach to an item "
+                    "this call created (#297). The old, pending row is superseded, not deleted.")
 
 
 class JobMetadata(_Model):

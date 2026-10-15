@@ -41,6 +41,16 @@ export default {
         // Semantic state, deliberately separate from the brand hue.
         success: "hsl(var(--success))",
         warning: "hsl(var(--warning))",
+        // Evidence map (#136). `<alpha-value>` so `stroke-graph-claim/25` works: resting
+        // edges are drawn faint on purpose.
+        graph: {
+          evidence: "hsl(var(--graph-evidence) / <alpha-value>)",
+          experience: "hsl(var(--graph-experience) / <alpha-value>)",
+          project: "hsl(var(--graph-project) / <alpha-value>)",
+          education: "hsl(var(--graph-education) / <alpha-value>)",
+          claim: "hsl(var(--graph-claim) / <alpha-value>)",
+          gap: "hsl(var(--graph-gap) / <alpha-value>)",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

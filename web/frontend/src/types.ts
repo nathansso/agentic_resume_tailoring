@@ -132,6 +132,78 @@ export interface GraphData {
   evidence: Record<string, string[]>;
 }
 
+// ── Evidence map (issue #136): GET /api/profile/graph/view ───────────────────────
+
+/** One entry of an item's text: a bullet, a project blurb, or a project's description. */
+export interface EvidenceText {
+  raw_index: number;        // position in the stored list; what an editor writes back
+  index: number | null;     // the harness's `#b<n>`, counted over non-empty entries; null when empty
+  text: string;
+  blurb_id: string | null;  // set for project blurbs, which are edited through their own route
+}
+
+export type EvidenceKind = "exp" | "proj" | "edu";
+export type EvidenceTextSource = "bullets" | "blurbs" | "description" | "none" | "fields";
+
+export interface EvidenceItem {
+  key: string;
+  id: string;
+  kind: EvidenceKind;
+  title: string;
+  org: string;
+  start: string;
+  end: string;
+  description: string;
+  text: EvidenceText[];
+  text_source: EvidenceTextSource;
+  cite_key: string;
+  parent_key: string | null;
+  achievements: { id: string; title: string; issuer: string; date: string }[];
+  repo_url: string;
+  fields: Record<string, string>;   // the editable columns, under their API names
+}
+
+export interface EvidenceSkill {
+  key: string;
+  name: string;
+  category: string;
+  area: string;
+  proficiency: number | null;       // 1-5, highest across sources
+  sources: string[];                // resume | github | linkedin | manual | chat | host
+  is_core: boolean;
+}
+
+export interface EvidenceEdge {
+  item_key: string;
+  skill_key: string;
+  cites: number[];                  // `#b<n>` ordinals of the bullets that name the skill
+  github: boolean;                  // a recorded GitHub source also ties the project to the skill
+  marks: [number, number][][];      // per cite: [start, end) offsets of the words that matched
+}
+
+export interface EvidenceStats {
+  items: number;
+  skills: number;
+  evidenced: number;                // cited by at least one bullet
+  unevidenced: number;              // no bullet and no GitHub source
+  github_only: number;
+  needs_text: number;               // experiences and projects with no text to link from
+}
+
+export interface EvidenceView {
+  items: EvidenceItem[];
+  skills: EvidenceSkill[];
+  edges: EvidenceEdge[];
+  stats: EvidenceStats;
+}
+
+export interface JobSkillRow {
+  name: string;
+  required: boolean;                // false = preferred
+  weight: number;
+  area: string;
+}
+
 export interface ProfileData {
   user_id: string;
   name: string;
