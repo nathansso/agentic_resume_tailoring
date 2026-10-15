@@ -234,6 +234,15 @@ describe("coverage", () => {
     const c = coverage(rankBullets(V, [req("docker", 1, { terms: ["docker"] })]), new Set());
     expect(c.rows[0].label).toBe("Docker");
   });
+
+  it("labels a requirement by the skill its own name matches before another skill its terms reach", () => {
+    const torch = skill("PyTorch");
+    const v = view([A], [torch, py], [edge("exp/a", py, [0])]);
+    const c = coverage(rankBullets(v, [req("python", 1, { terms: ["python", "pytorch"] })]), new Set());
+    expect(c.rows[0].label).toBe("Python");             // not PyTorch, whose key sorts first
+    const via = coverage(rankBullets(v, [req("deep learning", 1, { terms: ["pytorch"] })]), new Set());
+    expect(via.rows[0].label).toBe("PyTorch");           // no skill of that name: the one a term reaches
+  });
 });
 
 describe("term matching in the job overlay", () => {

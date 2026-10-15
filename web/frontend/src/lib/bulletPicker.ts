@@ -16,7 +16,7 @@
  * invariant, docs/harness.md § 5).
  */
 import type { EvidenceItem, EvidenceSkill, EvidenceView, JobSkillRow } from "../types";
-import { byRecency, endKey, matchJobSkills, type JobMatch } from "./evidenceMap";
+import { byRecency, endKey, matchJobSkills, skillMatchKey, type JobMatch } from "./evidenceMap";
 
 /** How many bullets the page holds, until the user says otherwise. A bullet count, not a measure of a page. */
 export const DEFAULT_BUDGET = 8;
@@ -190,7 +190,7 @@ export type CoverStatus = "covered" | "coverable" | "claimed" | "missing";
 
 export interface CoverageRow {
   match: JobMatch;
-  /** What to call it: the profile's own spelling when it has the skill, else the job's. */
+  /** What to call it: the profile's own spelling of the requirement's name, else of another skill it names, else the job's. */
   label: string;
   status: CoverStatus;
   /** Ranked and unranked bullets that cite it, as ids, in ranking order. */
@@ -224,7 +224,8 @@ export function coverage(model: PickerModel, kept: ReadonlySet<string>): Coverag
     const status: CoverStatus = keptCiting.length > 0 ? "covered"
       : citing.length > 0 ? "coverable"
         : match.skills.length > 0 ? "claimed" : "missing";
-    return { match, label: match.skills[0]?.name ?? match.row.name, status, citing, keptCiting };
+    const named = match.skills.find((s) => skillMatchKey(s.name) === match.id) ?? match.skills[0];
+    return { match, label: named?.name ?? match.row.name, status, citing, keptCiting };
   });
   const counts = (required: boolean): CoverageCounts => {
     const group = rows.filter((r) => r.match.row.required === required);
