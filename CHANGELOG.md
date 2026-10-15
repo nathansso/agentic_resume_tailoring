@@ -14,6 +14,26 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 356 — Jev presented as an optional upgrade
+**Status:** complete | **Tests:** 3118 pass on SQLite (5 new in `test_site_home.py` and `test_site_docs.py`), 25 skipped, 2 xfailed, 0 fail; the Postgres leg was not run (nothing here touches storage)
+
+Decided 2026-10-15: Jev stays optional on the user's own TypeSafe key, called from their machine, and ART is solid without it. The landing page and the docs read as if a student had to add a TypeSafe key; they now say the opposite first. Copy and tests only; no code under `harness/` changed.
+
+### What shipped
+- **Home page FAQ.** "Do I need an API key?" answers "No." and gives the reason (no text-writing model is called). A second paragraph, "Optional: strengthen the checks with Jev.", says in plain words what a key adds: it catches a reworded claim its cited source doesn't back, catches a banned topic mentioned in other words, and picks the best approved bullet more often.
+- **Home page privacy note.** It leads with "Everything ARTie stores stays on your computer". The Jev facts moved under an "Optional: strengthen the checks with Jev" heading in the same note, with the same wording about what a request carries (now also naming the cited source text and the names of your skills, roles and projects, which `docs/harness.md` § 4 lists), and the same `ART_JEV_MODE=off` / no-key promise that nothing is sent.
+- **Install page.** The Jev section is its own table-of-contents entry, "Optional: strengthen the checks with Jev", after "Check that it worked" and "Optional extras" and before Troubleshooting. Its commands still render from `commands.json`; no command or `commands.json` entry changed.
+- **`INSTALL.md` and `plugin/README.md`.** "Jev (optional): strengthen the checks" (the "Jev (optional)" prefix is kept because `docs/harness.md` and the plugin README cite it) and the memory-gate hook paragraph now say that everything works without a key and that a key is an upgrade. Prose only; no command text changed.
+- **Tests.** `tests/test_site_home.py`: the API-key FAQ answer starts with "No." and its optional paragraph names the three claims and carries no number; the privacy note leads with local storage and keeps every Jev mention under the optional heading. `tests/test_site_docs.py`: the install page's Jev section is titled "Optional" and comes after the first-run check; no site page, `INSTALL.md` or `plugin/README.md` says a key is required or needed.
+
+### Deviations from spec
+- **No Jev-vs-fallback numbers.** The fitted figures in `docs/harness.md` (for example 47 of 48 against 18 of 48 for the bullet choice) are not quoted; #350 is measuring the fallbacks and a follow-up adds numbers. The FAQ says "more often", which that table supports, and a test forbids digits in that paragraph.
+- **The memory gate is not named on the home page.** `docs/harness.md` § 4 supports it (a key lets ART save a clear, low-stakes preference itself; without one every candidate goes to the host), but it is a hook detail, so it is covered in `plugin/README.md` and `INSTALL.md` only.
+- **"Nothing is skipped" is gone.** The old install copy said no safety check is skipped without a key. `docs/harness.md` § 4 lists the support check's fallback as "Unchecked; lexical drift still gates", so the copy now says the plain rules (word drift against the cited source, the literal term match, word overlap) still gate, and Jev adds the reworded cases they miss.
+- **The home page's source-text and name lists were incomplete.** The earlier note listed bullet excerpts, requirements, job title and messages; it now also lists the cited source text and the names of skills, roles and projects, per the Privacy paragraph of § 4.
+
+---
+
 ## Issue 298 — `ResumeRule`: what the user said about the page, enforced at finalize
 **Status:** complete | **Tests:** 3103 pass on SQLite (85 in `test_resume_rules.py`, after merging main), 24 skipped, 2 xfailed, 0 fail
 
