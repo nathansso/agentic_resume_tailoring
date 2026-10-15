@@ -627,7 +627,10 @@ def delete_experience(user_id: Optional[UUID], experience_id: str) -> bool:
         _record_tombstone(session, user_id, "experience", row.title, row.company)
         from agents.checks import exp_key
         from agents.project_context import unlink
-        key, term = exp_key({"title": row.title, "company": row.company}), row.title
+        # A role's title alone is a thing other roles share: a term pin on it would refuse a
+        # different role with the same title. "title @ company" names only this one.
+        key = exp_key({"title": row.title, "company": row.company})
+        term = f"{row.title} @ {row.company}" if row.company else row.title
         unlink(session, Project, "experience_id", row.experience_id)
         session.flush()
         session.delete(row)

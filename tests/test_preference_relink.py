@@ -229,13 +229,13 @@ def test_deleting_the_item_returns_the_ban_to_pending_and_it_still_blocks(kg, is
             if p["target_term"] == "Next-Item Recommendation"] == [True]
 
 
-def test_deleting_a_role_pends_the_ban_under_its_title(kg, isolated_engine):
+def test_deleting_a_role_pends_the_ban_under_its_title_and_company(kg, isolated_engine):
     memory.record_preference(kg, "Never mention the internship", "suppress", "Data Science Intern", 5)
     assert services.delete_experience(kg, _id(isolated_engine, Experience, kg))
 
     [pending] = _active(isolated_engine, kg, target_key=None, strength=5, polarity="suppress",
                         text="Never mention the internship")
-    assert pending.target_term == "Data Science Intern"
+    assert pending.target_term == "Data Science Intern @ IDX Exchange"
     assert pending.provenance["unlinked_from"] == "exp:data science intern|idx exchange"
 
 
@@ -247,8 +247,31 @@ def test_deleting_an_education_keeps_the_users_own_words(kg, isolated_engine):
     assert pending.target_term == "UC San Diego"
 
 
+def test_a_deleted_roles_ban_does_not_block_another_role_with_the_same_title(env, isolated_engine):
+    """The ban was on one role. Deleting it must leave a term that cannot match the other."""
+    uid, job_id, _ = env
+    _upsert(uid, ("experience", {"title": "Data Scientist", "company": "Acme"}),
+            ("experience", {"title": "Data Scientist", "company": "Nimbus"}))
+    memory.record_preference(uid, "Never show the Acme role", "suppress", "exp:data scientist|acme", 5)
+    assert services.delete_experience(uid, _id(isolated_engine, Experience, uid, company="Acme"))
+
+    [pending] = _active(isolated_engine, uid, target_key=None, text="Never show the Acme role")
+    assert pending.target_term == "Data Scientist @ Acme"
+    assert pin_target({"strength": 5, "polarity": "suppress", "target_key": None,
+                       "target_term": pending.target_term}) == ("term", "data scientist @ acme")
+
+    # what the executor enforces: the other role, and a bullet that says "data scientist", pass
+    from harness.acceptance import negative_pin_violations
+    from harness.executor import _hard_preferences
+    _, _, terms = _hard_preferences(uid, job_id)
+    assert "data scientist @ acme" in terms and "data scientist" not in terms
+    nimbus = {"experiences": [{"title": "Data Scientist", "company": "Nimbus",
+                               "bullets": ["Worked as a data scientist on forecasting."]}]}
+    assert negative_pin_violations(nimbus, terms) == []
+
+
 def test_an_unlinked_ban_comes_back_only_to_its_own_item(kg, isolated_engine):
-    """Deleting one of two same-titled roles must not hand its ban to the other."""
+    """Deleting one of two same-titled roles must not hand its ban to the other, even by name."""
     _upsert(kg, ("experience", {"title": "Research Assistant", "company": "Agos"}))
     memory.record_preference(kg, "Never mention the Agos role", "suppress", "exp:research assistant|agos", 5)
     assert services.delete_experience(kg, _id(isolated_engine, Experience, kg, company="Agos"))
@@ -256,7 +279,7 @@ def test_an_unlinked_ban_comes_back_only_to_its_own_item(kg, isolated_engine):
 
     assert relink.relink(kg)["relinked"] == []
     [p] = _active(isolated_engine, kg, target_key=None, text="Never mention the Agos role")
-    assert p.target_term == "Research Assistant"
+    assert p.target_term == "Research Assistant @ Agos"
 
 
 def test_an_unlinked_ban_binds_again_when_its_own_item_comes_back(kg, isolated_engine):
