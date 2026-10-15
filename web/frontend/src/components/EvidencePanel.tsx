@@ -237,7 +237,8 @@ async function runOp(op: SaveOp): Promise<void> {
   else await updateProject(op.id, op.body as ProjectEdit);
 }
 
-function ItemEditor({ view, item, onSelect, onSaved }: {
+/** The item editor: shared with the bullet picker (issue #319), which opens it on an item's bullets. */
+export function ItemEditor({ view, item, onSelect, onSaved }: {
   view: EvidenceView; item: EvidenceItem; onSelect: (key: string | null) => void; onSaved: () => Promise<void>;
 }) {
   const [draft, setDraft] = useState<Draft>(() => initialDraft(item));
