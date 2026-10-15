@@ -1,0 +1,141 @@
+{
+ "label": "Replay of a real ART run on a sample student profile",
+ "cropped_to": 0.8214,
+ "before": {
+  "sources": [
+   {
+    "src": "/demo/resume-before-1100.webp",
+    "width": 1100,
+    "height": 1170
+   },
+   {
+    "src": "/demo/resume-before-600.webp",
+    "width": 600,
+    "height": 638
+   }
+  ],
+  "marks": [
+   {
+    "x": 0.0994,
+    "y": 0.3438,
+    "w": 0.8205,
+    "h": 0.0191
+   },
+   {
+    "x": 0.0994,
+    "y": 0.3655,
+    "w": 0.7018,
+    "h": 0.019
+   },
+   {
+    "x": 0.0751,
+    "y": 0.8068,
+    "w": 0.1302,
+    "h": 0.0187
+   },
+   {
+    "x": 0.0994,
+    "y": 0.8281,
+    "w": 0.6276,
+    "h": 0.019
+   },
+   {
+    "x": 0.0751,
+    "y": 0.8918,
+    "w": 0.8649,
+    "h": 0.0191
+   },
+   {
+    "x": 0.0751,
+    "y": 0.9103,
+    "w": 0.0817,
+    "h": 0.019
+   },
+   {
+    "x": 0.0752,
+    "y": 0.9287,
+    "w": 0.325,
+    "h": 0.019
+   }
+  ]
+ },
+ "after": {
+  "sources": [
+   {
+    "src": "/demo/resume-after-1100.webp",
+    "width": 1100,
+    "height": 1170
+   },
+   {
+    "src": "/demo/resume-after-600.webp",
+    "width": 600,
+    "height": 638
+   }
+  ],
+  "marks": [
+   {
+    "x": 0.0994,
+    "y": 0.2827,
+    "w": 0.826,
+    "h": 0.0191
+   },
+   {
+    "x": 0.0994,
+    "y": 0.3656,
+    "w": 0.6789,
+    "h": 0.019
+   },
+   {
+    "x": 0.0751,
+    "y": 0.8397,
+    "w": 0.7203,
+    "h": 0.0191
+   },
+   {
+    "x": 0.0752,
+    "y": 0.8582,
+    "w": 0.3255,
+    "h": 0.019
+   }
+  ]
+ },
+ "changes": [
+  {
+   "removed": [],
+   "added": [
+    "Trained a gradient-boosted scikit-learn model to predict late shipments, reaching 0.81 AUC on a held-out month."
+   ]
+  },
+  {
+   "removed": [
+    "Trained a gradient-boosted model in scikit-learn to flag late shipments, reaching 0.81 AUC on a held-out month.",
+    "Walked 12 operations staff through the findings and wrote the handoff notes the team still uses."
+   ],
+   "added": [
+    "Explained the findings to 12 operations staff and wrote the handoff notes the team still uses."
+   ]
+  },
+  {
+   "removed": [
+    "Budget Tracker",
+    "Wrote a command-line budget tracker in Java with an SQLite store and CSV import."
+   ],
+   "added": []
+  },
+  {
+   "removed": [
+    "Languages & Libraries: Python, SQL, scikit-learn, Streamlit, FastAPI, pandas, Flask, Java, NumPy, PyTorch, React,",
+    "TypeScript",
+    "Tools: Tableau, Docker, Git, Jupyter, pytest"
+   ],
+   "added": [
+    "Languages & Libraries: Python, SQL, scikit-learn, pandas, Streamlit, FastAPI, NumPy, PyTorch",
+    "Tools: Tableau, Docker, pytest, Git, Jupyter"
+   ]
+  }
+ ],
+ "counts": {
+  "removed": 7,
+  "added": 4
+ }
+}

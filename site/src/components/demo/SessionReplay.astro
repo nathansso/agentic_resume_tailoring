@@ -1,0 +1,586 @@
+---
+// A terminal-style replay of a real ART run (issue #275).
+//
+// The data is transcript.json, written by scripts/build_site_demo.py: tool calls and what
+// ART answered were captured; the user's and the agent's lines were written for the demo.
+// Every step is rendered into the page as plain text, so the page reads in full without
+// scripts and the text is selectable. The script only reveals the steps one at a time.
+import transcript from "./transcript.json";
+
+type Step = {
+  phase: string;
+  type: "user" | "agent" | "tool";
+  text?: string;
+  items?: string[];
+  outro?: string;
+  note?: string;
+  name?: string;
+  args?: unknown;
+  result?: unknown;
+  ms: number;
+};
+
+const { events, phases, meta } = transcript as unknown as {
+  events: Step[];
+  phases: { id: string; label: string }[];
+  meta: Record<string, string | number>;
+};
+
+const pretty = (value: unknown) => JSON.stringify(value, null, 2).split("\n");
+const lineClass = (line: string) =>
+  /"status": "(reverted|refused)"|"committed": false|"reason": "/.test(line)
+    ? "bad"
+    : /"committed": true/.test(line)
+      ? "ok"
+      : "";
+const seconds = Math.round(Number(meta.total_ms) / 1000);
+const firstOfPhase = new Map<string, number>();
+events.forEach((ev, i) => {
+  if (!firstOfPhase.has(ev.phase)) firstOfPhase.set(ev.phase, i);
+});
+---
+
+<div class="replay" data-replay data-total={meta.total_ms}>
+  <div class="phases" role="group" aria-label="Jump to a step of the replay">
+    {phases.map((p) => (
+      <button type="button" class="phase" data-phase={p.id} data-first={firstOfPhase.get(p.id)}>
+        {p.label}
+      </button>
+    ))}
+  </div>
+
+  <div class="term">
+    <div class="term-bar" aria-hidden="true">
+      <span class="lights"><i></i><i></i><i></i></span>
+      <span class="title">claude code · sample student profile</span>
+    </div>
+
+    <div
+      class="term-body"
+      data-body
+      tabindex="0"
+      role="region"
+      aria-label="Transcript of the replayed ARTie session"
+    >
+      <p class="idle" data-idle aria-hidden="true">The replay starts when you scroll to it.</p>
+      {events.map((ev, i) => (
+        <div class={`ev ev-${ev.type}`} data-ev={i} data-ms={ev.ms} data-phase={ev.phase}>
+          {ev.type === "user" && (
+            <p class="line">
+              <span class="prompt" aria-hidden="true">&gt;</span>
+              <span class="said" data-typed>{ev.text}</span>
+            </p>
+          )}
+          {ev.type === "agent" && (
+            <div class="line agent">
+              <span class="bullet" aria-hidden="true">●</span>
+              <div class="said">
+                <p>{ev.text}</p>
+                {ev.items && (
+                  <ol class="plan">
+                    {ev.items.map((it) => <li>{it}</li>)}
+                  </ol>
+                )}
+                {ev.outro && <p>{ev.outro}</p>}
+                {ev.note && <p class="note">{ev.note}</p>}
+              </div>
+            </div>
+          )}
+          {ev.type === "tool" && (
+            <div class="tool">
+              <p class="tool-head">
+                <span class="bullet" aria-hidden="true">●</span>
+                <span class="tool-name">{ev.name}</span>
+                <span class="tag">from ART</span>
+              </p>
+              <details class="args">
+                <summary>arguments</summary>
+                <pre><code>{pretty(ev.args).map((l) => <span class="ln">{l}</span>)}</code></pre>
+              </details>
+              <pre class="result"><code>{pretty(ev.result).map((l) => <span class={`ln ${lineClass(l)}`}>{l}</span>)}</code></pre>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+
+    <div class="controls">
+      <button type="button" class="btn" data-play aria-pressed="false">Play</button>
+      <button type="button" class="btn" data-restart>Restart</button>
+      <button type="button" class="btn" data-all>Show everything</button>
+      <span class="bar" aria-hidden="true"><span data-bar></span></span>
+    </div>
+  </div>
+
+  <p class="sr-only" aria-live="polite" data-status></p>
+
+  <p class="legend">
+    <span class="key key-tool" aria-hidden="true"></span> Blocks with a green edge are what ART returned,
+    captured from the run. The other lines, from the user and the agent, were written for this demo.
+    Long answers are shortened where you see an ellipsis. Playback speed is fixed (about{" "}
+    {seconds} seconds in all); it doesn't show how long ART took.
+  </p>
+</div>
+
+<style>
+  .replay {
+    --t-bg: #0e1319;
+    --t-bar: #171d26;
+    --t-fg: #d7dde5;
+    --t-dim: #8d98a8;
+    --t-line: #263040;
+    --t-green: #4fd195;
+    --t-red: #ff8a80;
+    --t-amber: #f1c27a;
+  }
+  .phases {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  .phase {
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+    color: hsl(var(--muted-foreground));
+    border-radius: 9999px;
+    padding: 0.3rem 0.8rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .phase:hover {
+    color: hsl(var(--foreground));
+  }
+  .phase[aria-current="step"] {
+    border-color: hsl(var(--accent));
+    color: hsl(var(--accent));
+    font-weight: 600;
+  }
+  .term {
+    overflow: hidden;
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.75rem;
+    background: var(--t-bg);
+    color: var(--t-fg);
+    box-shadow: 0 10px 30px -12px rgb(0 0 0 / 0.35);
+  }
+  .term-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.55rem 0.9rem;
+    background: var(--t-bar);
+    border-bottom: 1px solid var(--t-line);
+    font-size: 0.75rem;
+    color: var(--t-dim);
+  }
+  .lights {
+    display: inline-flex;
+    gap: 0.35rem;
+  }
+  .lights i {
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 9999px;
+    background: var(--t-line);
+  }
+  .term-body {
+    height: min(34rem, 72vh);
+    overflow: auto;
+    padding: 1rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 0.8125rem;
+    line-height: 1.55;
+    overscroll-behavior: contain;
+    position: relative;
+  }
+  .term-body:focus-visible {
+    outline: 2px solid var(--t-green);
+    outline-offset: -2px;
+  }
+  .idle {
+    color: var(--t-dim);
+  }
+  .term-body.playing .idle,
+  .term-body.static .idle {
+    display: none;
+  }
+  .ev {
+    margin-bottom: 0.85rem;
+  }
+  .ev[hidden] {
+    display: none;
+  }
+  .line {
+    display: flex;
+    gap: 0.6rem;
+    margin: 0;
+  }
+  .prompt {
+    color: var(--t-green);
+    font-weight: 700;
+  }
+  .bullet {
+    color: var(--t-dim);
+    flex: none;
+  }
+  .said {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .ev-user .said {
+    color: #fff;
+    font-weight: 600;
+  }
+  .agent .said p {
+    margin: 0 0 0.4rem;
+  }
+  .plan {
+    margin: 0.2rem 0 0.5rem;
+    padding-left: 1.4rem;
+    list-style: decimal;
+  }
+  .plan li {
+    margin-bottom: 0.25rem;
+  }
+  .note {
+    border-left: 2px solid var(--t-amber);
+    padding-left: 0.6rem;
+    color: var(--t-amber);
+    font-style: italic;
+  }
+  .tool {
+    border-left: 2px solid var(--t-green);
+    padding-left: 0.8rem;
+    min-width: 0;
+  }
+  .tool-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 0.25rem;
+  }
+  .tool-head .bullet {
+    color: var(--t-green);
+  }
+  .tool-name {
+    color: var(--t-green);
+    font-weight: 700;
+  }
+  .tag {
+    border: 1px solid var(--t-line);
+    border-radius: 9999px;
+    padding: 0 0.5rem;
+    font-size: 0.6875rem;
+    color: var(--t-dim);
+  }
+  .args summary {
+    cursor: pointer;
+    color: var(--t-dim);
+    width: max-content;
+  }
+  pre {
+    margin: 0.3rem 0 0;
+    overflow-x: auto;
+    max-width: 100%;
+    color: var(--t-dim);
+  }
+  .result {
+    color: var(--t-fg);
+  }
+  code {
+    font-family: inherit;
+  }
+  .ln {
+    display: block;
+    white-space: pre;
+  }
+  .ln.bad {
+    color: var(--t-red);
+  }
+  .ln.ok {
+    color: var(--t-green);
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.9rem;
+    background: var(--t-bar);
+    border-top: 1px solid var(--t-line);
+  }
+  .btn {
+    border: 1px solid var(--t-line);
+    background: transparent;
+    color: var(--t-fg);
+    border-radius: 0.4rem;
+    padding: 0.3rem 0.8rem;
+    font-size: 0.8125rem;
+    cursor: pointer;
+  }
+  .btn:hover {
+    background: var(--t-line);
+  }
+  .btn:focus-visible,
+  .phase:focus-visible {
+    outline: 2px solid var(--t-green);
+    outline-offset: 2px;
+  }
+  .bar {
+    flex: 1;
+    min-width: 5rem;
+    height: 3px;
+    background: var(--t-line);
+    border-radius: 9999px;
+    overflow: hidden;
+  }
+  .bar > span {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: var(--t-green);
+  }
+  .legend {
+    margin-top: 0.9rem;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    color: hsl(var(--muted-foreground));
+  }
+  .key {
+    display: inline-block;
+    width: 2px;
+    height: 0.9em;
+    margin-right: 0.25rem;
+    vertical-align: -0.1em;
+    background: #4fd195;
+  }
+  .fade {
+    animation: fade-in 0.25s ease-out;
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(2px);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .fade {
+      animation: none;
+    }
+  }
+</style>
+
+<script>
+  // Reveals the steps already in the page, one at a time. With no script, or with
+  // reduced motion, the page keeps every step visible.
+  const root = document.querySelector<HTMLElement>("[data-replay]");
+  if (root) {
+    const body = root.querySelector<HTMLElement>("[data-body]")!;
+    const steps = Array.from(root.querySelectorAll<HTMLElement>("[data-ev]"));
+    const playBtn = root.querySelector<HTMLButtonElement>("[data-play]")!;
+    const status = root.querySelector<HTMLElement>("[data-status]")!;
+    const bar = root.querySelector<HTMLElement>("[data-bar]")!;
+    const chips = Array.from(root.querySelectorAll<HTMLButtonElement>(".phase"));
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const total = Number(root.dataset.total) || 1;
+    const ms = steps.map((s) => Number(s.dataset.ms) || 1000);
+    const before = ms.map((_, i) => ms.slice(0, i).reduce((a, b) => a + b, 0));
+    const typed = new Map<HTMLElement, string>();
+    steps.forEach((s) => {
+      const t = s.querySelector<HTMLElement>("[data-typed]");
+      if (t) typed.set(t, t.textContent || "");
+    });
+
+    let next = 0; // index of the first step not yet shown
+    let playing = false;
+    let token = 0;
+    let started = false;
+
+    const sleep = (t: number) => new Promise<void>((r) => setTimeout(r, t));
+    const lines = (s: HTMLElement) => Array.from(s.querySelectorAll<HTMLElement>(".result .ln"));
+    const say = (text: string) => (status.textContent = text);
+
+    function setPhase(i: number) {
+      const id = steps[Math.min(i, steps.length - 1)]?.dataset.phase;
+      chips.forEach((c) => {
+        if (c.dataset.phase === id) c.setAttribute("aria-current", "step");
+        else c.removeAttribute("aria-current");
+      });
+    }
+    function progress(i: number) {
+      bar.style.width = `${Math.min(100, ((before[i] ?? total) / total) * 100)}%`;
+    }
+    function showFull(i: number) {
+      const s = steps[i];
+      s.hidden = false;
+      typed.forEach((full, el) => {
+        if (s.contains(el)) el.textContent = full;
+      });
+      lines(s).forEach((l) => (l.hidden = false));
+    }
+    function hideAll() {
+      steps.forEach((s) => {
+        s.hidden = true;
+        s.classList.remove("fade");
+      });
+    }
+    function reveal(upTo: number) {
+      steps.forEach((s, i) => {
+        if (i < upTo) showFull(i);
+        else s.hidden = true;
+      });
+      next = upTo;
+      progress(upTo);
+      setPhase(upTo - 1);
+    }
+    function follow() {
+      body.scrollTop = body.scrollHeight;
+    }
+
+    async function playStep(i: number, mine: number) {
+      const s = steps[i];
+      const dur = ms[i];
+      setPhase(i);
+      progress(i);
+      if (!reduced) s.classList.add("fade");
+      s.hidden = false;
+      const t = s.querySelector<HTMLElement>("[data-typed]");
+      if (t && !reduced) {
+        const full = typed.get(t) || "";
+        t.textContent = "";
+        const per = Math.max(15, (dur * 0.6) / Math.max(full.length, 1));
+        for (let c = 1; c <= full.length; c++) {
+          if (token !== mine) return showFull(i);
+          t.textContent = full.slice(0, c);
+          follow();
+          await sleep(per);
+        }
+        await sleep(dur * 0.4);
+      } else if (!reduced && lines(s).length) {
+        const ls = lines(s);
+        ls.forEach((l) => (l.hidden = true));
+        follow();
+        const per = (dur * 0.7) / ls.length;
+        for (const l of ls) {
+          if (token !== mine) return showFull(i);
+          l.hidden = false;
+          follow();
+          await sleep(per);
+        }
+        await sleep(dur * 0.3);
+      } else {
+        follow();
+        await sleep(reduced ? Math.min(dur, 1500) : dur);
+      }
+      showFull(i);
+    }
+
+    async function run() {
+      const mine = ++token;
+      playing = true;
+      playBtn.textContent = "Pause";
+      playBtn.setAttribute("aria-pressed", "true");
+      body.classList.add("playing");
+      body.classList.remove("static");
+      let lastPhase = "";
+      while (playing && token === mine && next < steps.length) {
+        const phase = steps[next].dataset.phase || "";
+        if (phase !== lastPhase) {
+          lastPhase = phase;
+          say(`Step: ${chips.find((c) => c.dataset.phase === phase)?.textContent ?? phase}`);
+        }
+        await playStep(next, mine);
+        if (token !== mine) return;
+        next += 1;
+        progress(next);
+      }
+      if (token === mine) {
+        playing = false;
+        playBtn.textContent = next >= steps.length ? "Play again" : "Play";
+        playBtn.setAttribute("aria-pressed", "false");
+        if (next >= steps.length) say("Replay finished.");
+      }
+    }
+    function pause() {
+      playing = false;
+      token += 1;
+      if (next < steps.length && !steps[next].hidden) {
+        showFull(next);
+        next += 1;
+      }
+      playBtn.textContent = next >= steps.length ? "Play again" : "Play";
+      playBtn.setAttribute("aria-pressed", "false");
+    }
+    function showEverything() {
+      playing = false;
+      token += 1;
+      body.classList.remove("playing");
+      body.classList.add("static");
+      reveal(steps.length);
+      playBtn.textContent = "Play again";
+      playBtn.setAttribute("aria-pressed", "false");
+      body.scrollTop = 0;
+    }
+
+    playBtn.addEventListener("click", () => {
+      if (playing) return pause();
+      if (next >= steps.length) {
+        hideAll();
+        next = 0;
+      }
+      started = true;
+      run();
+    });
+    root.querySelector("[data-restart]")!.addEventListener("click", () => {
+      playing = false;
+      token += 1;
+      hideAll();
+      next = 0;
+      started = true;
+      run();
+    });
+    root.querySelector("[data-all]")!.addEventListener("click", showEverything);
+    chips.forEach((chip) =>
+      chip.addEventListener("click", () => {
+        playing = false;
+        token += 1;
+        started = true;
+        body.classList.add("playing");
+        body.classList.remove("static");
+        const target = Number(chip.dataset.first) || 0;
+        reveal(target);
+        setPhase(target);
+        say(`Step: ${chip.textContent}`);
+        // Show that step's first line and stop; Play carries on from there.
+        showFull(target);
+        next = target + 1;
+        body.scrollTop = steps[target].offsetTop - 8;
+        playBtn.textContent = next >= steps.length ? "Play again" : "Play";
+        playBtn.setAttribute("aria-pressed", "false");
+      }),
+    );
+
+    if (reduced) {
+      // Static final state: everything visible, nothing moves until asked.
+      body.classList.add("static");
+      playBtn.textContent = "Play";
+    } else {
+      hideAll();
+      const io = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((e) => e.isIntersecting) && !started && !document.hidden) {
+            started = true;
+            io.disconnect();
+            run();
+          }
+        },
+        { threshold: 0.3 },
+      );
+      // Watch the terminal, not the whole block: on a phone the block is taller than the screen.
+      io.observe(root.querySelector(".term")!);
+    }
+  }
+</script>
