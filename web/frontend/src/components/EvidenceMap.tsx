@@ -58,7 +58,7 @@ function Pips({ value, x }: { value: number; x: number }) {
   );
 }
 
-export function EvidenceMap({ defaultJobId = null }: { defaultJobId?: string | null }) {
+export function EvidenceMap({ defaultJobId = null, onChanged }: { defaultJobId?: string | null; onChanged?: () => void }) {
   const [view, setView] = useState<EvidenceView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -198,7 +198,7 @@ export function EvidenceMap({ defaultJobId = null }: { defaultJobId?: string | n
       </div>
       <EvidencePanel
         view={view} selected={current} overlay={overlay} jobOn={jobOn}
-        onSelect={setSelected} onSaved={reload}
+        onSelect={setSelected} onSaved={async () => { await reload(); onChanged?.(); }}
       />
     </div>
   );
