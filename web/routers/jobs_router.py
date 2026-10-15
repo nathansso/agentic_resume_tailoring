@@ -274,8 +274,8 @@ def get_jd_profile(job_id: str, user: User = Depends(get_current_user)):
 
 @router.get("/{job_id}/skills")
 def get_job_skills(job_id: str, user: User = Depends(get_current_user)):
-    """The skills this job asks for, `[{name, required, weight, area}]` (evidence map, #136).
-    Empty until the job is analyzed. Someone else's job is indistinguishable from no job."""
+    """The skills this job asks for, `[{name, required, weight, area, terms}]` (evidence map #136, bullet picker #319).
+    From the job's JD profile, else its analyzed skills; empty before either. Someone else's job is indistinguishable from no job."""
     try:
         job, session = _get_owned_job(job_id, user)
     except HTTPException as e:
