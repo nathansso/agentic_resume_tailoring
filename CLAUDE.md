@@ -191,7 +191,7 @@ gh api graphql -f query='mutation($proj:ID!,$item:ID!,$field:ID!,$opt:String!){
 - Use `database/user_utils.py::get_active_profile()` for active user lookups. `get_or_create_default_user()` exists only as backward-compat support.
 - Keep schema changes backward-compatible with defaults so existing local DBs still load.
 - Keep chat/router changes aligned with actual product capabilities. Do not teach prompts a capability that code does not expose.
-- Nothing under `harness/` may import a generative model client (`llm`, `langchain_*`, `anthropic`, `openai`). The Jev client under `harness/decisions/` is the only model call there, and every Jev call goes through its cache. `tests/test_harness_boundary.py` enforces this once #190 lands.
+- Nothing under `harness/` may import a generative model client (`llm`, `langchain_*`, `anthropic`, `openai`). The Jev client under `harness/decisions/` is the only model call there, and every Jev call goes through its cache. The Jev client and the GitHub client (`harness/github.py`, #353) are the only network clients there (the gateway client joins them in #355); the GitHub token is never stored in the DB, an export or a log. `tests/test_harness_boundary.py` enforces this once #190 lands.
 - Never gate or optimise on the ATS composite. It is monotone non-decreasing in text, so it is reported only. Tailoring metrics stay separate (hard gates, guards, targets) and are never combined into one scalar. See [`docs/harness.md`](docs/harness.md) § 5.
 - Prefer adding focused local guidance instead of expanding this file with volatile implementation details.
 

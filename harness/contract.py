@@ -1062,6 +1062,50 @@ class RetractRuleOutput(_Output):
     rule: Optional[Dict[str, Any]] = None
 
 
+# ── list_github_repos (#353) ─────────────────────────────────────────────────
+
+class GithubReposInput(_Model):
+    page: int = Field(1, ge=1, description="Page of the user's repos, most recently pushed first.")
+    per_page: int = Field(20, ge=1, le=50, description="Repos per page (at most 50).")
+    include_private: bool = Field(
+        True, description="Include private repos. They appear only when the user signed in with "
+                          "`art github login --private`; otherwise this is ignored.")
+    include_readme: bool = Field(True, description="Fetch each README excerpt (a few KB).")
+
+
+class GithubRepo(_Model):
+    name: Optional[str] = None
+    full_name: str = ""
+    description: Optional[str] = None
+    languages: List[str] = Field(default_factory=list, description="Biggest first.")
+    topics: List[str] = Field(default_factory=list)
+    stargazers: int = 0
+    pushed_at: Optional[str] = None
+    fork: bool = False
+    archived: bool = False
+    private: bool = False
+    html_url: Optional[str] = None
+    clone_url: Optional[str] = None
+    clone_command: Optional[str] = Field(
+        None, description="The clone command for this repo. Run it only after the user agrees.")
+    evidence_source: Optional[str] = Field(
+        None, description="`github:<repo>`: pass as upsert_items' `source` for records read "
+                          "from this repo.")
+    readme_excerpt: Optional[str] = Field(None, description="The README's first few KB.")
+    readme_truncated: bool = False
+
+
+class GithubReposOutput(_Output):
+    login: Optional[str] = None
+    scopes: List[str] = Field(default_factory=list)
+    private_included: bool = False
+    page: int = 1
+    per_page: int = 20
+    next_page: Optional[int] = Field(None, description="Pass as `page` for more; null on the last.")
+    repos: List[GithubRepo] = Field(default_factory=list)
+    note: Optional[str] = None
+
+
 def _library():
     from harness import library
     return library
@@ -1077,11 +1121,18 @@ class ToolSpec:
     output_model: type
     fn: Callable[..., Dict[str, Any]]
     read_only: bool = True
+    needs_user: bool = True      # False: acts on the machine, not on a profile (#353)
+    network: bool = False        # reaches a service off this machine (MCP's open-world hint)
 
 
 def _tools():
     from harness import tools
     return tools
+
+
+def _github():
+    from harness import github
+    return github
 
 
 def _memory():
@@ -1358,6 +1409,19 @@ TOOLS: List[ToolSpec] = [
         UpdateProfileInput, ProfileOutput,
         lambda uid, fields: _tools().update_profile(uid, fields),
         read_only=False),
+    ToolSpec(
+        "list_github_repos",
+        "The signed-in user's own GitHub repos, most recently pushed first, so you can pick "
+        "which to read: name, description, languages, topics, stars, last push, fork and "
+        "archived flags, URLs, a clone command and a README excerpt. The user must have run "
+        "`art github login` (add --private for private repos) in their own terminal; "
+        "without it you get not_logged_in. Public repos only unless the token has the repo "
+        "scope. Page with next_page. Clone a repo only after the user agrees; store what you "
+        "read with upsert_items, source github:<repo> (evidence_source).",
+        GithubReposInput, GithubReposOutput,
+        lambda uid, page=1, per_page=20, include_private=True, include_readme=True:
+            _github().list_github_repos(page, per_page, include_private, include_readme),
+        needs_user=False, network=True),
 ]
 BY_NAME: Dict[str, ToolSpec] = {t.name: t for t in TOOLS}
 
@@ -1376,7 +1440,7 @@ def invoke(name: str, user_id: Optional[UUID], args: Optional[Dict[str, Any]] = 
     """
     spec = BY_NAME[name]
     parsed = spec.input_model.model_validate(args or {})
-    if user_id is None:
+    if user_id is None and spec.needs_user:
         out = spec.output_model(error=NO_USER)
     elif not spec.read_only and not allow_writes:
         out = spec.output_model(error=READ_ONLY)

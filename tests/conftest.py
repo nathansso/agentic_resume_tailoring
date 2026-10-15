@@ -178,6 +178,19 @@ def _no_live_jev(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_real_github_login(monkeypatch):
+    """No test reads the developer's GitHub token or OS keychain (issue #353).
+
+    `ART_GITHUB_TOKEN` is removed, and `keyring` is made unimportable, so
+    `harness.github.resolve_token()` finds nothing and `keychain_available()` is
+    false unless a test installs a fake `keyring` (or sets the variable) itself.
+    """
+    monkeypatch.delenv("ART_GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("ART_GITHUB_CLIENT_ID", raising=False)
+    monkeypatch.setitem(sys.modules, "keyring", None)
+
+
+@pytest.fixture(autouse=True)
 def _isolate_institution_cache(monkeypatch):
     """Keep ROR (issue #95) out of the suite: disable network lookups by default
     and clear the in-process canonicalization memo between tests, so institution

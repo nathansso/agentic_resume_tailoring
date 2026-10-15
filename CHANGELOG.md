@@ -14,6 +14,34 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 353 — `art github login` and `list_github_repos`
+**Status:** complete | **Tests:** 3152 pass on SQLite (33 in `test_github.py`, plus 2 contract cases, 2 boundary tests and a packaging assertion), 24 skipped, 2 xfailed, 0 fail
+
+A student could only bring in repos already on disk. `art github login` signs the user in with GitHub's device flow, and `list_github_repos` lists their repos for the host to choose from. The same token will identify the user to the LinkedIn gateway (#354, client #355).
+
+### What shipped
+- **`harness/github.py` (new)**, plain `requests` behind an injectable transport, as the Jev client's is.
+  - **Device flow:** `request_device_code` and `poll_for_token` (`authorization_pending` waits, `slow_down` raises the interval by the server's figure or 5 s, `expired_token`, a passed deadline and `access_denied` raise). Scope is `read:user`; `--private` adds `repo`.
+  - **Token store:** `resolve_token()` is the one reader (`ART_GITHUB_TOKEN`, else the OS keychain through the optional `keyring`, service `art-mcp`, user `github-token`), with `store_token`, `delete_token` and `keychain_available()`. The token is never in the DB, an export, a log, a `repr` or a tool result. #355 reuses `resolve_token()` and `GitHubClient`.
+  - **`GitHubClient`:** `user()` (login and scopes from `X-OAuth-Scopes`), `repos()` (own repos, pushed-first, one page, `next_page` from the `Link` header), `languages()`, `readme()`.
+- **`list_github_repos`** on the contract, so on MCP and the CLI `--json` mode. Input: `page`, `per_page` (at most 50), `include_private`, `include_readme`. Output: `login`, `scopes`, `private_included`, `page`, `per_page`, `next_page`, `note` and `repos`, each with `name`, `full_name`, `description`, `languages`, `topics`, `stargazers`, `pushed_at`, `fork`, `archived`, `private`, `html_url`, `clone_url`, `clone_command`, `evidence_source` (`github:<repo>`), `readme_excerpt` (3000 characters at most) and `readme_truncated`. Private repos are listed only when the token holds `repo`; signed out, it returns `not_logged_in`.
+- **`art github login|logout|status`** (`harness/github_cli.py`, dispatched by `harness/entry.py`). One JSON document on stdout; the code and URL to type go to stderr. `status` never prints the token.
+- **Contract:** `ToolSpec` gained `needs_user` (false for this tool: it acts on the machine's GitHub login, so it works with no bound profile) and `network` (MCP's open-world hint).
+- **Boundary:** `tests/test_harness_boundary.py` allows exactly two harness modules to import a network library, the Jev client and `harness/github.py`; root `CLAUDE.md`, `docs/harness.md` and the Jev boundary test in `tests/test_jev.py` say the same.
+- **Docs and plugin:** `INSTALL.md` (the commands, the token's storage, and the maintainer steps to register the OAuth App), `plugin/README.md`, `/art:setup`, and the `art-setup` and `art-tailor` skills.
+- **Tests:** `tests/test_github.py` (a fake GitHub; the device flow through pending, `slow_down`, success, expiry and refusal; status and logout; fields, pagination and the private-scope gate; no token in the DB, an export, logs or any result; both adapters agree). `tests/conftest.py` hides the developer's keychain and `ART_GITHUB_TOKEN` from every test.
+
+### Deviations from spec
+- **The client ID is not registered yet.** `DEFAULT_CLIENT_ID` is empty; `ART_GITHUB_CLIENT_ID` supplies one meanwhile, and with neither, `art github login` fails with `not_configured` naming the owner step. Nothing was run against real GitHub.
+- **`keyring` is an extra (`art-mcp[keyring]`), and the plugin's pinned spec does not include it.** With no keychain, `art github login` stops before asking GitHub for a code and says so; `ART_GITHUB_TOKEN` (a personal access token works) is the other path. So for the plugin path to work the pinned `uvx` spec for both the login and the MCP server needs `keyring` (a follow-up: add it to the pin's extras, or to the default dependencies).
+- **No `--print-token`.** Login never shows the token, so a user with no keychain cannot get one to put in the environment; they use a personal access token.
+- **Private scope is read from the token, not the tool call.** `include_private` can only narrow what the token's `repo` scope allows. A token that does not report scopes (a fine-grained personal access token) is treated as public-only.
+- **Languages and README cost two extra requests per repo.** `per_page` is capped at 50 and `include_readme` can be turned off; GitHub's rate limit for an authenticated token is 5000 an hour.
+- **Own repos only** (`affiliation=owner`): repos in an organisation the user belongs to are not listed.
+- **The Postgres leg was not run locally** (CI runs it).
+
+---
+
 ## Issue 322 — Confirm project links from the evidence panel
 **Status:** complete | **Tests:** 3151 pass on SQLite (9 new), 16 skipped, 0 fail; frontend 180 pass (6 new); `npm run build` and `npm ci --dry-run` pass; the Postgres leg was not run locally (the Docker daemon was not running), CI's required Postgres leg covers it
 

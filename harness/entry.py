@@ -7,6 +7,7 @@
     art hook user-prompt < hook.json             # Claude Code plugin hooks (#201)
     art hooks codex --write                      # the file fallback for Codex without plugin hooks (#203, #290)
     art jev status|export|import                 # the Jev decision cache (#193)
+    art github login|logout|status               # GitHub device-flow sign-in (#353)
     art export --out backup.zip                  # back up a profile (#195)
     art import backup.zip                        # restore it into the local store
     art import --from-supabase --source-url ... --user-id ...   # one-time web-app migration
@@ -50,6 +51,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if argv[:1] == ["jev"]:
         from harness.decisions.recordings import main as jev_main
         return jev_main(argv[1:])
+    if argv[:1] == ["github"]:
+        from harness.github_cli import main as github_main
+        return github_main(argv[1:])
     if argv[:1] in (["export"], ["import"]):
         from harness.export_import import main as port_main
         return port_main(argv)

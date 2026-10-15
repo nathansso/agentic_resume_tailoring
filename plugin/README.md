@@ -35,6 +35,14 @@ Your data lives in `~/.art/art.db`, or `$ART_DATA_DIR`. Rendered resumes go to
 The two skills behind these, `art-tailor` and `art-setup`, also trigger on their own
 when you ask Claude to tailor a resume or update your experience.
 
+## GitHub repos (optional)
+
+To bring in your GitHub repos, sign in once in your own terminal with `art github login`
+(add `--private` for private repos). Claude can then call `list_github_repos`, pick the repos
+worth reading, and clone one only after you agree. The token goes to your OS keychain, never
+the ART database or an export; see "GitHub repos" in [INSTALL.md](../INSTALL.md) for the
+`keyring` requirement and the commands.
+
 ## Hooks
 
 - **Before every message:** if you edited a resume in the editor since your last
