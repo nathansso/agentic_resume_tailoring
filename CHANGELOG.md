@@ -14,6 +14,31 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 318 — Skill areas via keyword table and cached Jev
+**Status:** complete | **Tests:** 2991 pass on SQLite (16 new), 24 skipped, 0 fail; the Postgres leg was not run locally (the Docker daemon was not running), CI's required Postgres leg covers it
+
+A skill the #136 keyword table cannot place used to land in "Other" for good. It is now asked of Jev once, when it is ingested, and the answer is cached, so the evidence map, its job overlay and the coming area map group it reliably. Listing a profile's skills still never makes a call: the read path only reads the cache.
+
+### What shipped
+
+- **`harness/decisions/skill_area.py`** (`skill_area@v1`): one `Choice` per skill over the seven areas plus `Other`, the option descriptions being `areas.AREA_DESCRIPTIONS` (defined once, next to `AREAS`). `classify` is the write path (`engine.decide`: cache, one batched request for the misses, fallback on no key, mode `off` or an API error); `cached` is the read path.
+- **`engine.lookup`**: a cache-only read of Jev answers, in any mode, that never calls the API and never raises on a miss. The read path uses it, so `ART_JEV_MODE=off` still shows areas Jev already decided.
+- **`knowledge_graph/areas.py`**: `keyword_area` is the old rule path unchanged; `skill_area(name, category)` (signature kept) and the new batch `skill_areas(pairs)` run it first and consult the cache only for `Other`. `evidence_view` now makes one batch call for all of a profile's skills; its output is identical.
+- **Write time**: `KGStoreMixin._save_skills` classifies the skills it touched that the table leaves in `Other`, in one request, after the save. It cannot fail or roll back an ingest (any error is swallowed), and with no key or Jev off it does nothing.
+- **Backfill**: `knowledge_graph.areas.classify_unplaced_skills(user_id)` and `python scripts/classify_unplaced_skills.py --user-id <uuid> [--dry-run]`. It asks only for skills with no cached answer, so a second run makes no call.
+- **Tests (16 new, `tests/test_skill_area.py`)**: keyword path makes no Jev work; one request carries every unplaced skill of an ingest and the table's skills are not asked; the view returns the cached area with Jev off and no live client requested; a read miss is `Other` with no network; no key, an API 401 and a crash in the classifier each leave the ingest succeeding with `Other`; an `Other` answer is cached; a version bump invalidates; the backfill (dry run, scope to one user, once only, no key); `engine.lookup` modes and point check; the question text.
+
+### Deviations from spec
+
+- **The skill is in the question, not the state.** The plan said state = `{name, category}`, but `engine.decide` sends one state per request, so that would be one request per skill. The state is a constant and each question names its skill, so one request carries an ingest's unplaced skills and each skill still has its own cache row (the key hashes the question). The name is not case-folded; "Figma" and "figma" are separate rows.
+- **No confidence threshold.** The area is Jev's own choice. A wrong area costs a drag in the map, not a wrong resume, and there is no labelled set to fit one on; `Answer.p` is available if misfilings show up.
+- **The read path ignores `ART_JEV_MODE`** (plan: `mode_override="replay"` and catch the miss). `engine.lookup` is a plain cache read instead, which also avoids losing every hit in a batch to the first miss. Mode `off` still stops any request.
+- **Backfill is a `scripts/` entry point, not an `art` verb.** No existing CLI verb or harness tool fits a one-off per-user maintenance run cleanly. It takes `--user-id` explicitly because `DATABASE_URL` may point at production.
+- **`services.get_job_skills` is untouched** (parallel work on #319); it calls `skill_area` per skill, so it makes one cache query per skill the table cannot place.
+- **Not done:** the Postgres leg (Docker daemon not running); a live run against TypeSafe (tests use a fake transport). Skills ingested by `agents/job_analyzer.py` and `agents/chat.py` (which write `Skill` rows without `_save_skills`) are classified by the backfill or the next ingest that touches them, not at their own write.
+
+---
+
 ## Issue 136 — Evidence map in art ui
 **Status:** complete | **Tests:** 2979 pass on SQLite (52 new), 16 skipped, 0 fail; frontend 151 pass (39 new); `npm run build` and `npm ci --dry-run` pass; the Postgres leg was not run locally (the Docker daemon was not running), CI's required Postgres leg covers it
 
