@@ -14,6 +14,32 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 306 — The user's own editor edit, carried over verbatim, is not vetoed by a guard
+**Status:** complete | **Tests:** 2704 pass on SQLite (14 new), 24 skipped, 0 fail. The Postgres leg was not run locally; CI runs it
+
+#278 made `execute_plan` refuse to drop a `.tex` edit, so the host carries it over as a `revise` with the user's text. But a `revise` faces every guard, and what a user types is short, repetitive and off the posting: it lowers MTLD and keyword density, so the carry-over came back `reverted` and the host was pushed toward `discard_editor_edits`, the opposite of the point. The executor now verifies a carried-over edit itself and waives the guards for it. Hard gates are unchanged.
+
+### What shipped
+
+- **The executor decides what is a carried-over edit (`harness/texdiff.py::carried_by`, `harness/executor.py::_carried_edits`).** For a `revise` or `replace` on a parent with `edited_tex`, it reads the user's edits as `diff_nodes.tex_edits` does and checks the node's bullets for the item against the page's. The node is a carried-over edit when every text it adds is, whitespace-normalized and nothing else, the `after` of a `revised` or `added` edit of that item, every bullet it drops is the `before` of a `revised` or `removed` edit of that item, and it adds at least one such text. Reordering the item's bullets is free. Nothing the host writes on the node counts; there is no new field to set.
+- **Waived guards, reported (`harness/acceptance.py::accept(..., carried=True)`).** Hard gates apply in full. Guard regressions, and the "must improve a target" rule, do not veto. Every regression is reported under `waived`, a fallen target (`relevance_density`, `coverage`) included when no target rose (the case that rule 3 would have vetoed), with `reason: "guard_waived: carried editor edit; ..."`. A carried-over node with nothing regressed and nothing improved is accepted. No tolerance in `harness/policy.json` changed.
+- **A node says what it carried.** The accepted result gains `carried_edit`: the edits it carries (`change`, `bullet` = the `<item key>#b<n>` id `tex_edits` gives for a revised bullet, `null` for an added one, `after`).
+- **A hard-gate refusal is actionable.** When a hard gate refuses a verified carried-over edit, `reason` keeps the `hard_gate: <gate> <claim>` prefix and adds, per gate, what to do: for `consistency` / `faithfulness` / `citations`, record the fact the edit states with `upsert_items` (or ask the user whether it is true), cite it, and retry via `patch_plan`; for `preferences`, tell the user and change the preference only if they agree; for `bullet_lines`, ask the user to shorten it. It says not to reword the user's text.
+- **Anything not verbatim is an ordinary revise.** One word changed, a bullet the user did not edit rewritten, or a bullet the user kept dropped, and the node faces every guard as before.
+- **Docs and tool text.** `docs/harness.md` § 5 (the acceptance rule and a new paragraph) and § 13, `docs/architecture.md`, the `execute_plan` description and `NodeResult.waived` / `carried_edit` in `harness/contract.py` (shared by MCP and the CLI), the `art-tailor` skill, and the Codex `AGENTS.md` snippet.
+- **Tests (14 new, `tests/test_executor.py`).** A verbatim carry-over commits though MTLD and `relevance_density` both fall, and reports both under `waived`; the same text with no tex edit behind it is reverted; text differing by a word more, a word swapped or a trailing period faces every guard; whitespace alone is forgiven; carrying the edit but rewriting or dropping another bullet is an ordinary revise; an unsupported number (`47%`) is refused by the `consistency` gate with an actionable reason and nothing waived; an unresolved cite and a negative pin still refuse; the end-to-end loop (editor edit, `diff_nodes.tex_edits`, a revise built from it, commit, no `discard_editor_edits`); an added bullet; `accept(carried=True)` and `carried_by` directly. The waiver tests fail without the change.
+
+### Deviations from spec
+
+- **No label on the node.** The issue allowed any way of naming the bullet; the executor needs none. It matches each added text against the `revised`/`added` edits of the same item, so a host sends the user's text and the `<item key>#b<n>` id appears only in the result's `carried_edit`.
+- **The whole node must be accounted for.** Not just "contains a verbatim bullet": one verbatim bullet next to a rewritten one would otherwise carry a guard waiver for text the user never wrote (the concern #289 raised for `delete_bullet`). Several of the user's edits to one item still go in one node. A host that also wants its own change to that item (a plan has one node per item) makes it in a second plan, on top of the committed carry-over.
+- **The target rule is waived too, not only the guards.** The issue's acceptance case is a `relevance_density` regression, and that is a target; without waiving rule 3 a user edit that lowered the posting's keyword density with no other target rising would still be `no_target_improved`.
+- **`replace` is supported but narrow.** Its target item is not on the page, so the user's text must come from an item the user added to the `.tex` by hand (every bullet an `added` edit). It is not exercised by a test.
+- **A refused carry-over of an otherwise unchanged page reports `no_change`,** as any plan that changes nothing does (#257); the refusal is on the node's `reason`.
+- **The Postgres leg was not run locally** (CI runs it).
+
+---
+
 ## Issue 278 — A host commit no longer drops the user's `.tex` edits, and `diff_nodes` says which bullets they changed
 **Status:** complete | **Tests:** 2690 pass on SQLite (27 new), 24 skipped, 0 fail. The Postgres leg was not run locally; CI runs it
 
