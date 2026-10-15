@@ -14,6 +14,41 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 323 — Hint when a bullet names no skill
+**Status:** complete | **Tests:** 3190 pass on SQLite (0 new; the change is frontend only), 16 skipped, 2 xfailed, 0 fail; frontend 185 pass (5 new); `npm run build` and `npm ci --dry-run` pass; the Postgres leg was not run locally (the Docker daemon was not running), CI's required Postgres leg covers it
+
+In the evidence map's item editor, a bullet that names no skill ART recognizes now says "Names no skill ART recognizes" under it, and the line clears once the bullet links one. It is a muted hint, never a warning colour. **Measured firing rate: 29.8% of bullets (71 of 238) across the 21 synthetic profiles**, which is above the ~25% line, so the hint stays in the editor and is **not** shown on the map's item rows.
+
+### What shipped
+
+- **`lib/evidenceMap.ts::bareBullets(view, itemKey)`**, pure: the ordinals (`#b<n>`) of an item's non-empty text entries that no edge of that item cites. An empty or whitespace-only entry is not listed; a GitHub-only edge cites no bullet, so it does not clear one; education and an unknown key give `[]`. No backend change: the view already carries `text[].index` and `edges[].cites`.
+- **Item editor** (`EvidencePanel.tsx::ItemEditor`): the line under a bullet that used to read "Links no skills" now reads "Names no skill ART recognizes" for a saved, non-empty bullet that no skill cites. A bullet being edited reads "Edited. Save to see which skills it names." until it is saved, because the link is re-derived from the stored text (#136), so a hint about text no longer on screen would be wrong. After the save and re-read the line is replaced by "Links <skills>". An empty entry keeps "Links no skills".
+- **Tests.** 5 vitest in `lib/evidenceMap.test.ts`: cited, uncited and empty entries; a GitHub-only edge; an item that links nothing, education, a textless item and an unknown key; a bullet clearing when an edge cites it, with another item's edges ignored; a whitespace-only entry. No Python change.
+- **Measurement** (throwaway script, not committed): every `eval/profiles/*.md` (the 20 stratified profiles plus `benchmark_profile.md`) seeded into a temp SQLite store through `eval.scripted_host.seed_profile`, then `build_evidence_view`; a bullet fires when no edge of its item cites its ordinal. Experiences and projects only (education has no text).
+
+  | | bullets | fire |
+  |---|---|---|
+  | all 21 profiles | 238 | 71 (29.8%) |
+  | without the 5 `_redundant` variants | 168 | 48 (28.6%) |
+  | experience bullets | 148 | 35 (23.6%) |
+  | project bullets and blurbs | 90 | 36 (40.0%) |
+
+  Per profile (bullets fired of total): ai_engineering generalist 4/10, metric_poor 7/10, specialist 5/10, specialist_redundant 8/14; benchmark_profile 3/18; data_engineering generalist 1/10, metric_poor 1/10, specialist 2/10, specialist_redundant 2/14; data_science generalist 1/10, metric_poor 4/10, specialist 1/10, specialist_redundant 3/14; ml_engineering generalist 2/10, metric_poor 5/10, specialist 6/10, specialist_redundant 7/14; software_engineering generalist 1/10, metric_poor 3/10, specialist 2/10, specialist_redundant 3/14. The range is 10% to 70%, so a single rate hides most of the story.
+
+  A sample of 15 (seed 1) shows what fires: "Reduced hallucination reports 30% by adding grounded citation rendering to the response path.", "Cut training time 35% by moving augmentation into a prefetching data loader.", "Shows which retrieved passage supports each sentence of a generated answer.", "Reviewed pull requests from the rest of the team and kept the CI pipeline green.", "Implemented 5 replay strategies and measured forgetting across a 10-task sequence.". Nearly all are impact or method bullets that name no tool at all, not a tool under a nickname, so the hint is true but would be noise on the map at this rate.
+- **Verified by hand** in `python -m web.local_ui` against a throwaway SQLite store (the #136 demo seed plus a bullet "Moved the release to k8s and cut deploy time in half."): the hint under that bullet, "Edited. Save to see which skills it names." while typing, and after saving a bullet that names AWS the line became "Links AWS" and the AWS count on the map went from 1 to 2.
+
+### Deviations from spec
+
+- **No hint on the map's item rows** (the issue's "item row"). The plan allowed it only below ~25%, and the measured rate is 29.8% (28.6% without the redundant variants). Metric-poor and specialist AI and ML profiles run 50 to 70%, so a row hint would show on most roles. It is a small addition if the owner decides otherwise: a count from `bareBullets(...).length` in the row subtitle, ranked below "needs a description" and "unplaced".
+- **The measurement is on synthetic profiles**, as the plan said, not real ones. Their skill lists are short (15 to 32 skills; a real profile built by ingestion usually has more), and a longer list recognizes more bullets, so a real profile may fire less. Recording a real profile's rate in the issue is the owner's step; no real data was read.
+- **No "likely tool token" rule.** The sample is mostly bullets that name no tool, so a token heuristic would hide true hints rather than noise; a rule would need a tool-name list we do not have. Left as a follow-up.
+- **The line replaces "Links no skills"** rather than adding a second line, since the two say the same thing about a bullet.
+- **The hint reads saved text**, so a draft edit shows "Edited. Save to see which skills it names." rather than re-matching live in the browser (matching lives in the backend).
+- **Not done:** the Postgres leg (Docker daemon not running; CI's required leg covers it); the job overlay variant (hint only when a job is on); a screen reader pass; component tests (the repo has no DOM test setup, so the panel flow was checked in the browser).
+
+---
+
 ## Issue 322 — Confirm project links from the evidence panel
 **Status:** complete | **Tests:** 3151 pass on SQLite (9 new), 16 skipped, 0 fail; frontend 180 pass (6 new); `npm run build` and `npm ci --dry-run` pass; the Postgres leg was not run locally (the Docker daemon was not running), CI's required Postgres leg covers it
 
