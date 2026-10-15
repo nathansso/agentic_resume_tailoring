@@ -6,12 +6,12 @@
   "contract_version": "1",
   "latex_engine": "Tectonic 0.17.0",
   "jev": "off (no TypeSafe key)",
-  "profile": "scripts/site_demo/sample_resume.md (synthetic: no real person)",
+  "profile": "scripts/site_demo/sample_resume.md and sample_repos.md (synthetic: no real person)",
   "posting": "scripts/site_demo/sample_posting.txt (written for this demo)",
-  "authored": "Lines from the user and the agent, the records the agent extracted and its plan were written by hand. Tool calls and what ART returned were captured.",
+  "authored": "Lines from the user and the agent, the records the agent extracted, the requirements it read from the posting and its plan were written by hand. Tool calls and what ART returned were captured.",
   "elision": "Long tool answers are shortened for display: lists are cut, strings shortened and fields left out, each marked with an ellipsis.",
   "pacing": "Playback runs at a fixed rate; it is not the real duration of any call.",
-  "total_ms": 75170
+  "total_ms": 88292
  },
  "phases": [
   {
@@ -43,14 +43,14 @@
   {
    "phase": "setup",
    "type": "user",
-   "text": "/art:setup resume.md",
-   "ms": 1200
+   "text": "/art:setup resume.md, plus the READMEs of three repos that aren't on my resume",
+   "ms": 2940
   },
   {
    "phase": "setup",
    "type": "agent",
-   "text": "I'll read resume.md and store what it says: your degree, roles, projects and skills, with the bullets exactly as written. I won't add anything the file doesn't state.",
-   "ms": 2248
+   "text": "I'll read resume.md and the three READMEs and store what they say: your degree, roles, projects and skills, with the bullets exactly as written. I won't add anything the files don't state.",
+   "ms": 2490
   },
   {
    "phase": "setup",
@@ -70,39 +70,24 @@
      {
       "kind": "experience",
       "data": {
-       "company": "Tamarack Logistics",
-       "title": "Data Analyst Intern",
+       "company": "Kestrel Print & Sign",
+       "title": "Web Developer Intern",
        "start_date": "2026-06",
-       "end_date": "2026-09",
+       "end_date": "2026-08",
        "bullets": [
-        "Built a weekly delivery-delay report in pandas and SQL that replaced a manual spreadsheet for the operations…",
-        "Cleaned 14 months of shipment records, about 380,000 rows, and documented 9 data-quality checks.",
-        "Trained a gradient-boosted model in scikit-learn to flag late shipments, reaching 0.81 AUC on a held-out mont…",
-        "… 1 more"
+        "Built a React storefront for custom print orders that replaced the shop's phone-and-email process.",
+        "Added a Node and PostgreSQL order API with 12 endpoints and a staging environment.",
+        "… 3 more"
        ]
       }
      },
-     {
-      "kind": "experience",
-      "data": {
-       "company": "Alder Valley State University, Department of Computer Science",
-       "title": "Teaching Assistant",
-       "start_date": "2025-09",
-       "end_date": "Present",
-       "bullets": [
-        "Held weekly office hours for a 120-student Data Structures course taught in Python.",
-        "Graded labs and wrote pytest autograder tests for 4 assignments.",
-        "Led review sessions on recursion and hash tables that about 40 students attended."
-       ]
-      }
-     },
-     "… 21 more"
+     "… 24 more"
     ],
     "source": "resume.md"
    },
    "result": {
     "counts": {
-     "created": 24
+     "created": 26
     },
     "results": [
      {
@@ -114,29 +99,89 @@
      },
      {
       "index": 1,
-      "key": "exp:data analyst intern|tamarack logistics",
+      "key": "exp:web developer intern|kestrel print & sign",
       "kind": "experience",
       "message": null,
       "status": "created"
      },
-     {
-      "index": 2,
-      "key": "exp:teaching assistant|alder valley state university, department of computer science",
-      "kind": "experience",
-      "message": null,
-      "status": "created"
-     },
-     "… 21 more"
+     "… 24 more"
     ],
     "…": "1 more fields"
    },
-   "ms": 4030
+   "ms": 3040
   },
   {
    "phase": "setup",
    "type": "agent",
-   "text": "Stored 24 records. Now your resume header.",
-   "ms": 884
+   "text": "Stored 26 records from resume.md. Now the three repos.",
+   "ms": 1016
+  },
+  {
+   "phase": "setup",
+   "type": "tool",
+   "name": "upsert_items",
+   "args": {
+    "records": [
+     {
+      "kind": "project",
+      "data": {
+       "name": "Checkout A/B Test",
+       "repo_url": "https://github.com/riley-park-demo/checkout-ab-test",
+       "description": "A class project that compares two checkout flows on a mock store.",
+       "blurbs": [
+        "Designed an A/B test of two checkout flows on a mock store, choosing the sample size of 8,000 sessi…",
+        "Analyzed the results with a two-proportion z-test in Python (statsmodels); the one-page flow raised…",
+        "… 2 more"
+       ]
+      }
+     },
+     {
+      "kind": "project",
+      "data": {
+       "name": "Subscription Churn Model",
+       "repo_url": "https://github.com/riley-park-demo/subscription-churn",
+       "description": "Predicts which subscribers cancel, from a public customer dataset.",
+       "blurbs": [
+        "Engineered 12 features from the customer table in SQL, such as tenure and support-call counts.",
+        "Trained logistic regression and gradient-boosted models in scikit-learn, reaching 0.84 AUC on a hel…",
+        "… 2 more"
+       ]
+      }
+     },
+     "… 5 more"
+    ],
+    "source": "github READMEs"
+   },
+   "result": {
+    "counts": {
+     "created": 7
+    },
+    "results": [
+     {
+      "index": 0,
+      "key": "proj:checkout a/b test",
+      "kind": "project",
+      "message": null,
+      "status": "created"
+     },
+     {
+      "index": 1,
+      "key": "proj:subscription churn model",
+      "kind": "project",
+      "message": null,
+      "status": "created"
+     },
+     "… 5 more"
+    ],
+    "…": "1 more fields"
+   },
+   "ms": 3175
+  },
+  {
+   "phase": "setup",
+   "type": "agent",
+   "text": "Stored 7 more: the A/B test, churn and retail projects, and the skills they name. Now your header.",
+   "ms": 1500
   },
   {
    "phase": "setup",
@@ -177,16 +222,16 @@
       "title": "Alder Valley State University — B.S. Computer Science, Data Science minor"
      },
      {
-      "key": "exp:data analyst intern|tamarack logistics",
+      "key": "exp:shift lead|fernhollow coffee",
       "kind": "experience",
-      "title": "Data Analyst Intern @ Tamarack Logistics"
+      "title": "Shift Lead @ Fernhollow Coffee"
      },
      {
       "key": "exp:teaching assistant|alder valley state university, department of computer science",
       "kind": "experience",
       "title": "Teaching Assistant @ Alder Valley State University, Department of Computer Science"
      },
-     "… 21 more"
+     "… 30 more"
     ]
    },
    "ms": 1645
@@ -194,14 +239,14 @@
   {
    "phase": "setup",
    "type": "agent",
-   "text": "Your graph holds 2 roles, 4 projects, 17 skills and your degree. Paste a posting whenever you're ready.",
-   "ms": 1555
+   "text": "Your graph holds 3 roles, 7 projects, 22 skills and your degree: more than fits on one page. Paste a posting whenever you're ready.",
+   "ms": 1863
   },
   {
    "phase": "posting",
    "type": "user",
-   "text": "/art:tailor Data Science Intern, Summer 2027, Cedarline Freight (sample posting, 23 lines pasted)",
-   "ms": 3510
+   "text": "/art:tailor Brightwell Market, Data Science Intern, Growth Analytics, Summer 2027 (sample posting, 22 lines pasted). Compare it with my usual resume: resume.md alone.",
+   "ms": 5580
   },
   {
    "phase": "posting",
@@ -233,7 +278,7 @@
   {
    "phase": "posting",
    "type": "agent",
-   "text": "No saved preferences yet. Opening the job with the 8 requirements I pulled out of the posting.",
+   "text": "No saved preferences yet. Opening the job with the 6 requirements I pulled out of the posting.",
    "ms": 1456
   },
   {
@@ -241,12 +286,12 @@
    "type": "tool",
    "name": "open_job",
    "args": {
-    "jd_text": "Data Science Intern, Summer 2027\nCedarline Freight (sample posting written for this demo)\nHybrid, 12 weeks\n\nA…",
+    "jd_text": "Data Science Intern, Growth Analytics, Summer 2027\nBrightwell Market (sample posting written for this demo)\nH…",
     "requirements": [
      {
       "text": "The candidate is pursuing a B.S. or M.S. in computer science, statistics, data science or a related field.",
       "type": "required",
-      "criticality": 3,
+      "criticality": 2,
       "terms": [
        "computer science",
        "data science"
@@ -254,40 +299,49 @@
       "source_section": "Required qualifications"
      },
      {
-      "text": "The candidate has experience with Python and SQL.",
+      "text": "The candidate has experience with SQL and Python, including pandas.",
       "type": "required",
       "criticality": 5,
       "terms": [
+       "SQL",
        "Python",
-       "SQL"
+       "pandas"
       ],
       "source_section": "Required qualifications"
      },
      {
-      "text": "The candidate is familiar with machine learning libraries such as scikit-learn.",
+      "text": "The candidate has designed or analyzed experiments, for example A/B tests and significance testing.",
       "type": "required",
-      "criticality": 4,
+      "criticality": 5,
       "terms": [
-       "scikit-learn",
-       "machine learning"
+       "A/B test",
+       "experiments",
+       "significance",
+       "… 1 more"
       ],
       "source_section": "Required qualifications"
      },
-     "… 5 more"
+     "… 3 more"
     ],
     "metadata": {
-     "title": "Data Science Intern, Summer 2027",
-     "company": "Cedarline Freight",
+     "title": "Data Science Intern, Growth Analytics, Summer 2027",
+     "company": "Brightwell Market",
      "role_family": "data_science"
     }
    },
    "result": {
-    "job_id": "787b76c2-f521-4eb2-8784-c09f76637588",
-    "title": "Data Science Intern, Summer 2027",
-    "company": "Cedarline Freight",
-    "requirements": 8,
+    "job_id": "eee6d702-4161-49f9-b50a-9706daf02877",
+    "title": "Data Science Intern, Growth Analytics, Summer 2027",
+    "company": "Brightwell Market",
+    "requirements": 6,
     "role_family": "data_science",
     "skill_matches": [
+     {
+      "requirement": 1,
+      "skill": "SQL",
+      "term": "sql",
+      "type": "required"
+     },
      {
       "requirement": 1,
       "skill": "Python",
@@ -296,14 +350,8 @@
      },
      {
       "requirement": 1,
-      "skill": "SQL",
-      "term": "sql",
-      "type": "required"
-     },
-     {
-      "requirement": 2,
-      "skill": "scikit-learn",
-      "term": "scikit-learn",
+      "skill": "pandas",
+      "term": "pandas",
       "type": "required"
      },
      "… 4 more"
@@ -311,36 +359,36 @@
     "unmatched_terms": [
      {
       "requirement": 2,
-      "term": "machine learning",
+      "term": "a/b test",
       "type": "required"
      },
      {
-      "requirement": 4,
-      "term": "predict",
+      "requirement": 2,
+      "term": "experiments",
       "type": "required"
      },
      {
-      "requirement": 4,
-      "term": "delays",
+      "requirement": 2,
+      "term": "significance",
       "type": "required"
      },
-     "… 8 more"
+     "… 9 more"
     ],
     "…": "8 more fields"
    },
-   "ms": 4660
+   "ms": 4795
   },
   {
    "phase": "posting",
    "type": "agent",
-   "text": "ART matched 7 of the posting's terms to skills you already have. It doesn't guess at the ones it couldn't match, like \"machine learning\", so I'll only use those words where your own bullets support them.",
-   "ms": 2655
+   "text": "ART matched 7 of the posting's terms to skills you already have. It doesn't guess at the ones it couldn't match, so I'll only use those words where your own bullets support them.",
+   "ms": 2380
   },
   {
    "phase": "posting",
    "type": "agent",
-   "text": "First I'll save your graph as version 1, so there's something to compare the tailored resume against.",
-   "ms": 1533
+   "text": "First, your usual resume as version 1, so there's something to compare against: what resume.md says, with the three repo projects left off. Nothing reworded.",
+   "ms": 2149
   },
   {
    "phase": "posting",
@@ -348,19 +396,45 @@
    "name": "execute_plan",
    "args": {
     "program": {
-     "job_id": "787b76c2-f521-4eb2-8784-c09f76637588",
+     "job_id": "eee6d702-4161-49f9-b50a-9706daf02877",
      "parent": null,
-     "nodes": []
+     "nodes": [
+      {
+       "id": "d1",
+       "op": "delete",
+       "item_key": "proj:checkout a/b test",
+       "because": "user:my usual resume is resume.md, so leave the three repo projects off"
+      },
+      {
+       "id": "d2",
+       "op": "delete",
+       "item_key": "proj:subscription churn model",
+       "because": "user:my usual resume is resume.md, so leave the three repo projects off"
+      },
+      {
+       "id": "d3",
+       "op": "delete",
+       "item_key": "proj:retail sales dashboard",
+       "because": "user:my usual resume is resume.md, so leave the three repo projects off"
+      }
+     ],
+     "skills": [
+      "Python",
+      "Java",
+      "JavaScript",
+      "TypeScript",
+      "… 14 more"
+     ]
     }
    },
    "result": {
     "committed": true,
-    "node_id": "658795f6-c555-4701-a12e-1a3e3c9f724d",
+    "node_id": "d671ec49-b05c-4154-820b-fa1548214c7c",
     "line_budget": {
      "budget": 60.0,
      "cut_hints": [],
-     "lines_used": 44.44,
-     "over_by": -15.56
+     "lines_used": 52.94,
+     "over_by": -7.06
     },
     "violations": [],
     "metrics": {
@@ -376,7 +450,7 @@
      "…": "guards, targets and the ATS-style report left out"
     }
    },
-   "ms": 2050
+   "ms": 3220
   },
   {
    "phase": "posting",
@@ -389,39 +463,40 @@
    "type": "tool",
    "name": "get_item",
    "args": {
-    "key": "exp:data analyst intern|tamarack logistics"
+    "key": "exp:web developer intern|kestrel print & sign"
    },
    "result": {
     "error": null,
-    "key": "exp:data analyst intern|tamarack logistics",
+    "key": "exp:web developer intern|kestrel print & sign",
     "kind": "experience",
     "record": {
      "bullets": [
-      "Built a weekly delivery-delay report in pandas and SQL that replaced a manual spreadsheet for the operations team.",
-      "Cleaned 14 months of shipment records, about 380,000 rows, and documented 9 data-quality checks.",
-      "Trained a gradient-boosted model in scikit-learn to flag late shipments, reaching 0.81 AUC on a held-out month.",
-      "Walked 12 operations staff through the findings and wrote the handoff notes the team still uses."
+      "Built a React storefront for custom print orders that replaced the shop's phone-and-email process.",
+      "Added a Node and PostgreSQL order API with 12 endpoints and a staging environment.",
+      "Fixed 30 accessibility issues from an audit, raising the Lighthouse accessibility score from 71 to 96.",
+      "Set up GitHub Actions to run the test suite on every pull request.",
+      "… 1 more"
      ],
-     "company": "Tamarack Logistics",
+     "company": "Kestrel Print & Sign",
      "description": "",
-     "end": "2026-09",
-     "id": "c2c3374e-45ec-4a22-bc96-989345110b1a",
+     "end": "2026-08",
+     "id": "1e0608e1-0403-45a3-a3f1-40ee347be0d5",
      "incomplete": false,
      "missing": [],
      "projects": [],
      "start": "2026-06",
-     "title": "Data Analyst Intern"
+     "title": "Web Developer Intern"
     },
     "variants": []
    },
-   "ms": 1870
+   "ms": 1915
   },
   {
    "phase": "plan",
    "type": "tool",
    "name": "suggest_actions",
    "args": {
-    "job_id": "787b76c2-f521-4eb2-8784-c09f76637588"
+    "job_id": "eee6d702-4161-49f9-b50a-9706daf02877"
    },
    "result": {
     "error": null,
@@ -441,11 +516,11 @@
       ],
       "approved_variants": 0,
       "best_score": 0.0,
-      "item_key": "exp:data analyst intern|tamarack logistics",
+      "item_key": "exp:web developer intern|kestrel print & sign",
       "match": "no_match",
       "propensity": null,
       "source": "fallback",
-      "title": "Data Analyst Intern @ Tamarack Logistics",
+      "title": "Web Developer Intern @ Kestrel Print & Sign",
       "variant": null
      },
      {
@@ -469,10 +544,10 @@
       "title": "Teaching Assistant @ Alder Valley State University, Department of Computer Science",
       "variant": null
      },
-     "… 4 more"
+     "… 5 more"
     ],
-    "job_id": "787b76c2-f521-4eb2-8784-c09f76637588",
-    "node_id": "658795f6-c555-4701-a12e-1a3e3c9f724d"
+    "job_id": "eee6d702-4161-49f9-b50a-9706daf02877",
+    "node_id": "d671ec49-b05c-4154-820b-fa1548214c7c"
    },
    "ms": 3130
   },
@@ -481,21 +556,22 @@
    "type": "agent",
    "text": "No approved bullet variants yet, so I'll write from your source bullets. Here's the plan. Nothing changes until you say so.",
    "items": [
-    "Data Analyst Intern: lead with the late-shipment model, and say \"predict\", the posting's word, instead of \"flag\".",
-    "Same role: quantify the report bullet, \"cutting its weekly preparation from 3 hours to 20 minutes\".",
-    "Transit Delay Predictor: put the dashboard before the API, since the posting names dashboards.",
-    "Drop Budget Tracker. It's a Java project and the posting doesn't ask for Java.",
-    "Skills: Python, SQL and scikit-learn first; Flask, Java, TypeScript and React come off."
+    "Projects first, above Experience: your best matches for this posting are projects.",
+    "Projects: swap Checkout A/B Test, Subscription Churn Model and Retail Sales Dashboard in for Recycling Sorter, Budget Tracker and Portfolio Site. For the A/B result I'll add the 19% relative lift I worked out from your 3.1% and 3.7%.",
+    "Web Developer Intern: lead with the SQL bullet, which the posting asks for, and cut the Node API and GitHub Actions bullets.",
+    "Teaching Assistant: lead with the plain-language bullet and call it a \"non-technical audience\", the posting's words.",
+    "Drop the Fernhollow Coffee job; the posting doesn't ask for it.",
+    "Skills: Python, SQL, pandas, statsmodels and scikit-learn first; the web skills come off."
    ],
-   "outro": "Everything else stays as you wrote it. Go ahead?",
+   "outro": "Campus Dining Recommender and everything else stays as you wrote it. Go ahead?",
    "note": "Written for this demo: the second item adds a figure that no source states, so the replay can show the check that catches it.",
-   "ms": 8914
+   "ms": 11851
   },
   {
    "phase": "approve",
    "type": "user",
-   "text": "Looks good. Go ahead, and yes, drop Budget Tracker.",
-   "ms": 2130
+   "text": "Looks good. Go ahead, and yes, drop the coffee shop job.",
+   "ms": 2280
   },
   {
    "phase": "gates",
@@ -509,106 +585,78 @@
    "name": "execute_plan",
    "args": {
     "program": {
-     "job_id": "787b76c2-f521-4eb2-8784-c09f76637588",
-     "parent": "658795f6-c555-4701-a12e-1a3e3c9f724d",
+     "job_id": "eee6d702-4161-49f9-b50a-9706daf02877",
+     "parent": "d671ec49-b05c-4154-820b-fa1548214c7c",
      "nodes": [
       {
        "id": "n1",
        "op": "revise",
-       "item_key": "exp:data analyst intern|tamarack logistics",
-       "strategy": "quantify",
-       "keywords": [
-        "predict",
-        "SQL",
-        "delays"
-       ],
-       "bullets": [
-        {
-         "text": "Trained a gradient-boosted scikit-learn model to predict late shipments, reaching 0.81 AUC on a held-out month.",
-         "cites": [
-          "exp:data analyst intern|tamarack logistics#b2"
-         ]
-        },
-        {
-         "text": "Built a weekly delivery-delay report in pandas and SQL that replaced a manual spreadsheet for the operations team, cu…",
-         "cites": [
-          "exp:data analyst intern|tamarack logistics#b0"
-         ]
-        },
-        {
-         "text": "Cleaned 14 months of shipment records, about 380,000 rows, and documented 9 data-quality checks.",
-         "cites": [
-          "exp:data analyst intern|tamarack logistics#b1"
-         ]
-        },
-        {
-         "text": "Explained the findings to 12 operations staff and wrote the handoff notes the team still uses.",
-         "cites": [
-          "exp:data analyst intern|tamarack logistics#b3"
-         ]
-        }
-       ]
+       "item_key": "exp:web developer intern|kestrel print & sign",
+       "bullets": "… 3 bullets, each citing its source",
+       "…": "2 more fields"
       },
       {
        "id": "n2",
-       "op": "keep",
-       "item_key": "exp:teaching assistant|alder valley state university, department of computer science"
+       "op": "revise",
+       "item_key": "exp:teaching assistant|alder valley state university, department of computer science",
+       "bullets": "… 4 bullets, each citing its source",
+       "…": "2 more fields"
       },
       {
        "id": "n3",
-       "op": "revise",
-       "item_key": "proj:transit delay predictor",
-       "strategy": "keyword_weave",
-       "keywords": [
-        "dashboards",
-        "delays"
-       ],
+       "op": "replace",
+       "item_key": "proj:recycling sorter",
+       "replacement_key": "proj:checkout a/b test",
        "bullets": [
         {
-         "text": "Predicted bus delays with a scikit-learn random forest trained on 2 years of public transit data, reaching a mean abs…",
+         "text": "Analyzed the A/B test in Python with a two-proportion z-test (statsmodels) to check significance; the one-page flow raised conversion from 3.1% to 3.7%, a 19% relative lift (p = 0.03).",
          "cites": [
-          "proj:transit delay predictor#b0"
+          "proj:checkout a/b test#b1"
          ]
         },
-        {
-         "text": "Built a Streamlit dashboard that shows delay hot spots by route and hour.",
-         "cites": [
-          "proj:transit delay predictor#b2"
-         ]
-        },
-        {
-         "text": "Served delay predictions through a FastAPI endpoint packaged with Docker and covered by 14 pytest tests.",
-         "cites": [
-          "proj:transit delay predictor#b1"
-         ]
-        }
-       ]
+        "… 3 more bullets"
+       ],
+       "…": "1 more fields"
       },
       {
        "id": "n4",
-       "op": "keep",
-       "item_key": "proj:campus dining recommender"
+       "op": "replace",
+       "item_key": "proj:budget tracker",
+       "replacement_key": "proj:subscription churn model",
+       "bullets": "… 4 bullets, each citing its source",
+       "…": "1 more fields"
       },
       {
        "id": "n5",
        "op": "keep",
-       "item_key": "proj:recycling sorter"
+       "item_key": "proj:campus dining recommender"
       },
       {
        "id": "n6",
+       "op": "replace",
+       "item_key": "proj:portfolio site",
+       "replacement_key": "proj:retail sales dashboard",
+       "bullets": "… 3 bullets, each citing its source",
+       "…": "1 more fields"
+      },
+      {
+       "id": "n7",
        "op": "delete",
-       "item_key": "proj:budget tracker",
-       "because": "user:approved dropping Budget Tracker, a Java project the posting does not ask for"
+       "item_key": "exp:shift lead|fernhollow coffee",
+       "because": "user:approved dropping the Fernhollow Coffee job, which the posting does not ask for"
       }
      ],
      "skills": [
       "Python",
       "SQL",
-      "scikit-learn",
       "pandas",
-      "Streamlit",
-      "Tableau",
       "… 7 more"
+     ],
+     "section_order": [
+      "education",
+      "projects",
+      "experience",
+      "skills"
      ],
      "host": {
       "name": "claude-code"
@@ -617,110 +665,75 @@
    },
    "result": {
     "committed": true,
-    "node_id": "995f6793-ae56-43e7-851f-13cbd2cc9eec",
+    "node_id": "722a41b7-b628-4248-8870-3d00ba148b48",
     "nodes": [
      {
-      "carried_edit": null,
-      "deltas": {
-       "coverage": 0.0,
-       "relevance_density": 0.006
-      },
       "id": "n1",
-      "improved": [
-       "relevance_density"
-      ],
-      "item_key": "exp:data analyst intern|tamarack logistics",
       "op": "revise",
-      "reason": "hard_gate: consistency ['consistency:Built a weekly delivery-delay report in…:20 minutes', 'consistency:Built a weekly delivery-delay report in…:3 hours']",
-      "review": null,
-      "semantic": null,
-      "status": "reverted",
-      "waived": null
-     },
-     {
-      "carried_edit": null,
-      "deltas": {},
-      "id": "n2",
-      "improved": [],
-      "item_key": "exp:teaching assistant|alder valley state university, department of computer science",
-      "op": "keep",
-      "reason": null,
-      "review": null,
-      "semantic": null,
-      "status": "kept",
-      "waived": null
-     },
-     {
-      "carried_edit": null,
-      "deltas": {
-       "coverage": 0.0,
-       "relevance_density": 0.0
-      },
-      "id": "n3",
-      "improved": [],
-      "item_key": "proj:transit delay predictor",
-      "op": "revise",
-      "reason": "no_target_improved: coverage, relevance_density",
-      "review": null,
-      "semantic": null,
-      "status": "reverted",
-      "waived": null
-     },
-     {
-      "carried_edit": null,
-      "deltas": {},
-      "id": "n4",
-      "improved": [],
-      "item_key": "proj:campus dining recommender",
-      "op": "keep",
-      "reason": null,
-      "review": null,
-      "semantic": null,
-      "status": "kept",
-      "waived": null
-     },
-     {
-      "carried_edit": null,
-      "deltas": {},
-      "id": "n5",
-      "improved": [],
-      "item_key": "proj:recycling sorter",
-      "op": "keep",
-      "reason": null,
-      "review": null,
-      "semantic": null,
-      "status": "kept",
-      "waived": null
-     },
-     {
-      "carried_edit": null,
-      "deltas": {
-       "coverage": 0.0,
-       "relevance_density": 0.0083
-      },
-      "id": "n6",
-      "improved": [
-       "relevance_density"
-      ],
-      "item_key": "proj:budget tracker",
-      "op": "delete",
-      "reason": null,
-      "review": null,
-      "semantic": null,
+      "item_key": "exp:web developer intern|kestrel print & sign",
       "status": "accepted",
-      "waived": null
+      "reason": null,
+      "…": "6 more fields"
+     },
+     {
+      "id": "n2",
+      "op": "revise",
+      "item_key": "exp:teaching assistant|alder valley state university, department of computer science",
+      "status": "accepted",
+      "reason": null,
+      "…": "6 more fields"
+     },
+     {
+      "id": "n7",
+      "op": "delete",
+      "item_key": "exp:shift lead|fernhollow coffee",
+      "status": "accepted",
+      "reason": "guard_waived: requested delete; mtld regressed 0.1352",
+      "…": "6 more fields"
+     },
+     {
+      "id": "n3",
+      "op": "replace",
+      "item_key": "proj:recycling sorter",
+      "status": "reverted",
+      "reason": "hard_gate: consistency ['consistency:Analyzed the A/B test in Python with a …:19%']",
+      "…": "6 more fields"
+     },
+     {
+      "id": "n4",
+      "op": "replace",
+      "item_key": "proj:budget tracker",
+      "status": "accepted",
+      "reason": null,
+      "…": "6 more fields"
+     },
+     {
+      "id": "n6",
+      "op": "replace",
+      "item_key": "proj:portfolio site",
+      "status": "accepted",
+      "reason": null,
+      "…": "6 more fields"
+     },
+     {
+      "id": "n5",
+      "op": "keep",
+      "item_key": "proj:campus dining recommender",
+      "status": "kept",
+      "reason": null,
+      "…": "6 more fields"
      }
     ],
     "violations": [],
     "…": "15 more fields"
    },
-   "ms": 10015
+   "ms": 7180
   },
   {
    "phase": "gates",
    "type": "agent",
-   "text": "ART reverted two of my changes. The report bullet: \"3 hours\" and \"20 minutes\" aren't in the bullet it cites, I made those numbers up, and that sank the rest of the role's edits with it. And the Transit Delay reorder improved nothing the checks measure, so that project stays as it was. Everything else went in as version 2. I'll resubmit the role with your original wording on the report bullet and leave the projects alone.",
-   "ms": 5086
+   "text": "ART reverted one of my changes: the Checkout A/B Test swap. \"19%\" isn't in the bullet it cites. I worked that figure out myself, and ART only accepts numbers your own bullet states. Everything else went in as version 2. I'll resubmit the swap with your original 3.1% and 3.7%.",
+   "ms": 3458
   },
   {
    "phase": "gates",
@@ -728,44 +741,47 @@
    "name": "execute_plan",
    "args": {
     "program": {
-     "job_id": "787b76c2-f521-4eb2-8784-c09f76637588",
-     "parent": "995f6793-ae56-43e7-851f-13cbd2cc9eec",
+     "job_id": "eee6d702-4161-49f9-b50a-9706daf02877",
+     "parent": "722a41b7-b628-4248-8870-3d00ba148b48",
      "nodes": [
       {
-       "id": "n1",
-       "op": "revise",
-       "item_key": "exp:data analyst intern|tamarack logistics",
-       "strategy": "quantify",
-       "keywords": [
-        "predict",
-        "SQL",
-        "delays"
-       ],
+       "id": "n3",
+       "op": "replace",
+       "item_key": "proj:recycling sorter",
+       "replacement_key": "proj:checkout a/b test",
        "bullets": [
         {
-         "text": "Trained a gradient-boosted scikit-learn model to predict late shipments, reaching 0.81 AUC on a held-out month.",
+         "text": "Designed an A/B test of two checkout flows on a mock store, choosing the sample size of 8,000 sessions per variant with a power calculation before running it.",
          "cites": [
-          "exp:data analyst intern|tamarack logistics#b2"
+          "proj:checkout a/b test#b0"
          ]
         },
         {
-         "text": "Built a weekly delivery-delay report in pandas and SQL that replaced a manual spreadsheet for the operations team.",
+         "text": "Analyzed the A/B test in Python with a two-proportion z-test (statsmodels) to check significance; the one-page flow raised conversion from 3.1% to 3.7% (p = 0.03).",
          "cites": [
-          "exp:data analyst intern|tamarack logistics#b0"
+          "proj:checkout a/b test#b1"
          ]
         },
         {
-         "text": "Cleaned 14 months of shipment records, about 380,000 rows, and documented 9 data-quality checks.",
+         "text": "Built a Streamlit dashboard that shows daily conversion and a 95% confidence interval for each variant.",
          "cites": [
-          "exp:data analyst intern|tamarack logistics#b1"
+          "proj:checkout a/b test#b2"
          ]
         },
         {
-         "text": "Explained the findings to 12 operations staff and wrote the handoff notes the team still uses.",
+         "text": "Wrote a one-page memo with a recommendation for a non-technical audience of classmates who had not taken the course.",
          "cites": [
-          "exp:data analyst intern|tamarack logistics#b3"
+          "proj:checkout a/b test#b3"
          ]
         }
+       ],
+       "keywords": [
+        "A/B test",
+        "experiments",
+        "significance",
+        "dashboards",
+        "Streamlit",
+        "non-technical"
        ]
       }
      ]
@@ -773,16 +789,17 @@
    },
    "result": {
     "committed": true,
-    "node_id": "e14d5aef-3402-4eb7-ba43-1cd80f74afbb",
-    "parent": "995f6793-ae56-43e7-851f-13cbd2cc9eec",
+    "node_id": "762b43ae-d229-4f78-9012-d528772a7552",
+    "parent": "722a41b7-b628-4248-8870-3d00ba148b48",
     "nodes": [
      {
-      "id": "n1",
-      "op": "revise",
-      "item_key": "exp:data analyst intern|tamarack logistics",
+      "id": "n3",
+      "op": "replace",
+      "item_key": "proj:recycling sorter",
       "status": "accepted",
       "reason": null,
       "improved": [
+       "coverage",
        "relevance_density"
       ],
       "…": "5 more fields"
@@ -791,25 +808,98 @@
     "violations": [],
     "…": "14 more fields"
    },
-   "ms": 3625
+   "ms": 3805
   },
   {
    "phase": "gates",
    "type": "agent",
-   "text": "Committed as version 3. Now I'll render version 1, then version 3, as PDFs.",
-   "ms": 1247
+   "text": "Committed as version 3. Here is what changed from version 1.",
+   "ms": 1082
+  },
+  {
+   "phase": "gates",
+   "type": "tool",
+   "name": "diff_nodes",
+   "args": {
+    "from_node": "d671ec49-b05c-4154-820b-fa1548214c7c",
+    "to_node": "762b43ae-d229-4f78-9012-d528772a7552"
+   },
+   "result": {
+    "items": [
+     {
+      "bullets_added": [],
+      "bullets_removed": [
+       "Trained 6 new baristas on the register, the opening checklist and the espresso machine.",
+       "Reconciled the till against the day's sales report at the end of every shift.",
+       "Scheduled a team of 9 around class timetables using a shared spreadsheet.",
+       "… 1 more"
+      ],
+      "change": "removed",
+      "key": "exp:shift lead|fernhollow coffee",
+      "reordered": false,
+      "title": "Shift Lead @ Fernhollow Coffee"
+     },
+     {
+      "bullets_added": [
+       "Explained recursion and hash tables in plain language to a non-technical audience of students w…"
+      ],
+      "bullets_removed": [
+       "Explained recursion and hash tables in plain language to students with no programming backgroun…"
+      ],
+      "change": "revised",
+      "key": "exp:teaching assistant|alder valley state university, department of computer science",
+      "reordered": false,
+      "title": "Teaching Assistant @ Alder Valley State University, Department of Computer Science"
+     },
+     {
+      "bullets_added": [
+       "Wrote SQL queries that turn order data into a weekly sales report by product, which the owner u…"
+      ],
+      "bullets_removed": [
+       "Added a Node and PostgreSQL order API with 12 endpoints and a staging environment.",
+       "Set up GitHub Actions to run the test suite on every pull request.",
+       "Wrote SQL queries that report weekly sales by product, which the owner used to decide what to s…"
+      ],
+      "change": "revised",
+      "key": "exp:web developer intern|kestrel print & sign",
+      "reordered": false,
+      "title": "Web Developer Intern @ Kestrel Print & Sign"
+     },
+     "… 6 more"
+    ],
+    "skills_added": [
+     "statsmodels",
+     "scikit-learn",
+     "Streamlit",
+     "… 1 more"
+    ],
+    "skills_removed": [
+     "Java",
+     "JavaScript",
+     "TypeScript",
+     "… 9 more"
+    ],
+    "…": "6 more fields"
+   },
+   "ms": 3445
+  },
+  {
+   "phase": "gates",
+   "type": "agent",
+   "text": "Now I'll render version 1, then version 3, as PDFs.",
+   "ms": 983
   },
   {
    "phase": "render",
    "type": "tool",
    "name": "render",
    "args": {
-    "job_id": "787b76c2-f521-4eb2-8784-c09f76637588",
-    "node_id": "658795f6-c555-4701-a12e-1a3e3c9f724d"
+    "job_id": "eee6d702-4161-49f9-b50a-9706daf02877",
+    "node_id": "d671ec49-b05c-4154-820b-fa1548214c7c"
    },
    "result": {
-    "node_id": "658795f6-c555-4701-a12e-1a3e3c9f724d",
-    "pdf_path": "~/.art/applications/Cedarline_Freight_Data_Science_Intern_Summer_2027/resume.pdf",
+    "node_id": "d671ec49-b05c-4154-820b-fa1548214c7c",
+    "pdf_path": "~/.art/applications/Brightwell_Market_Data_Science_Intern_Growth_Analytics_Summer_2027/res…",
     "pages": 1,
     "source": "generated",
     "…": "5 more fields"
@@ -821,12 +911,12 @@
    "type": "tool",
    "name": "render",
    "args": {
-    "job_id": "787b76c2-f521-4eb2-8784-c09f76637588",
-    "node_id": "e14d5aef-3402-4eb7-ba43-1cd80f74afbb"
+    "job_id": "eee6d702-4161-49f9-b50a-9706daf02877",
+    "node_id": "762b43ae-d229-4f78-9012-d528772a7552"
    },
    "result": {
-    "node_id": "e14d5aef-3402-4eb7-ba43-1cd80f74afbb",
-    "pdf_path": "~/.art/applications/Cedarline_Freight_Data_Science_Intern_Summer_2027/resume.pdf",
+    "node_id": "762b43ae-d229-4f78-9012-d528772a7552",
+    "pdf_path": "~/.art/applications/Brightwell_Market_Data_Science_Intern_Growth_Analytics_Summer_2027/res…",
     "pages": 1,
     "source": "generated",
     "…": "5 more fields"
@@ -836,8 +926,8 @@
   {
    "phase": "render",
    "type": "agent",
-   "text": "Done. The tailored resume fits on one page and is at ~/.art/applications/Cedarline_Freight_Data_Science_Intern_Summer_2027/resume.pdf. I rendered version 1 first for the comparison, so that file now holds the tailored one. Read it through before you send it.",
-   "ms": 3260
+   "text": "Done. The tailored resume fits on one page and is at ~/.art/applications/Brightwell_Market_Data_Science_Intern_Growth_Analytics_Summer_2027/resume.pdf. I rendered version 1 first for the comparison, so that file now holds the tailored one. Read it through before you send it.",
+   "ms": 3447
   }
  ]
 }
