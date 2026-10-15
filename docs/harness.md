@@ -478,8 +478,8 @@ construction.
 | Context | `art_briefing` | role family → pins, negative pins, persona traits, JobCards with rejections |
 | | `art_pins` | role family, job → strength-5 preferences and negative pins, verbatim; the set `art_briefing` pushes, plus a job's own (#202) |
 | Retrieval | `kg_search` | query, kinds → items with keys and evidence IDs |
-| | `list_items` | kind → every key and title, no query needed (#191) |
-| | `get_item` | key → record, evidence; an experience or project also lists its approved variants (id, text, tags, cites) (#229) |
+| | `list_items` | kind → every key and title, no query needed (#191); each item also carries its `preferences` and `job_rules` (#297) |
+| | `get_item` | key → record, evidence; an experience or project also lists its approved variants (id, text, tags, cites) (#229); its `preferences` (active, keyed to it, any scope) and `job_rules` (#297) |
 | | `get_profile` | → name and contact details for the header (#191) |
 | Ingest & library | `ingest_schema` | kind → JSON schema the host fills |
 | | `upsert_items` | records with evidence → keys, merges, conflicts; kind `variant` imports the user's curated bullets, approved (#229) |
@@ -575,6 +575,13 @@ negation cases separately (`eval/memory_gate_labels/REPORT.md`).
   subjects ("Kafka or Spark") are refused (`multiple`). A substring never binds ("Kafka" is not
   "Kafka Streams", "R" is not "React"). `edu:` and `ach:` keys resolve here; the gate's catalog
   does not hold them.
+- **A preference follows its item (#297).** `upsert_items` ends with `harness/relink.py::relink`: a
+  pending preference whose term now binds to exactly one item is superseded by a keyed copy
+  (`provenance.relinked_from`; the result lists them as `relinked`). Renaming an item
+  (`services.update_*`, or `correct` on an education's degree) re-keys its preferences
+  (`renamed_from`); deleting it turns them back into pending rows under its name
+  (`unlinked_from`), which re-bind only to that same key. Nothing is deleted. `get_item`,
+  `kg_search` and `list_items` return each item's `preferences` and `job_rules`.
 - **One-time import.** The gate captures only new statements, so `art-setup` tells the host
   to import the user's existing standing preferences and negative pins through
   `record_preference`. There is no import path of its own.
