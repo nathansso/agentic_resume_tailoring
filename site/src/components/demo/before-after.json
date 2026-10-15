@@ -1,61 +1,233 @@
 {
  "label": "Replay of a real ART run on a sample student profile",
- "cropped_to": 0.8214,
+ "fill": {
+  "before": 0.9244,
+  "after": 0.9398
+ },
+ "posting": {
+  "title": "Data Science Intern, Growth Analytics, Summer 2027",
+  "company": "Brightwell Market",
+  "location": "Hybrid, 12 weeks",
+  "requirements": [
+   {
+    "id": "degree",
+    "short": "Pursuing a B.S. or M.S. in a quantitative field",
+    "text": "The candidate is pursuing a B.S. or M.S. in computer science, statistics, data science or a related field.",
+    "type": "required"
+   },
+   {
+    "id": "sql",
+    "short": "SQL and Python, including pandas",
+    "text": "The candidate has experience with SQL and Python, including pandas.",
+    "type": "required"
+   },
+   {
+    "id": "ab",
+    "short": "Design and analyze A/B tests",
+    "text": "The candidate has designed or analyzed experiments, for example A/B tests and significance testing.",
+    "type": "required"
+   },
+   {
+    "id": "ml",
+    "short": "Machine learning with scikit-learn",
+    "text": "The candidate is familiar with machine learning libraries such as scikit-learn.",
+    "type": "required"
+   },
+   {
+    "id": "explain",
+    "short": "Explain results to a non-technical audience",
+    "text": "The candidate can explain results clearly to a non-technical audience.",
+    "type": "required"
+   },
+   {
+    "id": "dash",
+    "short": "Dashboards, for example in Streamlit or Tableau",
+    "text": "The candidate has built dashboards, for example with Streamlit or Tableau.",
+    "type": "preferred"
+   }
+  ]
+ },
  "before": {
   "sources": [
    {
     "src": "/demo/resume-before-1100.webp",
     "width": 1100,
-    "height": 1170
+    "height": 1424
    },
    {
     "src": "/demo/resume-before-600.webp",
     "width": 600,
-    "height": 638
+    "height": 777
    }
   ],
   "marks": [
    {
     "x": 0.0994,
-    "y": 0.3438,
-    "w": 0.8205,
-    "h": 0.0191
+    "y": 0.2497,
+    "w": 0.6511,
+    "h": 0.0157
    },
    {
     "x": 0.0994,
-    "y": 0.3655,
-    "w": 0.7018,
-    "h": 0.019
+    "y": 0.2849,
+    "w": 0.4891,
+    "h": 0.0157
+   },
+   {
+    "x": 0.0994,
+    "y": 0.3027,
+    "w": 0.7526,
+    "h": 0.0156
+   },
+   {
+    "x": 0.0994,
+    "y": 0.4133,
+    "w": 0.7396,
+    "h": 0.0154
+   },
+   {
+    "x": 0.0756,
+    "y": 0.4349,
+    "w": 0.8578,
+    "h": 0.0168
+   },
+   {
+    "x": 0.0755,
+    "y": 0.453,
+    "w": 0.1313,
+    "h": 0.0156
+   },
+   {
+    "x": 0.0994,
+    "y": 0.4708,
+    "w": 0.6381,
+    "h": 0.0154
+   },
+   {
+    "x": 0.0994,
+    "y": 0.4883,
+    "w": 0.5413,
+    "h": 0.0156
+   },
+   {
+    "x": 0.0994,
+    "y": 0.5059,
+    "w": 0.5466,
+    "h": 0.0156
+   },
+   {
+    "x": 0.0994,
+    "y": 0.5235,
+    "w": 0.535,
+    "h": 0.0156
+   },
+   {
+    "x": 0.0579,
+    "y": 0.5523,
+    "w": 0.0914,
+    "h": 0.0147
    },
    {
     "x": 0.0751,
-    "y": 0.8068,
+    "y": 0.579,
+    "w": 0.1394,
+    "h": 0.0154
+   },
+   {
+    "x": 0.0994,
+    "y": 0.5959,
+    "w": 0.8158,
+    "h": 0.0162
+   },
+   {
+    "x": 0.0994,
+    "y": 0.6142,
+    "w": 0.4568,
+    "h": 0.0154
+   },
+   {
+    "x": 0.0751,
+    "y": 0.6395,
     "w": 0.1302,
-    "h": 0.0187
+    "h": 0.0154
    },
    {
     "x": 0.0994,
-    "y": 0.8281,
+    "y": 0.657,
     "w": 0.6276,
-    "h": 0.019
+    "h": 0.0156
+   },
+   {
+    "x": 0.0994,
+    "y": 0.6745,
+    "w": 0.4628,
+    "h": 0.0157
    },
    {
     "x": 0.0751,
-    "y": 0.8918,
-    "w": 0.8649,
-    "h": 0.0191
+    "y": 0.6999,
+    "w": 0.112,
+    "h": 0.0131
+   },
+   {
+    "x": 0.0994,
+    "y": 0.7175,
+    "w": 0.6412,
+    "h": 0.0156
+   },
+   {
+    "x": 0.0994,
+    "y": 0.7351,
+    "w": 0.7199,
+    "h": 0.0156
+   },
+   {
+    "x": 0.0994,
+    "y": 0.7526,
+    "w": 0.6845,
+    "h": 0.0157
+   },
+   {
+    "x": 0.0755,
+    "y": 0.7781,
+    "w": 0.2534,
+    "h": 0.0154
+   },
+   {
+    "x": 0.0994,
+    "y": 0.7958,
+    "w": 0.7602,
+    "h": 0.0154
+   },
+   {
+    "x": 0.0994,
+    "y": 0.8127,
+    "w": 0.6539,
+    "h": 0.0162
    },
    {
     "x": 0.0751,
-    "y": 0.9103,
-    "w": 0.0817,
-    "h": 0.019
+    "y": 0.8654,
+    "w": 0.8666,
+    "h": 0.0157
+   },
+   {
+    "x": 0.075,
+    "y": 0.8808,
+    "w": 0.0635,
+    "h": 0.0154
+   },
+   {
+    "x": 0.0751,
+    "y": 0.8958,
+    "w": 0.2432,
+    "h": 0.0156
    },
    {
     "x": 0.0752,
-    "y": 0.9287,
-    "w": 0.325,
-    "h": 0.019
+    "y": 0.9107,
+    "w": 0.3818,
+    "h": 0.0157
    }
   ]
  },
@@ -64,38 +236,158 @@
    {
     "src": "/demo/resume-after-1100.webp",
     "width": 1100,
-    "height": 1170
+    "height": 1424
    },
    {
     "src": "/demo/resume-after-600.webp",
     "width": 600,
-    "height": 638
+    "height": 777
    }
   ],
   "marks": [
    {
-    "x": 0.0994,
-    "y": 0.2827,
-    "w": 0.826,
-    "h": 0.0191
+    "x": 0.0579,
+    "y": 0.1733,
+    "w": 0.0914,
+    "h": 0.0147
+   },
+   {
+    "x": 0.0755,
+    "y": 0.1993,
+    "w": 0.1626,
+    "h": 0.0167
    },
    {
     "x": 0.0994,
-    "y": 0.3656,
-    "w": 0.6789,
-    "h": 0.019
+    "y": 0.2169,
+    "w": 0.8372,
+    "h": 0.0312
+   },
+   {
+    "x": 0.0994,
+    "y": 0.2496,
+    "w": 0.8155,
+    "h": 0.0318
+   },
+   {
+    "x": 0.0994,
+    "y": 0.2824,
+    "w": 0.7575,
+    "h": 0.0161
+   },
+   {
+    "x": 0.0994,
+    "y": 0.3005,
+    "w": 0.8352,
+    "h": 0.0156
+   },
+   {
+    "x": 0.1142,
+    "y": 0.3189,
+    "w": 0.051,
+    "h": 0.0098
+   },
+   {
+    "x": 0.0755,
+    "y": 0.341,
+    "w": 0.2212,
+    "h": 0.0153
+   },
+   {
+    "x": 0.0994,
+    "y": 0.3585,
+    "w": 0.7009,
+    "h": 0.0156
+   },
+   {
+    "x": 0.0994,
+    "y": 0.3763,
+    "w": 0.8409,
+    "h": 0.0282
+   },
+   {
+    "x": 0.0994,
+    "y": 0.409,
+    "w": 0.6854,
+    "h": 0.0154
+   },
+   {
+    "x": 0.0994,
+    "y": 0.4264,
+    "w": 0.812,
+    "h": 0.0282
    },
    {
     "x": 0.0751,
-    "y": 0.8397,
-    "w": 0.7203,
-    "h": 0.0191
+    "y": 0.4669,
+    "w": 0.1935,
+    "h": 0.013
+   },
+   {
+    "x": 0.0994,
+    "y": 0.4844,
+    "w": 0.7823,
+    "h": 0.0154
+   },
+   {
+    "x": 0.0994,
+    "y": 0.502,
+    "w": 0.5023,
+    "h": 0.0156
+   },
+   {
+    "x": 0.0994,
+    "y": 0.5191,
+    "w": 0.5125,
+    "h": 0.0162
+   },
+   {
+    "x": 0.0755,
+    "y": 0.545,
+    "w": 0.2534,
+    "h": 0.0154
+   },
+   {
+    "x": 0.0994,
+    "y": 0.5627,
+    "w": 0.7602,
+    "h": 0.0154
+   },
+   {
+    "x": 0.0994,
+    "y": 0.5796,
+    "w": 0.6539,
+    "h": 0.0162
+   },
+   {
+    "x": 0.0994,
+    "y": 0.6679,
+    "w": 0.8087,
+    "h": 0.0282
+   },
+   {
+    "x": 0.0994,
+    "y": 0.7758,
+    "w": 0.8435,
+    "h": 0.0307
+   },
+   {
+    "x": 0.0751,
+    "y": 0.896,
+    "w": 0.5866,
+    "h": 0.0156
+   },
+   {
+    "x": 0.0751,
+    "y": 0.9111,
+    "w": 0.2889,
+    "h": 0.0155
    },
    {
     "x": 0.0752,
-    "y": 0.8582,
-    "w": 0.3255,
-    "h": 0.019
+    "y": 0.9262,
+    "w": 0.2125,
+    "h": 0.0156
    }
   ]
  },
@@ -103,39 +395,448 @@
   {
    "removed": [],
    "added": [
-    "Trained a gradient-boosted scikit-learn model to predict late shipments, reaching 0.81 AUC on a held-out month."
+    "Projects",
+    "Checkout A/B Test",
+    "Designed an A/B test of two checkout flows on a mock store, choosing the sample size of 8,000 sessions per variant with a power calculation before running it.",
+    "Analyzed the A/B test in Python with a two-proportion z-test (statsmodels) to check significance; the one-page flow raised conversion from 3.1% to 3.7% (p = 0.03).",
+    "Built a Streamlit dashboard that shows daily conversion and a 95% confidence interval for each variant.",
+    "Wrote a one-page memo with a recommendation for a non-technical audience of classmates who had not taken the",
+    "course.",
+    "Subscription Churn Model",
+    "Engineered 12 features from the customer table in SQL, such as tenure and support-call counts.",
+    "Trained logistic regression and gradient-boosted models in scikit-learn to predict which subscribers cancel, reaching 0.84 AUC on a held-out set.",
+    "Built a Tableau dashboard that ranks customers by churn risk and shows churn by plan type.",
+    "Wrote the analysis up in a Jupyter notebook with a plain-language summary for readers who do not work with data.",
+    "Retail Sales Dashboard",
+    "Loaded 1.2 million order rows into SQLite and wrote 8 SQL queries on sales, returns and repeat purchases.",
+    "Charted weekly revenue by region and product category in Tableau.",
+    "Found that 4 of the 31 product categories brought in 58% of revenue.",
+    "Campus Dining Recommender",
+    "Built a content-based recommender over 600 menu items using TF-IDF and cosine similarity in Python.",
+    "Surveyed 45 classmates to evaluate it; 62% of its top-5 picks were rated 4 stars or higher."
    ]
   },
   {
-   "removed": [
-    "Trained a gradient-boosted model in scikit-learn to flag late shipments, reaching 0.81 AUC on a held-out month.",
-    "Walked 12 operations staff through the findings and wrote the handoff notes the team still uses."
-   ],
+   "removed": [],
    "added": [
-    "Explained the findings to 12 operations staff and wrote the handoff notes the team still uses."
+    "Wrote SQL queries that turn order data into a weekly sales report by product, which the owner used to decide what to stock."
    ]
   },
   {
    "removed": [
-    "Budget Tracker",
-    "Wrote a command-line budget tracker in Java with an SQLite store and CSV import."
+    "Added a Node and PostgreSQL order API with 12 endpoints and a staging environment."
    ],
    "added": []
   },
   {
    "removed": [
-    "Languages & Libraries: Python, SQL, scikit-learn, Streamlit, FastAPI, pandas, Flask, Java, NumPy, PyTorch, React,",
-    "TypeScript",
-    "Tools: Tableau, Docker, Git, Jupyter, pytest"
+    "Set up GitHub Actions to run the test suite on every pull request.",
+    "Wrote SQL queries that report weekly sales by product, which the owner used to decide what to stock."
+   ],
+   "added": []
+  },
+  {
+   "removed": [],
+   "added": [
+    "Explained recursion and hash tables in plain language to a non-technical audience of students with no programming background."
+   ]
+  },
+  {
+   "removed": [
+    "Explained recursion and hash tables in plain language to students with no programming background.",
+    "Shift Lead Jun 2024 – Aug 2025",
+    "Fernhollow Coffee",
+    "Trained 6 new baristas on the register, the opening checklist and the espresso machine.",
+    "Reconciled the till against the day’s sales report at the end of every shift.",
+    "Scheduled a team of 9 around class timetables using a shared spreadsheet.",
+    "Opened the shop alone two mornings a week and handled the cash drop.",
+    "Projects",
+    "Recycling Sorter",
+    "Fine-tuned a ResNet-18 in PyTorch on 5,200 labeled photos to sort 6 kinds of recycling, reaching 88% accuracy.",
+    "Built the demo as a Flask app and presented it to the judges.",
+    "Budget Tracker",
+    "Wrote a command-line budget tracker in Java with an SQLite store and CSV import.",
+    "Added a monthly summary view and 20 unit tests with JUnit.",
+    "Portfolio Site",
+    "Built a personal portfolio in React and TypeScript and deployed it with GitHub Pages.",
+    "Scored 98 on Lighthouse performance by lazy-loading images and trimming the bundle to 140 KB.",
+    "Added a dark-mode toggle and a contact form that sends email through a serverless function.",
+    "Campus Dining Recommender",
+    "Built a content-based recommender over 600 menu items using TF-IDF and cosine similarity in Python.",
+    "Surveyed 45 classmates to evaluate it; 62% of its top-5 picks were rated 4 stars or higher."
+   ],
+   "added": []
+  },
+  {
+   "removed": [
+    "Languages & Libraries: Python, Java, JavaScript, TypeScript, React, Node.js, SQL, Flask, FastAPI, pandas, NumPy,",
+    "PyTorch",
+    "Data Engineering: PostgreSQL",
+    "Tools: Docker, Git, GitHub Actions, pytest, Jupyter"
    ],
    "added": [
-    "Languages & Libraries: Python, SQL, scikit-learn, pandas, Streamlit, FastAPI, NumPy, PyTorch",
-    "Tools: Tableau, Docker, pytest, Git, Jupyter"
+    "Languages & Libraries: Python, SQL, pandas, statsmodels, Streamlit, NumPy",
+    "AI & Machine Learning: scikit-learn",
+    "Tools: Tableau, Git, Jupyter"
    ]
   }
  ],
  "counts": {
-  "removed": 7,
-  "added": 4
- }
+  "removed": 28,
+  "added": 24
+ },
+ "groups": [
+  {
+   "id": "added",
+   "title": "Added from your graph",
+   "entries": [
+    {
+     "key": "proj:checkout a/b test",
+     "title": "Checkout A/B Test",
+     "kind": "project",
+     "position": 1,
+     "ordinal": "first",
+     "of": 4,
+     "bullets": [
+      "Designed an A/B test of two checkout flows on a mock store, choosing the sample size of 8,000 sessions per variant with a power calculation before running it.",
+      "Analyzed the A/B test in Python with a two-proportion z-test (statsmodels) to check significance; the one-page flow raised conversion from 3.1% to 3.7% (p = 0.03).",
+      "Built a Streamlit dashboard that shows daily conversion and a 95% confidence interval for each variant.",
+      "Wrote a one-page memo with a recommendation for a non-technical audience of classmates who had not taken the course."
+     ],
+     "replaces": "Recycling Sorter",
+     "serves": [
+      {
+       "id": "ab",
+       "short": "Design and analyze A/B tests"
+      },
+      {
+       "id": "explain",
+       "short": "Explain results to a non-technical audience"
+      }
+     ]
+    },
+    {
+     "key": "proj:subscription churn model",
+     "title": "Subscription Churn Model",
+     "kind": "project",
+     "position": 2,
+     "ordinal": "second",
+     "of": 4,
+     "bullets": [
+      "Engineered 12 features from the customer table in SQL, such as tenure and support-call counts.",
+      "Trained logistic regression and gradient-boosted models in scikit-learn to predict which subscribers cancel, reaching 0.84 AUC on a held-out set.",
+      "Built a Tableau dashboard that ranks customers by churn risk and shows churn by plan type.",
+      "Wrote the analysis up in a Jupyter notebook with a plain-language summary for readers who do not work with data."
+     ],
+     "replaces": "Budget Tracker",
+     "serves": [
+      {
+       "id": "ml",
+       "short": "Machine learning with scikit-learn"
+      },
+      {
+       "id": "explain",
+       "short": "Explain results to a non-technical audience"
+      }
+     ]
+    },
+    {
+     "key": "proj:retail sales dashboard",
+     "title": "Retail Sales Dashboard",
+     "kind": "project",
+     "position": 3,
+     "ordinal": "third",
+     "of": 4,
+     "bullets": [
+      "Loaded 1.2 million order rows into SQLite and wrote 8 SQL queries on sales, returns and repeat purchases.",
+      "Charted weekly revenue by region and product category in Tableau.",
+      "Found that 4 of the 31 product categories brought in 58% of revenue."
+     ],
+     "replaces": "Portfolio Site",
+     "serves": [
+      {
+       "id": "sql",
+       "short": "SQL and Python, including pandas"
+      },
+      {
+       "id": "dash",
+       "short": "Dashboards, for example in Streamlit or Tableau"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "moved",
+   "title": "Moved up",
+   "entries": [
+    {
+     "scope": "section",
+     "section": "Projects",
+     "above": [
+      "Experience"
+     ],
+     "serves": [
+      {
+       "id": "sql",
+       "short": "SQL and Python, including pandas"
+      },
+      {
+       "id": "ab",
+       "short": "Design and analyze A/B tests"
+      }
+     ]
+    },
+    {
+     "scope": "bullet",
+     "key": "exp:web developer intern|kestrel print & sign",
+     "title": "Web Developer Intern, Kestrel Print & Sign",
+     "text": "Wrote SQL queries that turn order data into a weekly sales report by product, which the owner used to decide what to stock.",
+     "from": 5,
+     "to": 1,
+     "serves": [
+      {
+       "id": "sql",
+       "short": "SQL and Python, including pandas"
+      }
+     ]
+    },
+    {
+     "scope": "bullet",
+     "key": "exp:teaching assistant|alder valley state university, department of computer science",
+     "title": "Teaching Assistant, Alder Valley State University, Department of Computer Science",
+     "text": "Explained recursion and hash tables in plain language to a non-technical audience of students with no programming background.",
+     "from": 4,
+     "to": 1,
+     "serves": [
+      {
+       "id": "explain",
+       "short": "Explain results to a non-technical audience"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "reworded",
+   "title": "Reworded",
+   "entries": [
+    {
+     "key": "exp:web developer intern|kestrel print & sign",
+     "title": "Web Developer Intern, Kestrel Print & Sign",
+     "before": "Wrote SQL queries that report weekly sales by product, which the owner used to decide what to stock.",
+     "after": "Wrote SQL queries that turn order data into a weekly sales report by product, which the owner used to decide what to stock.",
+     "from_graph": false,
+     "serves": [
+      {
+       "id": "sql",
+       "short": "SQL and Python, including pandas"
+      }
+     ]
+    },
+    {
+     "key": "exp:teaching assistant|alder valley state university, department of computer science",
+     "title": "Teaching Assistant, Alder Valley State University, Department of Computer Science",
+     "before": "Explained recursion and hash tables in plain language to students with no programming background.",
+     "after": "Explained recursion and hash tables in plain language to a non-technical audience of students with no programming background.",
+     "from_graph": false,
+     "serves": [
+      {
+       "id": "explain",
+       "short": "Explain results to a non-technical audience"
+      }
+     ]
+    },
+    {
+     "key": "proj:checkout a/b test",
+     "title": "Checkout A/B Test",
+     "before": "Analyzed the results with a two-proportion z-test in Python (statsmodels); the one-page flow raised conversion from 3.1% to 3.7% (p = 0.03).",
+     "after": "Analyzed the A/B test in Python with a two-proportion z-test (statsmodels) to check significance; the one-page flow raised conversion from 3.1% to 3.7% (p = 0.03).",
+     "from_graph": true,
+     "serves": [
+      {
+       "id": "ab",
+       "short": "Design and analyze A/B tests"
+      }
+     ]
+    },
+    {
+     "key": "proj:checkout a/b test",
+     "title": "Checkout A/B Test",
+     "before": "Wrote a one-page memo with a recommendation for classmates who had not taken the course.",
+     "after": "Wrote a one-page memo with a recommendation for a non-technical audience of classmates who had not taken the course.",
+     "from_graph": true,
+     "serves": [
+      {
+       "id": "explain",
+       "short": "Explain results to a non-technical audience"
+      }
+     ]
+    },
+    {
+     "key": "proj:subscription churn model",
+     "title": "Subscription Churn Model",
+     "before": "Trained logistic regression and gradient-boosted models in scikit-learn, reaching 0.84 AUC on a held-out set.",
+     "after": "Trained logistic regression and gradient-boosted models in scikit-learn to predict which subscribers cancel, reaching 0.84 AUC on a held-out set.",
+     "from_graph": true,
+     "serves": [
+      {
+       "id": "ml",
+       "short": "Machine learning with scikit-learn"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "cut",
+   "title": "Cut",
+   "entries": [
+    {
+     "key": "exp:web developer intern|kestrel print & sign",
+     "title": "Web Developer Intern, Kestrel Print & Sign",
+     "scope": "bullet",
+     "text": "Added a Node and PostgreSQL order API with 12 endpoints and a staging environment.",
+     "reason": "The posting asks for data work, not web infrastructure."
+    },
+    {
+     "key": "exp:web developer intern|kestrel print & sign",
+     "title": "Web Developer Intern, Kestrel Print & Sign",
+     "scope": "bullet",
+     "text": "Set up GitHub Actions to run the test suite on every pull request.",
+     "reason": "The posting asks for data work, not web infrastructure."
+    },
+    {
+     "key": "exp:shift lead|fernhollow coffee",
+     "title": "Shift Lead, Fernhollow Coffee",
+     "scope": "item",
+     "n_bullets": 4,
+     "replaced_by": null,
+     "reason": "The posting asks for data work, and the page is full without it."
+    },
+    {
+     "key": "proj:recycling sorter",
+     "title": "Recycling Sorter",
+     "scope": "item",
+     "n_bullets": 2,
+     "replaced_by": "Checkout A/B Test",
+     "reason": "No requirement in the posting asks for it."
+    },
+    {
+     "key": "proj:budget tracker",
+     "title": "Budget Tracker",
+     "scope": "item",
+     "n_bullets": 2,
+     "replaced_by": "Subscription Churn Model",
+     "reason": "No requirement in the posting asks for it."
+    },
+    {
+     "key": "proj:portfolio site",
+     "title": "Portfolio Site",
+     "scope": "item",
+     "n_bullets": 3,
+     "replaced_by": "Retail Sales Dashboard",
+     "reason": "No requirement in the posting asks for it."
+    }
+   ]
+  },
+  {
+   "id": "skills",
+   "title": "Skills trimmed",
+   "entries": [
+    {
+     "before_count": 18,
+     "after_count": 10,
+     "first": [
+      "Python",
+      "SQL",
+      "pandas",
+      "statsmodels",
+      "scikit-learn"
+     ],
+     "added": [
+      {
+       "name": "statsmodels",
+       "serves": [
+        {
+         "id": "ab",
+         "short": "Design and analyze A/B tests"
+        }
+       ]
+      },
+      {
+       "name": "scikit-learn",
+       "serves": [
+        {
+         "id": "ml",
+         "short": "Machine learning with scikit-learn"
+        }
+       ]
+      },
+      {
+       "name": "Streamlit",
+       "serves": [
+        {
+         "id": "dash",
+         "short": "Dashboards, for example in Streamlit or Tableau"
+        }
+       ]
+      },
+      {
+       "name": "Tableau",
+       "serves": [
+        {
+         "id": "dash",
+         "short": "Dashboards, for example in Streamlit or Tableau"
+        }
+       ]
+      }
+     ],
+     "removed": [
+      "Java",
+      "JavaScript",
+      "TypeScript",
+      "React",
+      "Node.js",
+      "PostgreSQL",
+      "Flask",
+      "FastAPI",
+      "PyTorch",
+      "Docker",
+      "GitHub Actions",
+      "pytest"
+     ],
+     "led_by": [
+      {
+       "name": "Python",
+       "serves": [
+        {
+         "id": "sql",
+         "short": "SQL and Python, including pandas"
+        }
+       ]
+      },
+      {
+       "name": "SQL",
+       "serves": [
+        {
+         "id": "sql",
+         "short": "SQL and Python, including pandas"
+        }
+       ]
+      },
+      {
+       "name": "pandas",
+       "serves": [
+        {
+         "id": "sql",
+         "short": "SQL and Python, including pandas"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
 }
