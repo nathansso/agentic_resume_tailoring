@@ -1,0 +1,2184 @@
+{
+  "_comment": "Hand-labelled (subject, expected) pairs for the preference anchor resolver `harness/anchors.py` (#296). Built only from the synthetic profiles in eval/profiles/ (never personal/). `subject` is the thing the user's `phrasing` is about, as a host would extract it; `expected` is what the user means, labelled by hand, never copied from the resolver: an item key, or one of ambiguous | pending | document | multiple. `add` overlays items the profile lacks (a second role with one title, a longer name that contains a shorter one). `candidates` lists the keys an ambiguous row must name. `note` records why a label is debatable, or why a row is expected to be a miss. Categories are explained in README.md.",
+  "version": 1,
+  "statuses": [
+    "key",
+    "ambiguous",
+    "pending",
+    "document",
+    "multiple"
+  ],
+  "rows": [
+    {
+      "id": "exact_key_01",
+      "profile": "benchmark_profile",
+      "subject": "skill:kafka",
+      "phrasing": "Never use skill:kafka.",
+      "category": "exact_key",
+      "expected": "skill:kafka"
+    },
+    {
+      "id": "exact_key_02",
+      "profile": "benchmark_profile",
+      "subject": "exp:backend software engineer|bluefin software",
+      "phrasing": "Drop exp:backend software engineer|bluefin software from the page.",
+      "category": "exact_key",
+      "expected": "exp:backend software engineer|bluefin software"
+    },
+    {
+      "id": "exact_key_03",
+      "profile": "benchmark_profile",
+      "subject": "proj:streamboard",
+      "phrasing": "Always lead with proj:streamboard.",
+      "category": "exact_key",
+      "expected": "proj:streamboard"
+    },
+    {
+      "id": "exact_key_04",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "ach:ardenne undergraduate research prize",
+      "phrasing": "Pin ach:ardenne undergraduate research prize.",
+      "category": "exact_key",
+      "expected": "ach:ardenne undergraduate research prize"
+    },
+    {
+      "id": "exact_key_05",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "edu:cascade state university|b.s. statistics",
+      "phrasing": "Never list edu:cascade state university|b.s. statistics.",
+      "category": "exact_key",
+      "expected": "edu:cascade state university|b.s. statistics"
+    },
+    {
+      "id": "exact_key_06",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "SKILL:Go",
+      "phrasing": "Keep SKILL:Go on every resume.",
+      "category": "exact_key",
+      "expected": "skill:go",
+      "note": "the key step is case-insensitive"
+    },
+    {
+      "id": "exact_key_07",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "skill:spark",
+      "phrasing": "Don't mention skill:spark.",
+      "category": "exact_key",
+      "expected": "skill:spark"
+    },
+    {
+      "id": "label_01",
+      "profile": "benchmark_profile",
+      "subject": "skill: Kafka",
+      "phrasing": "Never mention skill: Kafka.",
+      "category": "label",
+      "expected": "skill:kafka"
+    },
+    {
+      "id": "label_02",
+      "profile": "benchmark_profile",
+      "subject": "experience: Backend Software Engineer @ Bluefin Software",
+      "phrasing": "Hide experience: Backend Software Engineer @ Bluefin Software.",
+      "category": "label",
+      "expected": "exp:backend software engineer|bluefin software"
+    },
+    {
+      "id": "label_03",
+      "profile": "benchmark_profile",
+      "subject": "project: StreamBoard",
+      "phrasing": "Always include project: StreamBoard.",
+      "category": "label",
+      "expected": "proj:streamboard"
+    },
+    {
+      "id": "label_04",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "education: Ardenne Polytechnic — B.S. Computer Science",
+      "phrasing": "Never show education: Ardenne Polytechnic — B.S. Computer Science.",
+      "category": "label",
+      "expected": "edu:ardenne polytechnic|b.s. computer science"
+    },
+    {
+      "id": "label_05",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "achievement: Ardenne Undergraduate Research Prize",
+      "phrasing": "Keep achievement: Ardenne Undergraduate Research Prize.",
+      "category": "label",
+      "expected": "ach:ardenne undergraduate research prize"
+    },
+    {
+      "id": "label_06",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "skill: Go",
+      "phrasing": "Pin skill: Go.",
+      "category": "label",
+      "expected": "skill:go"
+    },
+    {
+      "id": "label_07",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "skill: R",
+      "phrasing": "Always list skill: R.",
+      "category": "label",
+      "expected": "skill:r"
+    },
+    {
+      "id": "bare_name_01",
+      "profile": "benchmark_profile",
+      "subject": "Kafka",
+      "phrasing": "Never mention Kafka.",
+      "category": "bare_name",
+      "expected": "skill:kafka"
+    },
+    {
+      "id": "bare_name_02",
+      "profile": "benchmark_profile",
+      "subject": "kafka",
+      "phrasing": "don't put kafka on there",
+      "category": "bare_name",
+      "expected": "skill:kafka"
+    },
+    {
+      "id": "bare_name_03",
+      "profile": "benchmark_profile",
+      "subject": "Python",
+      "phrasing": "Always put Python first.",
+      "category": "bare_name",
+      "expected": "skill:python"
+    },
+    {
+      "id": "bare_name_04",
+      "profile": "benchmark_profile",
+      "subject": "TypeScript",
+      "phrasing": "Drop TypeScript from the skills.",
+      "category": "bare_name",
+      "expected": "skill:typescript"
+    },
+    {
+      "id": "bare_name_05",
+      "profile": "benchmark_profile",
+      "subject": "C#",
+      "phrasing": "I don't want C# on my resume.",
+      "category": "bare_name",
+      "expected": "skill:c#",
+      "note": "the whole string is a held name, so its `&`, `/` or `,` is not a separator"
+    },
+    {
+      "id": "bare_name_06",
+      "profile": "benchmark_profile",
+      "subject": "scikit-learn",
+      "phrasing": "Keep scikit-learn.",
+      "category": "bare_name",
+      "expected": "skill:scikit-learn"
+    },
+    {
+      "id": "bare_name_07",
+      "profile": "benchmark_profile",
+      "subject": "GitHub Actions",
+      "phrasing": "Leave out GitHub Actions.",
+      "category": "bare_name",
+      "expected": "skill:github actions"
+    },
+    {
+      "id": "bare_name_08",
+      "profile": "benchmark_profile",
+      "subject": "StreamBoard",
+      "phrasing": "Never mention StreamBoard.",
+      "category": "bare_name",
+      "expected": "proj:streamboard"
+    },
+    {
+      "id": "bare_name_09",
+      "profile": "benchmark_profile",
+      "subject": "SemanticSearch-Lite",
+      "phrasing": "Always include SemanticSearch-Lite.",
+      "category": "bare_name",
+      "expected": "proj:semanticsearch-lite"
+    },
+    {
+      "id": "bare_name_10",
+      "profile": "benchmark_profile",
+      "subject": "LLM Resume Coach",
+      "phrasing": "Cut LLM Resume Coach.",
+      "category": "bare_name",
+      "expected": "proj:llm resume coach"
+    },
+    {
+      "id": "bare_name_11",
+      "profile": "benchmark_profile",
+      "subject": "Pixel Adventure",
+      "phrasing": "Drop Pixel Adventure, it's a game.",
+      "category": "bare_name",
+      "expected": "proj:pixel adventure"
+    },
+    {
+      "id": "bare_name_12",
+      "profile": "benchmark_profile",
+      "subject": "City University",
+      "phrasing": "Never list City University.",
+      "category": "bare_name",
+      "expected": "edu:city university|b.s. computer science"
+    },
+    {
+      "id": "bare_name_13",
+      "profile": "benchmark_profile",
+      "subject": "B.S. Computer Science",
+      "phrasing": "Leave my B.S. Computer Science off.",
+      "category": "bare_name",
+      "expected": "edu:city university|b.s. computer science"
+    },
+    {
+      "id": "bare_name_14",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "Rehearsal",
+      "phrasing": "Always show Rehearsal.",
+      "category": "bare_name",
+      "expected": "proj:rehearsal"
+    },
+    {
+      "id": "bare_name_15",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "TinyDetect",
+      "phrasing": "Cut TinyDetect.",
+      "category": "bare_name",
+      "expected": "proj:tinydetect"
+    },
+    {
+      "id": "bare_name_16",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "Weights & Biases",
+      "phrasing": "Never mention Weights & Biases.",
+      "category": "bare_name",
+      "expected": "skill:weights & biases",
+      "note": "the whole string is a held name, so its `&`, `/` or `,` is not a separator"
+    },
+    {
+      "id": "bare_name_17",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "SageMaker",
+      "phrasing": "Don't name SageMaker.",
+      "category": "bare_name",
+      "expected": "skill:sagemaker"
+    },
+    {
+      "id": "bare_name_18",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "Ardenne Undergraduate Research Prize",
+      "phrasing": "Always list the Ardenne Undergraduate Research Prize.",
+      "category": "bare_name",
+      "expected": "ach:ardenne undergraduate research prize"
+    },
+    {
+      "id": "bare_name_19",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Split Sum",
+      "phrasing": "Lead with Split Sum.",
+      "category": "bare_name",
+      "expected": "proj:split sum"
+    },
+    {
+      "id": "bare_name_20",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Chess Ledger",
+      "phrasing": "Drop Chess Ledger.",
+      "category": "bare_name",
+      "expected": "proj:chess ledger"
+    },
+    {
+      "id": "bare_name_21",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Spring Boot",
+      "phrasing": "Hide Spring Boot.",
+      "category": "bare_name",
+      "expected": "skill:spring boot"
+    },
+    {
+      "id": "bare_name_22",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Next.js",
+      "phrasing": "Never say Next.js.",
+      "category": "bare_name",
+      "expected": "skill:next.js"
+    },
+    {
+      "id": "bare_name_23",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Node.js",
+      "phrasing": "Leave Node.js off.",
+      "category": "bare_name",
+      "expected": "skill:node.js"
+    },
+    {
+      "id": "bare_name_24",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "Feed Forge",
+      "phrasing": "Always feature Feed Forge.",
+      "category": "bare_name",
+      "expected": "proj:feed forge"
+    },
+    {
+      "id": "bare_name_25",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "Campus Air",
+      "phrasing": "Cut Campus Air.",
+      "category": "bare_name",
+      "expected": "proj:campus air"
+    },
+    {
+      "id": "bare_name_26",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "dbt",
+      "phrasing": "Never mention dbt.",
+      "category": "bare_name",
+      "expected": "skill:dbt"
+    },
+    {
+      "id": "bare_name_27",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "Churn Explorer",
+      "phrasing": "Always show Churn Explorer.",
+      "category": "bare_name",
+      "expected": "proj:churn explorer"
+    },
+    {
+      "id": "bare_name_28",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "Grade Signal",
+      "phrasing": "Drop Grade Signal.",
+      "category": "bare_name",
+      "expected": "proj:grade signal"
+    },
+    {
+      "id": "bare_name_29",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "A/B testing",
+      "phrasing": "Never mention A/B testing.",
+      "category": "bare_name",
+      "expected": "skill:a/b testing",
+      "note": "the whole string is a held name, so its `&`, `/` or `,` is not a separator"
+    },
+    {
+      "id": "bare_name_30",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "2nd Place, Cascade Analytics Challenge",
+      "phrasing": "Always keep the 2nd Place, Cascade Analytics Challenge award.",
+      "category": "bare_name",
+      "expected": "ach:2nd place, cascade analytics challenge",
+      "note": "the whole string is a held name, so its `&`, `/` or `,` is not a separator"
+    },
+    {
+      "id": "role_01",
+      "profile": "benchmark_profile",
+      "subject": "Backend Software Engineer @ Bluefin Software",
+      "phrasing": "Never mention the Backend Software Engineer @ Bluefin Software job.",
+      "category": "role",
+      "expected": "exp:backend software engineer|bluefin software"
+    },
+    {
+      "id": "role_02",
+      "profile": "benchmark_profile",
+      "subject": "Backend Software Engineer",
+      "phrasing": "Drop my Backend Software Engineer role.",
+      "category": "role",
+      "expected": "exp:backend software engineer|bluefin software"
+    },
+    {
+      "id": "role_03",
+      "profile": "benchmark_profile",
+      "subject": "Machine Learning Engineer",
+      "phrasing": "Always show the Machine Learning Engineer role.",
+      "category": "role",
+      "expected": "exp:machine learning engineer|nimbus analytics"
+    },
+    {
+      "id": "role_04",
+      "profile": "benchmark_profile",
+      "subject": "Student Developer",
+      "phrasing": "Cut the Student Developer role.",
+      "category": "role",
+      "expected": "exp:student developer|city university it department"
+    },
+    {
+      "id": "role_05",
+      "profile": "benchmark_profile",
+      "subject": "Software Engineer",
+      "phrasing": "Always keep my Software Engineer job.",
+      "category": "role",
+      "expected": "exp:software engineer|harbor labs",
+      "note": "held exactly once: 'Backend Software Engineer' is a different title, and a title is compared whole"
+    },
+    {
+      "id": "role_06",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "Machine Learning Intern @ Vector Health",
+      "phrasing": "Keep the Machine Learning Intern @ Vector Health role.",
+      "category": "role",
+      "expected": "exp:machine learning intern|vector health"
+    },
+    {
+      "id": "role_07",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "Undergraduate Research Assistant",
+      "phrasing": "Never show the Undergraduate Research Assistant job.",
+      "category": "role",
+      "expected": "exp:undergraduate research assistant|ardenne polytechnic vision lab"
+    },
+    {
+      "id": "role_08",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Teaching Assistant",
+      "phrasing": "Drop the Teaching Assistant role.",
+      "category": "role",
+      "expected": "exp:teaching assistant|halden state university computer science department"
+    },
+    {
+      "id": "role_09",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Software Engineering Intern @ Northwind Systems",
+      "phrasing": "Always lead with the Software Engineering Intern @ Northwind Systems role.",
+      "category": "role",
+      "expected": "exp:software engineering intern|northwind systems"
+    },
+    {
+      "id": "role_10",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "Data Engineering Intern",
+      "phrasing": "Always show my Data Engineering Intern role.",
+      "category": "role",
+      "expected": "exp:data engineering intern|northgate media"
+    },
+    {
+      "id": "role_11",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "Data Science Intern @ Fairhaven Retail Group",
+      "phrasing": "Keep the Data Science Intern @ Fairhaven Retail Group role.",
+      "category": "role",
+      "expected": "exp:data science intern|fairhaven retail group"
+    },
+    {
+      "id": "role_12",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "data science intern",
+      "phrasing": "put the data science intern job first",
+      "category": "role",
+      "expected": "exp:data science intern|fairhaven retail group"
+    },
+    {
+      "id": "role_at_phrase_01",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "Data Science Intern at Fairhaven Retail Group",
+      "phrasing": "Never mention my Data Science Intern at Fairhaven Retail Group.",
+      "category": "role_at_phrase",
+      "expected": "exp:data science intern|fairhaven retail group",
+      "note": "the user means the role; `title @ company` is the only both-names form the resolver knows, so this is expected to stay pending"
+    },
+    {
+      "id": "role_at_phrase_02",
+      "profile": "benchmark_profile",
+      "subject": "Machine Learning Engineer at Nimbus Analytics",
+      "phrasing": "Drop the Machine Learning Engineer job at Nimbus Analytics.",
+      "category": "role_at_phrase",
+      "expected": "exp:machine learning engineer|nimbus analytics",
+      "note": "same: 'at' is not '@'"
+    },
+    {
+      "id": "role_at_phrase_03",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Teaching Assistant, Halden State University Computer Science Department",
+      "phrasing": "Cut my Teaching Assistant, Halden State University Computer Science Department role.",
+      "category": "role_at_phrase",
+      "expected": "exp:teaching assistant|halden state university computer science department",
+      "note": "the comma reads as a separator, so this is refused as several subjects, not bound to the wrong role"
+    },
+    {
+      "id": "company_alone_01",
+      "profile": "benchmark_profile",
+      "subject": "Bluefin Software",
+      "phrasing": "Never mention Bluefin Software.",
+      "category": "company_alone",
+      "expected": "pending",
+      "note": "#295 deviation: a company is a thing several items may mention, so it stays a term pin and is not bound to the one role held there"
+    },
+    {
+      "id": "company_alone_02",
+      "profile": "benchmark_profile",
+      "subject": "Nimbus Analytics",
+      "phrasing": "Don't name Nimbus Analytics anywhere.",
+      "category": "company_alone",
+      "expected": "pending",
+      "note": "#295 deviation: a company is a thing several items may mention, so it stays a term pin and is not bound to the one role held there"
+    },
+    {
+      "id": "company_alone_03",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "Vector Health",
+      "phrasing": "Leave Vector Health off.",
+      "category": "company_alone",
+      "expected": "pending",
+      "note": "#295 deviation: a company is a thing several items may mention, so it stays a term pin and is not bound to the one role held there"
+    },
+    {
+      "id": "company_alone_04",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Northwind Systems",
+      "phrasing": "Never mention Northwind Systems.",
+      "category": "company_alone",
+      "expected": "pending",
+      "note": "#295 deviation: a company is a thing several items may mention, so it stays a term pin and is not bound to the one role held there"
+    },
+    {
+      "id": "company_alone_05",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "Fairhaven Retail Group",
+      "phrasing": "Don't say Fairhaven Retail Group.",
+      "category": "company_alone",
+      "expected": "pending",
+      "note": "#295 deviation: a company is a thing several items may mention, so it stays a term pin and is not bound to the one role held there"
+    },
+    {
+      "id": "company_alone_06",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "Northgate Media",
+      "phrasing": "Never say Northgate Media.",
+      "category": "company_alone",
+      "expected": "pending",
+      "note": "#295 deviation: a company is a thing several items may mention, so it stays a term pin and is not bound to the one role held there"
+    },
+    {
+      "id": "ambiguous_01",
+      "profile": "benchmark_profile",
+      "subject": "Software Engineer",
+      "phrasing": "Never mention my Software Engineer role.",
+      "category": "ambiguous",
+      "expected": "ambiguous",
+      "add": {
+        "experiences": [
+          {
+            "title": "Software Engineer",
+            "company": "Acme Cloud"
+          }
+        ]
+      },
+      "candidates": [
+        "exp:software engineer|harbor labs",
+        "exp:software engineer|acme cloud"
+      ],
+      "note": "two roles share the title"
+    },
+    {
+      "id": "ambiguous_02",
+      "profile": "benchmark_profile",
+      "subject": "Software Engineer @ Acme Cloud",
+      "phrasing": "Drop the Software Engineer @ Acme Cloud job.",
+      "category": "ambiguous",
+      "expected": "exp:software engineer|acme cloud",
+      "add": {
+        "experiences": [
+          {
+            "title": "Software Engineer",
+            "company": "Acme Cloud"
+          }
+        ]
+      },
+      "note": "the both-names form picks one of the two roles that share a title"
+    },
+    {
+      "id": "ambiguous_03",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Teaching Assistant",
+      "phrasing": "Cut the Teaching Assistant job.",
+      "category": "ambiguous",
+      "expected": "ambiguous",
+      "add": {
+        "experiences": [
+          {
+            "title": "Teaching Assistant",
+            "company": "Brookfield College"
+          }
+        ]
+      },
+      "candidates": [
+        "exp:teaching assistant|halden state university computer science department",
+        "exp:teaching assistant|brookfield college"
+      ]
+    },
+    {
+      "id": "ambiguous_04",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "Data Science Intern",
+      "phrasing": "Always lead with my Data Science Intern role.",
+      "category": "ambiguous",
+      "expected": "ambiguous",
+      "add": {
+        "experiences": [
+          {
+            "title": "Data Science Intern",
+            "company": "Lumen Health"
+          }
+        ]
+      },
+      "candidates": [
+        "exp:data science intern|fairhaven retail group",
+        "exp:data science intern|lumen health"
+      ]
+    },
+    {
+      "id": "ambiguous_05",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "Machine Learning Intern",
+      "phrasing": "Drop the Machine Learning Intern job.",
+      "category": "ambiguous",
+      "expected": "ambiguous",
+      "add": {
+        "experiences": [
+          {
+            "title": "Machine Learning Intern",
+            "company": "Orbit Labs"
+          }
+        ]
+      },
+      "candidates": [
+        "exp:machine learning intern|vector health",
+        "exp:machine learning intern|orbit labs"
+      ]
+    },
+    {
+      "id": "ambiguous_06",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Halden State University",
+      "phrasing": "Never list Halden State University.",
+      "category": "ambiguous",
+      "expected": "ambiguous",
+      "add": {
+        "education": [
+          {
+            "institution": "Halden State University",
+            "degree": "M.S. Computer Science"
+          }
+        ]
+      },
+      "candidates": [
+        "edu:halden state university|b.s. computer science",
+        "edu:halden state university|m.s. computer science"
+      ],
+      "note": "one school, two degrees: the school's name is both"
+    },
+    {
+      "id": "ambiguous_07",
+      "profile": "benchmark_profile",
+      "subject": "Kafka",
+      "phrasing": "Never mention Kafka.",
+      "category": "ambiguous",
+      "expected": "ambiguous",
+      "add": {
+        "projects": [
+          {
+            "name": "Kafka"
+          }
+        ]
+      },
+      "candidates": [
+        "skill:kafka",
+        "proj:kafka"
+      ],
+      "note": "a skill and a project share a name; the user must say which"
+    },
+    {
+      "id": "ambiguous_08",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "Spark",
+      "phrasing": "Drop Spark.",
+      "category": "ambiguous",
+      "expected": "ambiguous",
+      "add": {
+        "projects": [
+          {
+            "name": "Spark"
+          }
+        ]
+      },
+      "candidates": [
+        "skill:spark",
+        "proj:spark"
+      ]
+    },
+    {
+      "id": "alias_01",
+      "profile": "benchmark_profile",
+      "subject": "torch",
+      "phrasing": "Never mention torch.",
+      "category": "alias",
+      "expected": "skill:pytorch"
+    },
+    {
+      "id": "alias_02",
+      "profile": "benchmark_profile",
+      "subject": "sklearn",
+      "phrasing": "Drop sklearn.",
+      "category": "alias",
+      "expected": "skill:scikit-learn"
+    },
+    {
+      "id": "alias_03",
+      "profile": "benchmark_profile",
+      "subject": "sk-learn",
+      "phrasing": "Don't say sk-learn.",
+      "category": "alias",
+      "expected": "skill:scikit-learn"
+    },
+    {
+      "id": "alias_04",
+      "profile": "benchmark_profile",
+      "subject": "scikit learn",
+      "phrasing": "Keep scikit learn.",
+      "category": "alias",
+      "expected": "skill:scikit-learn",
+      "note": "hyphen and space are one spelling"
+    },
+    {
+      "id": "alias_05",
+      "profile": "benchmark_profile",
+      "subject": "postgresql",
+      "phrasing": "Never mention postgresql.",
+      "category": "alias",
+      "expected": "skill:postgres",
+      "note": "the graph stores 'Postgres'; the alias map folds both to PostgreSQL"
+    },
+    {
+      "id": "alias_06",
+      "profile": "benchmark_profile",
+      "subject": "PostgreSQL",
+      "phrasing": "Never mention PostgreSQL.",
+      "category": "alias",
+      "expected": "skill:postgres"
+    },
+    {
+      "id": "alias_07",
+      "profile": "benchmark_profile",
+      "subject": "openai",
+      "phrasing": "Drop openai.",
+      "category": "alias",
+      "expected": "skill:openai api"
+    },
+    {
+      "id": "alias_08",
+      "profile": "benchmark_profile",
+      "subject": "sentence transformers",
+      "phrasing": "Never mention sentence transformers.",
+      "category": "alias",
+      "expected": "skill:sentence-transformers",
+      "note": "hyphen and space are one spelling"
+    },
+    {
+      "id": "alias_09",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "torch",
+      "phrasing": "Always mention torch.",
+      "category": "alias",
+      "expected": "skill:pytorch"
+    },
+    {
+      "id": "alias_10",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "sklearn",
+      "phrasing": "Cut sklearn.",
+      "category": "alias",
+      "expected": "skill:scikit-learn"
+    },
+    {
+      "id": "alias_11",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "postgres",
+      "phrasing": "Never say postgres.",
+      "category": "alias",
+      "expected": "skill:postgresql",
+      "note": "the graph stores 'PostgreSQL'"
+    },
+    {
+      "id": "alias_12",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "mongo",
+      "phrasing": "Leave mongo off.",
+      "category": "alias",
+      "expected": "skill:mongodb"
+    },
+    {
+      "id": "alias_13",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "postgresql",
+      "phrasing": "Don't mention postgresql.",
+      "category": "alias",
+      "expected": "skill:postgres"
+    },
+    {
+      "id": "alias_14",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "mongo",
+      "phrasing": "Drop mongo.",
+      "category": "alias",
+      "expected": "skill:mongodb"
+    },
+    {
+      "id": "alias_15",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "sklearn",
+      "phrasing": "Never say sklearn.",
+      "category": "alias",
+      "expected": "skill:scikit-learn"
+    },
+    {
+      "id": "alias_16",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "postgresql",
+      "phrasing": "Drop postgresql.",
+      "category": "alias",
+      "expected": "skill:postgres"
+    },
+    {
+      "id": "alias_17",
+      "profile": "benchmark_profile",
+      "subject": "cv2",
+      "phrasing": "Never mention cv2.",
+      "category": "alias",
+      "expected": "skill:opencv",
+      "add": {
+        "skills": [
+          "OpenCV"
+        ]
+      },
+      "note": "the import name of OpenCV"
+    },
+    {
+      "id": "alias_18",
+      "profile": "benchmark_profile",
+      "subject": "bs4",
+      "phrasing": "Never mention bs4.",
+      "category": "alias",
+      "expected": "skill:beautifulsoup",
+      "add": {
+        "skills": [
+          "BeautifulSoup"
+        ]
+      }
+    },
+    {
+      "id": "alias_overreach_01",
+      "profile": "benchmark_profile",
+      "subject": "torchvision",
+      "phrasing": "Never mention torchvision.",
+      "category": "alias_overreach",
+      "expected": "pending",
+      "note": "a different package from PyTorch; binding it would also ban PyTorch. The alias map folds it into PyTorch for ingestion; a preference should not follow"
+    },
+    {
+      "id": "alias_overreach_02",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "torchvision",
+      "phrasing": "Drop torchvision.",
+      "category": "alias_overreach",
+      "expected": "pending",
+      "note": "as above"
+    },
+    {
+      "id": "alias_candidate_01",
+      "profile": "benchmark_profile",
+      "subject": "k8s",
+      "phrasing": "Never mention k8s.",
+      "category": "alias_candidate",
+      "expected": "skill:kubernetes",
+      "note": "not in SKILL_ALIASES (#295 deviation)"
+    },
+    {
+      "id": "alias_candidate_02",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "k8s",
+      "phrasing": "Drop k8s.",
+      "category": "alias_candidate",
+      "expected": "skill:kubernetes"
+    },
+    {
+      "id": "alias_candidate_03",
+      "profile": "benchmark_profile",
+      "subject": "pg",
+      "phrasing": "Never mention pg.",
+      "category": "alias_candidate",
+      "expected": "skill:postgres",
+      "note": "could be 'pg' the Postgres shorthand; the user means Postgres here"
+    },
+    {
+      "id": "alias_candidate_04",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "js",
+      "phrasing": "Never say js.",
+      "category": "alias_candidate",
+      "expected": "skill:javascript"
+    },
+    {
+      "id": "alias_candidate_05",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Golang",
+      "phrasing": "Drop Golang.",
+      "category": "alias_candidate",
+      "expected": "skill:go"
+    },
+    {
+      "id": "alias_candidate_06",
+      "profile": "benchmark_profile",
+      "subject": "ts",
+      "phrasing": "Leave ts off.",
+      "category": "alias_candidate",
+      "expected": "skill:typescript",
+      "note": "two characters: short names never bind through an alias"
+    },
+    {
+      "id": "alias_candidate_07",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "tf",
+      "phrasing": "Never mention tf.",
+      "category": "alias_candidate",
+      "expected": "skill:tensorflow",
+      "note": "deliberately not an alias: 'TF' is also a fragment of TF-IDF"
+    },
+    {
+      "id": "alias_candidate_08",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "wandb",
+      "phrasing": "Drop wandb.",
+      "category": "alias_candidate",
+      "expected": "skill:weights & biases"
+    },
+    {
+      "id": "alias_candidate_09",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "Weights and Biases",
+      "phrasing": "Never mention Weights and Biases.",
+      "category": "alias_candidate",
+      "expected": "skill:weights & biases",
+      "note": "'and' and '&' are one spelling to the user"
+    },
+    {
+      "id": "alias_candidate_10",
+      "profile": "benchmark_profile",
+      "subject": "gh actions",
+      "phrasing": "Never mention gh actions.",
+      "category": "alias_candidate",
+      "expected": "skill:github actions"
+    },
+    {
+      "id": "absent_01",
+      "profile": "benchmark_profile",
+      "subject": "Rust",
+      "phrasing": "Never mention Rust.",
+      "category": "absent",
+      "expected": "pending",
+      "note": "no item holds it: stored as a pending term for #297 to re-link"
+    },
+    {
+      "id": "absent_02",
+      "profile": "benchmark_profile",
+      "subject": "Terraform",
+      "phrasing": "Don't put Terraform on there.",
+      "category": "absent",
+      "expected": "pending",
+      "note": "no item holds it: stored as a pending term for #297 to re-link"
+    },
+    {
+      "id": "absent_03",
+      "profile": "benchmark_profile",
+      "subject": "Spark",
+      "phrasing": "Never say Spark.",
+      "category": "absent",
+      "expected": "pending",
+      "note": "no item holds it: stored as a pending term for #297 to re-link"
+    },
+    {
+      "id": "absent_04",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "Kafka",
+      "phrasing": "Never mention Kafka.",
+      "category": "absent",
+      "expected": "pending",
+      "note": "no item holds it: stored as a pending term for #297 to re-link"
+    },
+    {
+      "id": "absent_05",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "Kubernetes",
+      "phrasing": "Drop Kubernetes.",
+      "category": "absent",
+      "expected": "pending",
+      "note": "no item holds it: stored as a pending term for #297 to re-link"
+    },
+    {
+      "id": "absent_06",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Snowflake",
+      "phrasing": "Never mention Snowflake.",
+      "category": "absent",
+      "expected": "pending",
+      "note": "no item holds it: stored as a pending term for #297 to re-link"
+    },
+    {
+      "id": "absent_07",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "PyTorch",
+      "phrasing": "Don't say PyTorch.",
+      "category": "absent",
+      "expected": "pending",
+      "note": "no item holds it: stored as a pending term for #297 to re-link"
+    },
+    {
+      "id": "absent_08",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "Ruby",
+      "phrasing": "Never mention Ruby.",
+      "category": "absent",
+      "expected": "pending",
+      "note": "no item holds it: stored as a pending term for #297 to re-link"
+    },
+    {
+      "id": "absent_09",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "Hadoop",
+      "phrasing": "Don't put Hadoop on.",
+      "category": "absent",
+      "expected": "pending",
+      "note": "no item holds it: stored as a pending term for #297 to re-link"
+    },
+    {
+      "id": "absent_10",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "Kafka",
+      "phrasing": "Never mention Kafka.",
+      "category": "absent",
+      "expected": "pending",
+      "note": "no item holds it: stored as a pending term for #297 to re-link"
+    },
+    {
+      "id": "absent_11",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "Docker",
+      "phrasing": "Never say Docker.",
+      "category": "absent",
+      "expected": "pending",
+      "note": "no item holds it: stored as a pending term for #297 to re-link"
+    },
+    {
+      "id": "absent_12",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "computer vision",
+      "phrasing": "Don't mention computer vision.",
+      "category": "absent",
+      "expected": "pending",
+      "note": "no item holds it: stored as a pending term for #297 to re-link"
+    },
+    {
+      "id": "absent_13",
+      "profile": "benchmark_profile",
+      "subject": "my startup",
+      "phrasing": "Never mention my startup.",
+      "category": "absent",
+      "expected": "pending",
+      "note": "no item holds it: stored as a pending term for #297 to re-link"
+    },
+    {
+      "id": "absent_14",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Stripe",
+      "phrasing": "Never mention Stripe.",
+      "category": "absent",
+      "expected": "pending",
+      "note": "no item holds it: stored as a pending term for #297 to re-link"
+    },
+    {
+      "id": "absent_15",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "hackathons",
+      "phrasing": "Never mention hackathons.",
+      "category": "absent",
+      "expected": "pending",
+      "note": "no item holds it: stored as a pending term for #297 to re-link"
+    },
+    {
+      "id": "short_decoy_01",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "R",
+      "phrasing": "Always list R.",
+      "category": "short_decoy",
+      "expected": "skill:r"
+    },
+    {
+      "id": "short_decoy_02",
+      "profile": "benchmark_profile",
+      "subject": "R",
+      "phrasing": "Never mention R.",
+      "category": "short_decoy",
+      "expected": "pending",
+      "note": "held: React, not R"
+    },
+    {
+      "id": "short_decoy_03",
+      "profile": "benchmark_profile",
+      "subject": "React",
+      "phrasing": "Never mention React.",
+      "category": "short_decoy",
+      "expected": "skill:react"
+    },
+    {
+      "id": "short_decoy_04",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "React",
+      "phrasing": "Never mention React.",
+      "category": "short_decoy",
+      "expected": "pending",
+      "note": "held: R, not React"
+    },
+    {
+      "id": "short_decoy_05",
+      "profile": "benchmark_profile",
+      "subject": "C",
+      "phrasing": "Never mention C.",
+      "category": "short_decoy",
+      "expected": "pending",
+      "note": "held: C#; C is not C#"
+    },
+    {
+      "id": "short_decoy_06",
+      "profile": "benchmark_profile",
+      "subject": "C#",
+      "phrasing": "Never mention C#.",
+      "category": "short_decoy",
+      "expected": "skill:c#"
+    },
+    {
+      "id": "short_decoy_07",
+      "profile": "benchmark_profile",
+      "subject": "C++",
+      "phrasing": "Never mention C++.",
+      "category": "short_decoy",
+      "expected": "pending"
+    },
+    {
+      "id": "short_decoy_08",
+      "profile": "benchmark_profile",
+      "subject": "C/C++",
+      "phrasing": "Never mention C/C++.",
+      "category": "short_decoy",
+      "expected": "pending",
+      "note": "an unspaced slash is one name, not two"
+    },
+    {
+      "id": "short_decoy_09",
+      "profile": "benchmark_profile",
+      "subject": "Go",
+      "phrasing": "Never mention Go.",
+      "category": "short_decoy",
+      "expected": "pending",
+      "note": "no Go skill is held"
+    },
+    {
+      "id": "short_decoy_10",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Go",
+      "phrasing": "Never mention Go.",
+      "category": "short_decoy",
+      "expected": "skill:go"
+    },
+    {
+      "id": "short_decoy_11",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Google",
+      "phrasing": "Never mention Google.",
+      "category": "short_decoy",
+      "expected": "pending",
+      "note": "held: Go; Go is not Google"
+    },
+    {
+      "id": "short_decoy_12",
+      "profile": "benchmark_profile",
+      "subject": "Java",
+      "phrasing": "Never mention Java.",
+      "category": "short_decoy",
+      "expected": "pending",
+      "note": "neither Java nor JavaScript is held"
+    },
+    {
+      "id": "short_decoy_13",
+      "profile": "benchmark_profile",
+      "subject": "JavaScript",
+      "phrasing": "Never mention JavaScript.",
+      "category": "short_decoy",
+      "expected": "pending",
+      "note": "held: TypeScript, which is not JavaScript"
+    },
+    {
+      "id": "short_decoy_14",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Java",
+      "phrasing": "Drop Java.",
+      "category": "short_decoy",
+      "expected": "skill:java"
+    },
+    {
+      "id": "short_decoy_15",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "JavaScript",
+      "phrasing": "Drop JavaScript.",
+      "category": "short_decoy",
+      "expected": "skill:javascript"
+    },
+    {
+      "id": "short_decoy_16",
+      "profile": "benchmark_profile",
+      "subject": "SQL",
+      "phrasing": "Keep SQL.",
+      "category": "short_decoy",
+      "expected": "skill:sql"
+    },
+    {
+      "id": "short_decoy_17",
+      "profile": "benchmark_profile",
+      "subject": "MySQL",
+      "phrasing": "Never mention MySQL.",
+      "category": "short_decoy",
+      "expected": "skill:mysql"
+    },
+    {
+      "id": "short_decoy_18",
+      "profile": "benchmark_profile",
+      "subject": "NoSQL",
+      "phrasing": "Never mention NoSQL.",
+      "category": "short_decoy",
+      "expected": "pending",
+      "note": "held: SQL and MySQL; NoSQL is not either"
+    },
+    {
+      "id": "short_decoy_19",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "PySpark",
+      "phrasing": "Never mention PySpark.",
+      "category": "short_decoy",
+      "expected": "pending",
+      "note": "held: Spark; PySpark is a different skill"
+    },
+    {
+      "id": "short_decoy_20",
+      "profile": "benchmark_profile",
+      "subject": "GitHub",
+      "phrasing": "Never mention GitHub.",
+      "category": "short_decoy",
+      "expected": "pending",
+      "note": "held: GitHub Actions; GitHub is not the product the skill names"
+    },
+    {
+      "id": "short_decoy_21",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "Go",
+      "phrasing": "Never mention Go.",
+      "category": "short_decoy",
+      "expected": "pending"
+    },
+    {
+      "id": "short_decoy_22",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "C",
+      "phrasing": "Never mention C.",
+      "category": "short_decoy",
+      "expected": "pending",
+      "note": "no C held"
+    },
+    {
+      "id": "short_decoy_23",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "R&D",
+      "phrasing": "Never mention R&D.",
+      "category": "short_decoy",
+      "expected": "pending",
+      "note": "held: R; R&D is not R"
+    },
+    {
+      "id": "substring_decoy_01",
+      "profile": "benchmark_profile",
+      "subject": "Kafka Streams",
+      "phrasing": "Never mention Kafka Streams.",
+      "category": "substring_decoy",
+      "expected": "pending",
+      "note": "held: Kafka; Kafka Streams is a different thing"
+    },
+    {
+      "id": "substring_decoy_02",
+      "profile": "benchmark_profile",
+      "subject": "Kafka",
+      "phrasing": "Never mention Kafka.",
+      "category": "substring_decoy",
+      "expected": "skill:kafka",
+      "add": {
+        "skills": [
+          "Kafka Streams"
+        ]
+      },
+      "note": "Kafka Streams is also held; Kafka is still exactly one item"
+    },
+    {
+      "id": "substring_decoy_03",
+      "profile": "benchmark_profile",
+      "subject": "Kafka Streams",
+      "phrasing": "Never mention Kafka Streams.",
+      "category": "substring_decoy",
+      "expected": "skill:kafka streams",
+      "add": {
+        "skills": [
+          "Kafka Streams"
+        ]
+      }
+    },
+    {
+      "id": "substring_decoy_04",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Kafka Connect",
+      "phrasing": "Never mention Kafka Connect.",
+      "category": "substring_decoy",
+      "expected": "pending"
+    },
+    {
+      "id": "substring_decoy_05",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "Spark Notebook",
+      "phrasing": "Never mention Spark Notebook.",
+      "category": "substring_decoy",
+      "expected": "proj:spark notebook",
+      "add": {
+        "projects": [
+          {
+            "name": "Spark Notebook"
+          }
+        ]
+      }
+    },
+    {
+      "id": "substring_decoy_06",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "Spark",
+      "phrasing": "Never mention Spark.",
+      "category": "substring_decoy",
+      "expected": "skill:spark",
+      "add": {
+        "projects": [
+          {
+            "name": "Spark Notebook"
+          }
+        ]
+      },
+      "note": "a project named 'Spark Notebook' does not make 'Spark' ambiguous"
+    },
+    {
+      "id": "substring_decoy_07",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "Grade",
+      "phrasing": "Never mention Grade.",
+      "category": "substring_decoy",
+      "expected": "pending",
+      "note": "a word of 'Grade Signal'"
+    },
+    {
+      "id": "substring_decoy_08",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "Signal",
+      "phrasing": "Never mention Signal.",
+      "category": "substring_decoy",
+      "expected": "pending"
+    },
+    {
+      "id": "substring_decoy_09",
+      "profile": "benchmark_profile",
+      "subject": "Bluefin",
+      "phrasing": "Never mention Bluefin.",
+      "category": "substring_decoy",
+      "expected": "pending",
+      "note": "the first word of a company is not the company's name"
+    },
+    {
+      "id": "substring_decoy_10",
+      "profile": "benchmark_profile",
+      "subject": "Machine Learning",
+      "phrasing": "Never mention machine learning.",
+      "category": "substring_decoy",
+      "expected": "pending",
+      "note": "a topic that appears inside a role title"
+    },
+    {
+      "id": "substring_decoy_11",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "Data Science",
+      "phrasing": "Never mention data science.",
+      "category": "substring_decoy",
+      "expected": "pending",
+      "note": "a topic inside a role title"
+    },
+    {
+      "id": "substring_decoy_12",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Software",
+      "phrasing": "Never mention software.",
+      "category": "substring_decoy",
+      "expected": "pending"
+    },
+    {
+      "id": "substring_decoy_13",
+      "profile": "benchmark_profile",
+      "subject": "Student",
+      "phrasing": "Never mention Student.",
+      "category": "substring_decoy",
+      "expected": "pending"
+    },
+    {
+      "id": "substring_decoy_14",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "Computer Science",
+      "phrasing": "Never mention computer science.",
+      "category": "substring_decoy",
+      "expected": "pending",
+      "note": "a topic that appears inside a degree name"
+    },
+    {
+      "id": "substring_decoy_15",
+      "profile": "benchmark_profile",
+      "subject": "Postgres Wire",
+      "phrasing": "Never mention Postgres Wire.",
+      "category": "substring_decoy",
+      "expected": "pending"
+    },
+    {
+      "id": "section_01",
+      "profile": "benchmark_profile",
+      "subject": "section: projects",
+      "phrasing": "Never include a projects section.",
+      "category": "section",
+      "expected": "document"
+    },
+    {
+      "id": "section_02",
+      "profile": "benchmark_profile",
+      "subject": "section: Education",
+      "phrasing": "Drop the Education section.",
+      "category": "section",
+      "expected": "document"
+    },
+    {
+      "id": "section_03",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "projects",
+      "phrasing": "No projects.",
+      "category": "section",
+      "expected": "document",
+      "note": "a bare section name"
+    },
+    {
+      "id": "section_04",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "skills",
+      "phrasing": "Skills last.",
+      "category": "section",
+      "expected": "document"
+    },
+    {
+      "id": "section_05",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "achievements",
+      "phrasing": "Never show achievements.",
+      "category": "section",
+      "expected": "document"
+    },
+    {
+      "id": "section_06",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "Experience",
+      "phrasing": "Experience goes first.",
+      "category": "section",
+      "expected": "document"
+    },
+    {
+      "id": "section_07",
+      "profile": "benchmark_profile",
+      "subject": "the projects section",
+      "phrasing": "Drop the projects section.",
+      "category": "section",
+      "expected": "document",
+      "note": "the user means the section; the resolver knows only the bare name and `section:`"
+    },
+    {
+      "id": "section_08",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "education section",
+      "phrasing": "Put the education section last.",
+      "category": "section",
+      "expected": "document"
+    },
+    {
+      "id": "section_09",
+      "profile": "benchmark_profile",
+      "subject": "page",
+      "phrasing": "Keep it to one page.",
+      "category": "section",
+      "expected": "document"
+    },
+    {
+      "id": "section_10",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "one page",
+      "phrasing": "Keep it to one page.",
+      "category": "section",
+      "expected": "document"
+    },
+    {
+      "id": "section_11",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "two pages",
+      "phrasing": "Two pages is fine.",
+      "category": "section",
+      "expected": "document"
+    },
+    {
+      "id": "section_12",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "page count",
+      "phrasing": "Page count must stay at one.",
+      "category": "section",
+      "expected": "document"
+    },
+    {
+      "id": "section_13",
+      "profile": "benchmark_profile",
+      "subject": "resume length",
+      "phrasing": "Keep the resume length under a page.",
+      "category": "section",
+      "expected": "document"
+    },
+    {
+      "id": "section_14",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "order of sections",
+      "phrasing": "Fix the order of sections.",
+      "category": "section",
+      "expected": "document",
+      "note": "'order' is a document word"
+    },
+    {
+      "id": "section_15",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "bullets per role",
+      "phrasing": "Never more than four bullets per role.",
+      "category": "section",
+      "expected": "document",
+      "note": "structure, not a thing; 'bullets' is not a document word, so a recall miss is expected"
+    },
+    {
+      "id": "section_16",
+      "profile": "benchmark_profile",
+      "subject": "projects and skills",
+      "phrasing": "Put projects before skills.",
+      "category": "section",
+      "expected": "document",
+      "note": "two section names: both are document subjects"
+    },
+    {
+      "id": "section_17",
+      "profile": "benchmark_profile",
+      "subject": "font",
+      "phrasing": "Use a smaller font.",
+      "category": "section",
+      "expected": "document"
+    },
+    {
+      "id": "section_18",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "margins",
+      "phrasing": "Narrower margins.",
+      "category": "section",
+      "expected": "document"
+    },
+    {
+      "id": "section_19",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "formatting",
+      "phrasing": "Keep the formatting plain.",
+      "category": "section",
+      "expected": "document"
+    },
+    {
+      "id": "style_01",
+      "profile": "benchmark_profile",
+      "subject": "tone",
+      "phrasing": "Make the tone more formal.",
+      "category": "style",
+      "expected": "document"
+    },
+    {
+      "id": "style_02",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "formal tone",
+      "phrasing": "Use a formal tone.",
+      "category": "style",
+      "expected": "document"
+    },
+    {
+      "id": "style_03",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "wording",
+      "phrasing": "Plainer wording please.",
+      "category": "style",
+      "expected": "document"
+    },
+    {
+      "id": "style_04",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "active voice",
+      "phrasing": "Always use the active voice.",
+      "category": "style",
+      "expected": "document"
+    },
+    {
+      "id": "style_05",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "phrasing",
+      "phrasing": "Tighter phrasing.",
+      "category": "style",
+      "expected": "document"
+    },
+    {
+      "id": "style_06",
+      "profile": "benchmark_profile",
+      "subject": "summary",
+      "phrasing": "No summary at the top.",
+      "category": "style",
+      "expected": "document"
+    },
+    {
+      "id": "style_07",
+      "profile": "benchmark_profile",
+      "subject": "style",
+      "phrasing": "Keep the style understated.",
+      "category": "style",
+      "expected": "document"
+    },
+    {
+      "id": "style_08",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "layout",
+      "phrasing": "Simpler layout.",
+      "category": "style",
+      "expected": "document"
+    },
+    {
+      "id": "style_09",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "past tense",
+      "phrasing": "Write every bullet in the past tense.",
+      "category": "style",
+      "expected": "document",
+      "note": "a wording rule about the page; no document word in it, so a recall miss is expected"
+    },
+    {
+      "id": "style_10",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "buzzwords",
+      "phrasing": "No buzzwords.",
+      "category": "style",
+      "expected": "document",
+      "note": "a wording rule with no document word"
+    },
+    {
+      "id": "style_11",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "first person",
+      "phrasing": "Never write in the first person.",
+      "category": "style",
+      "expected": "document",
+      "note": "a wording rule with no document word"
+    },
+    {
+      "id": "scope_01",
+      "profile": "benchmark_profile",
+      "subject": "Kafka",
+      "phrasing": "For ML roles, never mention Kafka.",
+      "category": "scope",
+      "expected": "skill:kafka"
+    },
+    {
+      "id": "scope_02",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "Kafka",
+      "phrasing": "On data engineering jobs, lead with Kafka.",
+      "category": "scope",
+      "expected": "skill:kafka"
+    },
+    {
+      "id": "scope_03",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Teaching Assistant",
+      "phrasing": "For backend roles, drop the Teaching Assistant role.",
+      "category": "scope",
+      "expected": "exp:teaching assistant|halden state university computer science department"
+    },
+    {
+      "id": "scope_04",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "R",
+      "phrasing": "For machine learning roles, skip R.",
+      "category": "scope",
+      "expected": "skill:r"
+    },
+    {
+      "id": "scope_05",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "torch",
+      "phrasing": "For this job only, don't mention torch.",
+      "category": "scope",
+      "expected": "skill:pytorch"
+    },
+    {
+      "id": "scope_06",
+      "profile": "benchmark_profile",
+      "subject": "Rust",
+      "phrasing": "On backend jobs, never mention Rust.",
+      "category": "scope",
+      "expected": "pending"
+    },
+    {
+      "id": "scope_07",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "one page",
+      "phrasing": "For internships, keep it to one page.",
+      "category": "scope",
+      "expected": "document"
+    },
+    {
+      "id": "scope_08",
+      "profile": "benchmark_profile",
+      "subject": "tone",
+      "phrasing": "For research roles, use a more formal tone.",
+      "category": "scope",
+      "expected": "document"
+    },
+    {
+      "id": "negation_01",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Kafka",
+      "phrasing": "I never want Kafka on my resume.",
+      "category": "negation",
+      "expected": "skill:kafka"
+    },
+    {
+      "id": "negation_02",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Kafka",
+      "phrasing": "Please leave Kafka off.",
+      "category": "negation",
+      "expected": "skill:kafka"
+    },
+    {
+      "id": "negation_03",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Kafka",
+      "phrasing": "Kafka is a no-go.",
+      "category": "negation",
+      "expected": "skill:kafka"
+    },
+    {
+      "id": "negation_04",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Kafka",
+      "phrasing": "Strike Kafka from every version.",
+      "category": "negation",
+      "expected": "skill:kafka"
+    },
+    {
+      "id": "negation_05",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Kafka",
+      "phrasing": "Don't ever mention Kafka, even in a bullet.",
+      "category": "negation",
+      "expected": "skill:kafka"
+    },
+    {
+      "id": "negation_06",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "Terraform",
+      "phrasing": "I'd rather not have Terraform showing.",
+      "category": "negation",
+      "expected": "skill:terraform"
+    },
+    {
+      "id": "negation_07",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "Spark",
+      "phrasing": "Spark should never appear.",
+      "category": "negation",
+      "expected": "pending",
+      "note": "priya holds no Spark"
+    },
+    {
+      "id": "multiple_01",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "Kafka or Spark",
+      "phrasing": "Never mention Kafka or Spark.",
+      "category": "multiple",
+      "expected": "multiple"
+    },
+    {
+      "id": "multiple_02",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "Kafka, Spark",
+      "phrasing": "Never mention Kafka, Spark.",
+      "category": "multiple",
+      "expected": "multiple"
+    },
+    {
+      "id": "multiple_03",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "Kafka & Spark",
+      "phrasing": "Drop Kafka & Spark.",
+      "category": "multiple",
+      "expected": "multiple"
+    },
+    {
+      "id": "multiple_04",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "Kafka / Spark",
+      "phrasing": "Drop Kafka / Spark.",
+      "category": "multiple",
+      "expected": "multiple"
+    },
+    {
+      "id": "multiple_05",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "Kafka and Spark",
+      "phrasing": "Never mention Kafka and Spark.",
+      "category": "multiple",
+      "expected": "multiple",
+      "note": "both held: each piece is known on its own"
+    },
+    {
+      "id": "multiple_06",
+      "profile": "benchmark_profile",
+      "subject": "Kafka or Spark",
+      "phrasing": "Never mention Kafka or Spark.",
+      "category": "multiple",
+      "expected": "multiple",
+      "note": "Spark is absent: 'or' always splits"
+    },
+    {
+      "id": "multiple_07",
+      "profile": "benchmark_profile",
+      "subject": "Python + SQL",
+      "phrasing": "Always list Python + SQL.",
+      "category": "multiple",
+      "expected": "multiple"
+    },
+    {
+      "id": "multiple_08",
+      "profile": "benchmark_profile",
+      "subject": "pandas and NumPy",
+      "phrasing": "Drop pandas and NumPy.",
+      "category": "multiple",
+      "expected": "multiple",
+      "note": "both held"
+    },
+    {
+      "id": "multiple_09",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "PyTorch or TensorFlow",
+      "phrasing": "Never mention PyTorch or TensorFlow.",
+      "category": "multiple",
+      "expected": "multiple"
+    },
+    {
+      "id": "multiple_10",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "TinyDetect and Rehearsal",
+      "phrasing": "Cut TinyDetect and Rehearsal.",
+      "category": "multiple",
+      "expected": "multiple",
+      "note": "two held projects"
+    },
+    {
+      "id": "multiple_11",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Java; JavaScript",
+      "phrasing": "Never mention Java; JavaScript.",
+      "category": "multiple",
+      "expected": "multiple"
+    },
+    {
+      "id": "multiple_12",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Go or Rust",
+      "phrasing": "Never mention Go or Rust.",
+      "category": "multiple",
+      "expected": "multiple"
+    },
+    {
+      "id": "multiple_13",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "React, Node.js",
+      "phrasing": "Drop React, Node.js.",
+      "category": "multiple",
+      "expected": "multiple"
+    },
+    {
+      "id": "multiple_14",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Kafka and/or Redis",
+      "phrasing": "Never mention Kafka and/or Redis.",
+      "category": "multiple",
+      "expected": "multiple"
+    },
+    {
+      "id": "multiple_15",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "Kafka and Rust",
+      "phrasing": "Never mention Kafka and Rust.",
+      "category": "multiple",
+      "expected": "multiple",
+      "note": "the user means two things; Rust is absent so the rule keeps one pending term (#295 deviation: a refusal is not available)"
+    },
+    {
+      "id": "multiple_16",
+      "profile": "benchmark_profile",
+      "subject": "Rust and Go",
+      "phrasing": "Never mention Rust and Go.",
+      "category": "multiple",
+      "expected": "multiple",
+      "note": "two absent things joined by 'and': kept as one pending term, by design"
+    },
+    {
+      "id": "and_in_name_01",
+      "profile": "benchmark_profile",
+      "subject": "Research and Development",
+      "phrasing": "Never mention Research and Development.",
+      "category": "and_in_name",
+      "expected": "pending"
+    },
+    {
+      "id": "and_in_name_02",
+      "profile": "benchmark_profile",
+      "subject": "Mergers and Acquisitions",
+      "phrasing": "Never mention Mergers and Acquisitions.",
+      "category": "and_in_name",
+      "expected": "pending"
+    },
+    {
+      "id": "and_in_name_03",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "Q&A",
+      "phrasing": "Never mention Q&A.",
+      "category": "and_in_name",
+      "expected": "pending"
+    },
+    {
+      "id": "and_in_name_04",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "Research and Development",
+      "phrasing": "Never mention Research and Development.",
+      "category": "and_in_name",
+      "expected": "pending"
+    },
+    {
+      "id": "and_in_name_05",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Search and Rescue Planner",
+      "phrasing": "Always show the Search and Rescue Planner.",
+      "category": "and_in_name",
+      "expected": "proj:search and rescue planner",
+      "add": {
+        "projects": [
+          {
+            "name": "Search and Rescue Planner"
+          }
+        ]
+      },
+      "note": "a held name with 'and' in it binds as one"
+    },
+    {
+      "id": "and_in_name_06",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "Research and Development Intern",
+      "phrasing": "Always show the Research and Development Intern role.",
+      "category": "and_in_name",
+      "expected": "exp:research and development intern|initech",
+      "add": {
+        "experiences": [
+          {
+            "title": "Research and Development Intern",
+            "company": "Initech"
+          }
+        ]
+      }
+    },
+    {
+      "id": "and_in_name_07",
+      "profile": "benchmark_profile",
+      "subject": "Test and Measurement",
+      "phrasing": "Never mention Test and Measurement.",
+      "category": "and_in_name",
+      "expected": "pending"
+    },
+    {
+      "id": "doc_word_decoy_01",
+      "profile": "benchmark_profile",
+      "subject": "Style Transfer",
+      "phrasing": "Never mention Style Transfer.",
+      "category": "doc_word_decoy",
+      "expected": "pending",
+      "note": "an ML topic"
+    },
+    {
+      "id": "doc_word_decoy_02",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "Page Rank",
+      "phrasing": "Never mention Page Rank.",
+      "category": "doc_word_decoy",
+      "expected": "pending",
+      "note": "a graph algorithm"
+    },
+    {
+      "id": "doc_word_decoy_03",
+      "profile": "benchmark_profile",
+      "subject": "order-routing startup",
+      "phrasing": "Never mention my order-routing startup.",
+      "category": "doc_word_decoy",
+      "expected": "pending"
+    },
+    {
+      "id": "doc_word_decoy_04",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Order Management System",
+      "phrasing": "Never mention the Order Management System.",
+      "category": "doc_word_decoy",
+      "expected": "pending",
+      "note": "a system, not the order of the page"
+    },
+    {
+      "id": "doc_word_decoy_05",
+      "profile": "benchmark_profile",
+      "subject": "Voice Assistant",
+      "phrasing": "Never mention the Voice Assistant.",
+      "category": "doc_word_decoy",
+      "expected": "pending"
+    },
+    {
+      "id": "doc_word_decoy_06",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "Tone Mapping",
+      "phrasing": "Never mention Tone Mapping.",
+      "category": "doc_word_decoy",
+      "expected": "pending",
+      "note": "an image-processing technique"
+    },
+    {
+      "id": "doc_word_decoy_07",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Page Object Model",
+      "phrasing": "Never mention Page Object Model.",
+      "category": "doc_word_decoy",
+      "expected": "pending",
+      "note": "a testing pattern"
+    },
+    {
+      "id": "doc_word_decoy_08",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "Summary Statistics",
+      "phrasing": "Never mention Summary Statistics.",
+      "category": "doc_word_decoy",
+      "expected": "pending",
+      "note": "a statistics topic"
+    },
+    {
+      "id": "doc_word_decoy_09",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "Format String Vulnerability",
+      "phrasing": "Never mention Format String Vulnerability.",
+      "category": "doc_word_decoy",
+      "expected": "pending"
+    },
+    {
+      "id": "doc_word_decoy_10",
+      "profile": "benchmark_profile",
+      "subject": "Margin Trading",
+      "phrasing": "Never mention Margin Trading.",
+      "category": "doc_word_decoy",
+      "expected": "pending"
+    },
+    {
+      "id": "doc_word_decoy_11",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "Length Normalization",
+      "phrasing": "Never mention Length Normalization.",
+      "category": "doc_word_decoy",
+      "expected": "pending"
+    },
+    {
+      "id": "doc_word_decoy_12",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Font Rendering Engine",
+      "phrasing": "Never mention the Font Rendering Engine.",
+      "category": "doc_word_decoy",
+      "expected": "pending"
+    },
+    {
+      "id": "doc_word_decoy_13",
+      "profile": "data_engineering_generalist_adaeze_nwosu",
+      "subject": "Order Book Simulator",
+      "phrasing": "Never mention the Order Book Simulator.",
+      "category": "doc_word_decoy",
+      "expected": "proj:order book simulator",
+      "add": {
+        "projects": [
+          {
+            "name": "Order Book Simulator"
+          }
+        ]
+      },
+      "note": "held: the item steps run before the document words"
+    },
+    {
+      "id": "doc_word_decoy_14",
+      "profile": "ml_engineering_specialist_sofia_marchetti",
+      "subject": "Style Transfer",
+      "phrasing": "Never mention Style Transfer.",
+      "category": "doc_word_decoy",
+      "expected": "skill:style transfer",
+      "add": {
+        "skills": [
+          "Style Transfer"
+        ]
+      },
+      "note": "held as a skill"
+    },
+    {
+      "id": "doc_word_decoy_15",
+      "profile": "data_science_specialist_priya_raman",
+      "subject": "StyleGAN",
+      "phrasing": "Never mention StyleGAN.",
+      "category": "doc_word_decoy",
+      "expected": "pending",
+      "note": "one token, so no document word"
+    },
+    {
+      "id": "doc_word_decoy_16",
+      "profile": "benchmark_profile",
+      "subject": "Landing Page Optimization",
+      "phrasing": "Never mention Landing Page Optimization.",
+      "category": "doc_word_decoy",
+      "expected": "pending"
+    },
+    {
+      "id": "doc_word_decoy_17",
+      "profile": "software_engineering_generalist_devon_whitaker",
+      "subject": "Web Page Scraper",
+      "phrasing": "Never mention the Web Page Scraper.",
+      "category": "doc_word_decoy",
+      "expected": "pending"
+    }
+  ]
+}

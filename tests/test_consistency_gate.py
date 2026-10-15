@@ -128,6 +128,28 @@ def test_a_name_inside_a_compound_is_still_checked():
     assert unsupported_tokens("Called GPT-4", ["Called GPT-3.5"]) == ["GPT-4"]
 
 
+@pytest.mark.parametrize("bullet,expected", [
+    ("Streamed events through apache-kafka.", ["kafka"]),
+    ("Streamed events with confluent-kafka.", ["kafka"]),
+    ("Streamed events with a kafkajs client.", ["kafkajs"]),
+    ("Streamed events with aiokafka.", ["aiokafka"]),
+    ("Linked against librdkafka.", ["librdkafka"]),
+])
+def test_a_listed_technology_inside_a_hyphen_part_or_a_client_library_name_is_flagged(bullet, expected):
+    """#296: the evidence gates are what keeps an absent technology off the page, in any spelling."""
+    assert unsupported_tokens(bullet, ["Trained models and tracked runs with MLflow."]) == expected
+    assert unsupported_tokens(bullet, ["Used Kafka for event ingestion."]) in (expected, [])
+
+
+@pytest.mark.parametrize("bullet", [
+    "Built event-driven, real-time pipelines.", "Trained models with scikit-learn on weekly data.",
+    "Used lightgbm and xgboost for ranking.", "Wrote a go service for batch jobs.",
+])
+def test_ordinary_hyphen_and_affix_forms_are_not_read_as_a_listed_technology(bullet):
+    out = unsupported_tokens(bullet, ["scikit-learn lightgbm xgboost go batch jobs pipelines"])
+    assert not any(t.lower() in ("kafka", "docker", "kubernetes") for t in out)
+
+
 def test_derivations_are_flagged_by_design():
     # Strict to start (#123): "200 to 800 users" does not license "4x growth".
     assert unsupported_tokens("Drove 4x user growth", ["Grew users from 200 to 800."]) == ["4x"]

@@ -894,8 +894,13 @@ def extract_claims(text: str, *, generous: bool = False) -> List[Tuple[int, str,
 # any Capitalised word when the bullet is headline-cased (most content words
 # capitalised, where the signal means nothing); single letters; and the generic
 # capitalised words in _GENERIC_WORDS (months, seniority, role and org words).
-# Precision over recall: a lowercase name outside _TECH ("we used kafka") is
+# Precision over recall: a lowercase name outside _TECH ("we used redpanda") is
 # missed, and so is a fabricated employer that is not capitalised.
+#
+# A _TECH name inside a longer token is still that name (#296): `apache-kafka` and
+# `confluent-kafka` (a hyphen part), and a client library spelled with a language
+# affix (`kafkajs`, `aiokafka`; see _WRAPPED_TECH). Without it a technology the
+# evidence lacks could reach the page in a form the list never spelled.
 
 _TECH = frozenset("""
 kafka docker kubernetes k8s terraform ansible jenkins airflow hadoop hive snowflake redshift
@@ -907,6 +912,16 @@ github gitlab jira linux bash typescript javascript golang oracle salesforce sap
 tensorrt onnx mlflow kubeflow prometheus grafana datadog splunk elk pyspark jupyter numba
 sqlalchemy pytest junit selenium cypress webpack vite redux tailwind bootstrap flask
 """.split())
+
+# `<tech><affix>` and `<prefix><tech>`: the way a client library for a listed technology is
+# spelled (kafkajs, kafkapy, aiokafka, librdkafka). Only names of five or more letters, so
+# `git` or `s3` never match inside an ordinary word.
+_TECH_SUFFIXES = ("js", "py", "python", "net", "rb", "go", "rs", "jvm")
+_TECH_PREFIXES = ("aio", "py", "node", "lib", "librd", "go")
+_WRAPPED_TECH = frozenset(
+    spelled
+    for t in _TECH if t.isalpha() and len(t) >= 5
+    for spelled in ([t + a for a in _TECH_SUFFIXES] + [p + t for p in _TECH_PREFIXES]))
 
 _GENERIC_ACRONYMS = frozenset("""
 api apis etl elt ml ai nlp ci cd qa ui ux kpi kpis roi okr okrs sla slas sdlc crud rest gui cli
@@ -1002,12 +1017,18 @@ def _entity_candidates(text: str) -> List[Tuple[int, str]]:
     out: List[Tuple[int, str]] = []
     for m in toks:
         tok = m.group(0)
+        # `apache-kafka` asserts Kafka as `Kafka-based` does: a later hyphen part that is a
+        # listed technology is a name of its own (the first part is judged below).
+        if "-" in tok and tok.lower() not in _TECH:
+            for part in tok.split("-")[1:]:
+                if part.lower() in _TECH:
+                    out.append((m.start() + tok.index(part), part))
         # `Kafka-based` asserts Kafka; `scikit-learn` and `GPT-4` are one name.
         name = tok if _SYMBOLIC.search(tok) or tok.lower() in _TECH else tok.split("-")[0]
         low = name.lower().strip(".")
         if len(low) < 2 and not re.search(r"[+#]", name):
             continue
-        is_tech = low in _TECH
+        is_tech = low in _TECH or low in _WRAPPED_TECH
         if low in _GENERIC_WORDS or (low in _GENERIC_ACRONYMS and not is_tech):
             continue
         upper = name.isupper() and name.isalpha() and not shouting
