@@ -542,6 +542,20 @@ export function linksByBullet(view: EvidenceView, itemKey: string): Map<number, 
   return out;
 }
 
+/**
+ * The ordinals (`#b<n>`) of an item's non-empty text entries that no skill cites (#323): a bullet that
+ * names no skill ART recognizes. An empty entry has no ordinal, so it is never listed, and a GitHub-only
+ * edge cites no bullet, so it does not clear one; a whitespace-only entry is not a bullet. Only a hint: many good bullets are about impact and
+ * name no tool.
+ */
+export function bareBullets(view: EvidenceView, itemKey: string): number[] {
+  const item = view.items.find((i) => i.key === itemKey);
+  if (!item) return [];
+  const cited = new Set<number>();
+  for (const e of view.edges) if (e.item_key === itemKey) e.cites.forEach((n) => cited.add(n));
+  return item.text.flatMap((t) => (t.index !== null && t.text.trim() && !cited.has(t.index) ? [t.index] : []));
+}
+
 /** Skills that tie an item to GitHub but are named by no bullet of it. */
 export function githubOnlyLinks(view: EvidenceView, itemKey: string): EvidenceSkill[] {
   const skills = new Map(view.skills.map((s) => [s.key, s]));
