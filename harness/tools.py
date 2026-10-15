@@ -40,6 +40,7 @@ from agents import project_context
 from agents.checks import exp_key, proj_key  # the planner's own keys (#190)
 from agents.job_card import render_cards, select_cards
 from agents.preferences import preferences_in_scope
+from database.db import ordered_blurbs
 from database.vector_search import fts_search
 from database.models import Achievement, Project, ProjectBlurb, User
 from harness.decisions.negative_pins import is_negative_pin
@@ -175,8 +176,8 @@ def _project_blurbs(project_ids: Sequence[str]) -> Dict[str, List[Dict]]:
         rows = session.exec(
             select(ProjectBlurb).where(ProjectBlurb.project_id.in_(ids))
         ).all()
-    for b in sorted(rows, key=lambda r: (str(r.project_id), r.style or "", str(r.blurb_id))):
-        out.setdefault(str(b.project_id), []).append({"style": b.style, "content": b.content})
+    for pid, blurbs in ordered_blurbs(rows).items():    # bullet order, #327
+        out[str(pid)] = [{"style": b.style, "content": b.content} for b in blurbs]
     return out
 
 

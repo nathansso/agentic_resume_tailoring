@@ -327,7 +327,9 @@ IDs, and ART resolves them without parsing display text.
 **As built (#197).** `harness/program.py` holds the schema, `harness/acceptance.py` the
 metric vector and the rule, and `harness/executor.py` runs it. The details:
 
-- **IDs.** Evidence IDs are `<item key>#b<n>`, the n-th source bullet (0-based). A cite may
+- **IDs.** Evidence IDs are `<item key>#b<n>`, the n-th source bullet (0-based) in the order the
+  source gave them (#327): an experience's `bullets` list, a project's `ProjectBlurb.seq` (read
+  through `database.db.ordered_blurbs`, the only place project bullets are ordered). A cite may
   also be any item key. `because` is `pref:<preference id>` or `user:<what they asked>`.
 - **No parent yet.** A job with no history starts from its track baseline when one applies
   (§ 8), else from the whole KG with skills ranked (`kg_default_content`).
