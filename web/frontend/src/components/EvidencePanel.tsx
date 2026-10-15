@@ -358,8 +358,9 @@ function ProjectPlacement({ view, item, ctx, onSaved }: {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
-  const status = item.context_status ?? ctx?.status ?? "unreviewed";
   const parent = item.parent_key ? view.items.find((i) => i.key === item.parent_key) : undefined;
+  // A project under a role or degree reads as placed, whatever a hand-edited row says.
+  const status = parent ? "linked" : item.context_status ?? ctx?.status ?? "unreviewed";
   const suggestion = topSuggestion(ctx);
   const options = useMemo(() => {
     const all = placementOptions(view);

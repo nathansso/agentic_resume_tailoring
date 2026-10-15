@@ -14,6 +14,32 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 322 — Confirm project links from the evidence panel
+**Status:** complete | **Tests:** 3151 pass on SQLite (9 new), 16 skipped, 0 fail; frontend 180 pass (6 new); `npm run build` and `npm ci --dry-run` pass; the Postgres leg was not run locally (the Docker daemon was not running), CI's required Postgres leg covers it
+
+A project's panel in the evidence map now asks "Where was this done?". The user can link it to an experience or education, mark it personal, or take the answer back, and the map moves it under its parent. Nothing is written until a click.
+
+### What shipped
+
+- **Two routes**, both owner-scoped. `GET /api/profile/projects/contexts` returns, per project, `{project_id, status, parent, candidates}` with the view's item keys (`exp/<uuid>`, `edu/<uuid>`); `candidates` are the `suggest_project_contexts` rules' suggestions (`{key, title, reason}`) and the route never writes. `PUT /api/profile/projects/{id}/context` takes `{context: "exp/<uuid>" | "edu/<uuid>" | "personal" | "unreviewed"}` and answers `{project_id, status, parent}`; 400 for an unknown context, 404 for a project, role or degree that is not the caller's.
+- **One write path.** The PUT maps the view key to the user's own row and calls `agents.project_context.set_project_context`, the function the harness tool uses. It gained a keyword-only `context_id` so a view key names exactly one row when two roles or degrees share a key (the key alone takes the first). `suggest_for_user` gained `with_ids` for the UI; the harness tools leave it off and their output is unchanged.
+- **The view** (`/api/profile/graph/view`) carries `context_status` on project items (`unreviewed` / `linked` / `personal`). Additive; roles and degrees do not have it.
+- **Panel.** A project shows "Where was this done?": its current state, the rules' top suggestion with its reason as a "Link to <title>" button (only while the project is unreviewed), a select of every role and degree with a Link button, "Personal project", and "Not sure yet". Choosing in the select writes nothing until Link is pressed. After a write the map is re-read, so the project nests under its parent (or comes back out).
+- **Map.** A standalone, unreviewed project shows a muted "○ unplaced" in its row, and the summary strip shows "N projects to place" when N > 0, which selects the first one in map order. Personal and linked projects show neither.
+- **Tests.** 9 Python in `tests/test_project_context.py`: GET returns candidates and leaves the row unchanged; reviewed projects report their status and parent; PUT links to an experience, re-links to a degree, marks personal and resets, each checked on the row and in the view's `context_status` and `parent_key`; a bad context is 400; unknown project or parent is 404; a duplicate role key is pinned to the chosen row; cross-user project and parent addressing changes nothing and a list holds only the caller's projects; the view carries `context_status` on projects only; harness suggestions carry no `project_id`. 6 vitest in `lib/evidenceMap.test.ts` (`needsPlacement`, `projectsToPlace`, `placementOptions`, `placementLabel`, `topSuggestion`). Tailwind utilities and `--graph-*` tokens only; no new npm dependency, `package-lock.json` untouched.
+- **Verified by hand** in `python -m web.local_ui` against a throwaway SQLite store: "5 projects to place" selecting the first, the course-code suggestion linked with one click and the project nesting under the degree, re-linking it to a role, "Personal project" (hint and count gone, button disabled), "Not sure yet" (back to unplaced), and a select choice leaving the stored link unchanged until Link.
+
+### Deviations from spec
+
+- **The select has its own Link button** rather than writing on change, so a stray keystroke on the select cannot write a link ("no link without an explicit click").
+- **The suggestion is offered only for an unreviewed project.** A linked or personal project is the user's answer; the select covers a change of mind.
+- **A project under a role or degree reads as placed in the panel** even if its `context_status` says otherwise (a hand-edited row), so the panel agrees with the map.
+- **A project that needs a description and is unplaced** carries both hints in one crowded row, which truncates its subtitle further.
+- **Achievements are not covered**: no UI for `link_achievement` (a possible follow-up).
+- **Not done:** the Postgres leg (the Docker daemon was not running; CI's required leg covers it); a screen reader pass; component tests (the repo has no DOM test setup, so the panel flow was checked in the browser).
+
+---
+
 ## Issue 356 — Jev presented as an optional upgrade
 **Status:** complete | **Tests:** 3118 pass on SQLite (5 new in `test_site_home.py` and `test_site_docs.py`), 25 skipped, 2 xfailed, 0 fail; the Postgres leg was not run (nothing here touches storage)
 
