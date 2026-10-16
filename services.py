@@ -793,14 +793,16 @@ def _profile_job_skills(job_id: UUID) -> list[dict]:
     left out. Two requirements with one primary term merge: required wins, the heavier
     weight wins, the terms are united.
     """
-    from agents.jd_payload import iter_requirements
+    from agents.jd_payload import display_term, iter_requirements
     from knowledge_graph.areas import skill_areas
 
     profile = load_jd_profile(job_id)
     merged: dict[str, dict] = {}
     for req in iter_requirements((profile or {}).get("payload"), types=["required", "preferred"]):
         terms = [str(t).strip() for t in (req.get("terms") or []) if str(t or "").strip()]
-        name = terms[0] if terms else str(req.get("text") or "").strip()[:80]
+        text = str(req.get("text") or "").strip()
+        # `terms` are lower-cased for matching; the name is what the chips show (#348).
+        name = display_term(terms[0], text) if terms else text[:80]
         if not name:
             continue
         try:

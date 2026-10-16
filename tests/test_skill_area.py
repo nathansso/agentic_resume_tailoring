@@ -18,7 +18,7 @@ from knowledge_graph.areas import AREAS, OTHER, skill_area, skill_areas
 from knowledge_graph.evidence_view import build_evidence_view
 
 ANSWERS = {"Figma": "Tools", "Mailchimp": "Tools", "Prompt engineering": "ML & AI",
-           "Hobby knitting": "Other", "figma": "Tools", "mailchimp": "Tools"}
+           "Hobby knitting": "Other"}
 
 
 class Transport:
@@ -380,7 +380,7 @@ def test_get_job_skills_makes_one_cache_query_for_a_profile_job(jev):
     with Session(db.engine) as s:
         s.add(JDProfile(job_id=job_id, user_id=uid, payload=payload))
         s.commit()
-    areas.classify_skills_at_write([("figma", ""), ("mailchimp", "")])      # the terms are lower-cased
+    areas.classify_skills_at_write([("Figma", ""), ("Mailchimp", "")])      # asked under the display name
 
     counter = QueryCount(db.engine)
     try:
@@ -388,7 +388,7 @@ def test_get_job_skills_makes_one_cache_query_for_a_profile_job(jev):
     finally:
         counter.stop()
 
-    by_name = {r["name"].lower(): r["area"] for r in rows}
+    by_name = {r["name"].lower(): r["area"] for r in rows}      # display names, lower-cased here
     assert counter.n == 1                                   # was one per unplaced requirement
     assert by_name["figma"] == "Tools" and by_name["python"] == "Languages"
     assert by_name["hobby knitting"] == "Other"             # not asked: the read path only reads

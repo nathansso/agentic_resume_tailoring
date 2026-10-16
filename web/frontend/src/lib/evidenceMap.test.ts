@@ -6,7 +6,7 @@ import {
   DISMISSED_KEY, bareBullets, canDismiss, duplicateHint, isPanelKey, needsPlacement, placementLabel, placementOptions, projectsToPlace, skillIdOf, topSuggestion,
   arcPath, areaFoldKey, dateKey, edgeWidth, editableFields, estimateTextWidth, evidenceRows, firstMatch, fitText,
   ghostBlock, githubOnlyLinks, highlightSegments, initialDraft, jobOverlay, layoutMap, linkPath,
-  linksByBullet, neighborhood, planSave, searchSkills, skillEvidence, skillMatchKey, skillRadius,
+  linksByBullet, matchJobSkills, neighborhood, planSave, searchSkills, skillEvidence, skillMatchKey, skillRadius,
   sourceArcs, weightedMedian, type LayoutOptions,
 } from "./evidenceMap";
 
@@ -469,6 +469,24 @@ describe("compare to a job", () => {
     ]);
     expect(twice.required.total + twice.preferred.total).toBe(1);
     expect(twice.required.total).toBe(1);    // required wins
+  });
+
+  it("shows a missing requirement under the spelling the job sends, and matches through its lower-case terms", () => {
+    const rows: JobSkillRow[] = [
+      { name: "A/B testing", required: true, weight: 1, area: "Practices", terms: ["a/b testing"] },    // not on the profile
+      { name: "PyTorch Lightning", required: true, weight: 1, area: "ML & AI", terms: ["pytorch lightning"] },
+      { name: "Python", required: true, weight: 1, area: "Languages", terms: ["python"] },             // on the profile
+    ];
+    const ov = jobOverlay(VIEW, rows);
+    expect(ov.missing.map((m) => m.name).sort()).toEqual(["A/B testing", "PyTorch Lightning"]);
+    const chips = ghostBlock(layoutMap(VIEW, OPTS), ov.missing).chips;
+    expect(chips.map((c) => c.skill.name).sort()).toEqual(["A/B testing", "PyTorch Lightning"]);
+    expect(ov.classBySkill.get(py.key)).toBe("required-evidenced");
+    // The display name does not decide the match: a term in any case reaches the same skill.
+    const keys = (r: JobSkillRow) => matchJobSkills(VIEW, [r])[0].skills.map((s) => s.key);
+    expect(keys({ ...rows[2], name: "PYTHON" })).toEqual(keys(rows[2]));
+    expect(keys({ ...rows[2], name: "something else", terms: ["python"] })).toEqual(keys(rows[2]));
+    expect(matchJobSkills(VIEW, rows).map((m) => m.id)).toEqual(["a/btesting", "pytorchlightning", "python"]);   // by name, ids ignore case
   });
 
   it("an empty job has nothing to compare", () => {
