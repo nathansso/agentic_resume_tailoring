@@ -215,3 +215,99 @@ def classify_skills_at_write(skills: Iterable[Tuple[str, Optional[str]]], *, cli
                    if source == "jev")
     except Exception:
         return 0
+
+
+# ── Classification when a key arrives after the skills did (#342) ─────────────────────────
+
+BACKFILL_MARKER = "area_backfill.json"
+
+
+def _data_dir():
+    import os
+    from pathlib import Path
+
+    return Path(os.environ.get("ART_DATA_DIR") or Path.home() / ".art")
+
+
+def _backfill_due(user_id, today: str, data_dir) -> Optional[str]:
+    """The marker key to record when a startup backfill should run for this user, else None.
+
+    Due when Jev can answer (mode is not `off`, a key resolves) and the user and key have not
+    already had a backfill today. The key is identified by a hash, never stored. A marker that
+    cannot be read counts as absent; nothing here raises."""
+    import hashlib
+    import json
+
+    from harness.decisions import engine
+    from harness.decisions.client import resolve_api_key
+
+    if engine.mode() == "off":
+        return None
+    key = resolve_api_key()
+    if not key:
+        return None
+    marker_key = f"{user_id}:{hashlib.sha256(key.encode()).hexdigest()[:12]}"
+    try:
+        marks = json.loads((data_dir / BACKFILL_MARKER).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        marks = {}
+    if isinstance(marks, dict) and marks.get(marker_key) == today:
+        return None
+    return marker_key
+
+
+def _record_backfill(marker_key: str, today: str, data_dir) -> None:
+    import json
+
+    path = data_dir / BACKFILL_MARKER
+    try:
+        marks = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        marks = {}
+    if not isinstance(marks, dict):
+        marks = {}
+    # Keep today's marks only: yesterday's say nothing, and the file stays small.
+    marks = {k: v for k, v in marks.items() if v == today}
+    marks[marker_key] = today
+    data_dir.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(marks), encoding="utf-8")
+
+
+def backfill_unplaced_if_due(user_id, *, client=None, today: Optional[str] = None,
+                             data_dir=None) -> Optional[Dict[str, int]]:
+    """Run `classify_unplaced_skills` once per user and key per day, when Jev is available and
+    the user has skills the table cannot place. Returns its stats, or None when it did not
+    run. A profile ingested before a `TYPESAFE_API_KEY` was configured, or with Jev off, is
+    thereby placed the next time a long-lived `art` process starts with a key.
+
+    The marker is written before the request, so two processes starting together, or a request
+    that fails, do not retry until tomorrow or a different key. Never raises."""
+    import datetime
+
+    try:
+        today = today or datetime.date.today().isoformat()
+        data_dir = data_dir or _data_dir()
+        marker_key = _backfill_due(user_id, today, data_dir)
+        if marker_key is None:
+            return None
+        if classify_unplaced_skills(user_id, dry_run=True)["unplaced"] == 0:
+            return None
+        _record_backfill(marker_key, today, data_dir)
+        return classify_unplaced_skills(user_id, client=client)
+    except Exception:
+        return None
+
+
+def start_backfill_in_background(user_id, **kwargs):
+    """`backfill_unplaced_if_due` on a daemon thread, so startup never waits on it (the
+    database read, the request) and never fails because of it. Returns the thread, or None
+    with no user. Called by `art mcp` and `art ui`, the long-lived processes, once their store
+    is writable local SQLite (a remote database is backfilled by the script)."""
+    if user_id is None:
+        return None
+    import threading
+
+    thread = threading.Thread(target=backfill_unplaced_if_due, args=(user_id,), kwargs=kwargs,
+                              name="art-area-backfill", daemon=True)
+    thread.start()
+    return thread

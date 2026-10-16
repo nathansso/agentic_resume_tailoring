@@ -135,6 +135,12 @@ def main(argv: Optional[Sequence[str]] = None, static_dir: Path = STATIC_DIR) ->
         init_db()  # the user lookup below needs the tables on a fresh store
     user = _resolve_user(args.user_id, writable)
     os.environ["ART_LOCAL_UI_USER_ID"] = str(user.user_id)
+    if writable and os.environ["DATABASE_URL"].startswith("sqlite"):
+        # Skills ingested before a Jev key was configured: place them in the background,
+        # at most once a day per key, never delaying the editor (#342). Only the user's own
+        # local store: a remote database is backfilled by hand (scripts/classify_unplaced_skills.py).
+        from knowledge_graph.areas import start_backfill_in_background
+        start_backfill_in_background(user.user_id)
 
     import uvicorn
 

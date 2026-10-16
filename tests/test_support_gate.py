@@ -210,11 +210,13 @@ def test_original_is_the_most_similar_base_bullet_when_it_is_similar_enough():
     assert support._original("Same.", ["Same."]) is None                # itself is not the original
 
 
-# ── no key, mode off, API error: unchecked, no violation ─────────────────────
+# ── no key, mode off, API error: the deterministic check reads the bullet (#351) ──
 
-@pytest.mark.parametrize("how", ["off", "no_key", "api_error"])
-def test_without_jev_the_finding_is_unchecked_and_adds_nothing(auto, monkeypatch, how):
-    pair = PAIRS[3]                                    # an inflation that would block
+@pytest.mark.parametrize("how,reason", [("off", "mode=off"), ("no_key", "no_key"), ("api_error", "api_error")])
+def test_without_jev_the_deterministic_check_reads_the_bullet(auto, monkeypatch, how, reason):
+    """Before #351 the finding here was `unchecked` and added nothing. Now an inflation that Jev would
+    block is blocked by the fallback, on every way Jev can be missing, and Jev is never asked."""
+    pair = PAIRS[3]                                    # "Contributed to" -> "Led": an inflation
     content, sources = pair_page(pair)
     if how == "off":
         monkeypatch.setenv("ART_JEV_MODE", "off")
@@ -224,8 +226,67 @@ def test_without_jev_the_finding_is_unchecked_and_adds_nothing(auto, monkeypatch
     else:
         auto.use(FakeTransport(script=[(500, {"message": "down"})] * 5), max_retries=0)
     (f,) = make_support_checker(sources)(content)
-    assert f["status"] == "unchecked" and f["label"] is None
-    assert support_violations(content, Context(jd_text="x", support_checker=make_support_checker(sources))) == []
+    assert (f["status"], f["source"], f["label"]) == ("heuristic", "fallback", "adds_unsupported")
+    assert f["reason"].startswith(reason) and f["model"] == "fallback-support-v1"
+    assert f["probabilities"] is None and f["p"] is None and f["score"] >= 1.0
+    (v,) = violations([f])
+    assert v.startswith(f'unsupported:{KEY}: "Led the migration') and "(fallback check: role: led)" in v
+    assert reviews([f]) == []
+    ctx = Context(jd_text="x", support_checker=make_support_checker(sources))
+    assert support_violations(content, ctx) == [v]
+
+
+def test_without_jev_a_clean_bullet_passes_and_a_soft_stretch_is_a_review(auto, monkeypatch):
+    monkeypatch.setenv("ART_JEV_MODE", "off")
+    auto.use(Boom())
+    (clean,) = make_support_checker(pair_page(PAIRS[1])[1])(pair_page(PAIRS[1])[0])
+    assert clean["status"] == "heuristic" and clean["score"] == 0 and clean["label"] == "supported"
+    assert violations([clean]) == [] and reviews([clean]) == []
+    # "platform" is a soft signal: surfaced to the host and the user, never a block alone
+    stretch = "Built Python ETL pipelines with pandas on a shared platform that load daily event data into Snowflake."
+    content, sources = pair_page({**PAIRS[1], "bullet": stretch})
+    (f,) = make_support_checker(sources)(content)
+    assert violations([f]) == []
+    (r,) = reviews([f])
+    assert r["source"] == "fallback" and r["score"] == 0.5 and r["signals"] == ["role: platform"]
+    assert set(r) == {"item", "bullet", "label", "score", "source", "signals"}       # no `p`: it is not a probability
+
+
+def test_when_jev_answers_it_decides_alone_and_the_fallback_is_not_consulted(auto, monkeypatch):
+    """The fallback would block this inflation, but Jev calls it supported: the finding is Jev's, and no
+    heuristic finding exists (`eval/support_labels/FALLBACK_REPORT.md`, "With a key")."""
+    from harness.decisions import support_fallback
+
+    seen = []
+    real = support_fallback.assess
+    monkeypatch.setattr(support_fallback, "assess", lambda *a, **k: seen.append(a) or real(*a, **k))
+    pair = PAIRS[3]
+    auto.use(FakeTransport(answer_for=lambda state, wire: choice_answer(
+        "supported", {"supported": 0.97, "adds_unsupported": 0.02, "contradicts": 0.01})))
+    content, sources = pair_page(pair)
+    (f,) = make_support_checker(sources)(content)
+    assert (f["status"], f["source"], f["label"]) == ("checked", "jev", "supported")
+    assert violations([f]) == [] and seen == []
+
+
+def test_a_bullet_whose_cites_name_no_text_stays_unchecked_with_the_fallback_too(auto, monkeypatch):
+    monkeypatch.setenv("ART_JEV_MODE", "off")
+    (f,) = make_support_checker({KEY: ["Built the ingest service."]})(
+        page(["Used Python daily."], {"Used Python daily.": ["skill:python"]}))
+    assert (f["status"], f["reason"]) == ("unchecked", "no_evidence_text")
+
+
+def test_the_fallback_also_reads_the_rest_of_the_item(auto, monkeypatch):
+    """A claim the item makes in another source bullet, or its title, is not flagged: only the cited
+    bullet is Jev's evidence, and the fallback is the more lenient reader."""
+    monkeypatch.setenv("ART_JEV_MODE", "off")
+    sources = {KEY: ["Contributed to the migration to services.", "Led the weekly code review."]}
+    bullet = "Led the migration to services."
+    content = page([bullet], {bullet: [f"{KEY}#b0"]})
+    (f,) = make_support_checker(sources)(content)
+    assert f["score"] == 0 and violations([f]) == []                    # "Led" is in the item's other bullet
+    alone = make_support_checker({KEY: [sources[KEY][0]]})(content)
+    assert violations(alone) != []                                      # and flagged when it is not
 
 
 # ── through the executor ─────────────────────────────────────────────────────

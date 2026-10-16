@@ -812,7 +812,10 @@ class NodeResult(_Model):
                           "to record with upsert_items before retrying.")
     review: Optional[List[Dict[str, Any]]] = Field(
         None, description="Bullets Jev could not clearly call supported by their cited "
-                          "evidence (item, bullet, label, p), and bullets or item fields it "
+                          "evidence (item, bullet, label, p), bullets the deterministic fallback "
+                          "(no Jev answer, #351) thinks stretch their cited evidence (item, bullet, "
+                          "label, score, source: fallback, signals: what it read), and bullets or item "
+                          "fields Jev "
                           "thinks may mention a pinned topic in other words (check: "
                           "negative_pin, item, where, bullet, pin, p). Show them to the user.")
     semantic: Optional[Dict[str, Any]] = Field(
@@ -881,8 +884,10 @@ class ExecuteOutput(_Output):
                           "from the whole knowledge graph (#229).")
     support: Optional[Dict[str, Any]] = Field(
         None, description="The cited-bullet support check (#193): how many bullets Jev "
-                          "checked and which to review. Absent when nothing was checked "
-                          "(no key, mode off, or no changed cited bullet).")
+                          "checked and which to review; fallback_checked is how many the "
+                          "deterministic fallback read in Jev's place (no key, mode off, an API "
+                          "error, #351). Absent when nothing was checked by Jev and the fallback has "
+                          "nothing to review (no changed cited bullet, or nothing it flags).")
     negative_pins: Optional[Dict[str, Any]] = Field(
         None, description="The negative-pin check (#232): how many (bullet or item field, "
                           "pin) pairs on the final page Jev checked and which to review. Absent when "

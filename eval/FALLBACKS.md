@@ -4,7 +4,7 @@ Jev stays optional (epic #349, decided 2026-10-15): with no `TYPESAFE_API_KEY`, 
 
 - **How it is measured.** `python eval/fallback_benchmark.py write` runs each fallback through the production functions the harness calls (`make_support_checker`, `acceptance.negative_pin_violations`, `make_coverage_checker`, `memory_gate.route`, `library.best_variant`, `library.pick_track`) with `ART_JEV_MODE=off`. No recording is replayed, no key is read and nothing touches the network. `tests/test_fallback_benchmark.py` pins the numbers and fails when any table below is stale.
 - **Where Jev's figures come from.** They are read out of each `REPORT.md` by the script, not retyped: `support_labels`, `negative_pin_labels`, `coverage_labels`, `memory_gate_labels` (and its `context/`), `library_labels`. A refit changes them, and the test then fails until this file is regenerated.
-- **Nothing is invented.** A fallback that is *unchecked* (support) or *absent* (coverage's semantic target) is reported as that: every `adds_unsupported` pair is kept, no requirement is credited. No number stands in for a check that does not exist.
+- **Nothing is invented.** A fallback that is *absent* (coverage's semantic target) is reported as that: no requirement is credited. The support fallback was *unchecked* when #350 took this baseline (0 of 54 should-block pairs blocked, 19 with #123 beside it) and is the deterministic check since #351; its row reports what that check does, beside #123, on the same pairs. No number stands in for a check that does not exist.
 - **The labels are the fits' labels.** Synthetic profiles, user-confirmed for support, negative pins, coverage and the memory gate; planner-reviewed and pending the user's spot-check for the library sets. Read the numbers as a comparison of two methods on the same cases, not as an accuracy to expect.
 
 ## Summary
@@ -12,7 +12,7 @@ Jev stays optional (epic #349, decided 2026-10-15): with no `TYPESAFE_API_KEY`, 
 <!-- fallback-benchmark:begin summary -->
 | point (labelled set) | harmful error: fallback | harmful error: Jev | main figure: fallback | main figure: Jev | proposed bar | verdict |
 |---|---|---|---|---|---|---|
-| support (89 pairs) | 54/54 should-block pairs kept silently; 1/35 supported blocked by #123 | 0/54 kept silently (3 surfaced for review); 0/35 supported blocked | blocked 0/54; with #123 19/54 | blocked 51/54 (94%) | 35/54 should-block pairs blocked with #123 counted (contradicts 10/14, adds_unsupported 25/40) | work: #351 |
+| support (89 pairs) | 6/54 should-block pairs kept silently by the check and #123 (1 surfaced for review); 0/35 supported blocked by the check, 1 by #123 | 0/54 kept silently (3 surfaced for review); 0/35 supported blocked | blocked 36/54; with #123 47/54 | blocked 51/54 (94%) | 35/54 should-block pairs blocked with #123 counted (contradicts 10/14, adds_unsupported 25/40) | met: #351 |
 | negative pin (74 pairs) | 30/41 pinned mentions render | 0/41 render (3 surfaced for review) | blocked 11/41 (27%) | blocked 38/41 | hold 11/41 (the direct mentions) | leave |
 | coverage (131 pairs) | none possible | 0 false covers | credited 0/58 (target absent) | credited 58/58 | hold: the target stays absent without Jev | good enough |
 | memory gate (111 messages) | 0 wrong writes (it writes nothing) | 0 wrong of 15 writes | 57/67 preferences kept; 14 non-preferences sent to the host | 57/67 kept; 0 non-preferences sent | hold 57/67 preferences kept | good enough |
@@ -32,7 +32,7 @@ Any threshold a fix introduces is fitted the way `docs/architecture.md` § 8.8 s
 <!-- fallback-benchmark:begin targets -->
 | point | verdict | hard bar (harmful errors) | bar for the main figure | why |
 |---|---|---|---|---|
-| support | work: #351 | 0/35 supported pairs blocked by the new check (#123's own 1 is reported, not counted against it); any review tier surfaces at most 3 of the 35 supported pairs (the fits' 10% cap) | 35/54 should-block pairs blocked with #123 counted (contradicts 10/14, adds_unsupported 25/40) | Half the way from the 19 that #123 blocks today to Jev's 51; a check that blocks an honest edit is worse than none, so the hard bar is Jev's 0. |
+| support | met: #351 | 0/35 supported pairs blocked by the new check (#123's own 1 is reported, not counted against it); any review tier surfaces at most 3 of the 35 supported pairs (the fits' 10% cap) | 35/54 should-block pairs blocked with #123 counted (contradicts 10/14, adds_unsupported 25/40) | Half the way from the 19 that #123 blocks alone to Jev's 51; a check that blocks an honest edit is worse than none, so the hard bar is Jev's 0. Measured with the #351 check: 47/54 blocked with #123 counted (contradicts 13/14, adds_unsupported 34/40), 0/35 supported blocked and 0/35 surfaced for review by the new check. |
 | negative pin | leave | 0/33 not-a-mention pairs blocked (hold) | hold 11/41 (the direct mentions) | The term match is exact and never wrongly blocks; the 30 misses are paraphrases and products that no word list reads, and the host is handed every pin verbatim. |
 | coverage | good enough | none possible: an absent target blocks and writes nothing | hold: the target stays absent without Jev | `semantic_coverage` is a target, never a gate; the literal `coverage` and `relevance_density` still steer. |
 | memory gate | good enough | 0 automatic writes without Jev (hold) | hold 57/67 preferences kept | Nothing is written, so no write can be wrong; the 10 misses are the prefilter's, which Jev sits behind and shares. |
@@ -48,7 +48,7 @@ Any threshold a fix introduces is fitted the way `docs/architecture.md` § 8.8 s
 
 ### Needs work
 
-- **Support (#351)** is the one that matters: nothing semantic stops a reworded claim, and the only deterministic gate beside it (#123) reads new numbers and names, so role inflation, invented scope and contradictions that introduce no new token pass. The residual after #123 is the target of the new check.
+- **Support (#351) is done; the bar is met.** It was the one that mattered: nothing semantic stopped a reworded claim, and the only deterministic gate beside it (#123) reads new numbers and names, so role inflation, invented scope and contradictions that introduce no new token passed. `harness/decisions/support_fallback.py` now reads those (small explicit word lists, fitted by `eval/fit_support_fallback.py`, recorded in `harness/policy.json` as `fallback-support-v1`). The numbers are in the support section below and in `eval/support_labels/FALLBACK_REPORT.md`. The lists were written from the failure classes #350 named and run on this same set, so they are a floor, not a held-out accuracy; Jev still reads what no list does.
 
 ### Done: variant choice and track baseline (#352)
 
@@ -59,29 +59,29 @@ Any threshold a fix introduces is fitted the way `docs/architecture.md` § 8.8 s
 ## Support: cited-bullet check (#193, #237)
 
 <!-- fallback-benchmark:begin support -->
-89 pairs: 54 should block (contradicts 14, adds_unsupported 40), 35 supported. With Jev off every cited bullet's finding is `unchecked` (`reason`: mode=off), so `violations` and `reviews` are empty. Jev figures: `support_labels/REPORT.md`, "in support.py" row.
+89 pairs: 54 should block (contradicts 14, adds_unsupported 40), 35 supported. With Jev off every cited bullet's finding is the deterministic check's (`harness/decisions/support_fallback.py`, #351, model `fallback-support-v1`, `source`: fallback, `reason`: mode=off); `violations` and `reviews` are its block and review. The #123 numbers-and-names gate runs beside it in production, so the middle column counts a pair blocked by either. Jev figures: `support_labels/REPORT.md`, "in support.py" row.
 
-|  | fallback (unchecked) | Jev (tau_block 0.85, tau_review 0.35) |
-|---|---|---|
-| should-block pairs blocked | 0/54 (0%) | 51/54 (94%) |
-|   contradicts | 0/14 | 14/14 |
-|   adds_unsupported | 0/40 | 37/40 |
-| should-block pairs surfaced for review | 0 | 3 |
-| **should-block pairs kept silently (the harmful error)** | **54** | **0** |
-| supported pairs blocked (false blocks) | 0/35 | 0/35 |
-| supported pairs surfaced for review | 0 | 1 |
-
-**What stands there today.** The #123 numbers-and-names gate (`agents.checks.consistency_check`) runs beside the unchecked check, in production and here. On these pairs it blocks 19/54 (contradicts 6/14, adds_unsupported 13/40) and 1/35 supported pair (`bd_seaborn_python`), which Jev does not block. The pair carries only its cited text as evidence, where a real item adds its other source bullets and header, so both figures are upper bounds. Lexical drift (`faithfulness_drift`) is an item-level mean over the whole item's bullets that fires on wholesale rewrites; it has no per-bullet reading, so it is not scored here.
-
-| category | should block | #123 blocks | Jev blocks (tau_block 0.85) |
+|  | fallback: the #351 check | fallback: the #351 check + #123 | Jev (tau_block 0.85, tau_review 0.35) |
 |---|---|---|---|
-| `boundary` | 6 | 0 | 5 |
-| `contradiction` | 13 | 6 | 13 |
-| `invented_scope_outcome` | 13 | 2 | 13 |
-| `role_inflation` | 11 | 0 | 9 |
-| `ungrounded_tool` | 11 | 11 | 11 |
+| should-block pairs blocked | 36/54 (67%) | 47/54 (87%) | 51/54 (94%) |
+|   contradicts | 11/14 | 13/14 | 14/14 |
+|   adds_unsupported | 25/40 | 34/40 | 37/40 |
+| should-block pairs surfaced for review | 1 | 1 | 3 |
+| **should-block pairs kept silently (the harmful error)** | **17** | **6** | **0** |
+| supported pairs blocked (false blocks) | 0/35 | 1/35 | 0/35 |
+| supported pairs surfaced for review | 0 | 0 | 1 |
 
-The residual a new check works on, the should-block pairs #123 does not block: 35 (`boundary` 6, `contradiction` 7, `invented_scope_outcome` 11, `role_inflation` 11).
+**What stands beside it.** The #123 numbers-and-names gate (`agents.checks.consistency_check`) runs beside the check, in production and here. On these pairs it alone blocks 19/54 (contradicts 6/14, adds_unsupported 13/40), the baseline #350 measured, and 1/35 supported pair (`bd_seaborn_python`), which Jev does not block. The pair carries only its cited text as evidence, where a real item adds its other source bullets and header, so both checks' figures are upper bounds. Lexical drift (`faithfulness_drift`) is an item-level mean over the whole item's bullets that fires on wholesale rewrites; it has no per-bullet reading, so it is not scored here.
+
+| category | should block | #123 blocks | #351 check blocks | #351 check reviews (not blocked) | either blocks | Jev blocks (tau_block 0.85) |
+|---|---|---|---|---|---|---|
+| `boundary` | 6 | 0 | 3 | 1 | 3 | 5 |
+| `contradiction` | 13 | 6 | 10 | 0 | 12 | 13 |
+| `invented_scope_outcome` | 13 | 2 | 9 | 0 | 10 | 13 |
+| `role_inflation` | 11 | 0 | 11 | 0 | 11 | 9 |
+| `ungrounded_tool` | 11 | 11 | 3 | 0 | 11 | 11 |
+
+The residual the check worked on, the should-block pairs #123 does not block: 35 (`boundary` 6, `contradiction` 7, `invented_scope_outcome` 11, `role_inflation` 11). The check blocks 28 of them and surfaces 1 more for review; 6 should-block pairs pass both unflagged (`rw_dependency_free`, `scope_no_internet`, `scope_plagiarism_feature`, `scope_hourly_refresh`, `contra_replay_overwrites`, `bd_original_not_evidence`).
 <!-- fallback-benchmark:end support -->
 
 ## Negative pin (#232)
@@ -201,6 +201,7 @@ The fallback row above equals the one in `library_labels/REPORT.md` (36/36 (100%
 - The variant pick runs with the job's title and requirements and uniform keyword weights (used only to break ties), as `fit_library_thresholds.py` runs it. The track pick is given track names equal to role families, its best case; a saved track named otherwise reads as the family of the title of the job it came from. Both read requirements: a real job whose host extracted none gets `no_match` (variants) or #229's title lookup (tracks).
 - A host-stated `role_family` that names a saved track wins before either baseline path is asked; it is the host's call, not the fallback's, and is not scored.
 - Coverage and the memory gate's `unresolved_reference` path are not scored beyond what is stated: the coverage pairs carry no posting `terms` for the literal target, and the fallback never reads the previous assistant turn.
+- The #351 support check's word lists were written from the failure classes #350 named and then run on this same set, so its row is the set they were authored on, not a held-out accuracy. No supported pair fires any signal, so the labels cannot place its block cutoff between 0.5 and 1.0 (a rule does: a lone soft signal never blocks). `tests/test_support_fallback.py` adds 35 bullets written after the lists, honest and dishonest, as a regression floor; they are not a measurement either.
 - Labels are synthetic and the sets are small (36 to 131 cases per point, 6 to 19 per category), so a per-category figure moves by a whole case when one label is corrected.
 
 ## Regenerating
@@ -209,4 +210,5 @@ The fallback row above equals the one in `library_labels/REPORT.md` (36/36 (100%
 python eval/fallback_benchmark.py write    # rewrite the tables above from the committed labels and REPORT.md files
 python eval/fallback_benchmark.py check    # exit 1 if they are stale
 python eval/fallback_benchmark.py json     # the measured numbers
+python eval/fit_support_fallback.py analyze   # refit the support fallback's cutoffs (#351); rewrites support_labels/FALLBACK_REPORT.md
 ```

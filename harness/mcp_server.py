@@ -114,6 +114,12 @@ def main(argv=None) -> None:
     log.info("contract v%s: serving %s (%s, %s), user %s", CONTRACT_VERSION,
              ", ".join(TOOL_NAMES), scheme, "read-write" if writes else "read-only",
              user_id or "UNBOUND")
+    if writes and scheme == "sqlite":
+        # Skills ingested before a Jev key was configured: place them in the background,
+        # at most once a day per key, never delaying the server (#342). Only the user's own
+        # local store: a remote database is backfilled by hand (scripts/classify_unplaced_skills.py).
+        from knowledge_graph.areas import start_backfill_in_background
+        start_backfill_in_background(user_id)
     build_server(user_id, allow_writes=writes).run("stdio")
 
 

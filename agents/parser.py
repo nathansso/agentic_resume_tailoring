@@ -85,6 +85,7 @@ class ResumeParserAgent(KGStoreMixin):
             self._heal_projects(session, self.user.user_id)
             self._heal_education(session, self.user.user_id)
             self._heal_achievements(session, self.user.user_id)
+            self._heal_skills(session, self.user.user_id)
             session.commit()
 
         logger.info("Parsing complete and saved to DB.")

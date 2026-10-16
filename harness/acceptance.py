@@ -119,7 +119,8 @@ class Context:
     max_bullet_lines: int = 2
     # The cited-bullet support check (#193): `content -> findings`, backed by
     # the Jev engine and injected by the executor, like `line_counter`, so this
-    # module stays model-free. None (or an unchecked finding) adds nothing.
+    # module stays model-free. None (or an unchecked finding) adds nothing. With no Jev answer the
+    # checker's findings are the deterministic fallback's (#351), judged by its own cutoffs.
     support_checker: Optional[Callable[[Dict], List[Dict]]] = None
     # The negative-pin check (#232): `content -> findings`, Jev's yes/no on whether a changed
     # bullet or item field mentions a pinned topic in other words. Injected like the support

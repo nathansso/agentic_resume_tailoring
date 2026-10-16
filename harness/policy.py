@@ -31,6 +31,8 @@ UNVERSIONED = "unversioned"          # `version()` when the file is missing or u
 _FALLBACK: Dict[str, float] = {
     "support.tau_block": 0.85,
     "support.tau_review": 0.35,
+    "support_fallback.tau_block": 1.0,
+    "support_fallback.tau_review": 0.5,
     "negative_pin.tau_block": 0.85,
     "negative_pin.tau_review": 0.15,
     "coverage.tau_cover": 0.65,

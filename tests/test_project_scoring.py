@@ -346,6 +346,49 @@ def test_count_linked_skills_matches_repo_slug_and_name():
     assert ResumeTailorAgent._count_linked_skills("", None, evidence_rows) == 0
 
 
+def test_count_linked_skills_slug_is_a_whole_repo_not_a_prefix():
+    """#332: me/app does not count skills recorded for me/app-server, and vice versa."""
+    rows = [
+        ("s1", "github:me/app", None),
+        ("s2", "github:me/app-server", None),
+        ("s3", "github:me/app-server", None),
+        ("s4", "github:me/ap", None),
+        ("s5", "github:me/app.git", None),       # a longer repo name, not me/app
+        ("s6", "resume", "see github:me/app, built the API"),   # punctuation ends the token
+    ]
+    count = ResumeTailorAgent._count_linked_skills
+    assert count("App", "https://github.com/me/app", rows) == 2          # s1, s6
+    assert count("Server", "https://github.com/me/app-server", rows) == 2
+    assert count("Ap", "https://github.com/me/ap", rows) == 1
+    assert count("Ap", "https://github.com/ME/App/", rows) == 2           # slug is lowercased
+
+
+def test_count_linked_skills_name_is_a_whole_token_and_only_without_a_repo():
+    rows = [
+        ("s1", "resume", "Built the app with Flask"),
+        ("s2", "resume", "Mobile application backend"),
+        ("s3", "resume", "Roadmap tooling"),
+        ("s4", "github:me/app-server", None),
+    ]
+    count = ResumeTailorAgent._count_linked_skills
+    # Without a repo the name matches as a whole token: "app" is not "application" or "roadmap".
+    assert count("App", None, rows) == 1
+    # With a repo the slug is the recorded fact; the name is not a second needle.
+    assert count("App", "https://github.com/me/app", rows) == 0
+    # A repo URL that is not a GitHub repo has no slug, so the name is used.
+    assert count("App", "https://example.com/app", rows) == 1
+
+
+def test_names_repo_is_shared_with_the_evidence_view():
+    from knowledge_graph import evidence_view
+    from knowledge_graph.builder import names_repo
+    assert names_repo("github:me/app", "me/app")
+    assert not names_repo("github:me/app-server", "me/app")
+    assert not names_repo("github:me/ap", "me/app")
+    assert not names_repo("", "me/app")
+    assert not hasattr(evidence_view, "_names_repo")
+
+
 # ── Project.metrics column ────────────────────────────────────────────────────
 
 def test_project_metrics_roundtrip(isolated_engine):
