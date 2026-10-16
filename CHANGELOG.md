@@ -14,6 +14,46 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Release v0.1.1 — ship `main` to plugin users, GitHub login in the guides
+**Status:** complete in the repo; the tag `v0.1.1` is pushed after merge, with the owner's OK, and the OAuth client ID is not in yet (see Deviations) | **Tests:** 3222 pass on SQLite (1 new, `test_art_hooks_codex_replaces_the_v010_hooks_with_this_versions`, plus one assertion in `test_is_art_hook_recognises_any_source_and_only_art`), 24 skipped, 2 xfailed, 0 fail; site build and the 2 MB weight check pass (636,815 bytes); `uv build` gives `art_mcp-0.1.1-py3-none-any.whl` with `harness/github.py`, `harness/github_cli.py` and the editor, and `Requires-Dist: keyring>=24`; a clean install of it passes `scripts/smoke_art_mcp.py`; the Postgres leg was not run locally (nothing here touches storage), CI's required leg covers it
+
+Every install (the Claude Code plugin, Codex, a manual MCP registration) pinned the v0.1.0 wheel, which is 192 commits behind `main`. The plugin's instruction files come from `main` while its code is the wheel, so `/art:setup` and the `art-tailor` skill already told people to run `art github login`, a command v0.1.0 does not have. v0.1.1 moves every pin to the new wheel and teaches the site's install and usage pages GitHub login. Issue #369 closes after the tag ships and a fresh install is smoke-tested.
+
+### What shipped
+
+**In the wheel: new for users since v0.1.0**
+
+- **GitHub login (#353).** `art github login [--private]`, `status` and `logout`, and the `list_github_repos` tool, so the agent can list the user's repos and pick which to read or clone. The token lives in the OS keychain, else `ART_GITHUB_TOKEN`. `keyring` is now a default dependency (it was an extra the plugin's pin did not carry), so the plugin path has a keychain. The OAuth client ID is the one open piece.
+- **`/art:history` and `/art:revert` no longer crash (#326).** `diff_nodes` raised a validation error whenever two versions' skills differed.
+- **Citation keys are stable (#327).** `<item key>#b<n>` named a different project bullet from one ingest to the next; project bullets now carry a position, with a backfill for existing stores.
+- **The editor round trip over MCP (#276, #277, #278, #306).** A host-tailored job opens in `art ui`; a drag in the editor lasts across the next commit; the user's own `.tex` edit is shown to the host as changed bullets, is not dropped by a commit, and is not vetoed by a guard when carried over.
+- **Removing a bullet (#279, #289).** A requested delete is judged on the hard gates alone, and `delete_bullet` is the plan op that performs the cuts `cut_hints` recommends.
+- **Preferences bind to the right thing (#291, #295, #296, #297, #298).** One scope for the briefing, the pins and the executor; a deterministic anchor resolver; preferences re-link on ingest and follow renames and deletes; items carry their preferences; `ResumeRule` for what the user said about the page, enforced at finalize.
+- **Skills cap (#185).** `select_skills` no longer renders past the cap.
+- **Codex hooks (#290, #283).** The Codex plugin carries ART's hooks, `art hooks codex --write` no longer duplicates them, and it replaces the hooks an earlier install wrote (git source, older wheel, and now v0.1.0's; pinned by a test in this release).
+- **`art ui` evidence map and editing (#136, #318, #319, #321, #322, #323).** The Data Explorer opens on an evidence map with a job overlay and an item editor; skill areas come from a keyword table and cached Jev; a bullet picker per job; dismiss and restore a skill nothing proves; confirm where a project was done; a hint under a bullet that names no skill.
+
+**Site and docs (not in the wheel)**
+
+- **Install and usage guides for GitHub login (#369).** A "Bring in your GitHub repos (optional)" section on the install page (`art github login`, `--private`, the keychain, `ART_GITHUB_TOKEN`), and the usage page's "ARTie doesn't connect to your GitHub account" replaced by login, then `list_github_repos`, then read or clone, keeping cloning as the no-login path. The commands are rendered from `commands.json` and held to `INSTALL.md` by the drift test.
+- **The landing site (#272, #273, #274, #275, #337, #356, #354).** Scaffold, home, install and usage docs, a session replay and before/after resume, Jev presented as an optional upgrade, and a privacy page.
+
+**Internal**
+
+- **#354** hosted LinkedIn gateway: code and tests only, not deployed, and not in the wheel.
+- **#350** fallback benchmark for every Jev decision point; **#282** change-feed tests no longer depend on timers.
+- **The release itself.** `ART_VERSION`, both plugin manifests and every pinned wheel URL (`plugin/.mcp.json`, `plugin/hooks/hooks.json`, `/art:open`, the `art-tailor` skill, `INSTALL.md`, `integrations/codex/README.md`, `docs/harness.md`, the site's `commands.json`) go to 0.1.1; the test fixture's plugin cache directory follows `ART_VERSION`. `tests/test_plugin.py` gains the v0.1.0-hooks upgrade case.
+
+### Deviations from spec
+
+- **`DEFAULT_CLIENT_ID` in `harness/github.py` is still empty.** The owner registers the GitHub OAuth App (device flow) and the planner fills the ID in before the tag. Until then `art github login` fails with `not_configured`, or works with `ART_GITHUB_CLIENT_ID` set, so tagging without it ships a login that does not work.
+- **The stale-hook requirement needed no code change.** `is_art_hook` already recognises `art hook <event>` run through `uvx --from`, whatever wheel it pins, so the work is a test (`test_art_hooks_codex_replaces_the_v010_hooks_with_this_versions`) and one `is_art_hook` assertion.
+- **The install page shows the `uvx --from "…" art github login` form, not bare `art github login`.** The plugin runs ART through `uvx`, which puts no `art` on `PATH`. `INSTALL.md` gains those two lines beside the bare ones so the drift test holds. `plugin/README.md`, `/art:setup` and the `art-setup` and `art-tailor` skills still say bare `art github login`; changing them is outside this release's scope.
+- **Not tagged or published.** The tag, the `release.yml` dry run and a smoke test of a fresh install follow merge and are the planner's, with the owner's OK. The wheel was built locally to check its name and metadata and was not uploaded.
+- **Historical v0.1.0 mentions stay** in earlier CHANGELOG entries, and `site/src/components/demo/transcript.json` keeps `"art_version": "0.1.0"`, because it is the recording of a run on that release.
+
+---
+
 ## Issue 323 — Hint when a bullet names no skill
 **Status:** complete | **Tests:** 3190 pass on SQLite (0 new; the change is frontend only), 16 skipped, 2 xfailed, 0 fail; frontend 185 pass (5 new); `npm run build` and `npm ci --dry-run` pass; the Postgres leg was not run locally (the Docker daemon was not running), CI's required Postgres leg covers it
 
