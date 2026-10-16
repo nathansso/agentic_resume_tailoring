@@ -1,7 +1,7 @@
 {
   "_comment": "The policy artifact (#241). Every fitted or provisional threshold the harness decides with, and the guard tolerances, with the fit each came from. Read by harness/policy.py; tests/test_policy.py pins it to the fit scripts' output on the committed recordings. Changing a value means a new `version` and `digest`.",
-  "version": 1,
-  "digest": "e2fb4f5790ee9102",
+  "version": 2,
+  "digest": "234bfcb8ac6cd50f",
   "fit_date_basis": "the recordings' export date",
   "fits": {
     "support": {
@@ -125,6 +125,36 @@
           "sha256": "6e180e5df274d9e9d39a32742a722c8100bb093e20939b97daacdb4c52082a10"
         }
       ]
+    },
+    "fallback_variant": {
+      "decision": "variant choice without Jev: harness.library.best_variant over harness.concepts (#352)",
+      "script": "eval/fit_library_fallbacks.py",
+      "model": "fallback-variant-v1",
+      "fit_date": "2026-10-15",
+      "source_issue": 352,
+      "note": "no model and no recordings: the fit reads the labels and the committed code only, so `recordings` is empty and `fit_date` is the day of the fit",
+      "labels": [
+        {
+          "path": "eval/library_labels/variants.json",
+          "sha256": "b8514b47f3bfd4180bd81c3b3397603833a5b4b49fd4335c4052e2060eba1c8a"
+        }
+      ],
+      "recordings": []
+    },
+    "fallback_track": {
+      "decision": "track baseline without Jev: harness.library.pick_track over harness.concepts (#352)",
+      "script": "eval/fit_library_fallbacks.py",
+      "model": "fallback-track-v1",
+      "fit_date": "2026-10-15",
+      "source_issue": 352,
+      "note": "no model and no recordings: the fit reads the labels and the committed code only, so `recordings` is empty and `fit_date` is the day of the fit",
+      "labels": [
+        {
+          "path": "eval/library_labels/baselines.json",
+          "sha256": "36a9dcf4b7644ad977f93b5da48eb9c93d982dfa80b9deb3fd82f0aa5c93bc4c"
+        }
+      ],
+      "recordings": []
     }
   },
   "values": {
@@ -241,11 +271,25 @@
       "note": "floor of both library fits: a pick needs Jev to call it more likely than not"
     },
     "library.variant_match_floor": {
-      "value": 0.1,
-      "kind": "provisional",
-      "fit": null,
-      "source_issue": 229,
-      "note": "Jev-free fallback floor of suggest_actions; reasoned, not fitted; refit once real library use exists"
+      "value": 0.09,
+      "kind": "fitted",
+      "fit": "fallback_variant",
+      "source_issue": 352,
+      "note": "Jev-free floor on harness.library.variant_fit (concept demand); #229's word-overlap floor was 0.10 on another scale. The gap is thin (worst poor-fit score 0.083, lowest right pick 0.104): refit when the vocabulary or real use changes"
+    },
+    "library.fallback_track_floor": {
+      "value": 0.3,
+      "kind": "fitted",
+      "fit": "fallback_track",
+      "source_issue": 352,
+      "note": "Jev-free: minimum cosine of the job's reading with the picked track's role family; no wrong track on the labels at any floor, so it is the middle of the gap to the lowest right pick (0.61)"
+    },
+    "library.fallback_track_margin": {
+      "value": 0.02,
+      "kind": "fitted",
+      "fit": "fallback_track",
+      "source_issue": 352,
+      "note": "Jev-free: the picked track's lead over every other family; every wrong pick on the labels has a negative lead, so it is the middle of the gap from 0 to the lowest right pick's lead (0.037)"
     },
     "guards.stuffing": {
       "value": 0.0,
