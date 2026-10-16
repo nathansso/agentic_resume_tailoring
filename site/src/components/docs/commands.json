@@ -52,6 +52,13 @@
         "uvx --from \"{SOURCE}\" art ui --job <job_id>"
       ]
     },
+    "github-login": {
+      "source": "INSTALL.md",
+      "lines": [
+        "uvx --from \"{SOURCE}\" art github login",
+        "uvx --from \"{SOURCE}\" art github login --private"
+      ]
+    },
     "typesafe-key": {
       "source": "INSTALL.md",
       "lines": [
@@ -129,6 +136,7 @@
     "art jev status": "INSTALL.md",
     "ART_JEV_MODE=off": "INSTALL.md",
     "TYPESAFE_API_KEY": "INSTALL.md",
+    "ART_GITHUB_TOKEN": "INSTALL.md",
     "~/.art/art.db": "INSTALL.md",
     "/hooks": "INSTALL.md",
     "$art-setup": "integrations/codex/README.md",

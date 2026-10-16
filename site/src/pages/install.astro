@@ -14,6 +14,7 @@ const S = {
   codex: { id: "codex", title: "Install in Codex" },
   manual: { id: "other-clients", title: "Other MCP clients" },
   verify: { id: "check-it-worked", title: "Check that it worked" },
+  github: { id: "github", title: "Bring in your GitHub repos (optional)" },
   optional: { id: "optional", title: "Optional extras" },
   jev: { id: "jev", title: "Optional: strengthen the checks with Jev" },
   trouble: { id: "troubleshooting", title: "Troubleshooting" },
@@ -173,6 +174,36 @@ const toc = Object.values(S);
     </p>
     <CommandBlock label="In a terminal" lines={block("list-tools")} />
     <p>If any of these fail, see <a href="#troubleshooting">Troubleshooting</a>.</p>
+  </DocSection>
+
+  <DocSection section={S.github}>
+    <p>
+      Skip this if you would rather clone your repositories and hand your agent the folders (see
+      the <a href="/usage">Usage page</a>). Sign in with GitHub once and your agent can list
+      your repositories itself and choose which to read.
+    </p>
+    <p>
+      Run this in your own terminal, not through your agent. It prints a code and a GitHub
+      page; open the page, type the code and approve. Your password never goes through ARTie.
+      The plugin runs ARTie with <code>uvx</code> and puts no <code>art</code> command on your
+      <code>PATH</code>, so the lines below go through <code>uvx</code> as well:
+    </p>
+    <CommandBlock label="In a terminal" lines={block("github-login")} />
+    <p>
+      The first line reads your public repositories. The second, with <code>--private</code>,
+      also reads private ones. Run whichever you want; you can run the other later.
+    </p>
+    <p>
+      Nothing else needs installing: the <code>keyring</code> package ships with ARTie, and the
+      token it gets is kept in your operating system's keychain (Windows Credential Manager,
+      macOS Keychain, or your desktop's secret service). It is never stored in ARTie's
+      database, never included in an export, and never logged.
+    </p>
+    <p>
+      On a machine with no usable keychain, such as some headless Linux setups, the login says
+      so before it starts. Set <code>ART_GITHUB_TOKEN</code> to a GitHub personal access token
+      in the environment your agent starts from instead.
+    </p>
   </DocSection>
 
   <DocSection section={S.optional}>

@@ -223,6 +223,14 @@ art github status              # who is signed in; never prints the token
 art github logout              # removes the stored token
 ```
 
+The plugin runs ART through `uvx`, which puts no `art` on your PATH. From a plugin or
+`uvx` install, run the same commands through `uvx`:
+
+```bash
+uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login
+uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login --private
+```
+
 The token goes to the OS keychain through the `keyring` package (service `art-mcp`,
 user `github-token`), else it is read from `ART_GITHUB_TOKEN`, which also takes a personal
 access token. It is never stored in the database, never in an `art export` bundle, and never
