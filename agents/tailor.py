@@ -40,7 +40,7 @@ from agents.checks import (  # re-exported: tests and callers import these from 
 from agents.tailor_planner import (
     DEFAULT_KNOBS, TailorPlanner, decision_log_entry, exploration_mode,
 )
-from knowledge_graph.builder import SkillGraphBuilder, repo_slug
+from knowledge_graph.builder import SkillGraphBuilder, names_repo, repo_slug
 
 logger = logging.getLogger(__name__)
 
@@ -1337,22 +1337,23 @@ class ResumeTailorAgent:
     def _count_linked_skills(project_name: str, repo_url: str, evidence_rows: List) -> int:
         """
         Knowledge-graph degree: distinct skills whose evidence references this
-        project, matched by repo slug (owner/repo from repo_url) or project
-        name against UserSkill.evidence_source/evidence_detail (issue #46).
+        project against UserSkill.evidence_source/evidence_detail (issue #46).
+
+        A project with a repo is matched by its repo slug (owner/repo from repo_url), the
+        recorded fact, and only as a whole `owner/repo` (`names_repo`, #332): `owner/app`
+        does not count skills sourced from `owner/app-server`. The project name is the
+        needle only for a project with no repo, and then also as a whole token, so a short
+        name such as "app" no longer matches "application" or "map".
         """
-        needles = set()
         slug = repo_slug(repo_url)
-        if slug:
-            needles.add(slug)
-        if project_name:
-            needles.add(project_name.lower())
-        if not needles:
+        needle = slug or (project_name or "").strip().lower()
+        if not needle:
             return 0
 
         skill_ids = set()
         for skill_id, source, detail in evidence_rows:
             haystack = f"{source or ''} {detail or ''}".lower()
-            if any(n in haystack for n in needles):
+            if names_repo(haystack, needle):
                 skill_ids.add(skill_id)
         return len(skill_ids)
 
