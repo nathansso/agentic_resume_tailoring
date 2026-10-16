@@ -5,7 +5,7 @@ import {
 } from "../api/profile";
 import type { DismissedSkill, EvidenceItem, EvidenceKind, EvidenceSkill, EvidenceView, ProjectContext } from "../types";
 import {
-  DISMISSED_KEY, bareBullets, canDismiss, dateRange, editableFields, githubOnlyLinks, highlightSegments, initialDraft, linksByBullet, placementLabel,
+  DISMISSED_KEY, bareBullets, canDismiss, dateRange, duplicateHint, editableFields, githubOnlyLinks, highlightSegments, initialDraft, linksByBullet, placementLabel,
   placementOptions, planSave, recentEditable, skillEvidence, skillIdOf, textIsDescription, topSuggestion,
   type Draft, type JobOverlay, type SaveOp,
 } from "../lib/evidenceMap";
@@ -507,6 +507,7 @@ export function ItemEditor({ view, item, onSelect, onSaved, placement, savedNote
   const bare = useMemo(() => new Set(bareBullets(view, item.key)), [view, item.key]);
   const parent = item.parent_key ? view.items.find((i) => i.key === item.parent_key) : undefined;
   const children = view.items.filter((i) => i.parent_key === item.key);
+  const sameName = duplicateHint(view, item);
   const asDescription = textIsDescription(item);
   const fields = editableFields(item);
   const canAdd = item.kind === "exp";
@@ -541,6 +542,10 @@ export function ItemEditor({ view, item, onSelect, onSaved, placement, savedNote
       <p className="mt-0.5 text-[13px] text-muted-foreground">
         {[item.org, dateRange(item.start, item.end)].filter(Boolean).join(" · ")}
       </p>
+
+      {sameName && (
+        <p role="note" className="mt-3 rounded-md border border-graph-gap/40 p-3 text-[13px]">{sameName}</p>
+      )}
 
       {(parent || children.length > 0 || item.achievements.length > 0) && (
         <Callout>

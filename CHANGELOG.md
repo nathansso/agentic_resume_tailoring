@@ -39,6 +39,28 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 334 — Same-name projects and experiences no longer share evidence
+**Status:** complete | **Tests:** 3252 pass on SQLite (23 new), 16 skipped, 2 xfailed, 0 fail; frontend 189 pass (4 new); `npm run build` and `npm ci --dry-run` pass; the Postgres leg was not run locally (the Docker daemon was not running), CI's required Postgres leg covers it
+
+Two projects with one name collapsed into one graph node (`Project:<name>`), so one got the other's skill links, and the cite keys (`proj:<name>`, `exp:<title>|<company>`) collide the same way for every name-keyed reader. ART's model assumes a user's project names, and role title-and-company pairs, are unique. This enforces that, and makes a duplicate that does exist visible instead of silently misattributed.
+
+### What shipped
+- **A rename onto another item's key is refused.** `services.update_project` and `update_experience` raise the new `DuplicateItemError` (a `ValueError`) when the new name, or title and company, has the same `proj_key` / `exp_key` as another of the user's items (case and surrounding spaces ignored, the identity a cite uses). The web routes answer **409** with a message naming the other item ("You already have a project named X; rename this one or delete the other."). The check runs only when the key changes, so renaming an item to its own name or re-casing it works, and editing other fields of an existing duplicate is not blocked.
+- **Chat matches by key.** `create_artifact_from_chat` finds an existing project or experience by key, so "my app" is "My App" and no second row appears ("My-App" stays distinct, as it does for a cite). `_supersede_project` / `_supersede_experience` look for the key twin before the fuzzy matcher, so a supersede updates that row and can never rename another onto it.
+- **Deterministic builder.** `SkillGraphBuilder._user_projects` / `_user_experiences` read in `(seq, created_at, id)` order, so when two rows share a node id the survivor no longer depends on storage order.
+- **The evidence view flags duplicates.** Every item has `duplicate_of` (the key of another item with its cite key, else null). Items that share a graph node get none of that node's edges, so neither is shown the other's links or cites; case-variant duplicates have distinct nodes and keep their own. The item editor shows "Same name as X. Rename or delete one so ART can tell them apart; a later import may merge them." (`duplicateHint`, `lib/evidenceMap.ts`).
+- **Tests.** `tests/test_same_name_items.py` (23): 409 for an exact, re-cased, padded and upper-cased project rename and for role renames; new names, an item's own name and another user's same name still work; chat create adds no second row for either type; the supersede preference; builder survivor over reversed storage order and over a total tie; evidence view flags, edge suppression, case variants, roles, no false flags. `evidenceMap.test.ts`: 4 for `duplicateHint`.
+
+### Deviations from spec
+- **Uniqueness is enforced; the graph is not re-keyed.** The issue asked for nodes keyed by row id. The cite keys (`proj_key`, `exp_key`), the harness records, `_KG.by_key`, preferences, `BulletVariant.item_key`, `JobRule.item_key` and `follow_rename` all bind by name and would still collide, so re-keying the graph alone fixes one reader of many. No node id or cite key changed (the existing id-asserting tests pass untouched). "Key items by row id end to end" is a follow-up only if this proves insufficient.
+- **No harness change.** The plan listed the `upsert_items` `correct` path, but `_CORRECTABLE` excludes a project's name and a role's title and company (#297), so `correct` cannot rename onto another key. A test pins that. The ingest heal already merges same-name rows.
+- **The supersede paths have no collision guard.** Matching the key twin first means the twin is the row updated, so a guard could never fire.
+- **Existing duplicates are flagged, not merged or repaired.** The next ingest's heal merges those it matches. Education and achievement nodes (`Education:`, `Achievement:`) are keyed by name too; not touched.
+- **Tailoring benchmark not re-run.** Profiles without duplicate names read identically: the builder change is an ORDER BY and node ids are unchanged.
+- **The Postgres leg was not run locally**; Docker was not running.
+
+---
+
 ## Issue 323 — Hint when a bullet names no skill
 **Status:** complete | **Tests:** 3190 pass on SQLite (0 new; the change is frontend only), 16 skipped, 2 xfailed, 0 fail; frontend 185 pass (5 new); `npm run build` and `npm ci --dry-run` pass; the Postgres leg was not run locally (the Docker daemon was not running), CI's required Postgres leg covers it
 

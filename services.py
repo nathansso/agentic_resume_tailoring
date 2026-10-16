@@ -503,10 +503,36 @@ def _as_uuid(value) -> Optional[UUID]:
         return None
 
 
+class DuplicateItemError(ValueError):
+    """A rename would give two of a user's projects (or roles) the same key (issue #334).
+
+    A key (`checks.proj_key` / `exp_key`) is what a cite, a preference and the graph's
+    nodes bind by, so two items with one key cannot be told apart. The web route
+    answers 409; the message names the other item so the user can act on it.
+    """
+
+
+def _project_twin(session, user_id: UUID, name: str, own_id=None) -> Optional[Project]:
+    """Another of this user's projects whose key (`proj_key`) is `name`'s, else None."""
+    from agents.checks import proj_key
+    key = proj_key({"name": name})
+    return next((p for p in session.exec(select(Project).where(Project.user_id == user_id)).all()
+                 if p.project_id != own_id and proj_key({"name": p.name}) == key), None)
+
+
+def _experience_twin(session, user_id: UUID, title: str, company: str, own_id=None) -> Optional[Experience]:
+    """Another of this user's roles whose key (`exp_key`) is this title and company's, else None."""
+    from agents.checks import exp_key
+    key = exp_key({"title": title, "company": company})
+    return next((e for e in session.exec(select(Experience).where(Experience.user_id == user_id)).all()
+                 if e.experience_id != own_id and exp_key({"title": e.title, "company": e.company}) == key), None)
+
+
 def update_experience(user_id: Optional[UUID], experience_id: str, fields: dict) -> Optional[dict]:
     """Edit a user's own Experience row. Returns the updated row dict, or None if
-    not found / not owned. Raises ValueError on an empty required field. Sets
-    manually_edited so a later re-ingest can't revert the change (issue #92)."""
+    not found / not owned. Raises ValueError on an empty required field and
+    DuplicateItemError when the new title and company are another role's (issue #334).
+    Sets manually_edited so a later re-ingest can't revert the change (issue #92)."""
     if user_id is None:
         return None
     with Session(engine) as session:
@@ -516,16 +542,22 @@ def update_experience(user_id: Optional[UUID], experience_id: str, fields: dict)
             return None
         from agents.checks import exp_key
         old_key = exp_key({"title": row.title, "company": row.company})
+        title, company = row.title, row.company
         if "title" in fields:
             title = str(fields["title"] or "").strip()
             if not title:
                 raise ValueError("Title cannot be empty.")
-            row.title = title
         if "company" in fields:
             company = str(fields["company"] or "").strip()
             if not company:
                 raise ValueError("Company cannot be empty.")
-            row.company = company
+        if exp_key({"title": title, "company": company}) != old_key:
+            twin = _experience_twin(session, user_id, title, company, row.experience_id)
+            if twin is not None:
+                raise DuplicateItemError(
+                    f"You already have a role titled {twin.title} at {twin.company}; "
+                    "rename this one or delete the other.")
+        row.title, row.company = title, company
         for key in ("start_date", "end_date", "description"):
             if key in fields:
                 setattr(row, key, _clean_str(fields[key]))
@@ -575,7 +607,8 @@ def update_education(user_id: Optional[UUID], education_id: str, fields: dict) -
 
 
 def update_project(user_id: Optional[UUID], project_id: str, fields: dict) -> Optional[dict]:
-    """Edit a user's own Project row (issue #92)."""
+    """Edit a user's own Project row (issue #92). Raises DuplicateItemError when the new
+    name is another project's (issue #334)."""
     if user_id is None:
         return None
     with Session(engine) as session:
@@ -589,6 +622,12 @@ def update_project(user_id: Optional[UUID], project_id: str, fields: dict) -> Op
             name = str(fields["name"] or "").strip()
             if not name:
                 raise ValueError("Name cannot be empty.")
+            if proj_key({"name": name}) != old_key:
+                twin = _project_twin(session, user_id, name, row.project_id)
+                if twin is not None:
+                    raise DuplicateItemError(
+                        f"You already have a project named {twin.name}; "
+                        "rename this one or delete the other.")
             row.name = name
         for key in ("description", "repo_url", "demo_url", "start_date", "end_date"):
             if key in fields:
@@ -1330,14 +1369,10 @@ def create_artifact_from_chat(
             description = (data.get("description") or evidence).strip() or None
             repo_url = (data.get("repo_url") or "").strip() or None
             with Session(engine) as session:
-                existing = session.exec(
-                    select(Project).where(
-                        Project.user_id == user_id,
-                        Project.name == name,
-                    )
-                ).first()
+                # By key, the identity a cite and the graph use: "my app" is "My App" (issue #334).
+                existing = _project_twin(session, user_id, name)
                 if existing:
-                    return f"Project '{name}' is already in your profile."
+                    return f"Project '{existing.name}' is already in your profile."
                 session.add(Project(
                     user_id=user_id,
                     name=name,
@@ -1356,13 +1391,7 @@ def create_artifact_from_chat(
             # Fall back to the evidence quote when no separate description is provided.
             description = (data.get("description") or evidence).strip() or None
             with Session(engine) as session:
-                existing = session.exec(
-                    select(Experience).where(
-                        Experience.user_id == user_id,
-                        Experience.title == title,
-                        Experience.company == company,
-                    )
-                ).first()
+                existing = _experience_twin(session, user_id, title, company)    # by key (issue #334)
                 if existing:
                     return f"Experience '{title} @ {company}' is already in your profile."
                 session.add(Experience(
@@ -1450,6 +1479,7 @@ def _supersede_project(session, user_id: UUID, data: dict, evidence: str,
                        source_context: Optional[str]) -> Optional[str]:
     """Update an existing Project in place. None when there's no row to update."""
 
+    from agents.checks import proj_key
     from agents.parser import ResumeParserAgent
 
     name = (data.get("name") or "").strip()
@@ -1457,7 +1487,11 @@ def _supersede_project(session, user_id: UUID, data: dict, evidence: str,
     rows = session.exec(select(Project).where(Project.user_id == user_id)).all()
     # Reuse the ingestion deduper's matcher rather than a second notion of
     # "same project" (shared repo URL, spacing/containment on the name).
-    row = next(
+    # The row with this name's key first (the identity cites and the graph use, issue #334),
+    # then the fuzzy matcher. Matching the key twin first also means a supersede can never
+    # rename a row onto another row's key: that other row is the one it updates.
+    row = next((p for p in rows if name and proj_key({"name": p.name}) == proj_key({"name": name})), None)
+    row = row or next(
         (p for p in rows
          if ResumeParserAgent._projects_match(name, repo_url, p.name, p.repo_url)),
         None,
@@ -1510,12 +1544,17 @@ def _supersede_experience(session, user_id: UUID, data: dict, evidence: str,
     row appearing for the same job.
     """
 
+    from agents.checks import exp_key
     from agents.parser import ResumeParserAgent
 
     title = (data.get("title") or data.get("name") or "").strip()
     company = (data.get("company") or "").strip()
     rows = session.exec(select(Experience).where(Experience.user_id == user_id)).all()
-    row = next(
+    # The row with this title and company's key first (issue #334), then the fuzzy matcher.
+    row = next((e for e in rows if title and company
+                and exp_key({"title": e.title, "company": e.company})
+                == exp_key({"title": title, "company": company})), None)
+    row = row or next(
         (e for e in rows
          if ResumeParserAgent._experiences_match(title, company, e.title, e.company)),
         None,
