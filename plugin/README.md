@@ -37,8 +37,14 @@ when you ask Claude to tailor a resume or update your experience.
 
 ## GitHub repos (optional)
 
-To bring in your GitHub repos, sign in once in your own terminal with `art github login`
-(add `--private` for private repos). Claude can then call `list_github_repos`, pick the repos
+To bring in your GitHub repos, sign in once in your own terminal (add `--private` for private
+repos):
+
+```bash
+uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login
+```
+
+Claude can then call `list_github_repos`, pick the repos
 worth reading, and clone one only after you agree. The token goes to your OS keychain, never
 the ART database or an export; see "GitHub repos" in [INSTALL.md](../INSTALL.md) for the
 `keyring` requirement and the commands.

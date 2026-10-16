@@ -481,3 +481,22 @@ def test_the_stub_keyring_is_what_the_suite_sees_by_default():
     """The autouse fixture hides the developer's keychain from every other test."""
     assert sys.modules.get("keyring") is None
     assert gh.resolve_token() is None and gh.keychain_available() is False
+
+
+def test_login_hints_give_the_pinned_uvx_command_not_a_bare_art():
+    """A plugin install puts no `art` on PATH, so every login hint the user or agent sees is the
+    pinned uvx form (#369): the tool's not_logged_in error and the plugin's own docs."""
+    import re
+    from pathlib import Path
+    from harness.github import login_command
+    from harness.hooks import SOURCE
+    assert login_command() == f'uvx --from "{SOURCE}" art github login'
+    assert login_command(private=True).endswith("art github login --private")
+
+    plugin = Path(__file__).resolve().parent.parent / "plugin"
+    for doc in [plugin / "README.md", plugin / "commands" / "setup.md",
+                plugin / "skills" / "art-setup" / "SKILL.md",
+                plugin / "skills" / "art-tailor" / "SKILL.md"]:
+        text = doc.read_text(encoding="utf-8")
+        assert login_command() in text, doc
+        assert not re.search(r"run `art github login`", text), doc

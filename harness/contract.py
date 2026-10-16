@@ -1413,9 +1413,9 @@ TOOLS: List[ToolSpec] = [
         "list_github_repos",
         "The signed-in user's own GitHub repos, most recently pushed first, so you can pick "
         "which to read: name, description, languages, topics, stars, last push, fork and "
-        "archived flags, URLs, a clone command and a README excerpt. The user must have run "
-        "`art github login` (add --private for private repos) in their own terminal; "
-        "without it you get not_logged_in. Public repos only unless the token has the repo "
+        "archived flags, URLs, a clone command and a README excerpt. The user must have signed "
+        "in once in their own terminal (`art github login`, run through uvx for a plugin "
+        "install); without it you get not_logged_in, whose message gives the exact command. Public repos only unless the token has the repo "
         "scope. Page with next_page. Clone a repo only after the user agrees; store what you "
         "read with upsert_items, source github:<repo> (evidence_source).",
         GithubReposInput, GithubReposOutput,
