@@ -29,6 +29,7 @@ VALUES = DOC["values"]
 # A new value is added here on purpose; a changed one fails here, then in its drift test.
 EXPECTED = {
     "support.tau_block": 0.85, "support.tau_review": 0.35,
+    "support_fallback.tau_block": 1.0, "support_fallback.tau_review": 0.5,
     "negative_pin.tau_block": 0.85, "negative_pin.tau_review": 0.15,
     "coverage.tau_cover": 0.65,
     "memory_gate.v1.tau_lo": 0.25, "memory_gate.v1.tau_hi": 0.65, "memory_gate.v1.tau_target": 0.75,
@@ -43,14 +44,17 @@ EXPECTED = {
 
 def _modules():
     from harness import acceptance, library
-    from harness.decisions import coverage, library as jev_library, memory_gate, negative_pins, support
-    return acceptance, library, coverage, jev_library, memory_gate, negative_pins, support
+    from harness.decisions import (
+        coverage, library as jev_library, memory_gate, negative_pins, support, support_fallback,
+    )
+    return acceptance, library, coverage, jev_library, memory_gate, negative_pins, support, support_fallback
 
 
 def _module_values():
-    acceptance, library, coverage, jl, mg, neg, sup = _modules()
+    acceptance, library, coverage, jl, mg, neg, sup, fb = _modules()
     return {
         "support.tau_block": sup.TAU_BLOCK, "support.tau_review": sup.TAU_REVIEW,
+        "support_fallback.tau_block": fb.TAU_BLOCK, "support_fallback.tau_review": fb.TAU_REVIEW,
         "negative_pin.tau_block": neg.TAU_BLOCK, "negative_pin.tau_review": neg.TAU_REVIEW,
         "coverage.tau_cover": coverage.TAU_COVER,
         "memory_gate.v1.tau_lo": mg.TAU_LO, "memory_gate.v1.tau_hi": mg.TAU_HI,
@@ -132,6 +136,7 @@ def test_no_module_hard_codes_a_value_the_artifact_holds():
     leave the artifact behind. (The fallback table in policy.py is the one place the numbers repeat.)"""
     wanted = {  # module path -> names that must be `policy.get(...)`
         "harness/decisions/support.py": {"TAU_BLOCK", "TAU_REVIEW"},
+        "harness/decisions/support_fallback.py": {"TAU_BLOCK", "TAU_REVIEW"},
         "harness/decisions/negative_pins.py": {"TAU_BLOCK", "TAU_REVIEW"},
         "harness/decisions/coverage.py": {"TAU_COVER"},
         "harness/decisions/memory_gate.py": {"TAU_LO", "TAU_HI", "TAU_TARGET", "TAU_LO_V2", "TAU_HI_V2",
@@ -194,7 +199,8 @@ def test_each_fit_names_files_that_exist_with_the_hashes_recorded():
         assert (ROOT / fit["script"]).is_file(), name
         assert fit["model"] and fit["fit_date"] and isinstance(fit["source_issue"], int), name
         for kind in ("labels", "recordings"):
-            assert fit[kind], (name, kind)
+            # A fallback fit (#351) has no recordings: its "model" is code, so there is no answer to record.
+            assert fit[kind] or (kind == "recordings" and fit["model"].startswith("fallback-")), (name, kind)
             for f in fit[kind]:
                 assert policy.file_sha256(ROOT / f["path"]) == f["sha256"], (name, f["path"])
 
@@ -226,6 +232,20 @@ def test_support_thresholds_are_what_the_fit_recommends(isolated_engine, monkeyp
     _replay(monkeypatch, fit.RECORDINGS_PATH)
     rec = fit.recommend(fit.run_pairs(fit.load_pairs()))
     assert _drift({"support.tau_block": rec["tau_block"], "support.tau_review": rec["tau_review"]}) == {}
+
+
+def test_support_fallback_cutoffs_are_what_the_fit_recommends():
+    """The deterministic check's cutoffs (#351) are fitted on the same labels, with no recording and no
+    Jev: re-running the fit on the committed pairs gives the artifact's values. A change to the lists
+    that moves a score moves the fit, and this fails until the artifact is updated."""
+    from eval import fit_support_fallback as fit
+    from harness.decisions import support_fallback
+    rec = fit.recommend(fit.run_pairs(fit.load_pairs()))
+    assert _drift({"support_fallback.tau_block": rec["tau_block"],
+                   "support_fallback.tau_review": rec["tau_review"]}) == {}
+    entry = DOC["fits"]["support_fallback"]
+    assert entry["model"] == support_fallback.MODEL and entry["decision"] == support_fallback.VERSION
+    assert entry["recordings"] == []
 
 
 def test_negative_pin_thresholds_are_what_the_fit_recommends(isolated_engine, monkeypatch):
