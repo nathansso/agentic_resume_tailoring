@@ -125,6 +125,7 @@ class JobAnalyzerAgent:
             # The job's skills resolve by fold against its owner's profile first, so a
             # posting's "pytorch" points at the profile's "PyTorch" row (#365).
             resolver = SkillResolver(session, job.user_id)
+            placed = []
             for item in skills:
                 skill_name = item.get("name", "").strip()
                 if not skill_name:
@@ -134,6 +135,7 @@ class JobAnalyzerAgent:
                 skill = resolver.get_or_create(skill_name, item.get("category"))
                 if skill is None:
                     continue
+                placed.append((skill.name, skill.category))
 
                 job_skill = JobSkill(
                     job_id=job.job_id,
@@ -145,4 +147,9 @@ class JobAnalyzerAgent:
 
             session.commit()
             session.refresh(job)
-            return job
+
+        # Place the posting's skills the keyword table cannot in an area (#342), after the
+        # save and outside the session: best effort, it never raises and never loses the job.
+        from knowledge_graph.areas import classify_skills_at_write
+        classify_skills_at_write(placed)
+        return job
