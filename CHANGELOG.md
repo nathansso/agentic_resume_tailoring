@@ -14,6 +14,31 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 320 — Area map
+**Status:** complete | **Tests:** 3282 pass on SQLite (no Python change), 17 skipped, 2 xfailed, 0 fail; frontend 223 pass (34 new); the Postgres leg was not run locally
+
+A new Data Explorer tab, "Area map", after "Bullet picker": the whole knowledge graph clustered by skill area, where every position means something. Areas sit on a ring ordered so neighbours share the most evidence, each skill is a circle packed inside its area, and each experience or project sits where the areas its bullets cite pull it. It is an overview; the evidence map (#136) stays the place to audit a claim.
+
+### What shipped
+
+- **`lib/areaMap.ts`**, a pure layout with no physics library and no new package. The ring order tries every cyclic order of the areas present (the first, in the fixed order, held in place) and keeps the one with the most shared evidence (per item, the smaller of its weights into the two neighbours; weight = citing bullets, a GitHub-only link half a bullet). Skills are placed largest-first at the first free point of a phyllotaxis spiral, so a cluster is round, compact and overlap-free; the disc is the enclosing circle plus padding. Discs sit on the ring a fixed gap apart, with the ring widened to leave a hollow for the items. An item starts at the weighted mix of its areas' centres, pulled 0.8 of the way out, then 90 fixed passes pull it to that target, push items apart (in an ellipse as wide as a marker with its label) and push them out of the discs. Items with no link are listed, not placed. The result is a function of the data alone: identical for any row order, and independent of the window, the search text and the job overlay.
+- **Labels.** Area name, "evidenced/total" and the three most-cited skills sit outside each disc along the radial direction. Item labels take the free slot of eight (right, left, below, above, then the diagonals) that covers least, around discs, skill circles, markers, area labels and earlier labels. Skill names are written only on hover, focus or a search hit, by the same routine, biggest circle first, and one that would land mostly on something else is left out (the panel still names it).
+- **`components/AreaMap.tsx`.** SVG with the evidence map's tokens, shapes and rules (`graph-*`, neutral edges at about 0.2 opacity, evidence green only for a cited skill, dashed for none, kind by glyph). Hover or focus on an item, skill or area dims what it does not link, turns its links green and writes the skill names; click selects into the shared `EvidencePanel`; click or Enter on an area disc opens the Evidence map with every other area folded. A "Find a skill" box, the job toggle (required and preferred rings, "x/y required" under each area, missing required skills as chips below the map) and the legend reuse the evidence map's logic. Nothing moves when any of them changes. Items nothing links are listed under the map. Light and dark, `prefers-reduced-motion`, keyboard (Tab, Enter, Space).
+- **Shared code, not copied.** `components/graphParts.tsx` (kind glyph, keyboard rule, counts, job toggle and status), `hooks/useJobCompare.ts` and `hooks/useEvidenceData.ts` moved out of `EvidenceMap.tsx` unchanged in behaviour; `EvidenceMap` also takes an `initialFolded` prop, read once at mount. `DataExplorer` holds the fold set an area click hands over and clears it when a tab is clicked.
+- **Tests (34 new, `lib/areaMap.test.ts`).** Spiral packing (no overlaps, origin first, deterministic, compact, enclosing circle); ring order (shared-evidence score, best of all orders on a fixture whose answer differs from the fixed order, same for any input order, GitHub-only half weight); layout (one disc per area on the ring, identical output for shuffled items, skills and edges, no skill overlaps and every skill inside its disc, discs apart and items outside them, an item citing one area nearer that area than any other, work spanning areas nearer the middle, an item between two areas in proportion to its bullets, loose items listed and education left out, one edge per link, everything inside the view box, item labels clear of each other, circles and area labels); the label-slot chooser (right first, moves when covered, then below, then above, least-bad when none is clear, soft against hard obstacles); skill names; the fold set for an area click.
+
+### Deviations from spec
+
+- **No d3.** The issue named `d3.packSiblings`/`packEnclose` and a synchronous d3-force pass; the plan and the lockfile rule (#219) ruled out new packages, so the pack is a phyllotaxis first-fit and the collision pass is a fixed-iteration relaxation. The enclosing circle is an approximation (Badoiu-Clarkson, 160 steps), not the exact smallest one.
+- **Item labels try eight slots, not four,** and skill names eight too. With four, a crowded middle left labels on top of each other.
+- **Education is not placed** (it links no skill, so would only ever be listed) and is left out of the "not placed" list too.
+- **The map is drawn at its natural size and scaled to the column** (between 0.78 and 1.35 times), scrolling below that, rather than laid out again per width. That keeps the picture identical across window sizes; a narrow column (about 1100 px window with the panel open) reads at roughly 9 px text.
+- **Edges are drawn at rest** (faint) rather than only on hover, as in the prototype; they read as spokes into the clusters. Link width is thinner than the evidence map's, `0.7 + log2(1 + cites)`.
+- **An uncited skill is never smaller than 5 px radius,** and every radius is 1.2 times the evidence map's, so the clusters are legible at the scale the map is shown.
+- **Not done:** a screen reader pass; component tests (the repo has no DOM test setup, so the interactions were checked in headless Chrome against a seeded throwaway profile); a phone-width layout (the map scrolls); the Postgres leg (no storage code changed; CI's covers it).
+
+---
+
 ## Issue 365 — One identity per skill
 **Status:** complete | **Tests:** 3253 pass on SQLite (31 new), 24 skipped, 0 fail; the Postgres leg was not run locally (the Docker daemon was not running), CI's required Postgres leg covers it
 
