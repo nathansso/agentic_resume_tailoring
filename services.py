@@ -322,22 +322,20 @@ def set_skill_core(user_id: UUID, skill_name: str, is_core: bool) -> str:
         skill_name = (skill_name or "").strip()
         if not skill_name:
             return "Please provide a skill name."
+        from agents.skill_matching import skill_fold
+        from agents.skill_resolver import resolve_skill
+
         with Session(engine) as session:
-            skill = session.exec(select(Skill).where(Skill.name == skill_name)).first()
-            if not skill:
-                all_skills = session.exec(select(Skill)).all()
-                skill = next(
-                    (s for s in all_skills if s.name.lower() == skill_name.lower()), None
-                )
+            skill = resolve_skill(session, user_id, skill_name)    # one identity per skill (#365)
             if not skill:
                 return f"'{skill_name}' is not in your profile."
             display_name = skill.name
-            links = session.exec(
-                select(UserSkill).where(
-                    UserSkill.user_id == user_id,
-                    UserSkill.skill_id == skill.skill_id,
-                )
-            ).all()
+            # Every row of the user's whose name folds to this one, so a pin survives
+            # duplicates the user has not had merged yet.
+            fold = skill_fold(skill.name)
+            links = [l for l, s in session.exec(
+                select(UserSkill, Skill).join(Skill, Skill.skill_id == UserSkill.skill_id)
+                .where(UserSkill.user_id == user_id)).all() if skill_fold(s.name) == fold]
             if not links:
                 return f"'{skill_name}' is not in your profile."
             for link in links:
@@ -1267,15 +1265,11 @@ def add_skill_to_profile(user_id: UUID, skill_name: str, target: Optional[str] =
         skill_name = skill_name.strip()
         if not skill_name:
             return "Please provide a skill name."
+        from agents.skill_resolver import SkillResolver
+
         with Session(engine) as session:
-            skill = session.exec(select(Skill).where(Skill.name == skill_name)).first()
-            if not skill:
-                all_skills = session.exec(select(Skill)).all()
-                skill = next((s for s in all_skills if s.name.lower() == skill_name.lower()), None)
-            if not skill:
-                skill = Skill(name=skill_name)
-                session.add(skill)
-                session.flush()
+            # "pytorch" joins the user's "PyTorch" instead of making a second skill (#365).
+            skill = SkillResolver(session, user_id).get_or_create(skill_name)
             existing = session.exec(
                 select(UserSkill).where(
                     UserSkill.user_id == user_id,
@@ -1342,15 +1336,10 @@ def create_artifact_from_chat(
             if not name:
                 return "Skill name is required."
             category = (data.get("category") or "").strip() or None
+            from agents.skill_resolver import SkillResolver
+
             with Session(engine) as session:
-                skill = session.exec(select(Skill).where(Skill.name == name)).first()
-                if not skill:
-                    all_skills = session.exec(select(Skill)).all()
-                    skill = next((s for s in all_skills if s.name.lower() == name.lower()), None)
-                if not skill:
-                    skill = Skill(name=name, category=category)
-                    session.add(skill)
-                    session.flush()
+                skill = SkillResolver(session, user_id).get_or_create(name, category)    # (#365)
                 existing = session.exec(
                     select(UserSkill).where(
                         UserSkill.user_id == user_id,
@@ -1433,9 +1422,10 @@ def _supersede_skill(session, user_id: UUID, data: dict, evidence: str,
                      source_context: Optional[str]) -> Optional[str]:
     """Update an existing UserSkill in place. None when there's no row to update."""
 
+    from agents.skill_resolver import resolve_skill
+
     name = (data.get("name") or "").strip()
-    all_skills = session.exec(select(Skill)).all()
-    skill = next((s for s in all_skills if s.name.lower() == name.lower()), None)
+    skill = resolve_skill(session, user_id, name)    # the user's own skill by fold first (#365)
     if not skill:
         return None
     link = session.exec(
