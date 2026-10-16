@@ -218,6 +218,8 @@ def edit_experience(
         row = services.update_experience(
             user.user_id, experience_id, body.model_dump(exclude_unset=True)
         )
+    except services.DuplicateItemError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if row is None:
@@ -262,6 +264,8 @@ def edit_project(
         row = services.update_project(
             user.user_id, project_id, body.model_dump(exclude_unset=True)
         )
+    except services.DuplicateItemError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if row is None:
