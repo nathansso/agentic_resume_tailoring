@@ -318,8 +318,11 @@ def test_the_chat_job_analysis_path_joins_the_owners_existing_row(isolated_engin
         def _extract_skills(self, text):
             return [{"name": "Time-Series Analysis", "category": "Data", "required": True, "weight": 0.9}]
 
+    import services
     monkeypatch.setattr(ja_module, "JobAnalyzerAgent", _FakeAnalyzer)
     monkeypatch.setattr(chat_module, "get_llm", lambda role="chat", temperature=0.2: object())
+    # The chat path also rebuilds the job's JD profile, a model call this test isn't about.
+    monkeypatch.setattr(services, "rebuild_jd_profile", lambda *a, **k: None)
     agent = chat_module.ChatAgent()
     agent.set_active_job(str(job_id))
     agent._analyze_active_job("")
