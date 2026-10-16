@@ -245,7 +245,7 @@ Call `execute_plan({program})`. Read the result:
   with the job id filled in:
 
   ```
-  uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl" art ui --job <job_id>
+  uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art ui --job <job_id>
   ```
 
   Their saves come back to you: through the prompt hook if it's installed, and

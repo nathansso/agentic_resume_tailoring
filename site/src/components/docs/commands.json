@@ -1,7 +1,7 @@
 {
   "_comment": "Every command the install and usage pages show. tests/test_site_docs.py checks each line against its `source` file (INSTALL.md, plugin/README.md or integrations/codex/README.md), so a command here cannot drift from the docs. {SOURCE} and {URL} are expanded by commands.ts; bump the version in `vars` when INSTALL.md bumps the pin.",
   "vars": {
-    "URL": "https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl",
+    "URL": "https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl",
     "SOURCE": "art-mcp[ui] @ {URL}"
   },
   "blocks": {

@@ -381,9 +381,10 @@ def test_the_codex_plugin_bundles_the_hooks_pinned_to_this_version():
 def _install_plugin(home, hooks_config=None, enabled=True, plugin="art", market="art"):
     """What `codex plugin add art@art` leaves in a CODEX_HOME: the config entry and the copied
     plugin, hooks file included."""
+    from harness import ART_VERSION
     from harness.hooks import hook_config
 
-    root = home / "plugins" / "cache" / market / plugin / "0.1.0"
+    root = home / "plugins" / "cache" / market / plugin / ART_VERSION
     (root / "hooks").mkdir(parents=True)
     (root / "hooks" / "hooks.json").write_text(
         json.dumps(hook_config() if hooks_config is None else hooks_config), encoding="utf-8")
@@ -402,7 +403,7 @@ def test_write_with_the_plugin_installed_removes_its_own_hooks_not_the_users(
         tmp_path, monkeypatch, capsys):
     """The duplicate case: `--write` was run before the plugin was installed. Each ART hook must
     fire once, so the plugin's stay and the file's go; everything else in the file is kept."""
-    from harness import entry
+    from harness import ART_VERSION, entry
     from harness.hooks import hook_config
 
     mine = {"hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": "my-lint"}]}],
@@ -418,7 +419,8 @@ def test_write_with_the_plugin_installed_removes_its_own_hooks_not_the_users(
     assert entry.main(["hooks", "codex", "--write"]) == 0
     after = json.loads(path.read_text(encoding="utf-8"))
     assert after == mine                                            # only the user's remain
-    plugin_hooks = json.loads((tmp_path / "plugins/cache/art/art/0.1.0/hooks/hooks.json")
+    plugin_hooks = json.loads((tmp_path / "plugins" / "cache" / "art" / "art" / ART_VERSION / "hooks"
+                               / "hooks.json")
                               .read_text(encoding="utf-8"))
     assert plugin_hooks == hook_config()
     assert len(_art_hook_lines(plugin_hooks, after)) == 2           # one of each, in all
