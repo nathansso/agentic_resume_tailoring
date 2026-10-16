@@ -485,6 +485,21 @@ export function skillIdOf(skillKey: string): string {
   return skillKey.startsWith("skill/") ? skillKey.slice("skill/".length) : skillKey;
 }
 
+// ── same-name items (#334) ─────────────────────────────────────────────────────
+
+/**
+ * What to tell the user about an item that shares its name with another (the server's `duplicate_of`),
+ * or null. ART binds cites, preferences and the graph's links by name, so it cannot tell the two
+ * apart until one is renamed or deleted; a later import may also merge them.
+ */
+export function duplicateHint(view: EvidenceView, item: EvidenceItem): string | null {
+  if (!item.duplicate_of) return null;
+  const other = view.items.find((i) => i.key === item.duplicate_of);
+  const label = other ? placementLabel(other) : "another item";
+  return `Same name as ${label}. Rename or delete one so ART can tell them apart; ` +
+    "a later import may merge them.";
+}
+
 // ── where a project was done (#322) ────────────────────────────────────────────
 
 /**

@@ -3,10 +3,10 @@ import type {
   EvidenceEdge, EvidenceItem, EvidenceKind, EvidenceSkill, EvidenceText, EvidenceView, JobSkillRow, ProjectContext,
 } from "../types";
 import {
-  DISMISSED_KEY, bareBullets, canDismiss, isPanelKey, needsPlacement, placementLabel, placementOptions, projectsToPlace, skillIdOf, topSuggestion,
+  DISMISSED_KEY, bareBullets, canDismiss, duplicateHint, isPanelKey, needsPlacement, placementLabel, placementOptions, projectsToPlace, skillIdOf, topSuggestion,
   arcPath, areaFoldKey, dateKey, edgeWidth, editableFields, estimateTextWidth, evidenceRows, firstMatch, fitText,
   ghostBlock, githubOnlyLinks, highlightSegments, initialDraft, jobOverlay, layoutMap, linkPath,
-  linksByBullet, neighborhood, planSave, searchSkills, skillEvidence, skillMatchKey, skillRadius,
+  linksByBullet, matchJobSkills, neighborhood, planSave, searchSkills, skillEvidence, skillMatchKey, skillRadius,
   sourceArcs, weightedMedian, type LayoutOptions,
 } from "./evidenceMap";
 
@@ -471,6 +471,24 @@ describe("compare to a job", () => {
     expect(twice.required.total).toBe(1);    // required wins
   });
 
+  it("shows a missing requirement under the spelling the job sends, and matches through its lower-case terms", () => {
+    const rows: JobSkillRow[] = [
+      { name: "A/B testing", required: true, weight: 1, area: "Practices", terms: ["a/b testing"] },    // not on the profile
+      { name: "PyTorch Lightning", required: true, weight: 1, area: "ML & AI", terms: ["pytorch lightning"] },
+      { name: "Python", required: true, weight: 1, area: "Languages", terms: ["python"] },             // on the profile
+    ];
+    const ov = jobOverlay(VIEW, rows);
+    expect(ov.missing.map((m) => m.name).sort()).toEqual(["A/B testing", "PyTorch Lightning"]);
+    const chips = ghostBlock(layoutMap(VIEW, OPTS), ov.missing).chips;
+    expect(chips.map((c) => c.skill.name).sort()).toEqual(["A/B testing", "PyTorch Lightning"]);
+    expect(ov.classBySkill.get(py.key)).toBe("required-evidenced");
+    // The display name does not decide the match: a term in any case reaches the same skill.
+    const keys = (r: JobSkillRow) => matchJobSkills(VIEW, [r])[0].skills.map((s) => s.key);
+    expect(keys({ ...rows[2], name: "PYTHON" })).toEqual(keys(rows[2]));
+    expect(keys({ ...rows[2], name: "something else", terms: ["python"] })).toEqual(keys(rows[2]));
+    expect(matchJobSkills(VIEW, rows).map((m) => m.id)).toEqual(["a/btesting", "pytorchlightning", "python"]);   // by name, ids ignore case
+  });
+
   it("an empty job has nothing to compare", () => {
     const none = jobOverlay(VIEW, []);
     expect(none.required.total + none.preferred.total).toBe(0);
@@ -590,5 +608,32 @@ describe("the editor", () => {
     expect(planSave(edu, d).ops).toEqual([{ kind: "education", id: "e1", body: { gpa: "4.0" } }]);
     d.fields.institution = " ";
     expect(planSave(edu, d)).toEqual({ ops: [], errors: ["Institution can't be empty."] });
+  });
+});
+
+describe("same-name items (#334)", () => {
+  const a = item("proj/a", "proj", { title: "Atlas", duplicate_of: "proj/b" });
+  const b = item("proj/b", "proj", { title: "atlas", duplicate_of: "proj/a" });
+  const solo = item("proj/c", "proj", { title: "Solo" });
+  const v = view([a, b, solo], [], []);
+
+  it("says which item shares the name and what to do", () => {
+    expect(duplicateHint(v, a)).toMatch(/^Same name as atlas\. Rename or delete one/);
+    expect(duplicateHint(v, b)).toMatch(/^Same name as Atlas\./);
+  });
+
+  it("names a role by title and company", () => {
+    const role = item("exp/x", "exp", { title: "Analyst", org: "Acme", duplicate_of: "exp/y" });
+    const twin = item("exp/y", "exp", { title: "Analyst", org: "Acme", duplicate_of: "exp/x" });
+    expect(duplicateHint(view([role, twin], [], []), role)).toContain("Analyst · Acme");
+  });
+
+  it("says nothing for a unique item, or when the server sends no field", () => {
+    expect(duplicateHint(v, solo)).toBeNull();
+    expect(duplicateHint(v, { ...solo, duplicate_of: null })).toBeNull();
+  });
+
+  it("still warns when the twin is not in the view", () => {
+    expect(duplicateHint(view([a], [], []), a)).toMatch(/^Same name as another item\./);
   });
 });

@@ -24,6 +24,7 @@ from database.clock import utc_now
 from database.db import next_seq
 from database.models import Achievement, DeletedEntry, Education, Experience, Project, Skill, UserSkill
 from agents.skill_matching import skill_fold
+from agents.skill_resolver import SkillResolver, merge_user_skill_duplicates
 from agents.skill_postprocessor import normalize_skill_name
 from agents import project_context as _ctx
 from institution import canonicalize_institution
@@ -470,6 +471,14 @@ class KGStoreMixin:
             removed += 1
         return removed
 
+    @classmethod
+    def _heal_skills(cls, session, user_id) -> int:
+        """Leave the user one `Skill` per fold (#365): "PyTorch" and "pytorch", "Time-Series
+        Analysis" and "time series analysis" become one skill, every source kept. Repoints the
+        user's own links and never deletes or renames a global `Skill` row. Returns how many
+        duplicate skills were merged away; idempotent."""
+        return merge_user_skill_duplicates(session, user_id)
+
     def _save_projects(self, data: List[Dict], source: str, repo_metrics: Dict[str, Dict] = None):
         # GitHub signals keyed by repo name (issue #46) — matched case-insensitively
         # against extracted project names so complexity scoring can use them later.
@@ -767,6 +776,7 @@ class KGStoreMixin:
         outcomes = []
         with Session(_db.engine) as session:
             tombs = self._load_tombstones(session, self.user.user_id, "skill")
+            resolver = SkillResolver(session, self.user.user_id)
             for item in data:
                 # Normalize name via alias map
                 raw_name = normalize_skill_name(item.get("name", "").strip())
@@ -778,13 +788,11 @@ class KGStoreMixin:
                     outcomes.append(("skipped_tombstone", None))
                     continue
 
-                # Get or create the Skill node
-                skill = session.exec(select(Skill).where(Skill.name == raw_name)).first()
+                # Get or create the Skill node. A new spelling joins the row the user, or
+                # anyone, already has under the same fold (#365): "pytorch" is "PyTorch".
+                skill = resolver.resolve(raw_name)
                 if not skill:
-                    skill = Skill(name=raw_name, category=item.get("category"))
-                    session.add(skill)
-                    session.commit()
-                    session.refresh(skill)
+                    skill = resolver.get_or_create(raw_name, item.get("category"))
                 elif (item.get("category") or "").strip() not in ("", "Other") \
                         and (skill.category or "").strip() in ("", "Other"):
                     # Fill a missing category on a stored skill (#259), never replace
