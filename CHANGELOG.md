@@ -14,6 +14,43 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issues 332, 342 & 348 — Repo-slug matching, skill-area coverage and job requirement spelling
+**Status:** complete | **Tests:** 3301 pass on SQLite (18 new), 16 skipped, 2 xfailed, 0 fail; frontend 191 pass (2 new); `npm run build` and `npm ci --dry-run` pass; the Postgres leg was not run locally (the Docker daemon was not running), CI's required Postgres leg covers it
+
+Three small fixes left behind by the evidence-map work: project scoring read a longer repo's skills as its own, skills written by the job analyzer and chat never got an area, and the job overlay's missing chips said "pytorch".
+
+### What shipped
+
+**#332 — Project scoring matches whole repos**
+- **`knowledge_graph/builder.py::names_repo(haystack, slug)`**, next to `repo_slug`, is the one boundary rule (`(?<![\w.-])slug(?![\w.-])`). `evidence_view` lost its private `_names_repo` and uses it; `agents/tailor.py::_count_linked_skills` uses it too, so the two cannot drift. `me/app` no longer counts skills recorded for `me/app-server`, and `me/ap` no longer counts `me/app`.
+- **The project name is a needle only for a project with no repo,** and then as a whole token by the same rule, so a short name such as "app" no longer matches "application" or "roadmap". A project with a repo is matched by its slug alone.
+- Tests (3, `tests/test_project_scoring.py`): slug as a whole repo in both directions, the name as a whole token and only without a repo, `names_repo` shared with the evidence view. The #136 provenance tests pass untouched.
+- **Tailoring benchmark:** `PYTHONHASHSEED=0 python eval/tailoring_benchmark.py --stub --limit 3`, before and after: the CSV and the rendered `.tex`/`.json` are byte-identical (plumbing mode; the benchmark profile's projects score the same).
+
+**#342 — Skill areas for every writer, one query to read them, a backfill when a key arrives**
+- **Writers.** `agents/job_analyzer.py::_save_job`, the chat job analysis (`agents/chat.py::_analyze_active_job`), `services.add_skill_to_profile` and the skill branch of `create_artifact_from_chat` now call `classify_skills_at_write` after their save and outside the session. It is the #318 best-effort call: it never raises, asks nothing for a skill the keyword table places, and does nothing with no key or `ART_JEV_MODE=off`.
+- **`services.get_job_skills` / `_profile_job_skills`** read areas with one `skill_areas(pairs)` call instead of `skill_area` per requirement. Output unchanged.
+- **Key configured later: option (b), at startup.** `knowledge_graph.areas.start_backfill_in_background(user_id)` is called by `art mcp` (`harness/mcp_server.py::main`) and `art ui` (`web/local_ui.py::main`) once their store is a writable local SQLite one. It runs `backfill_unplaced_if_due` on a daemon thread: when Jev is not off, a key resolves and the user has unplaced skills, it runs `classify_unplaced_skills`, at most once per user and key per day. The marker is `area_backfill.json` in the data dir, holds a hash of the key (never the key), and is written before the request so a failed request waits for tomorrow. Startup never waits on it and never fails because of it. The manual script stays for remote stores, which the startup hook never touches.
+- Tests (13, `tests/test_skill_area.py`): the analyzer (existing job and new job), the chat job analysis, and chat/manual add-skill each place an unplaced skill with the fake transport and leave the table's skills alone; a failing classifier still saves the job; `get_job_skills` makes one `jevdecision` query for a profile job and for `JobSkill` rows (counted with a cursor listener); the backfill places skills, runs once a day per key, does nothing without a key, with Jev off or with nothing unplaced, survives a 401 and an unwritable data dir, and runs on a daemon thread; `art mcp` and `art ui` start it only for a writable store.
+
+**#348 — Missing-skill chips use the posting's spelling**
+- **`agents/jd_payload.py::display_term(term, text)`**, model-free: the term's spelling in the requirement's own `text` when it has a capital and is not shouting (a run of capitals longer than 4 letters), else the alias map's canonical spelling ("pytorch" is "PyTorch"), else the term with its first letter capitalised when it is entirely lower-case.
+- **`_profile_job_skills`** returns it as `name`. `terms` stay lower-cased, so matching in `jobOverlay` / `matchJobSkills` (which compares `skillMatchKey`, already case-blind) is unchanged. The evidence map's ghost chips and the picker's coverage column show `name`, so no component changed.
+- Tests: Python (2, `tests/test_evidence_view.py`): the endpoint returns the display spelling for missing requirements (posting case, alias map, shouting, capital fallback, acronym, term absent from the text) with the terms still lower-case, and `display_term` itself; four existing endpoint tests now expect `Python` / `Docker` / `AWS` / `Go`. Vitest (2): `jobOverlay` and `ghostBlock` carry the display name and still match through lower-case terms; the picker's coverage label for a missing requirement.
+
+### Deviations from spec
+
+- **The JD profile does not keep the original terms,** only `text` (the requirement's sentence), so "the posting's spelling" is read out of `text` by `display_term`, not stored. A term the model inferred, absent from its own text, falls through to the alias map and then a capital. Storing the original-case terms in the payload (a `PROFILE_VERSION` question) is a follow-up if this misses too often.
+- **A requirement with no alias hit and a lower-case posting reads "Gpu work" / "Feature store":** only the first letter is capitalised, as planned.
+- **`area` for a profile requirement is now asked under the display name** ("Figma", not "figma"), because that is what the name is. The keyword table is case-blind; the Jev cache is not, and a display name is likelier to hit a skill already classified under its proper spelling.
+- **#342 also covers two chat paths the issue did not name:** `add_skill_to_profile` and the skill branch of `create_artifact_from_chat`, which also create `Skill` rows without the hook. `_supersede_skill` only updates an existing skill, so it is untouched.
+- **Profile requirements are not classified at write time** (`open_job` / `rebuild_jd_profile` write no `Skill` rows); their area is read from the cache under the display name, and the startup backfill only covers a user's own skills. A job-requirement backfill is a follow-up.
+- **The startup backfill runs in `art mcp` and `art ui`,** the long-lived processes, not in one-shot `art <tool>` calls, where a daemon thread would be killed at exit. It is skipped for any remote or read-only store.
+- **The project name no longer scores a project that has a repo.** A resume skill whose detail says "Built Cool Tool" no longer counts toward a project with a GitHub URL named "Cool Tool"; the repo's own sources still do. The benchmark did not move.
+- **Postgres leg not run locally** (the Docker daemon was not running); no storage code changed.
+
+---
+
 ## Issue 365 — One identity per skill
 **Status:** complete | **Tests:** 3253 pass on SQLite (31 new), 24 skipped, 0 fail; the Postgres leg was not run locally (the Docker daemon was not running), CI's required Postgres leg covers it
 
