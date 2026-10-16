@@ -52,9 +52,11 @@ EXPECTED_GATE = {
                 "prefs_dropped": 0, "other_to_host": 3},
 }
 EXPECTED_LIBRARY = {
-    "variant_choice": {"fallback": {"n": 48, "correct": 18, "picks": 18, "right_picks": 7, "poor": 7, "wrong": 4, "lost": 19},
+    # #352: the concept-fit variant pick and the duties-based track pick (before: 18/48 with 7 poor-fit picks
+    # and 27/36 with 8 wrong tracks; `fb.BEFORE_352`). Fits, not held-out figures: see library_labels/FALLBACK_FIT.md.
+    "variant_choice": {"fallback": {"n": 48, "correct": 41, "picks": 27, "right_picks": 26, "poor": 0, "wrong": 1, "lost": 6},
                        "constant": {"correct": 15, "picks": 0, "lost": 33}},
-    "track_baseline": {"fallback": {"n": 36, "correct": 27, "picks": 23, "right_picks": 15, "poor": 0, "wrong": 8, "lost": 1},
+    "track_baseline": {"fallback": {"n": 36, "correct": 36, "picks": 22, "right_picks": 22, "poor": 0, "wrong": 0, "lost": 0},
                        "constant": {"correct": 14, "picks": 0, "lost": 22}},
 }
 # Jev's figures as the committed REPORT.md files report them, so a refit that moves one is noticed here
@@ -143,8 +145,12 @@ def test_no_fallback_is_safer_than_jev_on_the_harmful_error(measured, jev):
     assert measured["support"]["with123"]["silent"] > jev["support"]["silent"] == 0
     jp = jev["negative_pin"]
     assert measured["negative_pin"]["silent"] > measured["negative_pin"]["mentions"] - jp["blocked_n"] - jp["review_mentions"] == 0
-    assert measured["variant_choice"]["fallback"]["poor"] > jev["variant_choice"]["jev"]["bad"] == 0
-    assert measured["track_baseline"]["fallback"]["wrong"] > jev["track_baseline"]["jev"]["bad"] == 0
+    # the library points were the exception until #352: their fallbacks now meet Jev's own harmful-error
+    # count (no poor-fit variant, no wrong track) and the one other wrong variant pick Jev also makes
+    assert measured["variant_choice"]["fallback"]["poor"] == jev["variant_choice"]["jev"]["bad"] == 0
+    assert measured["track_baseline"]["fallback"]["wrong"] == jev["track_baseline"]["jev"]["bad"] == 0
+    jv = jev["variant_choice"]["jev"]
+    assert measured["variant_choice"]["fallback"]["wrong"] <= jv["picks"] - jv["right"] - jv["bad"] == 1
     assert measured["memory_gate"]["main"]["writes"] == 0 == jev["memory_gate"]["wrong_writes"]
 
 
@@ -168,10 +174,11 @@ def test_every_point_has_a_target_a_reason_and_a_verdict(measured, jev):
     assert set(t) == set(fb.POINTS) and len(fb.POINTS) == 6
     for name, row in t.items():
         assert row["hard"] and row["bar"] and row["reason"], name
-        assert row["verdict"] in ("work: #351", "met: #351", "work: #352", "good enough", "leave"), name
+        assert row["verdict"] in ("work: #351", "met: #351", "work: #352", "done: #352", "good enough", "leave"), name
     assert [n for n, r in t.items() if r["verdict"] == "good enough"] == ["coverage", "memory_gate"]
-    assert [n for n, r in t.items() if r["verdict"].startswith("work")] == ["variant_choice", "track_baseline"]
+    assert [n for n, r in t.items() if r["verdict"].startswith("work")] == []
     assert t["support"]["verdict"] == "met: #351"
+    assert [n for n, r in t.items() if r["verdict"] == "done: #352"] == ["variant_choice", "track_baseline"]
 
 
 def test_the_bars_follow_the_half_gap_rule(measured, jev):
@@ -184,13 +191,15 @@ def test_the_bars_follow_the_half_gap_rule(measured, jev):
 
 
 def test_each_bar_sits_between_todays_figure_and_jevs(measured, jev):
-    """Strictly above what runs today, at or below Jev's own figure."""
+    """Strictly above what ran before the fix (the bars were set from it at #350 and do not move when a
+    fix lands), at or below Jev's own figure; the library points' fallbacks now meet them."""
     t = fb.targets(measured, jev)
     for point, today, ceiling in (
-            ("variant_choice", measured["variant_choice"]["fallback"]["correct"], 47),
-            ("track_baseline", measured["track_baseline"]["fallback"]["correct"], 35)):
+            ("variant_choice", fb.BEFORE_352["variant_choice"]["correct"], 47),
+            ("track_baseline", fb.BEFORE_352["track_baseline"]["correct"], 35)):
         bar = int(t[point]["bar"].split("/")[0])
         assert today < bar <= ceiling, point
+        assert measured[point]["fallback"]["correct"] >= bar, point
     bar = int(t["support"]["bar"].split("/")[0])
     assert measured["support"]["g123"]["blocked"] < bar <= jev["support"]["blocked_n"]
 

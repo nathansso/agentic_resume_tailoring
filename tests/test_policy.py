@@ -36,7 +36,8 @@ EXPECTED = {
     "memory_gate.v2.tau_lo": 0.20, "memory_gate.v2.tau_hi": 0.65, "memory_gate.v2.tau_target": 0.75,
     "memory_gate.hi_floor": 0.5, "memory_gate.hard_mass": 0.25, "memory_gate.v1_would_be_writes": 29,
     "library.tau_variant": 0.50, "library.tau_baseline": 0.50, "library.tau_floor": 0.5,
-    "library.variant_match_floor": 0.10,
+    "library.variant_match_floor": 0.09,
+    "library.fallback_track_floor": 0.30, "library.fallback_track_margin": 0.02,
     "guards.stuffing": 0.0, "guards.verb_entropy": 0.35, "guards.mtld": 0.10,
     "guards.duplication": 0.15, "guards.variant_drift": 0.35,
 }
@@ -65,6 +66,8 @@ def _module_values():
         "memory_gate.v1_would_be_writes": mg.V1_WOULD_BE_WRITES,
         "library.tau_variant": jl.TAU_VARIANT, "library.tau_baseline": jl.TAU_BASELINE,
         "library.tau_floor": jl.TAU_FLOOR, "library.variant_match_floor": library.VARIANT_MATCH_FLOOR,
+        "library.fallback_track_floor": library.TRACK_FALLBACK_FLOOR,
+        "library.fallback_track_margin": library.TRACK_FALLBACK_MARGIN,
         "guards.stuffing": acceptance.DEFAULT_TOLERANCES["stuffing"],
         "guards.verb_entropy": acceptance.DEFAULT_TOLERANCES["verb_entropy"],
         "guards.mtld": acceptance.DEFAULT_TOLERANCES["mtld"],
@@ -142,7 +145,7 @@ def test_no_module_hard_codes_a_value_the_artifact_holds():
         "harness/decisions/memory_gate.py": {"TAU_LO", "TAU_HI", "TAU_TARGET", "TAU_LO_V2", "TAU_HI_V2",
                                              "TAU_TARGET_V2", "HI_FLOOR", "HARD_MASS", "V1_WOULD_BE_WRITES"},
         "harness/decisions/library.py": {"TAU_VARIANT", "TAU_BASELINE", "TAU_FLOOR"},
-        "harness/library.py": {"VARIANT_MATCH_FLOOR"},
+        "harness/library.py": {"VARIANT_MATCH_FLOOR", "TRACK_FALLBACK_FLOOR", "TRACK_FALLBACK_MARGIN"},
         "harness/acceptance.py": {"VARIANT_DRIFT_TOLERANCE"},
     }
     for rel, names in wanted.items():
@@ -199,7 +202,7 @@ def test_each_fit_names_files_that_exist_with_the_hashes_recorded():
         assert (ROOT / fit["script"]).is_file(), name
         assert fit["model"] and fit["fit_date"] and isinstance(fit["source_issue"], int), name
         for kind in ("labels", "recordings"):
-            # A fallback fit (#351) has no recordings: its "model" is code, so there is no answer to record.
+            # A Jev-free fallback's fit (#351, #352) has no recordings: its "model" is code.
             assert fit[kind] or (kind == "recordings" and fit["model"].startswith("fallback-")), (name, kind)
             for f in fit[kind]:
                 assert policy.file_sha256(ROOT / f["path"]) == f["sha256"], (name, f["path"])
@@ -296,6 +299,20 @@ def test_library_thresholds_are_what_the_fit_recommends(isolated_engine, monkeyp
     vrows, brows, _ = fit.replay_rows(fit.load_variants(), fit.load_baselines())
     rec = fit.recommend(vrows, brows)
     assert _drift({"library.tau_variant": rec["tau_variant"], "library.tau_baseline": rec["tau_baseline"]}) == {}
+
+
+def test_the_jev_free_library_fallbacks_are_what_their_fit_recommends(monkeypatch):
+    """Variant and track fallbacks (#352) are fitted on the labels and the committed vocabulary alone:
+    no recordings. A change to `harness/concepts.py` or a label that moves a number fails here."""
+    monkeypatch.setenv("ART_JEV_MODE", "off")
+    from eval import fit_library_fallbacks as fit
+    from eval import fit_library_thresholds as lib
+    rec = fit.recommend(fit.variant_rows(lib.load_variants()), fit.track_rows_of(lib.load_baselines()))
+    assert _drift(rec) == {}
+    assert VALUES["library.variant_match_floor"]["fit"] == "fallback_variant"
+    assert {VALUES[k]["fit"] for k in ("library.fallback_track_floor", "library.fallback_track_margin")} == {"fallback_track"}
+    assert DOC["fits"]["fallback_variant"]["model"] == "fallback-variant-v1"
+    assert DOC["fits"]["fallback_track"]["model"] == "fallback-track-v1"
 
 
 # ── every committed node records the policy it ran under ─────────────────────

@@ -305,11 +305,26 @@ def _job_terms(uid, job_id):
     return sorted((t for t, w in weights.items() if w > 0), key=lambda t: (-weights[t], t))
 
 
-def test_suggest_actions_picks_the_variant_with_the_best_overlap(env):
-    uid, job_id, _ = env
-    top = _job_terms(uid, job_id)[:6]
-    strong = "Built " + " ".join(top) + " pipelines"
-    middling = "Built " + " ".join(top[:1]) + " reports for the quarterly planning cycle meeting"
+PIPELINE_REQUIREMENTS = [
+    {"text": "Build and maintain data pipelines and ETL jobs on a cloud warehouse", "type": "required", "criticality": 5},
+    {"text": "Orchestrate batch workflows with Airflow and keep them monitored", "type": "required", "criticality": 4},
+    {"text": "Strong SQL and Python", "type": "required", "criticality": 3},
+]
+
+
+def _open_with_requirements(uid, title, requirements, company="Reqs Co"):
+    """A job opened through `open_job` with the requirements a host would extract."""
+    out = invoke("open_job", uid, {"jd_text": f"{title}. " + " ".join(r["text"] for r in requirements),
+                                   "requirements": requirements, "metadata": {"title": title, "company": company}})
+    assert out.get("error") is None, out
+    return out["job_id"]
+
+
+def test_suggest_actions_picks_the_variant_that_best_shows_the_work_the_job_asks_for(env):
+    uid, _, _ = env
+    job_id = _open_with_requirements(uid, "Data Engineer", PIPELINE_REQUIREMENTS)
+    strong = "Built Airflow ETL pipelines that load a Snowflake warehouse each night with retries and alerts."
+    middling = "Wrote SQL reports of weekly delivery times for the regional managers."
     weak = "Organized the annual office holiday celebration party"
     for text in (weak, middling, strong):
         _import(uid, EXP, text)
@@ -351,7 +366,7 @@ def test_with_uniform_weights_the_score_is_relevance_density():
     assert variant_score("python forecasting", heavy) == 0.75
     # No answer yet: all-zero weights fall back to uniform, as keyword coverage does.
     assert job_terms({"python": 0.0}, jd) == terms
-    assert best_variant([], terms) == (None, 0.0)
+    assert best_variant([], terms, {}) == (None, 0.0)
 
 
 def test_actions_are_the_valid_ops_with_uniform_propensities(env, isolated_engine):
@@ -1018,8 +1033,8 @@ def test_the_scripted_host_uses_variants_and_reports_library_reuse(env):
     assert not [n for n in plain["nodes"] if n["id"].startswith("variant:")]   # no library: as before
     assert all("from_variant" not in b for n in plain["nodes"] for b in n.get("bullets") or [])
 
-    top = _job_terms(uid, job_id)[:6]
-    text = "Built " + " ".join(top) + " pipelines"
+    text = ("Trained a convolutional neural network classifier for computer vision and machine learning "
+            "to predict defects on a production line")
     vid = _vid(_import(uid, EXP, text))
     program = build_program(uid, job_id, task["description"])
     node = next(n for n in program["nodes"] if n["id"] == f"variant:{EXP}")

@@ -1356,9 +1356,10 @@ and the valid actions with uniform propensities. A plan bullet names a variant w
 (an approved variant of that very item, or arbitration refuses it) and inherits its cites. Writing
 from raw facts is for `no_match`.
 
-- **Fallback pick.** The share of the bullet's content tokens that are job terms, each at its keyword
-  weight over the heaviest's, so uniform weights equal `relevance_density`; a score under
-  `VARIANT_MATCH_FLOOR` (0.10) is `no_match`.
+- **Fallback pick (#352).** The job's top requirements and title are read as kinds of work
+  (`harness/concepts.py`); each approved variant is scored by how much of what it shows the job asks
+  for (`variant_fit`), 0 when it is mostly about work the posting does not ask for; a score under
+  `VARIANT_MATCH_FLOOR` (0.09, fitted) is `no_match`. Word overlap (#229) is only the tie-break.
 - **Jev pick** (`variant_choice@v1`): one request per (job, item with approved variants). The gate is
   the probability Jev puts on any variant (one minus its `no_match`), not on its own choice, because
   two good phrasings of one bullet split its probability and neither would reach the cutoff while
@@ -1366,8 +1367,10 @@ from raw facts is for `no_match`.
 - **Baseline.** `open_job` takes a `metadata.role_family`, else a deterministic title keyword map
   (`agents/job_card.TITLE_ROLE_FAMILIES`), else `other`, and never the LLM classifier. A host family
   that names a saved track exactly wins without a question (`source: host`); with any saved track, one
-  Jev `choice` (`track_baseline@v1`) decides (`jev`, `cache`); otherwise the track named after the
-  family is used (`fallback`). A job with no history starts from a copy of that node's content, with
+  Jev `choice` (`track_baseline@v1`) decides (`jev`, `cache`); otherwise (`fallback`) the saved track
+  whose role family best fits the job's requirements is used when it clears a fitted score and lead
+  over every other family (`harness.library.pick_track`, #352), and with no requirements the track
+  named after the title's family. A job with no history starts from a copy of that node's content, with
   skills re-ranked against this posting, job-scoped rule fields reset and this posting's answers
   applied (`executor.baseline_content`); the first node's provenance records the baseline. With no
   match the start is the whole graph, as before. `harness/library.py::choose_baseline` is the one

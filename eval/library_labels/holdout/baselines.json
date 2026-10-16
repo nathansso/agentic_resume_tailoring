@@ -1,0 +1,495 @@
+{
+ "_comment": "Author-written HOLDOUT for the track-baseline fallback (issue #352): same format as baselines.json, same four tracks. Written before the fallback's concept lexicon; never used to fit a threshold or margin. Labels are the author's, unreviewed. 'best' for the hybrid titles names every track a reasonable reader accepts.",
+ "version": 1,
+ "status": "author-written, unreviewed, holdout only",
+ "categories": [
+  "clear_match",
+  "hybrid_title",
+  "title_mismatch",
+  "no_track",
+  "near_miss"
+ ],
+ "tracks": [
+  {
+   "track": "data_science",
+   "title": "Data Scientist"
+  },
+  {
+   "track": "machine_learning",
+   "title": "Machine Learning Engineer"
+  },
+  {
+   "track": "data_engineering",
+   "title": "Data Engineer"
+  },
+  {
+   "track": "software_engineering",
+   "title": "Software Engineer"
+  }
+ ],
+ "cases": [
+  {
+   "id": "h_pricing",
+   "category": "clear_match",
+   "title": "Data Analyst, Pricing",
+   "requirements": [
+    {
+     "text": "Estimate price elasticity and the effect of price changes using regression",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Design and analyse price tests and report the lift",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Build dashboards merchants use to track margin",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Strong SQL and R or Python",
+     "type": "required",
+     "criticality": 3
+    }
+   ],
+   "best": [
+    "data_science"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_vision",
+   "category": "clear_match",
+   "title": "Computer Vision Engineer",
+   "requirements": [
+    {
+     "text": "Train and fine-tune convolutional models for image recognition",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Multi-GPU training in PyTorch on large image datasets",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Optimise trained models for low-latency inference",
+     "type": "required",
+     "criticality": 3
+    }
+   ],
+   "best": [
+    "machine_learning"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_platform",
+   "category": "clear_match",
+   "title": "Data Platform Engineer",
+   "requirements": [
+    {
+     "text": "Build streaming and batch pipelines with Kafka, Flink or Spark",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Operate Airflow orchestration with monitoring",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Model warehouse tables and keep them tested",
+     "type": "required",
+     "criticality": 4
+    }
+   ],
+   "best": [
+    "data_engineering"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_payments",
+   "category": "clear_match",
+   "title": "Backend Engineer, Payments",
+   "requirements": [
+    {
+     "text": "Design and build gRPC and REST services that move money reliably",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Handle idempotency and retries in distributed systems",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Strong Go or Java and PostgreSQL",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Write automated tests and carry an on-call rotation",
+     "type": "required",
+     "criticality": 3
+    }
+   ],
+   "best": [
+    "software_engineering"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_webui",
+   "category": "clear_match",
+   "title": "Web UI Engineer",
+   "requirements": [
+    {
+     "text": "Build responsive, accessible interfaces with Vue or React",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Strong HTML, CSS and TypeScript",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Improve page load speed and write front end tests",
+     "type": "required",
+     "criticality": 3
+    }
+   ],
+   "best": [
+    "software_engineering"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_exp_platform",
+   "category": "hybrid_title",
+   "title": "Data Scientist, Experimentation Platform",
+   "requirements": [
+    {
+     "text": "Build the services and pipelines that run online experiments",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Design metrics and statistical methods for A/B tests",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Strong Python and SQL",
+     "type": "required",
+     "criticality": 3
+    }
+   ],
+   "best": [
+    "data_science",
+    "software_engineering",
+    "data_engineering"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_applied_sci",
+   "category": "hybrid_title",
+   "title": "Applied Scientist, Machine Learning Infrastructure",
+   "requirements": [
+    {
+     "text": "Train and evaluate deep learning models at scale",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Build the training and serving infrastructure those models run on",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Strong Python and PyTorch",
+     "type": "required",
+     "criticality": 3
+    }
+   ],
+   "best": [
+    "machine_learning",
+    "software_engineering"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_swe_ranking",
+   "category": "title_mismatch",
+   "title": "Software Engineer, Ads Ranking",
+   "requirements": [
+    {
+     "text": "Train ranking models and run offline evaluations",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Feature engineering on click and impression logs",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Run online experiments to measure model impact",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Strong Python and machine learning fundamentals",
+     "type": "required",
+     "criticality": 3
+    }
+   ],
+   "best": [
+    "machine_learning"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_ba_dbt",
+   "category": "title_mismatch",
+   "title": "Business Analyst",
+   "requirements": [
+    {
+     "text": "Build and test dbt models on the Snowflake warehouse",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Schedule and monitor Airflow pipelines",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Keep source tables fresh and documented",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Strong SQL",
+     "type": "required",
+     "criticality": 3
+    }
+   ],
+   "best": [
+    "data_engineering"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_ds_services",
+   "category": "title_mismatch",
+   "title": "Data Scientist",
+   "requirements": [
+    {
+     "text": "Build REST APIs and backend services in Java",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Design database schemas and write migrations",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Write automated tests and maintain CI/CD",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Experience deploying services on Kubernetes",
+     "type": "required",
+     "criticality": 3
+    }
+   ],
+   "best": [
+    "software_engineering"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_mle_stats",
+   "category": "title_mismatch",
+   "title": "Machine Learning Engineer",
+   "requirements": [
+    {
+     "text": "Run statistical analyses and hypothesis tests to answer business questions",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Build dashboards and reports for executives",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Present findings to non-technical stakeholders",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Strong SQL and R",
+     "type": "required",
+     "criticality": 3
+    }
+   ],
+   "best": [
+    "data_science"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_sec",
+   "category": "no_track",
+   "title": "Security Engineer",
+   "requirements": [
+    {
+     "text": "Perform penetration tests and threat modelling on web applications",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Triage alerts in a SIEM and lead incident response",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Write detection rules and automate security tooling in Python",
+     "type": "required",
+     "criticality": 3
+    }
+   ],
+   "best": [],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_marketing",
+   "category": "no_track",
+   "title": "Marketing Manager",
+   "requirements": [
+    {
+     "text": "Plan and run campaigns across email, social and paid channels",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Own the content calendar and the brand voice",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Report on campaign results to leadership",
+     "type": "required",
+     "criticality": 3
+    }
+   ],
+   "best": [],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_verif",
+   "category": "no_track",
+   "title": "Hardware Verification Engineer",
+   "requirements": [
+    {
+     "text": "Write SystemVerilog testbenches and UVM environments for ASIC blocks",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Debug waveforms and close functional coverage",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Scripting in Python and Tcl",
+     "type": "required",
+     "criticality": 3
+    }
+   ],
+   "best": [],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_dba",
+   "category": "near_miss",
+   "title": "Database Administrator",
+   "requirements": [
+    {
+     "text": "Manage backups, replication and failover for production databases",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Tune slow SQL queries and indexes",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Apply patches and manage user access",
+     "type": "required",
+     "criticality": 3
+    }
+   ],
+   "best": [],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_ds_sales",
+   "category": "near_miss",
+   "title": "Sales Engineer, Machine Learning Platform",
+   "requirements": [
+    {
+     "text": "Run technical demos of the machine learning platform for prospective customers",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Scope proofs of concept with customers",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Work with account executives to close deals",
+     "type": "required",
+     "criticality": 4
+    }
+   ],
+   "best": [],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_data_entry",
+   "category": "near_miss",
+   "title": "Data Entry Clerk",
+   "requirements": [
+    {
+     "text": "Enter customer records into the database accurately",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Verify data against source documents",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Basic Excel and SQL lookups",
+     "type": "required",
+     "criticality": 3
+    }
+   ],
+   "best": [],
+   "rationale": "holdout"
+  }
+ ]
+}
