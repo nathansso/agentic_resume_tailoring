@@ -1,7 +1,7 @@
 {
   "_comment": "The policy artifact (#241). Every fitted or provisional threshold the harness decides with, and the guard tolerances, with the fit each came from. Read by harness/policy.py; tests/test_policy.py pins it to the fit scripts' output on the committed recordings. Changing a value means a new `version` and `digest`.",
-  "version": 1,
-  "digest": "e2fb4f5790ee9102",
+  "version": 2,
+  "digest": "e5d6545a94aff29d",
   "fit_date_basis": "the recordings' export date",
   "fits": {
     "support": {
@@ -22,6 +22,21 @@
           "sha256": "b82947832da4f2e3784800a93768122a24f793082e62367c5c2e43e71357aa11"
         }
       ]
+    },
+    "support_fallback": {
+      "decision": "support_fallback@v1",
+      "script": "eval/fit_support_fallback.py",
+      "model": "fallback-support-v1",
+      "fit_date": "2026-10-15",
+      "source_issue": 351,
+      "labels": [
+        {
+          "path": "eval/support_labels/pairs.json",
+          "sha256": "bdc3b3b426001b90e091577834d4aac743c0ac35a2e0c0aed5002d9ffabe06b6"
+        }
+      ],
+      "recordings": [],
+      "note": "no recordings: the check is code (harness/decisions/support_fallback.py), not a model. fit_date is the day the script was run, and the cutoffs are on a 0.5 grid of summed signal weights, not a model's confidence"
     },
     "negative_pin": {
       "decision": "negative_pin@v1",
@@ -139,6 +154,19 @@
       "kind": "fitted",
       "fit": "support",
       "source_issue": 237
+    },
+    "support_fallback.tau_block": {
+      "value": 1.0,
+      "kind": "fitted",
+      "fit": "support_fallback",
+      "source_issue": 351,
+      "note": "on summed signal weights (strong 1.0, soft 0.5), floored at one strong signal: a lone soft signal reviews, never blocks"
+    },
+    "support_fallback.tau_review": {
+      "value": 0.5,
+      "kind": "fitted",
+      "fit": "support_fallback",
+      "source_issue": 351
     },
     "negative_pin.tau_block": {
       "value": 0.85,

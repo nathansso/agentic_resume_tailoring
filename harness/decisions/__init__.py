@@ -12,6 +12,8 @@ boundary test (`tests/test_harness_boundary.py`) keeps it that way.
 - `engine`: `decide(point, state, questions, fallback)` and its three modes.
 - `recordings`: export and import of cache rows, and the `art jev` commands.
 - `support`: the first decision point, the cited-bullet support check.
+- `support_fallback`: the deterministic reading of a cited bullet when Jev has no answer (#351):
+  small word lists, no model, its own fitted cutoffs.
 - `negative_pins`: does a changed text mention a pinned topic in other words (#232).
 - `coverage`: does a bullet show the candidate meets a posting requirement (#126), the
   `semantic_coverage` target.

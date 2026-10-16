@@ -23,7 +23,13 @@ nothing else from the knowledge graph.
 **What is checked.** Only bullets that changed: a verbatim source bullet is
 skipped (which also keeps a user's own editor edits from being blocked) and so
 is an uncited bullet (the citations gate owns it). With no key, mode `off`, or
-an API error the finding is `unchecked` and adds nothing.
+an API error Jev has no answer, and the deterministic check
+(`support_fallback.py`, #351) reads the bullet instead: a finding with
+`status: "heuristic"` and `source: "fallback"`, judged by its own fitted cutoffs
+(`support_fallback.TAU_BLOCK` / `TAU_REVIEW`). When Jev answers it decides alone:
+`eval/support_labels/FALLBACK_REPORT.md` ("With a key") shows why the fallback does
+not run beside it. A bullet whose cites name no bullet text has nothing to compare
+and stays `unchecked`.
 
 **Score and thresholds.** A finding's blocking score is the probability that
 the bullet is *not* supported: p(adds_unsupported) + p(contradicts), which is
@@ -47,6 +53,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from agents.checks import exp_key, proj_key
 from harness import policy
+from harness.decisions import support_fallback
 from harness.decisions.questions import Choice, canonical
 
 QUESTION = Choice(
@@ -77,6 +84,7 @@ TAU_BLOCK = policy.get("support.tau_block")
 TAU_REVIEW = policy.get("support.tau_review")
 
 _ROUND = 4
+_HEADER = ("title", "company", "name")        # an item's header counts as evidence for the fallback
 ORIGINAL_MIN_OVERLAP = 0.25
 _WORD = re.compile(r"[a-z0-9]+")
 
@@ -188,11 +196,16 @@ def make_support_checker(source_bullets: Dict[str, List[str]],
                     findings.append(_unchecked(key, bullet, "no_evidence_text"))
                     continue
                 state = build_state(evidence, bullet, _original(bullet, base.get(key, [])))
-                memo_key = canonical(state)
+                # The fallback reads the rest of the item too (its other source bullets and its
+                # header), so a claim the item makes elsewhere is not flagged: it can only be
+                # more lenient than the cited evidence alone, which is all Jev sees.
+                context = [*source_bullets.get(key, []), *(str(item.get(f) or "") for f in _HEADER)]
+                memo_key = canonical(state) + canonical(context)
                 if memo_key not in memo:
                     answer = engine.decide("support", state, [QUESTION],
                                            fallback=None)[0]
-                    memo[memo_key] = _finding(key, bullet, answer)
+                    memo[memo_key] = (_heuristic(key, bullet, state, context, answer.reason)
+                                      if answer.fell_back else _finding(key, bullet, answer))
                 findings.append({**memo[memo_key], "item": key, "bullet": bullet})
         return findings
 
@@ -202,6 +215,12 @@ def make_support_checker(source_bullets: Dict[str, List[str]],
 def _unchecked(key: str, bullet: str, reason: str) -> Dict:
     return {"item": key, "bullet": bullet, "status": "unchecked", "label": None, "p": None,
             "probabilities": None, "source": "fallback", "reason": reason}
+
+
+def _heuristic(key: str, bullet: str, state: Dict[str, Any], context: Sequence[str],
+               reason: Optional[str]) -> Dict:
+    """The finding for a bullet Jev did not answer: the deterministic check's reading (#351)."""
+    return support_fallback.finding(key, bullet, state, context, reason or "fallback")
 
 
 def _finding(key: str, bullet: str, answer) -> Dict:
@@ -227,11 +246,27 @@ def _worst(finding: Dict) -> Tuple[Optional[str], float]:
     return None, 0.0
 
 
+def _heuristic_outcome(f: Dict) -> Optional[str]:
+    """`block`, `review` or None for a fallback finding, by the fallback's own cutoffs."""
+    if f.get("status") != "heuristic" or f.get("label") not in BLOCKING:
+        return None
+    score = float(f.get("score") or 0.0)
+    if score >= support_fallback.TAU_BLOCK:
+        return "block"
+    return "review" if score >= support_fallback.TAU_REVIEW else None
+
+
 def violations(findings: Sequence[Dict]) -> List[str]:
     """Gate violations: `contradicts:` / `unsupported:` plus the item and bullet,
-    for findings whose blocking score is >= TAU_BLOCK. Sorted."""
+    for findings whose blocking score is >= TAU_BLOCK. Sorted. A fallback finding
+    (#351) blocks at the fallback's own cutoff and names the signals that fired."""
     out = []
     for f in findings:
+        if f.get("status") == "heuristic":
+            if _heuristic_outcome(f) == "block":
+                why = "; ".join(f.get("signals") or [])
+                out.append(f'{BLOCKING[f["label"]]}:{f["item"]}: "{_short(f["bullet"])}" (fallback check: {why})')
+            continue
         if f.get("status") != "checked":
             continue
         label, p = _worst(f)
@@ -242,9 +277,17 @@ def violations(findings: Sequence[Dict]) -> List[str]:
 
 def reviews(findings: Sequence[Dict]) -> List[Dict]:
     """The uncertain band, for the host to show the user: TAU_REVIEW <= p <
-    TAU_BLOCK. Sorted by item then bullet."""
+    TAU_BLOCK. Sorted by item then bullet. A fallback finding (#351) is in the band by its own
+    cutoffs and carries `score` (a sum of signal weights, not a probability), `source:
+    "fallback"` and the `signals` that fired, in place of `p`."""
     out = []
     for f in findings:
+        if f.get("status") == "heuristic":
+            if _heuristic_outcome(f) == "review":
+                out.append({"item": f["item"], "bullet": _short(f["bullet"], 80), "label": f["label"],
+                            "score": round(float(f["score"]), _ROUND), "source": "fallback",
+                            "signals": list(f.get("signals") or [])})
+            continue
         if f.get("status") != "checked":
             continue
         label, p = _worst(f)
