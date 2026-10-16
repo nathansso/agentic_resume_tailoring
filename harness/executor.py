@@ -1067,11 +1067,18 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
         out["soft_preferences"] = soft
     if baseline:
         out["baseline"] = baseline
-    # Only when Jev (or its cache) answered for at least one bullet: with no key
-    # the result is what it was before #193.
-    findings = [f for f in ctx.support_checker(working) if f["status"] == "checked"]
-    if findings:
-        out["support"] = {"checked": len(findings), "review": support_reviews(findings)}
+    # Only when Jev (or its cache) answered for at least one bullet, or the deterministic
+    # fallback (#351) has something to review: with no key and nothing to show, the result is what
+    # it was before #193. `checked` counts Jev's answers; `fallback_checked` the bullets the
+    # fallback read in their place.
+    support_findings = ctx.support_checker(working)
+    findings = [f for f in support_findings if f["status"] == "checked"]
+    heuristic = [f for f in support_findings if f["status"] == "heuristic"]
+    review = support_reviews(findings + heuristic)
+    if findings or review:
+        out["support"] = {"checked": len(findings), "review": review}
+        if heuristic:
+            out["support"]["fallback_checked"] = len(heuristic)
     pin_findings = ([f for f in ctx.pin_page_checker(working) if f["status"] == "checked"]
                     if ctx.pin_page_checker else [])
     if pin_findings:

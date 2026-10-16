@@ -13,10 +13,12 @@ extraction stack. `jd_profile` re-exports all of it.
 """
 import hashlib
 import json
+import re
 from typing import Any, Dict, List, Optional
 
 from agents.ats_scorer import ATSScoringEngine, _detect_level
 from agents.extraction_schemas import JDProfileExtraction, JDRequirementItem, RequirementType
+from agents.skill_matching import canonical_name
 
 
 def text_digest(description: str, version: int) -> str:
@@ -102,6 +104,30 @@ def _clean_terms(terms: Any) -> List[str]:
         seen.add(cleaned)
         out.append(cleaned)
     return out
+
+
+def display_term(term: str, text: str = "") -> str:
+    """How a requirement's term reads on screen. `_clean_terms` lower-cases the stored terms,
+    which is right for matching and wrong for a chip that says "pytorch" (#348).
+
+    In order: the term's spelling in the requirement's own `text`, the posting's wording, when
+    that spelling has a capital and is not just shouting; else the alias map's canonical
+    spelling ("pytorch" is "PyTorch"); else the term with its first letter capitalised, only
+    when it is entirely lower-case. The stored term is never changed; this is for display.
+    """
+    term = (term or "").strip()
+    if not term:
+        return term
+    found = re.search(r"(?<!\w)" + re.escape(term) + r"(?!\w)", text or "", re.IGNORECASE)
+    if found:
+        spelled = found.group(0)
+        shouting = spelled.isupper() and len(spelled) > 4          # "KUBERNETES", not "AWS"
+        if any(c.isupper() for c in spelled) and not shouting:
+            return spelled
+    canonical = canonical_name(term)
+    if canonical != term:
+        return canonical
+    return term[:1].upper() + term[1:] if term == term.lower() else term
 
 
 def _clamp_criticality(value: Any) -> int:

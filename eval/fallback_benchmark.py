@@ -14,9 +14,10 @@ files** (never retyped), and proposes the bar each fallback has to clear:
 
 Nothing here calls Jev. `measure` forces `ART_JEV_MODE=off` for its duration (and drops
 `TYPESAFE_API_KEY`), asks the engine for no recordings and opens no network connection, so it needs
-neither the recordings nor a key. A fallback that is "unchecked" (support) or "absent" (coverage's
-semantic target) is reported as exactly that: every `adds_unsupported` pair is kept, no requirement is
-credited. No number stands in for the missing check.
+neither the recordings nor a key. A fallback that is absent (coverage's semantic target) is reported as
+exactly that: no requirement is credited. No number stands in for a missing check. The support fallback
+was "unchecked" when this baseline was taken (#350: 0 of 54 should-block pairs blocked) and is the
+deterministic check since #351; its row reports what that check does, beside the #123 gate.
 
 Rules for what is counted (the epic's, #349):
 
@@ -111,11 +112,12 @@ def _support_page(pair: Dict[str, Any]):
 def measure_support(pairs: Optional[Sequence[Dict[str, Any]]] = None) -> Dict[str, Any]:
     """The support fallback on `eval/support_labels/pairs.json`, through `make_support_checker`.
 
-    With Jev off every finding is `unchecked`, so `violations` and `reviews` are empty and the page
-    is left to the other gates. `consistency` is the #123 numbers-and-names gate on the same pair:
-    it runs beside the support check in production, so it is what actually stands between a reworded
-    claim and the page. The pair carries only its cited text as evidence, where a real item adds its
-    other source bullets and header, so that gate's catches here are an upper bound."""
+    With Jev off every finding is the deterministic check's reading (#351, `status: "heuristic"`,
+    `source: "fallback"`), so `violations` and `reviews` are the fallback's own block and review.
+    `consistency` is the #123 numbers-and-names gate on the same pair: it runs beside the support
+    check in production, so what stands between a reworded claim and the page is the two together.
+    The pair carries only its cited text as evidence, where a real item adds its other source
+    bullets and header, so both checks' catches here are upper bounds."""
     from agents.checks import consistency_check
     from harness.decisions import support
 
@@ -125,21 +127,26 @@ def measure_support(pairs: Optional[Sequence[Dict[str, Any]]] = None) -> Dict[st
         for pair in pairs:
             content, source, base = _support_page(pair)
             findings = support.make_support_checker(source, base)(content)
-            if len(findings) != 1 or findings[0]["status"] != "unchecked":
-                raise RuntimeError(f"{pair['id']}: expected one unchecked finding, got {findings}")
+            if len(findings) != 1 or findings[0]["status"] != "heuristic" or findings[0]["source"] != "fallback":
+                raise RuntimeError(f"{pair['id']}: expected one fallback finding, got {findings}")
             rows.append({
                 "id": pair["id"], "category": pair["category"], "label": pair["label"],
                 "blocked": bool(support.violations(findings)),
                 "reviewed": bool(support.reviews(findings)),
-                "reason": findings[0]["reason"],
+                "reason": findings[0]["reason"], "score": findings[0]["score"],
                 "g123": bool(consistency_check(content, source)),
             })
     return _support_summary(rows)
 
 
 def _support_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """`blocked` / `reviewed` / `silent` are the #351 check alone; `with123` counts a pair blocked by
+    either the check or the #123 gate (what the page is actually held to), and `silent` there is a pair
+    neither blocks nor the check surfaces for review."""
     should = [r for r in rows if r["label"] != "supported"]
     supported = [r for r in rows if r["label"] == "supported"]
+    for r in rows:
+        r["either"] = r["blocked"] or r["g123"]
 
     def by_label(sel, key):
         return {l: [sum(1 for r in sel if r["label"] == l and r[key]), sum(1 for r in sel if r["label"] == l)]
@@ -150,7 +157,8 @@ def _support_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         rs = [r for r in rows if r["category"] == c]
         sb = [r for r in rs if r["label"] != "supported"]
         cats[c] = {"n": len(rs), "should": len(sb), "blocked": sum(r["blocked"] for r in sb),
-                   "g123": sum(r["g123"] for r in sb),
+                   "reviewed": sum(r["reviewed"] and not r["blocked"] for r in sb),
+                   "g123": sum(r["g123"] for r in sb), "either": sum(r["either"] for r in sb),
                    "g123_false": sum(r["g123"] for r in rs if r["label"] == "supported")}
     return {
         "n": len(rows), "should": len(should), "supported": len(supported),
@@ -159,10 +167,17 @@ def _support_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         "by_label": by_label(should, "blocked"),
         "false_blocks": sum(r["blocked"] for r in supported),
         "false_reviews": sum(r["reviewed"] for r in supported),
+        "false_ids": [r["id"] for r in supported if r["blocked"] or r["reviewed"]],
+        "silent_ids": [r["id"] for r in should if not (r["either"] or r["reviewed"])],
         "reasons": sorted({r["reason"] for r in rows}),
         "g123": {"blocked": sum(r["g123"] for r in should), "by_label": by_label(should, "g123"),
                  "false_blocks": sum(r["g123"] for r in supported),
                  "false_ids": [r["id"] for r in supported if r["g123"]]},
+        "with123": {"blocked": sum(r["either"] for r in should), "by_label": by_label(should, "either"),
+                    "reviewed": sum(r["reviewed"] and not r["either"] for r in should),
+                    "silent": sum(not (r["either"] or r["reviewed"]) for r in should),
+                    "false_blocks": sum(r["either"] for r in supported),
+                    "false_ids": [r["id"] for r in supported if r["either"]]},
         "categories": cats,
     }
 
@@ -306,11 +321,11 @@ def measure_memory_gate(doc: Optional[Dict[str, Any]] = None,
 # ── 5 and 6. variant choice and track baseline (#199) ────────────────────────
 
 def measure_library() -> Dict[str, Any]:
-    """The variant and baseline fallbacks on `eval/library_labels/`, through #229's own functions
-    (`harness.library.best_variant`, the role-family lookup) as `fit_library_thresholds` runs them.
+    """The variant and baseline fallbacks on `eval/library_labels/`, through the production functions
+    (`harness.library.best_variant`, `pick_track`; #352) as `fit_library_thresholds` runs them.
     Also the same cases answered by a constant (always `no_match`, always `none`), the floor any
-    fallback has to beat to be worth its code. The overlap pick is given the job's text with uniform
-    weights, as in the fit; a real job also has stored keyword weights, which can only help it."""
+    fallback has to beat to be worth its code. The variant pick is given the job's title and
+    requirements, with uniform keyword weights for its tie-break, as in the fit."""
     from eval import fit_library_thresholds as fit
 
     vdoc, bdoc = fit.load_variants(), fit.load_baselines()
@@ -438,8 +453,8 @@ def jev_memory_gate() -> Dict[str, Any]:
 def jev_library() -> Dict[str, Any]:
     t = _text(LIBRARY_REPORT)
     out: Dict[str, Any] = {}
-    for key, heading, fb, bad in (("variant_choice", "## Variant choice", "The #229 fallback (word overlap)", "poor"),
-                                  ("track_baseline", "## Track baseline", "The #229 fallback (role-family lookup)", "wrong")):
+    for key, heading, fb, bad in (("variant_choice", "## Variant choice", "The Jev-free fallback (concept fit)", "poor"),
+                                  ("track_baseline", "## Track baseline", "The Jev-free fallback (duties fit)", "wrong")):
         sec = _section(t, heading)
         end = sec.find("\n## ", 5)
         sec = sec[:end] if end > 0 else sec
@@ -473,6 +488,13 @@ def half_gap(floor: int, jev: int) -> int:
     return math.ceil((floor + jev) / 2)
 
 
+# What ran for the two library points before #352 (#229's word overlap and title lookup), on the
+# same labelled sets. The bars of the library points are half the gap from *these* figures to Jev's:
+# they were set at #350 and stay put when a fix lands, so a verdict can say the bar was met.
+BEFORE_352 = {"variant_choice": {"correct": 18, "picks": 18, "right": 7, "poor": 7, "wrong": 4, "lost": 19},
+              "track_baseline": {"correct": 27, "picks": 23, "right": 15, "poor": 0, "wrong": 8, "lost": 1}}
+
+
 def targets(m: Dict[str, Any], j: Dict[str, Any]) -> Dict[str, Any]:
     """Per point: the hard bars (harmful errors, never worse than Jev's), the soft bar (half the gap
     on the main figure), and the verdict. Points #349 does not schedule keep their baseline."""
@@ -483,18 +505,32 @@ def targets(m: Dict[str, Any], j: Dict[str, Any]) -> Dict[str, Any]:
     sup_add = half_gap(g["by_label"]["adds_unsupported"][0], _ints(js["adds"])[0])
     v, jv = m["variant_choice"]["fallback"], j["variant_choice"]["jev"]
     b, jb = m["track_baseline"]["fallback"], j["track_baseline"]["jev"]
-    v_bar = half_gap(v["correct"], _ints(jv["correct"])[0])
-    b_bar = half_gap(b["correct"], _ints(jb["correct"])[0])
+    v0, b0 = BEFORE_352["variant_choice"], BEFORE_352["track_baseline"]
+    v_bar = half_gap(v0["correct"], _ints(jv["correct"])[0])
+    b_bar = half_gap(b0["correct"], _ints(jb["correct"])[0])
+    jv_other = jv["picks"] - jv["right"] - jv["bad"]
+    v_const, b_const = m["variant_choice"]["constant"]["correct"], m["track_baseline"]["constant"]["correct"]
+    v_met = v["poor"] <= jv["bad"] and v["wrong"] <= jv_other and v["correct"] >= v_bar and v["correct"] > v_const
+    b_met = b["wrong"] <= jb["bad"] and b["correct"] >= b_bar and b["correct"] > b_const
+    w = s["with123"]
+    review_cap = math.floor(0.10 * s["supported"])
+    met = (w["blocked"] >= sup_total and s["false_blocks"] == 0 and s["false_reviews"] <= review_cap
+           and w["by_label"]["contradicts"][0] >= sup_con and w["by_label"]["adds_unsupported"][0] >= sup_add)
     return {
-        "support": {"verdict": "work: #351",
+        "support": {"verdict": "met: #351" if met else "work: #351",
                     "hard": f"0/{s['supported']} supported pairs blocked by the new check (#123's own {g['false_blocks']} is reported, "
                             f"not counted against it); any review tier surfaces at most "
-                            f"{math.floor(0.10 * s['supported'])} of the {s['supported']} supported pairs (the fits' 10% cap)",
+                            f"{review_cap} of the {s['supported']} supported pairs (the fits' 10% cap)",
                     "bar": f"{sup_total}/{s['should']} should-block pairs blocked with #123 counted "
                            f"(contradicts {sup_con}/{s['by_label']['contradicts'][1]}, "
                            f"adds_unsupported {sup_add}/{s['by_label']['adds_unsupported'][1]})",
-                    "reason": f"Half the way from the {g['blocked']} that #123 blocks today to Jev's {js['blocked_n']}; "
-                              f"a check that blocks an honest edit is worse than none, so the hard bar is Jev's 0."},
+                    "reason": f"Half the way from the {g['blocked']} that #123 blocks alone to Jev's {js['blocked_n']}; "
+                              f"a check that blocks an honest edit is worse than none, so the hard bar is Jev's 0. "
+                              f"Measured with the #351 check: {w['blocked']}/{s['should']} blocked with #123 counted "
+                              f"(contradicts {w['by_label']['contradicts'][0]}/{w['by_label']['contradicts'][1]}, adds_unsupported "
+                              f"{w['by_label']['adds_unsupported'][0]}/{w['by_label']['adds_unsupported'][1]}), "
+                              f"{s['false_blocks']}/{s['supported']} supported blocked and {s['false_reviews']}/{s['supported']} "
+                              f"surfaced for review by the new check."},
         "negative_pin": {"verdict": "leave",
                          "hard": f"0/{m['negative_pin']['other']} not-a-mention pairs blocked (hold)",
                          "bar": f"hold {m['negative_pin']['blocked']}/{m['negative_pin']['mentions']} (the direct mentions)",
@@ -510,19 +546,20 @@ def targets(m: Dict[str, Any], j: Dict[str, Any]) -> Dict[str, Any]:
                         "bar": f"hold {m['memory_gate']['main']['prefs_kept']}/{m['memory_gate']['main']['prefs']} preferences kept",
                         "reason": f"Nothing is written, so no write can be wrong; the {m['memory_gate']['main']['prefs_dropped']} misses are "
                                   "the prefilter's, which Jev sits behind and shares."},
-        "variant_choice": {"verdict": "work: #352",
-                           "hard": f"0/{v['n']} poor-fit picks, and at most {jv['picks'] - jv['right'] - jv['bad']} other wrong pick",
+        "variant_choice": {"verdict": "done: #352" if v_met else "work: #352",
+                           "hard": f"0/{v['n']} poor-fit picks, and at most {jv_other} other wrong pick",
                            "bar": f"{v_bar}/{v['n']} correct, and above the constant 'always no_match' "
-                                  f"({m['variant_choice']['constant']['correct']}/{v['n']})",
-                           "reason": f"Half the way from {v['correct']} to Jev's {_ints(jv['correct'])[0]}; "
-                                     f"today's fallback is only {v['correct'] - m['variant_choice']['constant']['correct']} cases "
+                                  f"({v_const}/{v['n']})",
+                           "reason": f"Half the way from {v0['correct']} (#229's word overlap, before #352) to Jev's "
+                                     f"{_ints(jv['correct'])[0]}; that fallback was only {v0['correct'] - v_const} cases "
                                      "better than a constant."},
-        "track_baseline": {"verdict": "work: #352",
+        "track_baseline": {"verdict": "done: #352" if b_met else "work: #352",
                            "hard": f"0/{b['n']} wrong tracks",
                            "bar": f"{b_bar}/{b['n']} correct, and above the constant 'always none' "
-                                  f"({m['track_baseline']['constant']['correct']}/{b['n']})",
-                           "reason": f"Half the way from {b['correct']} to Jev's {_ints(jb['correct'])[0]}; the lookup reads the "
-                                     "title alone and is right on none of the jobs whose title and duties disagree."},
+                                  f"({b_const}/{b['n']})",
+                           "reason": f"Half the way from {b0['correct']} (#229's title lookup, before #352) to Jev's "
+                                     f"{_ints(jb['correct'])[0]}; the lookup read the title alone and was right on none of "
+                                     "the jobs whose title and duties disagree."},
     }
 
 
@@ -538,10 +575,11 @@ def block_summary(m, j, t) -> str:
     head = ["point (labelled set)", "harmful error: fallback", "harmful error: Jev", "main figure: fallback",
             "main figure: Jev", "proposed bar", "verdict"]
     body = [
-        ["support (89 pairs)", f"{s['silent']}/{s['should']} should-block pairs kept silently; "
-                               f"{s['g123']['false_blocks']}/{s['supported']} supported blocked by #123",
+        ["support (89 pairs)", f"{s['with123']['silent']}/{s['should']} should-block pairs kept silently by the check and #123 "
+                               f"({s['with123']['reviewed']} surfaced for review); {s['false_blocks']}/{s['supported']} supported "
+                               f"blocked by the check, {s['g123']['false_blocks']} by #123",
          f"{js['silent']}/{s['should']} kept silently ({js['review_should']} surfaced for review); {js['false_blocks']} supported blocked",
-         f"blocked {s['blocked']}/{s['should']}; with #123 {s['g123']['blocked']}/{s['should']}",
+         f"blocked {s['blocked']}/{s['should']}; with #123 {s['with123']['blocked']}/{s['should']}",
          f"blocked {js['blocked']}", t["support"]["bar"], t["support"]["verdict"]],
         ["negative pin (74 pairs)", f"{p['silent']}/{p['mentions']} pinned mentions render", f"0/{p['mentions']} render "
          f"({jp['review_mentions']} surfaced for review)", f"blocked {_frac(p['blocked'], p['mentions'])}",
@@ -569,37 +607,51 @@ def block_targets(m, j, t) -> str:
 
 def block_support(m, j, t) -> str:
     s, js = m["support"], j["support"]
-    g = s["g123"]
-    o = [f"{s['n']} pairs: {s['should']} should block (contradicts {s['by_label']['contradicts'][1]}, "
-         f"adds_unsupported {s['by_label']['adds_unsupported'][1]}), {s['supported']} supported. "
-         f"With Jev off every cited bullet's finding is `unchecked` (`reason`: {', '.join(s['reasons'])}), so "
-         "`violations` and `reviews` are empty. Jev figures: `support_labels/REPORT.md`, \"in support.py\" row.\n"]
-    o.append(_table(["", "fallback (unchecked)", f"Jev (tau_block {js['tau_block']}, tau_review {js['tau_review']})"], [
-        ["should-block pairs blocked", _frac(s["blocked"], s["should"]), js["blocked"]],
-        ["  contradicts", f"{s['by_label']['contradicts'][0]}/{s['by_label']['contradicts'][1]}", js["contradicts"]],
-        ["  adds_unsupported", f"{s['by_label']['adds_unsupported'][0]}/{s['by_label']['adds_unsupported'][1]}", js["adds"]],
-        ["should-block pairs surfaced for review", s["reviewed"], js["review_should"]],
-        ["**should-block pairs kept silently (the harmful error)**", f"**{s['silent']}**", f"**{js['silent']}**"],
-        ["supported pairs blocked (false blocks)", f"{s['false_blocks']}/{s['supported']}", js["false_blocks"]],
-        ["supported pairs surfaced for review", s["false_reviews"], js["review_supported"]],
+    g, w = s["g123"], s["with123"]
+    c, cw = s["by_label"], w["by_label"]
+    o = [f"{s['n']} pairs: {s['should']} should block (contradicts {c['contradicts'][1]}, "
+         f"adds_unsupported {c['adds_unsupported'][1]}), {s['supported']} supported. "
+         f"With Jev off every cited bullet's finding is the deterministic check's (`harness/decisions/support_fallback.py`, "
+         f"#351, model `fallback-support-v1`, `source`: fallback, `reason`: {', '.join(s['reasons'])}); `violations` and `reviews` "
+         "are its block and review. The #123 numbers-and-names gate runs beside it in production, so the middle column counts a "
+         "pair blocked by either. Jev figures: `support_labels/REPORT.md`, \"in support.py\" row.\n"]
+    o.append(_table(["", "fallback: the #351 check", "fallback: the #351 check + #123",
+                     f"Jev (tau_block {js['tau_block']}, tau_review {js['tau_review']})"], [
+        ["should-block pairs blocked", _frac(s["blocked"], s["should"]), _frac(w["blocked"], s["should"]), js["blocked"]],
+        ["  contradicts", f"{c['contradicts'][0]}/{c['contradicts'][1]}", f"{cw['contradicts'][0]}/{cw['contradicts'][1]}",
+         js["contradicts"]],
+        ["  adds_unsupported", f"{c['adds_unsupported'][0]}/{c['adds_unsupported'][1]}",
+         f"{cw['adds_unsupported'][0]}/{cw['adds_unsupported'][1]}", js["adds"]],
+        ["should-block pairs surfaced for review", s["reviewed"], w["reviewed"], js["review_should"]],
+        ["**should-block pairs kept silently (the harmful error)**", f"**{s['silent']}**", f"**{w['silent']}**",
+         f"**{js['silent']}**"],
+        ["supported pairs blocked (false blocks)", f"{s['false_blocks']}/{s['supported']}", f"{w['false_blocks']}/{s['supported']}",
+         js["false_blocks"]],
+        ["supported pairs surfaced for review", s["false_reviews"], s["false_reviews"], js["review_supported"]],
     ]))
     o.append("")
-    o.append(f"**What stands there today.** The #123 numbers-and-names gate (`agents.checks.consistency_check`) runs beside the "
-             f"unchecked check, in production and here. On these pairs it blocks {g['blocked']}/{s['should']} "
+    o.append(f"**What stands beside it.** The #123 numbers-and-names gate (`agents.checks.consistency_check`) runs beside the "
+             f"check, in production and here. On these pairs it alone blocks {g['blocked']}/{s['should']} "
              f"(contradicts {g['by_label']['contradicts'][0]}/{g['by_label']['contradicts'][1]}, adds_unsupported "
-             f"{g['by_label']['adds_unsupported'][0]}/{g['by_label']['adds_unsupported'][1]}) and "
+             f"{g['by_label']['adds_unsupported'][0]}/{g['by_label']['adds_unsupported'][1]}), the baseline #350 measured, and "
              f"{g['false_blocks']}/{s['supported']} supported pair"
              + (f" ({', '.join('`' + i + '`' for i in g['false_ids'])}), which Jev does not block" if g["false_ids"] else "")
              + ". The pair carries only its cited text as evidence, where a real item adds its other source bullets and header, "
-               "so both figures are upper bounds. Lexical drift (`faithfulness_drift`) is an item-level mean over the whole "
+               "so both checks' figures are upper bounds. Lexical drift (`faithfulness_drift`) is an item-level mean over the whole "
                "item's bullets that fires on wholesale rewrites; it has no per-bullet reading, so it is not scored here.\n")
-    cats = [[f"`{c}`", v["should"] or "-", v["g123"] if v["should"] else "-", js["by_group"].get(c, "-")
-             if v["should"] else "-"] for c, v in s["categories"].items() if v["should"]]
-    o.append(_table(["category", "should block", "#123 blocks", f"Jev blocks (tau_block {js['tau_block']})"], cats))
-    resid = {c: v["should"] - v["g123"] for c, v in s["categories"].items() if v["should"] - v["g123"]}
+    cats = [[f"`{c_}`", v["should"] or "-", v["g123"] if v["should"] else "-", v["blocked"] if v["should"] else "-",
+             v["reviewed"] if v["should"] else "-", v["either"] if v["should"] else "-",
+             js["by_group"].get(c_, "-") if v["should"] else "-"]
+            for c_, v in s["categories"].items() if v["should"]]
+    o.append(_table(["category", "should block", "#123 blocks", "#351 check blocks", "#351 check reviews (not blocked)",
+                     "either blocks", f"Jev blocks (tau_block {js['tau_block']})"], cats))
+    resid = {c_: v["should"] - v["g123"] for c_, v in s["categories"].items() if v["should"] - v["g123"]}
     o.append("")
-    o.append(f"The residual a new check works on, the should-block pairs #123 does not block: {sum(resid.values())} "
-             f"({', '.join(f'`{c}` {n}' for c, n in resid.items())}).")
+    o.append(f"The residual the check worked on, the should-block pairs #123 does not block: {sum(resid.values())} "
+             f"({', '.join(f'`{c_}` {n}' for c_, n in resid.items())}). The check blocks "
+             f"{w['blocked'] - g['blocked']} of them and surfaces {w['reviewed']} more for review; "
+             f"{w['silent']} should-block pairs pass both unflagged"
+             + (f" ({', '.join('`' + i + '`' for i in s['silent_ids'])})." if s["silent_ids"] else "."))
     return "\n".join(o)
 
 
@@ -683,14 +735,21 @@ def _lib_rows(m_key: str, m, j, bad_name: str) -> str:
     jline = ["Jev at the threshold 0.50", jr["correct"], jr["picks"], jr["right"], jr["bad"]] \
         + ([jr["picks"] - jr["right"] - jr["bad"]] if bad == "poor" else []) + [jr["lost"]]
     const_name = "constant: always no_match" if bad == "poor" else "constant: always none"
-    return _table(head, [line("**the #229 fallback**", f), jline, line(const_name, k)])
+    z = BEFORE_352[m_key]
+    before = {"n": f["n"], "correct": z["correct"], "picks": z["picks"], "right_picks": z["right"], "poor": z["poor"],
+              "wrong": z["wrong"], "lost": z["lost"]}
+    before_name = "before #352 (#229 word overlap)" if bad == "poor" else "before #352 (#229 title lookup)"
+    return _table(head, [line("**the Jev-free fallback (#352)**", f), line(before_name, before), jline, line(const_name, k)])
 
 
 def block_variant(m, j, t) -> str:
     mm, jj = m["variant_choice"], j["variant_choice"]
-    o = [f"{mm['fallback']['n']} cases. The fallback is #229's word-overlap pick (`harness.library.best_variant`, floor 0.10), run "
-         "exactly as `fit_library_thresholds.py` runs it. The harmful error is a poor-fit pick (the label names the variants that do not fit). "
-         "Jev figures: `library_labels/REPORT.md`, \"Variant choice\".\n", _lib_rows("variant_choice", m, j, "poor-fit"), ""]
+    o = [f"{mm['fallback']['n']} cases. The fallback is the concept-fit pick of #352 (`harness.library.best_variant` over `harness/concepts.py`, "
+         "floor `library.variant_match_floor`), run exactly as `fit_library_thresholds.py` runs it; #229's word overlap (floor 0.10) ran before. "
+         "The harmful error is a poor-fit pick (the label names the variants that do not fit). "
+         "Jev figures: `library_labels/REPORT.md`, \"Variant choice\". Its vocabulary was written with these labels in view: "
+         "`library_labels/FALLBACK_FIT.md` sets leave-one-out and an author-written holdout beside this fit.\n",
+         _lib_rows("variant_choice", m, j, "poor-fit"), ""]
     rep, f = jj["report_fallback"], mm["fallback"]
     o.append(f"The fallback row above equals the one in `library_labels/REPORT.md` ({rep['correct']}, {rep['picks']} picks, "
              f"{rep['right']} right, {rep['bad']} poor-fit, {rep['lost']} lost); the test pins it.\n")
@@ -702,9 +761,12 @@ def block_variant(m, j, t) -> str:
 
 def block_baseline(m, j, t) -> str:
     mm, jj = m["track_baseline"], j["track_baseline"]
-    o = [f"{mm['fallback']['n']} cases. The fallback is #229's role-family lookup: the track named after the family of the job's "
-         "title (`agents.job_card.role_family_from_title`), else none; a host-stated `role_family` wins before either is asked and "
-         "is not scored here. The harmful error is a wrong track. Jev figures: `library_labels/REPORT.md`, \"Track baseline\".\n",
+    o = [f"{mm['fallback']['n']} cases. The fallback is the duties-based pick of #352 (`harness.library.pick_track`): the saved track whose "
+         "role family best fits the job's top requirements and title, when it clears the fitted floor and leads every other family "
+         "by the fitted margin, else none; #229's title lookup (`agents.job_card.role_family_from_title`) ran before and still runs for a job "
+         "with no requirements. A host-stated `role_family` wins before either is asked and is not scored here. The harmful error is a "
+         "wrong track. Jev figures: `library_labels/REPORT.md`, \"Track baseline\". The vocabulary was written with these labels in view: "
+         "`library_labels/FALLBACK_FIT.md` sets leave-one-out and an author-written holdout beside this fit.\n",
          _lib_rows("track_baseline", m, j, "wrong"), ""]
     rep = jj["report_fallback"]
     o.append(f"The fallback row above equals the one in `library_labels/REPORT.md` ({rep['correct']}, {rep['picks']} picks, "

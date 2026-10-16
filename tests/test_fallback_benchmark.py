@@ -25,12 +25,18 @@ ROOT = Path(__file__).resolve().parent.parent
 EXPECTED = {
     "support": {
         "n": 89, "should": 54, "supported": 35,
-        "blocked": 0, "reviewed": 0, "silent": 54, "false_blocks": 0, "false_reviews": 0,
-        "by_label": {"contradicts": [0, 14], "adds_unsupported": [0, 40]},
+        # the #351 deterministic check alone (it was unchecked when #350 took the baseline: 0 blocked)
+        "blocked": 36, "reviewed": 1, "silent": 17, "false_blocks": 0, "false_reviews": 0,
+        "by_label": {"contradicts": [11, 14], "adds_unsupported": [25, 40]},
         "reasons": ["mode=off"],
-        # the #123 numbers-and-names gate that runs beside the unchecked check, on the cited text alone
+        # the #123 numbers-and-names gate that runs beside it, on the cited text alone: #350's baseline
         "g123": {"blocked": 19, "by_label": {"contradicts": [6, 14], "adds_unsupported": [13, 40]},
                  "false_blocks": 1, "false_ids": ["bd_seaborn_python"]},
+        # what the page is held to: either blocks
+        "with123": {"blocked": 47, "by_label": {"contradicts": [13, 14], "adds_unsupported": [34, 40]},
+                    "reviewed": 1, "silent": 6, "false_blocks": 1, "false_ids": ["bd_seaborn_python"]},
+        "silent_ids": ["rw_dependency_free", "scope_no_internet", "scope_plagiarism_feature", "scope_hourly_refresh",
+                       "contra_replay_overwrites", "bd_original_not_evidence"],
     },
     "negative_pin": {
         "n": 74, "mentions": 41, "other": 33, "blocked": 11, "reviewed": 0, "silent": 30,
@@ -46,9 +52,11 @@ EXPECTED_GATE = {
                 "prefs_dropped": 0, "other_to_host": 3},
 }
 EXPECTED_LIBRARY = {
-    "variant_choice": {"fallback": {"n": 48, "correct": 18, "picks": 18, "right_picks": 7, "poor": 7, "wrong": 4, "lost": 19},
+    # #352: the concept-fit variant pick and the duties-based track pick (before: 18/48 with 7 poor-fit picks
+    # and 27/36 with 8 wrong tracks; `fb.BEFORE_352`). Fits, not held-out figures: see library_labels/FALLBACK_FIT.md.
+    "variant_choice": {"fallback": {"n": 48, "correct": 41, "picks": 27, "right_picks": 26, "poor": 0, "wrong": 1, "lost": 6},
                        "constant": {"correct": 15, "picks": 0, "lost": 33}},
-    "track_baseline": {"fallback": {"n": 36, "correct": 27, "picks": 23, "right_picks": 15, "poor": 0, "wrong": 8, "lost": 1},
+    "track_baseline": {"fallback": {"n": 36, "correct": 36, "picks": 22, "right_picks": 22, "poor": 0, "wrong": 0, "lost": 0},
                        "constant": {"correct": 14, "picks": 0, "lost": 22}},
 }
 # Jev's figures as the committed REPORT.md files report them, so a refit that moves one is noticed here
@@ -132,12 +140,17 @@ def test_jev_figures_are_read_from_the_committed_reports(jev, point):
 
 def test_no_fallback_is_safer_than_jev_on_the_harmful_error(measured, jev):
     """Jev's harmful-error count is 0 on every set that has one; each fallback's is higher, except where it
-    cannot err (memory gate: no write; coverage: no gate)."""
-    assert measured["support"]["silent"] > jev["support"]["silent"] == 0
+    cannot err (memory gate: no write; coverage: no gate). The support fallback leaves 6 should-block pairs
+    past both the #351 check and #123, down from 54 kept silently when it was unchecked."""
+    assert measured["support"]["with123"]["silent"] > jev["support"]["silent"] == 0
     jp = jev["negative_pin"]
     assert measured["negative_pin"]["silent"] > measured["negative_pin"]["mentions"] - jp["blocked_n"] - jp["review_mentions"] == 0
-    assert measured["variant_choice"]["fallback"]["poor"] > jev["variant_choice"]["jev"]["bad"] == 0
-    assert measured["track_baseline"]["fallback"]["wrong"] > jev["track_baseline"]["jev"]["bad"] == 0
+    # the library points were the exception until #352: their fallbacks now meet Jev's own harmful-error
+    # count (no poor-fit variant, no wrong track) and the one other wrong variant pick Jev also makes
+    assert measured["variant_choice"]["fallback"]["poor"] == jev["variant_choice"]["jev"]["bad"] == 0
+    assert measured["track_baseline"]["fallback"]["wrong"] == jev["track_baseline"]["jev"]["bad"] == 0
+    jv = jev["variant_choice"]["jev"]
+    assert measured["variant_choice"]["fallback"]["wrong"] <= jv["picks"] - jv["right"] - jv["bad"] == 1
     assert measured["memory_gate"]["main"]["writes"] == 0 == jev["memory_gate"]["wrong_writes"]
 
 
@@ -161,10 +174,11 @@ def test_every_point_has_a_target_a_reason_and_a_verdict(measured, jev):
     assert set(t) == set(fb.POINTS) and len(fb.POINTS) == 6
     for name, row in t.items():
         assert row["hard"] and row["bar"] and row["reason"], name
-        assert row["verdict"] in ("work: #351", "work: #352", "good enough", "leave"), name
+        assert row["verdict"] in ("work: #351", "met: #351", "work: #352", "done: #352", "good enough", "leave"), name
     assert [n for n, r in t.items() if r["verdict"] == "good enough"] == ["coverage", "memory_gate"]
-    assert [n for n, r in t.items() if r["verdict"].startswith("work")] == [
-        "support", "variant_choice", "track_baseline"]
+    assert [n for n, r in t.items() if r["verdict"].startswith("work")] == []
+    assert t["support"]["verdict"] == "met: #351"
+    assert [n for n, r in t.items() if r["verdict"] == "done: #352"] == ["variant_choice", "track_baseline"]
 
 
 def test_the_bars_follow_the_half_gap_rule(measured, jev):
@@ -177,15 +191,30 @@ def test_the_bars_follow_the_half_gap_rule(measured, jev):
 
 
 def test_each_bar_sits_between_todays_figure_and_jevs(measured, jev):
-    """Strictly above what runs today, at or below Jev's own figure."""
+    """Strictly above what ran before the fix (the bars were set from it at #350 and do not move when a
+    fix lands), at or below Jev's own figure; the library points' fallbacks now meet them."""
     t = fb.targets(measured, jev)
     for point, today, ceiling in (
-            ("variant_choice", measured["variant_choice"]["fallback"]["correct"], 47),
-            ("track_baseline", measured["track_baseline"]["fallback"]["correct"], 35)):
+            ("variant_choice", fb.BEFORE_352["variant_choice"]["correct"], 47),
+            ("track_baseline", fb.BEFORE_352["track_baseline"]["correct"], 35)):
         bar = int(t[point]["bar"].split("/")[0])
         assert today < bar <= ceiling, point
+        assert measured[point]["fallback"]["correct"] >= bar, point
     bar = int(t["support"]["bar"].split("/")[0])
     assert measured["support"]["g123"]["blocked"] < bar <= jev["support"]["blocked_n"]
+
+
+def test_the_support_bar_is_met(measured, jev):
+    """#351's bar, from the document's own rule: 0 of the 35 supported pairs blocked by the new check (#123's
+    own 1 is reported, not counted), at most 3 surfaced for review, and the half-gap figure on the main
+    measure with #123 counted."""
+    s, t = measured["support"], fb.targets(measured, jev)["support"]
+    assert s["false_blocks"] == 0 and s["false_reviews"] <= 3 and s["false_ids"] == []
+    assert s["with123"]["blocked"] >= 35 and s["with123"]["by_label"]["contradicts"][0] >= 10
+    assert s["with123"]["by_label"]["adds_unsupported"][0] >= 25
+    assert s["g123"]["false_ids"] == ["bd_seaborn_python"] and t["verdict"] == "met: #351"
+    # short of Jev's blocks, and the new check adds to #123 rather than replacing it
+    assert s["with123"]["blocked"] < jev["support"]["blocked_n"] and s["blocked"] < s["with123"]["blocked"]
 
 
 # ── offline, no Jev ──────────────────────────────────────────────────────────
@@ -203,7 +232,7 @@ def test_measuring_never_reaches_jev_even_with_a_key_and_auto_mode(monkeypatch):
     assert os.environ["ART_JEV_MODE"] == "auto" and os.environ["TYPESAFE_API_KEY"] == "not-a-real-key"
 
 
-def test_every_measured_finding_is_unchecked_not_an_answer(measured):
+def test_every_measured_finding_is_the_fallbacks_not_a_jev_answer(measured):
     assert measured["support"]["reasons"] == ["mode=off"]
     assert measured["coverage"]["answered"] == 0
 
@@ -236,7 +265,7 @@ def test_the_document_lists_all_six_points_with_a_fallback_a_jev_figure_and_a_ta
 
 def test_write_and_check_run_offline_from_the_command_line(tmp_path):
     doc = tmp_path / "FALLBACKS.md"
-    doc.write_text(fb.DOC_PATH.read_text(encoding="utf-8").replace("0/35 | 0/35", "0/35 | 9/35"), encoding="utf-8")
+    doc.write_text(fb.DOC_PATH.read_text(encoding="utf-8").replace("| 0/35 | 1/35 | 0/35 |", "| 0/35 | 1/35 | 9/35 |"), encoding="utf-8")
     env = {k: v for k, v in os.environ.items() if k not in ("TYPESAFE_API_KEY", "DATABASE_URL")}
     env["PYTHONPATH"] = str(ROOT)
     env["ART_JEV_MODE"] = "auto"                           # the script must force it off itself
