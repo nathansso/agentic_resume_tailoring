@@ -3,7 +3,7 @@ import type {
   EvidenceEdge, EvidenceItem, EvidenceKind, EvidenceSkill, EvidenceText, EvidenceView, JobSkillRow, ProjectContext,
 } from "../types";
 import {
-  DISMISSED_KEY, bareBullets, canDismiss, isPanelKey, needsPlacement, placementLabel, placementOptions, projectsToPlace, skillIdOf, topSuggestion,
+  DISMISSED_KEY, bareBullets, canDismiss, duplicateHint, isPanelKey, needsPlacement, placementLabel, placementOptions, projectsToPlace, skillIdOf, topSuggestion,
   arcPath, areaFoldKey, dateKey, edgeWidth, editableFields, estimateTextWidth, evidenceRows, firstMatch, fitText,
   ghostBlock, githubOnlyLinks, highlightSegments, initialDraft, jobOverlay, layoutMap, linkPath,
   linksByBullet, neighborhood, planSave, searchSkills, skillEvidence, skillMatchKey, skillRadius,
@@ -590,5 +590,32 @@ describe("the editor", () => {
     expect(planSave(edu, d).ops).toEqual([{ kind: "education", id: "e1", body: { gpa: "4.0" } }]);
     d.fields.institution = " ";
     expect(planSave(edu, d)).toEqual({ ops: [], errors: ["Institution can't be empty."] });
+  });
+});
+
+describe("same-name items (#334)", () => {
+  const a = item("proj/a", "proj", { title: "Atlas", duplicate_of: "proj/b" });
+  const b = item("proj/b", "proj", { title: "atlas", duplicate_of: "proj/a" });
+  const solo = item("proj/c", "proj", { title: "Solo" });
+  const v = view([a, b, solo], [], []);
+
+  it("says which item shares the name and what to do", () => {
+    expect(duplicateHint(v, a)).toMatch(/^Same name as atlas\. Rename or delete one/);
+    expect(duplicateHint(v, b)).toMatch(/^Same name as Atlas\./);
+  });
+
+  it("names a role by title and company", () => {
+    const role = item("exp/x", "exp", { title: "Analyst", org: "Acme", duplicate_of: "exp/y" });
+    const twin = item("exp/y", "exp", { title: "Analyst", org: "Acme", duplicate_of: "exp/x" });
+    expect(duplicateHint(view([role, twin], [], []), role)).toContain("Analyst · Acme");
+  });
+
+  it("says nothing for a unique item, or when the server sends no field", () => {
+    expect(duplicateHint(v, solo)).toBeNull();
+    expect(duplicateHint(v, { ...solo, duplicate_of: null })).toBeNull();
+  });
+
+  it("still warns when the twin is not in the view", () => {
+    expect(duplicateHint(view([a], [], []), a)).toMatch(/^Same name as another item\./);
   });
 });

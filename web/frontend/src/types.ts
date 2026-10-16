@@ -158,6 +158,8 @@ export interface EvidenceItem {
   text_source: EvidenceTextSource;
   cite_key: string;
   parent_key: string | null;
+  /** Key of another role or project with the same name (#334): ART cannot tell the two apart. */
+  duplicate_of?: string | null;
   achievements: { id: string; title: string; issuer: string; date: string }[];
   repo_url: string;
   /** Projects only (#322): has the user said where it was done? Absent on experiences and education. */

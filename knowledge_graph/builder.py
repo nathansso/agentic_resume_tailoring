@@ -85,14 +85,20 @@ class SkillGraphBuilder:
             .distinct()
         ).all())
 
+    # Both are ordered, so that when two rows share a node id (nodes are keyed by name, and
+    # a duplicate can exist between ingests, issue #334) the one that survives is the same
+    # whatever order the database returns rows in: the later one wins `add_node`.
     def _user_projects(self, session) -> List[Project]:
         return list(session.exec(
             select(Project).where(Project.user_id == self.user_id)
+            .order_by(Project.seq.is_(None), Project.seq, Project.created_at, Project.project_id)
         ).all())
 
     def _user_experiences(self, session) -> List[Experience]:
         return list(session.exec(
             select(Experience).where(Experience.user_id == self.user_id)
+            .order_by(Experience.seq.is_(None), Experience.seq, Experience.created_at,
+                      Experience.experience_id)
         ).all())
 
     def _add_skills(self, skills: List[Skill]):
@@ -102,9 +108,13 @@ class SkillGraphBuilder:
                 continue
             self.graph.add_node(f"Skill:{s.name}", type="Skill", id=str(s.skill_id), name=s.name, category=s.category)
 
+    @staticmethod
+    def _project_node(p) -> str:
+        return f"Project:{p.name}"
+
     def _add_projects(self, projects: List[Project]):
         for p in projects:
-            self.graph.add_node(f"Project:{p.name}", type="Project", id=str(p.project_id), name=p.name)
+            self.graph.add_node(self._project_node(p), type="Project", id=str(p.project_id), name=p.name)
 
     def _add_experiences(self, experiences: List[Experience]):
         for e in experiences:
