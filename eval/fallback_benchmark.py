@@ -306,11 +306,11 @@ def measure_memory_gate(doc: Optional[Dict[str, Any]] = None,
 # ── 5 and 6. variant choice and track baseline (#199) ────────────────────────
 
 def measure_library() -> Dict[str, Any]:
-    """The variant and baseline fallbacks on `eval/library_labels/`, through #229's own functions
-    (`harness.library.best_variant`, the role-family lookup) as `fit_library_thresholds` runs them.
+    """The variant and baseline fallbacks on `eval/library_labels/`, through the production functions
+    (`harness.library.best_variant`, `pick_track`; #352) as `fit_library_thresholds` runs them.
     Also the same cases answered by a constant (always `no_match`, always `none`), the floor any
-    fallback has to beat to be worth its code. The overlap pick is given the job's text with uniform
-    weights, as in the fit; a real job also has stored keyword weights, which can only help it."""
+    fallback has to beat to be worth its code. The variant pick is given the job's title and
+    requirements, with uniform keyword weights for its tie-break, as in the fit."""
     from eval import fit_library_thresholds as fit
 
     vdoc, bdoc = fit.load_variants(), fit.load_baselines()
@@ -438,8 +438,8 @@ def jev_memory_gate() -> Dict[str, Any]:
 def jev_library() -> Dict[str, Any]:
     t = _text(LIBRARY_REPORT)
     out: Dict[str, Any] = {}
-    for key, heading, fb, bad in (("variant_choice", "## Variant choice", "The #229 fallback (word overlap)", "poor"),
-                                  ("track_baseline", "## Track baseline", "The #229 fallback (role-family lookup)", "wrong")):
+    for key, heading, fb, bad in (("variant_choice", "## Variant choice", "The Jev-free fallback (concept fit)", "poor"),
+                                  ("track_baseline", "## Track baseline", "The Jev-free fallback (duties fit)", "wrong")):
         sec = _section(t, heading)
         end = sec.find("\n## ", 5)
         sec = sec[:end] if end > 0 else sec
@@ -473,6 +473,13 @@ def half_gap(floor: int, jev: int) -> int:
     return math.ceil((floor + jev) / 2)
 
 
+# What ran for the two library points before #352 (#229's word overlap and title lookup), on the
+# same labelled sets. The bars of the library points are half the gap from *these* figures to Jev's:
+# they were set at #350 and stay put when a fix lands, so a verdict can say the bar was met.
+BEFORE_352 = {"variant_choice": {"correct": 18, "picks": 18, "right": 7, "poor": 7, "wrong": 4, "lost": 19},
+              "track_baseline": {"correct": 27, "picks": 23, "right": 15, "poor": 0, "wrong": 8, "lost": 1}}
+
+
 def targets(m: Dict[str, Any], j: Dict[str, Any]) -> Dict[str, Any]:
     """Per point: the hard bars (harmful errors, never worse than Jev's), the soft bar (half the gap
     on the main figure), and the verdict. Points #349 does not schedule keep their baseline."""
@@ -483,8 +490,13 @@ def targets(m: Dict[str, Any], j: Dict[str, Any]) -> Dict[str, Any]:
     sup_add = half_gap(g["by_label"]["adds_unsupported"][0], _ints(js["adds"])[0])
     v, jv = m["variant_choice"]["fallback"], j["variant_choice"]["jev"]
     b, jb = m["track_baseline"]["fallback"], j["track_baseline"]["jev"]
-    v_bar = half_gap(v["correct"], _ints(jv["correct"])[0])
-    b_bar = half_gap(b["correct"], _ints(jb["correct"])[0])
+    v0, b0 = BEFORE_352["variant_choice"], BEFORE_352["track_baseline"]
+    v_bar = half_gap(v0["correct"], _ints(jv["correct"])[0])
+    b_bar = half_gap(b0["correct"], _ints(jb["correct"])[0])
+    jv_other = jv["picks"] - jv["right"] - jv["bad"]
+    v_const, b_const = m["variant_choice"]["constant"]["correct"], m["track_baseline"]["constant"]["correct"]
+    v_met = v["poor"] <= jv["bad"] and v["wrong"] <= jv_other and v["correct"] >= v_bar and v["correct"] > v_const
+    b_met = b["wrong"] <= jb["bad"] and b["correct"] >= b_bar and b["correct"] > b_const
     return {
         "support": {"verdict": "work: #351",
                     "hard": f"0/{s['supported']} supported pairs blocked by the new check (#123's own {g['false_blocks']} is reported, "
@@ -510,19 +522,20 @@ def targets(m: Dict[str, Any], j: Dict[str, Any]) -> Dict[str, Any]:
                         "bar": f"hold {m['memory_gate']['main']['prefs_kept']}/{m['memory_gate']['main']['prefs']} preferences kept",
                         "reason": f"Nothing is written, so no write can be wrong; the {m['memory_gate']['main']['prefs_dropped']} misses are "
                                   "the prefilter's, which Jev sits behind and shares."},
-        "variant_choice": {"verdict": "work: #352",
-                           "hard": f"0/{v['n']} poor-fit picks, and at most {jv['picks'] - jv['right'] - jv['bad']} other wrong pick",
+        "variant_choice": {"verdict": "done: #352" if v_met else "work: #352",
+                           "hard": f"0/{v['n']} poor-fit picks, and at most {jv_other} other wrong pick",
                            "bar": f"{v_bar}/{v['n']} correct, and above the constant 'always no_match' "
-                                  f"({m['variant_choice']['constant']['correct']}/{v['n']})",
-                           "reason": f"Half the way from {v['correct']} to Jev's {_ints(jv['correct'])[0]}; "
-                                     f"today's fallback is only {v['correct'] - m['variant_choice']['constant']['correct']} cases "
+                                  f"({v_const}/{v['n']})",
+                           "reason": f"Half the way from {v0['correct']} (#229's word overlap, before #352) to Jev's "
+                                     f"{_ints(jv['correct'])[0]}; that fallback was only {v0['correct'] - v_const} cases "
                                      "better than a constant."},
-        "track_baseline": {"verdict": "work: #352",
+        "track_baseline": {"verdict": "done: #352" if b_met else "work: #352",
                            "hard": f"0/{b['n']} wrong tracks",
                            "bar": f"{b_bar}/{b['n']} correct, and above the constant 'always none' "
-                                  f"({m['track_baseline']['constant']['correct']}/{b['n']})",
-                           "reason": f"Half the way from {b['correct']} to Jev's {_ints(jb['correct'])[0]}; the lookup reads the "
-                                     "title alone and is right on none of the jobs whose title and duties disagree."},
+                                  f"({b_const}/{b['n']})",
+                           "reason": f"Half the way from {b0['correct']} (#229's title lookup, before #352) to Jev's "
+                                     f"{_ints(jb['correct'])[0]}; the lookup read the title alone and was right on none of "
+                                     "the jobs whose title and duties disagree."},
     }
 
 
@@ -683,14 +696,21 @@ def _lib_rows(m_key: str, m, j, bad_name: str) -> str:
     jline = ["Jev at the threshold 0.50", jr["correct"], jr["picks"], jr["right"], jr["bad"]] \
         + ([jr["picks"] - jr["right"] - jr["bad"]] if bad == "poor" else []) + [jr["lost"]]
     const_name = "constant: always no_match" if bad == "poor" else "constant: always none"
-    return _table(head, [line("**the #229 fallback**", f), jline, line(const_name, k)])
+    z = BEFORE_352[m_key]
+    before = {"n": f["n"], "correct": z["correct"], "picks": z["picks"], "right_picks": z["right"], "poor": z["poor"],
+              "wrong": z["wrong"], "lost": z["lost"]}
+    before_name = "before #352 (#229 word overlap)" if bad == "poor" else "before #352 (#229 title lookup)"
+    return _table(head, [line("**the Jev-free fallback (#352)**", f), line(before_name, before), jline, line(const_name, k)])
 
 
 def block_variant(m, j, t) -> str:
     mm, jj = m["variant_choice"], j["variant_choice"]
-    o = [f"{mm['fallback']['n']} cases. The fallback is #229's word-overlap pick (`harness.library.best_variant`, floor 0.10), run "
-         "exactly as `fit_library_thresholds.py` runs it. The harmful error is a poor-fit pick (the label names the variants that do not fit). "
-         "Jev figures: `library_labels/REPORT.md`, \"Variant choice\".\n", _lib_rows("variant_choice", m, j, "poor-fit"), ""]
+    o = [f"{mm['fallback']['n']} cases. The fallback is the concept-fit pick of #352 (`harness.library.best_variant` over `harness/concepts.py`, "
+         "floor `library.variant_match_floor`), run exactly as `fit_library_thresholds.py` runs it; #229's word overlap (floor 0.10) ran before. "
+         "The harmful error is a poor-fit pick (the label names the variants that do not fit). "
+         "Jev figures: `library_labels/REPORT.md`, \"Variant choice\". Its vocabulary was written with these labels in view: "
+         "`library_labels/FALLBACK_FIT.md` sets leave-one-out and an author-written holdout beside this fit.\n",
+         _lib_rows("variant_choice", m, j, "poor-fit"), ""]
     rep, f = jj["report_fallback"], mm["fallback"]
     o.append(f"The fallback row above equals the one in `library_labels/REPORT.md` ({rep['correct']}, {rep['picks']} picks, "
              f"{rep['right']} right, {rep['bad']} poor-fit, {rep['lost']} lost); the test pins it.\n")
@@ -702,9 +722,12 @@ def block_variant(m, j, t) -> str:
 
 def block_baseline(m, j, t) -> str:
     mm, jj = m["track_baseline"], j["track_baseline"]
-    o = [f"{mm['fallback']['n']} cases. The fallback is #229's role-family lookup: the track named after the family of the job's "
-         "title (`agents.job_card.role_family_from_title`), else none; a host-stated `role_family` wins before either is asked and "
-         "is not scored here. The harmful error is a wrong track. Jev figures: `library_labels/REPORT.md`, \"Track baseline\".\n",
+    o = [f"{mm['fallback']['n']} cases. The fallback is the duties-based pick of #352 (`harness.library.pick_track`): the saved track whose "
+         "role family best fits the job's top requirements and title, when it clears the fitted floor and leads every other family "
+         "by the fitted margin, else none; #229's title lookup (`agents.job_card.role_family_from_title`) ran before and still runs for a job "
+         "with no requirements. A host-stated `role_family` wins before either is asked and is not scored here. The harmful error is a "
+         "wrong track. Jev figures: `library_labels/REPORT.md`, \"Track baseline\". The vocabulary was written with these labels in view: "
+         "`library_labels/FALLBACK_FIT.md` sets leave-one-out and an author-written holdout beside this fit.\n",
          _lib_rows("track_baseline", m, j, "wrong"), ""]
     rep = jj["report_fallback"]
     o.append(f"The fallback row above equals the one in `library_labels/REPORT.md` ({rep['correct']}, {rep['picks']} picks, "
