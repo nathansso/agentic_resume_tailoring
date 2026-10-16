@@ -5,7 +5,7 @@ import {
 } from "../api/profile";
 import type { DismissedSkill, EvidenceItem, EvidenceKind, EvidenceSkill, EvidenceView, ProjectContext } from "../types";
 import {
-  DISMISSED_KEY, canDismiss, dateRange, editableFields, githubOnlyLinks, highlightSegments, initialDraft, linksByBullet, placementLabel,
+  DISMISSED_KEY, bareBullets, canDismiss, dateRange, editableFields, githubOnlyLinks, highlightSegments, initialDraft, linksByBullet, placementLabel,
   placementOptions, planSave, recentEditable, skillEvidence, skillIdOf, textIsDescription, topSuggestion,
   type Draft, type JobOverlay, type SaveOp,
 } from "../lib/evidenceMap";
@@ -504,6 +504,7 @@ export function ItemEditor({ view, item, onSelect, onSaved, placement, savedNote
   const dirty = JSON.stringify(draft) !== JSON.stringify(initialDraft(item));
   const links = useMemo(() => linksByBullet(view, item.key), [view, item.key]);
   const githubOnly = useMemo(() => githubOnlyLinks(view, item.key), [view, item.key]);
+  const bare = useMemo(() => new Set(bareBullets(view, item.key)), [view, item.key]);
   const parent = item.parent_key ? view.items.find((i) => i.key === item.parent_key) : undefined;
   const children = view.items.filter((i) => i.parent_key === item.key);
   const asDescription = textIsDescription(item);
@@ -621,7 +622,11 @@ export function ItemEditor({ view, item, onSelect, onSaved, placement, savedNote
                   {entry && (
                     <p className="flex min-h-[1.25rem] flex-wrap items-center gap-1 text-[12px] text-muted-foreground">
                       {linked.length === 0
-                        ? <span>Links no skills</span>
+                        ? ordinal !== null && bare.has(ordinal)
+                          // A hint, not a warning (#323): many good bullets are about impact and name no tool.
+                          // It reads the saved text, so an edited bullet waits for a save to be re-checked.
+                          ? <span>{value === entry.text ? "Names no skill ART recognizes" : "Edited. Save to see which skills it names."}</span>
+                          : <span>Links no skills</span>
                         : <><span>Links</span>{linked.map((s) => (
                           <button
                             key={s.key} type="button" onClick={() => onSelect(s.key)}

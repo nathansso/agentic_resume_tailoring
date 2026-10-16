@@ -3,7 +3,7 @@ import type {
   EvidenceEdge, EvidenceItem, EvidenceKind, EvidenceSkill, EvidenceText, EvidenceView, JobSkillRow, ProjectContext,
 } from "../types";
 import {
-  DISMISSED_KEY, canDismiss, isPanelKey, needsPlacement, placementLabel, placementOptions, projectsToPlace, skillIdOf, topSuggestion,
+  DISMISSED_KEY, bareBullets, canDismiss, isPanelKey, needsPlacement, placementLabel, placementOptions, projectsToPlace, skillIdOf, topSuggestion,
   arcPath, areaFoldKey, dateKey, edgeWidth, editableFields, estimateTextWidth, evidenceRows, firstMatch, fitText,
   ghostBlock, githubOnlyLinks, highlightSegments, initialDraft, jobOverlay, layoutMap, linkPath,
   linksByBullet, neighborhood, planSave, searchSkills, skillEvidence, skillMatchKey, skillRadius,
@@ -280,6 +280,46 @@ describe("the side panel's reads", () => {
     expect(links.get(1)?.map((s) => s.name)).toEqual(["PyTorch"]);
     expect(githubOnlyLinks(VIEW, "proj/beta").map((s) => s.name)).toEqual(["TypeScript"]);
     expect(githubOnlyLinks(VIEW, "proj/alpha")).toEqual([]);
+  });
+});
+
+describe("bullets that name no skill (#323)", () => {
+  const job = item("exp/job", "exp", { text: text("Used Python", "Cut costs 30%", "", "Shipped it", "Wrote SQL") });
+  const side = item("proj/side", "proj", { text: text("Built a thing", "Fixed a bug") });
+  const quiet = item("exp/quiet", "exp", { text: text("Led a team", "Mentored interns") });
+  const degree = item("edu/ucsd", "edu", { text: [] });   // education carries no text entries
+  const v = view([job, side, quiet, degree, bare], [py, sql, ts], [
+    edge("exp/job", py, [0]), edge("exp/job", sql, [3]), edge("proj/side", ts, [], true),
+  ]);
+
+  it("lists the ordinals no edge cites, skipping an empty entry", () => {
+    // job's ordinals run 0, 1, 2, 3 over its four non-empty entries; the empty one has none
+    expect(bareBullets(v, "exp/job")).toEqual([1, 2]);
+  });
+
+  it("does not count a GitHub-only edge as naming a bullet", () => {
+    expect(bareBullets(v, "proj/side")).toEqual([0, 1]);
+  });
+
+  it("lists every bullet of an item no skill links, and none for education, a textless item or an unknown key", () => {
+    expect(bareBullets(v, "exp/quiet")).toEqual([0, 1]);
+    expect(bareBullets(v, "edu/ucsd")).toEqual([]);
+    expect(bareBullets(v, "proj/bare")).toEqual([]);
+    expect(bareBullets(v, "exp/nope")).toEqual([]);
+  });
+
+  it("clears a bullet as soon as an edge cites it, and ignores other items' edges", () => {
+    const fixed = view([job, side, quiet], [py, sql, ts], [
+      edge("exp/job", py, [0, 1]), edge("exp/job", sql, [3]), edge("exp/quiet", sql, [0]), edge("proj/side", ts, [0]),
+    ]);
+    expect(bareBullets(fixed, "exp/job")).toEqual([2]);
+    expect(bareBullets(fixed, "exp/quiet")).toEqual([1]);
+    expect(bareBullets(fixed, "proj/side")).toEqual([1]);
+  });
+
+  it("does not list a whitespace-only entry", () => {
+    const ws = item("exp/ws", "exp", { text: text("  ", "Did a thing") });
+    expect(bareBullets(view([ws], [py], []), "exp/ws")).toEqual([1]);
   });
 });
 
