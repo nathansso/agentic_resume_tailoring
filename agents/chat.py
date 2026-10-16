@@ -763,17 +763,16 @@ class ChatAgent:
                     session.delete(link)
                 session.flush()
 
+                # Resolved by fold against the job owner's profile first (#365).
+                from agents.skill_resolver import SkillResolver
+                resolver = SkillResolver(session, job_db.user_id)
                 for item in skills:
                     skill_name = (item.get("name") or "").strip()
                     if not skill_name:
                         continue
-                    skill = session.exec(
-                        select(Skill).where(Skill.name == skill_name)
-                    ).first()
-                    if not skill:
-                        skill = Skill(name=skill_name, category=item.get("category"))
-                        session.add(skill)
-                        session.flush()
+                    skill = resolver.get_or_create(skill_name, item.get("category"))
+                    if skill is None:
+                        continue
                     # Only JobSkill — never UserSkill; job skills must not pollute the user profile.
                     session.add(JobSkill(
                         job_id=job_db.job_id,

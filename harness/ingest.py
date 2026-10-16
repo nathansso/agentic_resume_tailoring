@@ -424,6 +424,7 @@ def upsert_items(user_id: UUID, records: Sequence[Dict], source: str = DEFAULT_S
             store._heal_projects(session, user_id)
             store._heal_education(session, user_id)
             store._heal_achievements(session, user_id)
+            store._heal_skills(session, user_id)
             session.commit()
     if variants:
         out.update(library.import_variants(user_id, variants))

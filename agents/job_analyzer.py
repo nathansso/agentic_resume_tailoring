@@ -7,6 +7,7 @@ from llm import get_llm, get_extractor
 from agents.extraction_schemas import JobMetadata, JobSkillList
 from database.db import engine
 from database.models import JobDescription, JobSkill, Skill
+from agents.skill_resolver import SkillResolver
 
 logger = logging.getLogger(__name__)
 
@@ -121,18 +122,18 @@ class JobAnalyzerAgent:
                 session.commit()
                 session.refresh(job)
 
+            # The job's skills resolve by fold against its owner's profile first, so a
+            # posting's "pytorch" points at the profile's "PyTorch" row (#365).
+            resolver = SkillResolver(session, job.user_id)
             for item in skills:
                 skill_name = item.get("name", "").strip()
                 if not skill_name:
                     continue
 
                 # Get or create the Skill record
-                skill = session.exec(select(Skill).where(Skill.name == skill_name)).first()
-                if not skill:
-                    skill = Skill(name=skill_name, category=item.get("category"))
-                    session.add(skill)
-                    session.commit()
-                    session.refresh(skill)
+                skill = resolver.get_or_create(skill_name, item.get("category"))
+                if skill is None:
+                    continue
 
                 job_skill = JobSkill(
                     job_id=job.job_id,
