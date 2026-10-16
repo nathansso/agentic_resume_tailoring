@@ -78,8 +78,8 @@ The tools named below are the ART MCP server's tools.
   record lists its `projects`; an achievement's `project` is what it was won for.
 - `get_item` also lists the item's `variants`: wording the user approved for that
   experience or project. Approved wording beats regenerated wording (see step 4).
-- If the user wants their GitHub repos considered, have them run `art github login` in their
-  own terminal (`--private` for private repos), then call `list_github_repos`. Read the repos
+- If the user wants their GitHub repos considered, have them run `uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login` in their
+  own terminal (`--private` for private repos; the tool's `not_logged_in` error repeats it), then call `list_github_repos`. Read the repos
   worth reading, clone one only after they agree, and store what you learn with
   `upsert_items` (`source: github:<repo>`) before you cite it; a repo is not evidence until
   it is stored.
@@ -252,7 +252,7 @@ Call `execute_plan({program})`. Read the result:
   with the job id filled in:
 
   ```
-  uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl" art ui --job <job_id>
+  uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art ui --job <job_id>
   ```
 
   Their saves come back to you: through the prompt hook if it's installed, and

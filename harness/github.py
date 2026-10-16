@@ -302,7 +302,8 @@ class GitHubClient:
                    "X-GitHub-Api-Version": API_VERSION, "User-Agent": USER_AGENT}
         status, resp_headers, text = self._transport("GET", url, headers, None, self.timeout)
         if status == 401:
-            raise GitHubError("bad_token", "GitHub rejected the token. Run `art github login` again.")
+            raise GitHubError("bad_token", "GitHub rejected the token. The user signs in again with: "
+                              + login_command())
         if status in (403, 429) and resp_headers.get("x-ratelimit-remaining") == "0":
             raise GitHubError("rate_limited", "GitHub's rate limit is used up; try again later.")
         return status, resp_headers, text
@@ -360,6 +361,13 @@ class GitHubClient:
 
 # ── the tool ─────────────────────────────────────────────────────────────────
 
+def login_command(private: bool = False) -> str:
+    """The exact command a user runs to sign in. The plugin puts no `art` on PATH, so the bare
+    `art github login` fails for a plugin install; this is the pinned `uvx` form (#369)."""
+    from harness.hooks import SOURCE  # the one pin; imported here to keep this module light
+    return f'uvx --from "{SOURCE}" art github login' + (" --private" if private else "")
+
+
 def _error(code: str, message: str) -> Dict[str, Any]:
     return {"error": {"code": code, "message": message, "suggestions": []}}
 
@@ -396,10 +404,10 @@ def list_github_repos(page: int = 1, per_page: int = 20, include_private: bool =
     if client is None:
         token = resolve_token()
         if not token:
-            return _error("not_logged_in", "Not signed in to GitHub. The user runs "
-                                           "`art github login` in their own terminal (add "
-                                           "--private to include private repos), then you call "
-                                           "this again.")
+            return _error("not_logged_in", "Not signed in to GitHub. Have the user run this in "
+                                           f"their own terminal: {login_command()} (or "
+                                           f"{login_command(private=True)} to include private "
+                                           "repos), then call this again.")
         client = GitHubClient(token)
     per_page = max(1, min(int(per_page), MAX_PER_PAGE))
     try:
@@ -413,8 +421,8 @@ def list_github_repos(page: int = 1, per_page: int = 20, include_private: bool =
         return _error(exc.code, exc.message)
     note = None
     if include_private and not private_ok:
-        note = ("Public repos only: the token lacks the `repo` scope. The user can run "
-                "`art github login --private` to include private ones.")
+        note = ("Public repos only: the token lacks the `repo` scope. To include private ones "
+                f"the user runs: {login_command(private=True)}")
     return {"login": who["login"], "scopes": who["scopes"], "private_included": private,
             "page": page, "per_page": per_page, "next_page": nxt, "repos": rows, "note": note}
 

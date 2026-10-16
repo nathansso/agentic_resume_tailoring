@@ -32,7 +32,7 @@ the hooks with `/hooks` in Codex (it skips a plugin's hooks until you do). For a
 Codex, or Codex without the plugin, install them into your own `hooks.json` instead:
 
 ```bash
-uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl" art hooks codex --write
+uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art hooks codex --write
 ```
 
 With the plugin installed that command adds nothing and removes ART's own entries from
@@ -50,10 +50,10 @@ plugin pins that exact URL (`v<version>` is `ART_VERSION` in `harness/__init__.p
 
 ```bash
 # Register the MCP server with Claude Code
-claude mcp add art -- uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl" art mcp
+claude mcp add art -- uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art mcp
 
 # The same tools as a JSON CLI
-uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl" art --list
+uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art --list
 ```
 
 `art mcp` and `art-mcp` run the same server; the plugin uses `art mcp` so it needs only the
@@ -68,7 +68,7 @@ profile.
 The release wheel has the built editor in it, so no checkout, Node or `npm` is needed:
 
 ```bash
-uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl" art ui --job <job_id>
+uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art ui --job <job_id>
 ```
 
 It opens http://127.0.0.1:8765/. The plugin's `/art:open` prints this command for the
@@ -83,7 +83,7 @@ From a checkout, build the editor and run it from source or from a wheel you bui
 npm --prefix web/frontend ci && npm --prefix web/frontend run build
 python -m web.local_ui                     # from source
 uv build                                   # dist/art_mcp-<version>-py3-none-any.whl
-uvx --from "dist/art_mcp-0.1.0-py3-none-any.whl[ui]" art ui
+uvx --from "dist/art_mcp-0.1.1-py3-none-any.whl[ui]" art ui
 ```
 
 CI builds that wheel, installs it with no extras into an empty venv, and drives `art-mcp`
@@ -223,10 +223,18 @@ art github status              # who is signed in; never prints the token
 art github logout              # removes the stored token
 ```
 
+The plugin runs ART through `uvx`, which puts no `art` on your PATH. From a plugin or
+`uvx` install, run the same commands through `uvx`:
+
+```bash
+uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login
+uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login --private
+```
+
 The token goes to the OS keychain through the `keyring` package (service `art-mcp`,
 user `github-token`), else it is read from `ART_GITHUB_TOKEN`, which also takes a personal
 access token. It is never stored in the database, never in an `art export` bundle, and never
-logged. `keyring` ships with ART from the release after v0.1.0; on a machine with no usable
+logged. `keyring` ships with ART from v0.1.1; on a machine with no usable
 keychain backend (some headless Linux setups), `art github login` says so before it starts,
 and `ART_GITHUB_TOKEN` is the way in. Nothing about your repos is sent anywhere but your
 own agent: ART reads them from `api.github.com` with your token and hands the result to it.
