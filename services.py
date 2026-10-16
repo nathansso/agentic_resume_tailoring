@@ -793,14 +793,16 @@ def _profile_job_skills(job_id: UUID) -> list[dict]:
     left out. Two requirements with one primary term merge: required wins, the heavier
     weight wins, the terms are united.
     """
-    from agents.jd_payload import iter_requirements
-    from knowledge_graph.areas import skill_area
+    from agents.jd_payload import display_term, iter_requirements
+    from knowledge_graph.areas import skill_areas
 
     profile = load_jd_profile(job_id)
     merged: dict[str, dict] = {}
     for req in iter_requirements((profile or {}).get("payload"), types=["required", "preferred"]):
         terms = [str(t).strip() for t in (req.get("terms") or []) if str(t or "").strip()]
-        name = terms[0] if terms else str(req.get("text") or "").strip()[:80]
+        text = str(req.get("text") or "").strip()
+        # `terms` are lower-cased for matching; the name is what the chips show (#348).
+        name = display_term(terms[0], text) if terms else text[:80]
         if not name:
             continue
         try:
@@ -809,7 +811,7 @@ def _profile_job_skills(job_id: UUID) -> list[dict]:
             criticality = 3
         row = {"name": name, "required": req.get("type") == "required",
                "weight": round(max(1, min(5, criticality)) / 5, 2),
-               "area": skill_area(name, ""), "terms": terms or [name]}
+               "area": None, "terms": terms or [name]}
         key = name.lower()
         prior = merged.get(key)
         if prior is None:
@@ -818,6 +820,10 @@ def _profile_job_skills(job_id: UUID) -> list[dict]:
         prior["required"] = prior["required"] or row["required"]
         prior["weight"] = max(prior["weight"], row["weight"])
         prior["terms"] = list(dict.fromkeys(prior["terms"] + row["terms"]))
+    # One batch lookup of the Jev cache for every requirement, not one query each (#342).
+    areas = skill_areas([(row["name"], "") for row in merged.values()])
+    for row in merged.values():
+        row["area"] = areas[(row["name"], "")]
     return list(merged.values())
 
 
@@ -832,20 +838,21 @@ def get_job_skills(job_id: UUID) -> list[dict]:
     and chat), whose `terms` are just the name. Ownership is the caller's to check. A job
     with neither has no rows, which the UI reads as "analyze this job first".
     """
-    from knowledge_graph.areas import skill_area
+    from knowledge_graph.areas import skill_areas
     out = {row["name"].lower().strip(): row for row in _profile_job_skills(job_id)}
     if not out:
         with Session(engine) as session:
             rows = session.exec(
                 select(JobSkill, Skill).join(Skill, Skill.skill_id == JobSkill.skill_id)
                 .where(JobSkill.job_id == job_id)).all()
+        areas = skill_areas([(skill.name, skill.category) for _, skill in rows])    # one query (#342)
         for js, skill in rows:
             key = skill.name.lower().strip()
             prior = out.get(key)
             if prior is None or (js.required and not prior["required"]):
                 out[key] = {"name": skill.name, "required": bool(js.required),
                             "weight": float(js.weight if js.weight is not None else 1.0),
-                            "area": skill_area(skill.name, skill.category),
+                            "area": areas[(skill.name, skill.category)],
                             "terms": [skill.name]}
     return sorted(out.values(), key=lambda r: (not r["required"], r["name"].lower(), r["name"]))
 
@@ -1259,6 +1266,15 @@ def update_resume_path(user_id: UUID, path: str) -> None:
             session.commit()
 
 
+def _classify_new_skill(pair: tuple) -> None:
+    """Place a skill the user just added by hand or in chat in an area when the keyword table
+    cannot (#342). Best effort and after the save: it never raises, and with no key it does
+    nothing."""
+    from knowledge_graph.areas import classify_skills_at_write
+
+    classify_skills_at_write([pair])
+
+
 def add_skill_to_profile(user_id: UUID, skill_name: str, target: Optional[str] = None) -> str:
     """Add a skill to the user's profile. Returns plain-English result. Never raises."""
     try:
@@ -1278,6 +1294,7 @@ def add_skill_to_profile(user_id: UUID, skill_name: str, target: Optional[str] =
             ).first()
             if existing:
                 return f"'{skill_name}' is already in your profile."
+            placed = (skill.name, skill.category)
             _clear_skill_tombstones(session, user_id, skill.name)    # asking for it is not a re-ingest (#321)
             evidence = f"manual:{target}" if target else "manual"
             user_skill = UserSkill(
@@ -1296,6 +1313,7 @@ def add_skill_to_profile(user_id: UUID, skill_name: str, target: Optional[str] =
                 ensure_skill_embeddings(session, [skill.skill_id])
             except Exception as exc:
                 logger.warning("Skill embedding refresh skipped: %s", exc)
+        _classify_new_skill(placed)
         return f"Added '{skill_name}' to your profile."
     except Exception as e:
         logger.error("add_skill_to_profile failed: %s", e)
@@ -1349,6 +1367,7 @@ def create_artifact_from_chat(
                 if existing:
                     return f"'{name}' is already in your profile."
                 proficiency = data.get("proficiency")
+                placed = (skill.name, skill.category)
                 _clear_skill_tombstones(session, user_id, skill.name)    # asking for it is not a re-ingest (#321)
                 session.add(UserSkill(
                     user_id=user_id,
@@ -1360,6 +1379,7 @@ def create_artifact_from_chat(
                     source_context=source_context,
                 ))
                 session.commit()
+            _classify_new_skill(placed)
             return f"Added skill '{name}' to your profile (source: chat)."
         elif artifact_type == "project":
             name = (data.get("name") or "").strip()

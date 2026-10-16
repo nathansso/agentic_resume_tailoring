@@ -22,11 +22,26 @@ def repo_slug(url: Optional[str]) -> Optional[str]:
     The one place that decides which repository a `Project.repo_url` names, shared
     by the project scorer (`agents/tailor.py::_count_linked_skills`, #46) and the
     evidence map's GitHub provenance edges (#136) so the two cannot drift.
+    `names_repo` is the matching rule that goes with it.
     """
     if not url:
         return None
     match = _REPO_SLUG_RE.search(url.strip())
     return match.group(1).lower() if match else None
+
+
+def names_repo(haystack: str, slug: str) -> bool:
+    """Whether `haystack` names `slug` as a whole token: not as the start or end of a longer one.
+
+    `owner/app` is not `owner/app-server` and `owner/ap` is not `owner/app`. The one boundary
+    rule for repo slugs (and for a project name used in place of one), shared by the project
+    scorer (`agents/tailor.py::_count_linked_skills`, #332) and the evidence map's GitHub
+    provenance edges (`knowledge_graph/evidence_view.py`, #136) so the two cannot drift. Case
+    is the caller's business: pass both lowercased.
+    """
+    if not haystack or not slug:
+        return False
+    return re.search(r"(?<![\w.-])" + re.escape(slug) + r"(?![\w.-])", haystack) is not None
 
 
 class SkillGraphBuilder:

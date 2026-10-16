@@ -245,6 +245,16 @@ describe("coverage", () => {
   });
 });
 
+describe("a missing requirement's spelling", () => {
+  it("is the one the job sends, in the coverage column and in the note", () => {
+    const v = view([A], [py], [edge("exp/a", py, [0])]);
+    const c = coverage(rankBullets(v, [req("python", 1), req("A/B testing", 1, { terms: ["a/b testing"] })]), new Set());
+    const row = c.rows.find((r) => r.status === "missing");
+    expect(row?.label).toBe("A/B testing");                 // not "a/b testing"
+    expect(c.rows.find((r) => r.label === "Python")?.status).not.toBe("missing");   // still matched through its terms
+  });
+});
+
 describe("term matching in the job overlay", () => {
   it("resolves a requirement through any of its terms and counts it once", () => {
     const row: JobSkillRow = { name: "cloud", required: true, weight: 1, area: "Tools", terms: ["cloud", "aws", "azure"] };

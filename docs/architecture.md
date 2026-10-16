@@ -1208,6 +1208,17 @@ nothing.
 (`requirement_covered@v1` is kept as `LEGACY_VERSION` for the benchmark recordings. The memory
 gate's three cutoffs are `TAU_LO`, `TAU_HI` and `TAU_TARGET`.)
 
+**Skill areas (#318, #342).** A skill is classified when it is written: by `_save_skills` (every
+ingest path), by the job analyzer and the chat job analysis (a posting's skills), and by the chat
+and manual add-skill paths, all through `knowledge_graph.areas.classify_skills_at_write`, which is
+best effort and never raises. Reading is cache-only (`skill_areas` is one query for any number of
+skills, which is what `get_job_skills` uses). A skill written with no key, or with Jev off, stays in
+`Other` until it is classified later: `art mcp` and `art ui` start `backfill_unplaced_if_due` on a
+daemon thread when their store is a writable local SQLite one, which runs `classify_unplaced_skills` when a key
+resolves, Jev is not off and the profile has unplaced skills, at most once per user and key per day
+(`area_backfill.json` in the data dir keeps a hash of the key, never the key). The one-off for any
+profile, including a remote one, is `scripts/classify_unplaced_skills.py --user-id <uuid>`.
+
 **Support check.** For each changed bullet that cites evidence, the evidence is the text of the
 cited source bullets and nothing else from the graph, plus the text of the approved variant the
 bullet names. A verbatim source bullet or variant, and an uncited bullet, are never sent. The
