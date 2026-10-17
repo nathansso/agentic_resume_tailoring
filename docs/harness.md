@@ -577,6 +577,26 @@ judge is `eval/compliance_checker.py`: standard library only, it reads the rende
 composite is not an input. Results: `eval/results/preference_compliance_<date>.{json,md}`. The live-model arm
 (PrefEval-style distance and implicitness) stays with #173 and #178.
 
+### Migrating rows written before the anchoring model (#300)
+
+Rows an older build wrote are brought over by `art migrate preferences [--dry-run]
+[--user-id <uuid>]` (`harness/migrations.py`; a CLI command, not an MCP tool), and automatically
+once per user when a local SQLite store is opened by `art-mcp` or `art`. It never guesses and
+never deletes (a changed row is `superseded`, with `provenance.migration`), and a second run
+changes nothing.
+
+| Row | Becomes |
+|---|---|
+| keyed to an item that exists | untouched |
+| unkeyed, names exactly one item (#297 `relink`, alias-aware) | a keyed copy |
+| keyed to an item that no longer exists | a pending copy, as when the item is deleted (`unlinked_from`; a role keeps "title @ company") |
+| `section:<name>` suppress, or a row whose words state one plain limit (`rules.infer_limit`) | a `limit` rule with the same strength and scope; the row gets `provenance.migrated_to` |
+| anything else: emphasize or reframe on a section, a negated limit, an ambiguous or pending subject, a conversion that would loosen a hard rule or disagree with a rule recorded since | left as it was, and listed in the report with a reason |
+
+The report is `{relinked, unlinked, converted_to_rules, left_alone: [{preference_id, code,
+reason}], already_done, unchanged, counts}`. The automatic run never touches a remote or
+read-only store, and a failure is logged and leaves every row as it was.
+
 ## 10. Memory and compaction (#202)
 
 ```mermaid

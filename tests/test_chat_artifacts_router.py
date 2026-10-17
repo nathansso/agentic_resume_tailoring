@@ -175,3 +175,28 @@ def test_decide_accept_supersedes_an_existing_row(isolated_engine, chat_client):
         rows = s.exec(select(Project).where(Project.user_id == user.user_id)).all()
     assert len(rows) == 1, "supersede must update in place over the API too"
     assert rows[0].description == "Redis-backed layer"
+
+
+def test_decide_accept_reports_a_skipped_manual_edit(isolated_engine, chat_client):
+    """Accepting a supersede of a hand-edited row saves nothing and says so."""
+    user = _seed_user(isolated_engine)
+    with Session(isolated_engine) as s:
+        s.add(Project(user_id=user.user_id, name="Cache", description="mine",
+                      manually_edited=True))
+        s.commit()
+
+    resp = chat_client(user).post(
+        "/api/chat/landing/artifacts/decide",
+        json={"action": "accept", "proposal": {
+            "type": "project", "name": "Cache", "description": "Redis-backed layer",
+            "decision": "supersede", "target": "project: Cache",
+            "evidence": "The cache project is Redis-backed",
+        }},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["saved"] is False
+    assert resp.json()["status"] == "skipped_manual"
+
+    with Session(isolated_engine) as s:
+        rows = s.exec(select(Project).where(Project.user_id == user.user_id)).all()
+    assert [r.description for r in rows] == ["mine"]

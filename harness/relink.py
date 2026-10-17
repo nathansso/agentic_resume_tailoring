@@ -21,7 +21,7 @@ Idempotent: a second run finds no pending row that binds. Model-free by rule
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 import services
@@ -36,10 +36,14 @@ _TARGET_TYPE = {"exp": "experience", "proj": "project", "skill": "skill",
                 "edu": "topic", "ach": "topic"}      # an education or award stays a topic (#295)
 
 
-def relink(user_id: UUID) -> Dict[str, Any]:
+def relink(user_id: UUID, dry_run: bool = False,
+           provenance: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Attach every active pending suppress/emphasize preference whose subject now binds to exactly
     one item. Returns `{relinked: [{preference_id, supersedes_id, text, polarity, key}], count}`;
-    the ids are the new row's and the old one's. Never raises: ingestion has already succeeded."""
+    the ids are the new row's and the old one's. Never raises: ingestion has already succeeded.
+
+    `dry_run` writes nothing: each entry then carries the old row's id as `preference_id` and
+    `supersedes_id` None. `provenance` is merged into every keyed copy (the migration's marker, #300)."""
     out: Dict[str, Any] = {"relinked": [], "count": 0}
     try:
         pending = [p for p in services.load_preferences(user_id)
@@ -60,7 +64,17 @@ def relink(user_id: UUID) -> Dict[str, Any]:
                 continue
             changes.append({"preference_id": pref["preference_id"], "target_key": key,
                             "target_type": _TARGET_TYPE.get(key.split(":", 1)[0], "topic"),
-                            "provenance": {"relinked_from": pref["preference_id"]}})
+                            "provenance": {**(provenance or {}),
+                                           "relinked_from": pref["preference_id"]}})
+        if dry_run:
+            by_id = {p["preference_id"]: p for p in pending}
+            for change in changes:
+                pref = by_id[change["preference_id"]]
+                out["relinked"].append({
+                    "preference_id": pref["preference_id"], "supersedes_id": None,
+                    "text": pref["text"], "polarity": pref["polarity"], "key": change["target_key"]})
+            out["count"] = len(out["relinked"])
+            return out
         for row in services.reanchor_preferences(user_id, changes):
             out["relinked"].append({
                 "preference_id": row["preference_id"], "supersedes_id": row["supersedes_id"],

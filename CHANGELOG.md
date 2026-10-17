@@ -55,10 +55,63 @@ Phase 6 of 7 of the preference-anchoring plan (#295–#300). The briefing is rea
 - **`.gitignore` gained an exception** for `eval/results/preference_compliance_*`: the directory was ignored as `#51` outputs, and the issue commits these two files. Nothing else under `eval/results/` is tracked.
 - **Two existing assertions changed**: `tests/test_executor.py::_strip` ignores `active_constraints` (a dry run leads with it, a commit does not), and `tests/test_jev_library.py` expects the key on the library-level `suggest_actions` result.
 - **Not done:** the live-model arm (PrefEval-style distance and implicitness: #173 tasks D, E, F and I, and #178); the Postgres leg was not run locally (nothing here touches storage). The compiled page count needs tectonic's bundle cached; with no engine, or `--no-compile`, the checker estimates and the report says so.
+
+---
+
+## Issue 300 — Migrate existing preference rows to anchors and page rules
+**Status:** complete | **Tests:** 3451 pass on SQLite after merging main (32 new in `tests/test_preference_migration.py`), 24 skipped, 2 xfailed, 0 fail; the Postgres leg was not run locally (the Docker daemon was not running), CI covers it
+
+Phase 7 of 7 of the preference-anchoring plan (#295–#300). Rows written before #295 to #298 were still in users' stores: unkeyed topics that now name an item, keys whose item had been deleted, and `section:` rows enforced as the dead term "section: projects". `art migrate preferences` brings them to the new model, conservatively and repeatably, and a local store gets it automatically once.
+
+### What shipped
+- **`harness/migrations.py::migrate_preferences(user_id, dry_run=False)`**, model-free, returning `{relinked, unlinked, converted_to_rules, left_alone: [{preference_id, code, reason, text}], already_done, unchanged, counts}`. Each active row gets exactly one outcome:
+  - **keyed to an item that exists**: untouched (`unchanged`).
+  - **unkeyed, names exactly one item**: #297's `relink` (alias-aware through #295), reused rather than reimplemented. It gained `dry_run` and a `provenance` argument so the migration can report without writing and mark its copies.
+  - **keyed to an item that no longer exists**: a pending copy through `services.reanchor_preferences`, `provenance.unlinked_from` set so it re-binds only to its own key (#297); a role keeps "title @ company" as its term.
+  - **`section:<name>` suppress**: a `limit` `{<name>: 0}` `ResumeRule` with the row's strength and scope, so a hard row becomes a hard rule and now actually removes the section. The old row is superseded with `provenance.migrated_to = rule_id`.
+  - **a page-ish row** (a topic such as "keep it to one page", or no target at all): converted only when `rules.infer_limit` returns params for its words with the row's polarity.
+  - **everything else**: left exactly as it was and listed with a code (`section_not_clear`, `pending`, `ambiguous`, `multiple`, `negated_limit`, `scope_conflict`, `rule_conflict`, `no_target`, `no_items`, `unrecognized_key`, `bad_row`, `not_relinkable`, `unknown_section`).
+- **`services.supersede_preferences`**: retires active rows with merged provenance and no replacement row (the rule is the replacement). Nothing is deleted anywhere.
+- **Scope conflicts.** A conversion `rules.loosens_hard` refuses is left alone (`scope_conflict`, naming the broader rule). So is one that disagrees with a rule the user recorded since (`rule_conflict`): the newer statement stands. Two rows that say the same thing share one rule (the harder one makes it; `reused`).
+- **Idempotent.** Row state is the guard: every row the migration writes carries `provenance.migration`, a keyed copy is keyed, a pending copy has nothing to re-resolve, a superseded row is not active. A second run changes nothing and reports `already_done`.
+- **How it runs.** `art migrate preferences [--dry-run] [--user-id] [--database-url] [--allow-writes]` (`harness/entry.py`); a read-only store refuses without `--dry-run`. `harness.runtime.bootstrap(prepare=True)` also runs it once per user on a **local SQLite** store, gated by a small `migrations.json` marker beside the store, never on a remote store, and never raising into startup (`auto_migrate=False` is what the command passes).
+- **Docs.** `docs/harness.md` ("Migrating rows written before the anchoring model").
+- **Tests (`tests/test_preference_migration.py`).** The conftest preference set plus a store with a `section:projects` suppress (hard, and a soft duplicate), a `section:achievements` emphasize, a role-family soft section row, a pending "Kafka" that binds, "torch" that binds `skill:pytorch`, a pending "Snowflake" that stays, a dangling `exp:` key, a page limit and a negated one. Asserts each outcome and its provenance, nothing deleted, a second run changes nothing, a dry run writes nothing and reports what the real run does, a page limit cannot loosen a hard rule, a rule recorded since outranks an older row, an existing rule is reused, ambiguous and multiple subjects wait, the executor now refuses the excluded section's items and removes it from the page, left-alone and relinked pins enforce at least as before, the CLI, the marker, the remote and read-only paths, and a failure in startup.
+
+### Deviations from spec
+- **Idempotence by row state, plus a marker file for the automatic run only.** A new table would be a schema change for one boolean; the rows already say what has been done. The marker (`migrations.json` beside the SQLite file) only keeps startup from re-reading the preference table every time. It is written only when the user held preference rows, so a store that is imported into later is migrated at its next start. The CLI ignores it.
+- **A dangling key is not re-bound by alias.** `skill:torch` whose skill is now "PyTorch" becomes a pending "torch" (still a term pin; it re-binds only to `skill:torch`, so the user restates it to attach it to PyTorch), not a keyed copy. #297 forbids a deleted item's ban moving to another item; the migration cannot tell a rename from a delete, so it takes the conservative reading.
+- **A key with no stated term uses the key's own words.** The conftest set's `proj:coursework-db` becomes the pending term "coursework-db"; an `edu:` key becomes its institution. This enforces something where the keyed row enforced nothing (#297 noted such rows were seeded on purpose), so it is equal or better.
+- **No item at all means no key is judged dangling** (`no_items`), because an empty read cannot tell a deleted item from an unreadable graph.
+- **Page counts under a negator are left alone** unless the negator is a plain maximum ("never exceed two pages"). `infer_limit` ignores polarity for pages, so "avoid one-page resumes" would otherwise become a one-page rule.
+- **A row's compound words are not split.** "Keep it to one page and no projects section" is two readings, so `infer_limit` returns nothing and the row stays; the host can record two rules.
+- **The report is lists plus `counts`.** The issue's `{relinked, converted_to_rules, left_alone, already_done}` is a subset; `unlinked` and `unchanged` are added.
+- **The real store at `~/.art/art.db` holds no preference rows** (it predates the table; two users, 7 experiences, 52 projects, 264 skills). A copy was run: 0 rows, a no-op. Four synthetic legacy rows were then added to the copy (a hard `section:` suppress, a pending skill name, a dangling `exp:` key, a page limit): 1 relinked, 1 unlinked, 2 converted to rules, 0 left alone; a second run changed nothing. The original was not touched.
+- **Found by that run:** the module imported `services` at top level, so `art migrate` built an engine from `.env` before `bootstrap` pinned the database (it failed to connect and wrote nothing). The imports are now inside the functions and a test pins it.
+- **Postgres leg not run locally** (the Docker daemon was not running); the new writes go through the existing `services` JSON-column paths. CI runs it. `test_timezone_datetimes.py::test_no_source_file_reads_a_naive_utc_clock` is the known local-only failure (untracked folders).
+
+---
+
+## Issue 378 — Chat save leaves hand-edited projects and experiences alone
+**Status:** complete | **Tests:** 3418 pass on SQLite (3 new: 2 in `test_knowledge_extraction.py`, 1 in `test_chat_artifacts_router.py`), 24 skipped, 2 xfailed, 0 fail; the Postgres leg was not run locally (no schema change), CI's required leg covers it
+
+Accepting a chat knowledge-artifact `supersede` (the chat `/save` command and `POST /api/chat/{job_id}/artifacts/decide`) overwrote Project and Experience rows the user had edited by hand. `services._supersede_project` and `_supersede_experience` were the only write paths that ignored `manually_edited` (#92): kg_store saves skip such rows, and harness `upsert_items` with `correct` returns `skipped_manual`. Supersede now leaves them alone too, and says so.
+
+### What shipped
+- **`services._supersede_project` / `_supersede_experience`** raise an internal `_ManuallyEdited` once the matched row has `manually_edited` set, before touching any field. It is raised rather than returned so `apply_artifact_decision` cannot read it as "no match" and fall back to adding a second row for the same item.
+- **`services.apply_artifact_decision_outcome(user_id, proposal, source_context)`** returns `(status, message)`: `applied`, `skipped_manual`, `no_op` or `failed` (missing evidence, unknown type, an error). `apply_artifact_decision` returns its message, so `/save` and the Knowledge-Updates eval are unchanged in shape, and `/save` now tells the user the item was left unchanged and to edit it in the editor.
+- **`POST /api/chat/{job_id}/artifacts/decide`** returns `status` alongside `saved` and `message`, and `saved` is true only when the status is `applied`.
+- **Tests (3 new).** `tests/test_knowledge_extraction.py`: a hand-edited project keeps its description through a supersede with `status == "skipped_manual"` and no second row; a hand-edited experience keeps its title through a promotion. `tests/test_chat_artifacts_router.py`: accepting that supersede over the API returns `saved: false`, `status: "skipped_manual"` and leaves the row as it was.
+
+### Deviations from spec
+- **`saved` on `/artifacts/decide` now means a write happened.** It was `true` for every accept; it is now `false` for `no_op` and `failed` as well as `skipped_manual`. No frontend reads the endpoint yet (#147 is the UI).
+- **An add that `create_artifact_from_chat` turns down still reads `applied`.** That function returns plain English for its refusals (a missing name or company), so the status cannot tell them apart without changing its return type; the message says why.
+- **Skills are not covered.** `UserSkill` has no `manually_edited` flag, so `_supersede_skill` is unchanged.
+
 ---
 
 ## Release v0.1.1 — ship `main` to plugin users, GitHub login in the guides
-**Status:** complete in the repo; the tag `v0.1.1` is pushed after merge, with the owner's OK, and the OAuth client ID is not in yet (see Deviations) | **Tests:** 3222 pass on SQLite (1 new, `test_art_hooks_codex_replaces_the_v010_hooks_with_this_versions`, plus one assertion in `test_is_art_hook_recognises_any_source_and_only_art`), 24 skipped, 2 xfailed, 0 fail; site build and the 2 MB weight check pass (636,815 bytes); `uv build` gives `art_mcp-0.1.1-py3-none-any.whl` with `harness/github.py`, `harness/github_cli.py` and the editor, and `Requires-Dist: keyring>=24`; a clean install of it passes `scripts/smoke_art_mcp.py`; the Postgres leg was not run locally (nothing here touches storage), CI's required leg covers it
+**Status:** complete; the tag `v0.1.1` is pushed with the owner's OK, with the ARTie OAuth App's client ID shipped in `harness/github.py` | **Tests:** 3222 pass on SQLite (1 new, `test_art_hooks_codex_replaces_the_v010_hooks_with_this_versions`, plus one assertion in `test_is_art_hook_recognises_any_source_and_only_art`), 24 skipped, 2 xfailed, 0 fail; site build and the 2 MB weight check pass (636,815 bytes); `uv build` gives `art_mcp-0.1.1-py3-none-any.whl` with `harness/github.py`, `harness/github_cli.py` and the editor, and `Requires-Dist: keyring>=24`; a clean install of it passes `scripts/smoke_art_mcp.py`; the Postgres leg was not run locally (nothing here touches storage), CI's required leg covers it
 
 Every install (the Claude Code plugin, Codex, a manual MCP registration) pinned the v0.1.0 wheel, which is 192 commits behind `main`. The plugin's instruction files come from `main` while its code is the wheel, so `/art:setup` and the `art-tailor` skill already told people to run `art github login`, a command v0.1.0 does not have. v0.1.1 moves every pin to the new wheel and teaches the site's install and usage pages GitHub login. Issue #369 closes after the tag ships and a fresh install is smoke-tested.
 
@@ -66,13 +119,14 @@ Every install (the Claude Code plugin, Codex, a manual MCP registration) pinned 
 
 **In the wheel: new for users since v0.1.0**
 
-- **GitHub login (#353).** `art github login [--private]`, `status` and `logout`, and the `list_github_repos` tool, so the agent can list the user's repos and pick which to read or clone. The token lives in the OS keychain, else `ART_GITHUB_TOKEN`. `keyring` is now a default dependency (it was an extra the plugin's pin did not carry), so the plugin path has a keychain. The OAuth client ID is the one open piece.
+- **GitHub login (#353).** `art github login [--private]`, `status` and `logout`, and the `list_github_repos` tool, so the agent can list the user's repos and pick which to read or clone. The token lives in the OS keychain, else `ART_GITHUB_TOKEN`. `keyring` is now a default dependency (it was an extra the plugin's pin did not carry), so the plugin path has a keychain. The package ships the ARTie OAuth App's client ID, so login works with no setup.
 - **`/art:history` and `/art:revert` no longer crash (#326).** `diff_nodes` raised a validation error whenever two versions' skills differed.
 - **Citation keys are stable (#327).** `<item key>#b<n>` named a different project bullet from one ingest to the next; project bullets now carry a position, with a backfill for existing stores.
 - **The editor round trip over MCP (#276, #277, #278, #306).** A host-tailored job opens in `art ui`; a drag in the editor lasts across the next commit; the user's own `.tex` edit is shown to the host as changed bullets, is not dropped by a commit, and is not vetoed by a guard when carried over.
 - **Removing a bullet (#279, #289).** A requested delete is judged on the hard gates alone, and `delete_bullet` is the plan op that performs the cuts `cut_hints` recommends.
 - **Preferences bind to the right thing (#291, #295, #296, #297, #298).** One scope for the briefing, the pins and the executor; a deterministic anchor resolver; preferences re-link on ingest and follow renames and deletes; items carry their preferences; `ResumeRule` for what the user said about the page, enforced at finalize.
 - **Skills cap (#185).** `select_skills` no longer renders past the cap.
+- **Robust without Jev (#349: #351, #352).** With no TypeSafe key, a deterministic support check blocks unsupported rewrites (47 of 54 should-block pairs with #123's gate, 0 of 35 supported blocked), and the approved-bullet and saved-track fallbacks pick 41/48 and 36/36 with no poor-fit or wrong picks. All are fits on the labelled sets (`eval/FALLBACKS.md`); the policy artifact is v3.
 - **Codex hooks (#290, #283).** The Codex plugin carries ART's hooks, `art hooks codex --write` no longer duplicates them, and it replaces the hooks an earlier install wrote (git source, older wheel, and now v0.1.0's; pinned by a test in this release).
 - **`art ui` evidence map and editing (#136, #318, #319, #321, #322, #323).** The Data Explorer opens on an evidence map with a job overlay and an item editor; skill areas come from a keyword table and cached Jev; a bullet picker per job; dismiss and restore a skill nothing proves; confirm where a project was done; a hint under a bullet that names no skill.
 
@@ -89,7 +143,7 @@ Every install (the Claude Code plugin, Codex, a manual MCP registration) pinned 
 
 ### Deviations from spec
 
-- **`DEFAULT_CLIENT_ID` in `harness/github.py` is still empty.** The owner registers the GitHub OAuth App (device flow) and the planner fills the ID in before the tag. Until then `art github login` fails with `not_configured`, or works with `ART_GITHUB_CLIENT_ID` set, so tagging without it ships a login that does not work.
+- **The OAuth client ID was filled in after the release PR** (`Ov23liPXidZbNgjP4Oh7`, the ARTie OAuth App with device flow on), once the owner registered the app; it went in with a test that pins it, before the tag.
 - **The stale-hook requirement needed no code change.** `is_art_hook` already recognises `art hook <event>` run through `uvx --from`, whatever wheel it pins, so the work is a test (`test_art_hooks_codex_replaces_the_v010_hooks_with_this_versions`) and one `is_art_hook` assertion.
 - **The install page shows the `uvx --from "…" art github login` form, not bare `art github login`.** The plugin runs ART through `uvx`, which puts no `art` on `PATH`. `INSTALL.md` gains those two lines beside the bare ones so the drift test holds. `plugin/README.md`, `/art:setup` and the `art-setup` and `art-tailor` skills still say bare `art github login`; changing them is outside this release's scope.
 - **Not tagged or published.** The tag, the `release.yml` dry run and a smoke test of a fresh install follow merge and are the planner's, with the owner's OK. The wheel was built locally to check its name and metadata and was not uploaded.

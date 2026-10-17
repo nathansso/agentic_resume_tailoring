@@ -381,6 +381,53 @@ def test_apply_decision_supersede_with_no_match_creates_instead(isolated_engine)
             select(Project).where(Project.name == "Brand New")).first()
 
 
+def test_apply_decision_supersede_leaves_a_manually_edited_project_alone(isolated_engine):
+    """A hand edit outranks a chat supersede, as it does a re-ingest (#92), and
+    the skip is reported rather than turned into a duplicate row."""
+    user = _seed_user_and_skill(isolated_engine)
+    with Session(isolated_engine) as session:
+        session.add(Project(
+            user_id=user.user_id, name="Cache", description="hand-written",
+            manually_edited=True))
+        session.commit()
+
+    status, message = services_module.apply_artifact_decision_outcome(user.user_id, {
+        "type": "project", "name": "Cache", "description": "Redis-backed layer",
+        "decision": "supersede", "target": "project: Cache",
+        "evidence": "The cache project is Redis-backed",
+    })
+    assert status == "skipped_manual"
+    assert "edited it by hand" in message
+
+    with Session(isolated_engine) as session:
+        rows = session.exec(
+            select(Project).where(Project.user_id == user.user_id)).all()
+    assert len(rows) == 1, "a skip must not fall back to adding a row"
+    assert rows[0].description == "hand-written"
+
+
+def test_apply_decision_supersede_leaves_a_manually_edited_experience_alone(
+        isolated_engine):
+    user = _seed_user_and_skill(isolated_engine)
+    with Session(isolated_engine) as session:
+        session.add(Experience(
+            user_id=user.user_id, title="Senior Engineer", company="Acme",
+            manually_edited=True))
+        session.commit()
+
+    message = services_module.apply_artifact_decision(user.user_id, {
+        "type": "experience", "name": "Staff Engineer", "company": "Acme",
+        "decision": "supersede", "target": "experience: Senior Engineer @ Acme",
+        "evidence": "I got promoted to Staff Engineer at Acme last month",
+    })
+    assert "edited it by hand" in message
+
+    with Session(isolated_engine) as session:
+        rows = session.exec(
+            select(Experience).where(Experience.user_id == user.user_id)).all()
+    assert [(r.title, r.company) for r in rows] == [("Senior Engineer", "Acme")]
+
+
 def test_apply_decision_supersede_requires_evidence(isolated_engine):
     user = _seed_user_and_skill(isolated_engine)
     message = services_module.apply_artifact_decision(user.user_id, {

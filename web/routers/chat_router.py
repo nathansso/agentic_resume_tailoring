@@ -143,8 +143,10 @@ async def decide_artifact(
     if action == "dismiss":
         return {"saved": False, "message": "Dismissed — nothing saved."}
 
-    message = await asyncio.to_thread(
-        services.apply_artifact_decision,
+    status, message = await asyncio.to_thread(
+        services.apply_artifact_decision_outcome,
         user.user_id, body.proposal, f"chat:{job_id}",
     )
-    return {"saved": True, "message": message}
+    # A row the user edited by hand is left alone; `status` says so instead
+    # of reporting a save that didn't happen.
+    return {"saved": status == "applied", "status": status, "message": message}

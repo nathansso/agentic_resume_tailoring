@@ -81,7 +81,7 @@ def prepare_local_store(url: str) -> bool:
 
 
 def bootstrap(database_url: Optional[str], user_id: Optional[str],
-              allow_writes: bool = False, prepare: bool = False):
+              allow_writes: bool = False, prepare: bool = False, auto_migrate: bool = True):
     """Pin the database, then resolve and bind the user.
 
     Returns `(user_id or None, writes_allowed)`.
@@ -91,6 +91,9 @@ def bootstrap(database_url: Optional[str], user_id: Optional[str],
     and `art` entry points), a local SQLite store is created and migrated
     first, and an unbound one gets the default profile, so a clean install
     answers tools instead of `no_user`. Without it nothing here writes.
+
+    A prepared local store also gets the preference migration (#300), once per user and never
+    raising: `auto_migrate=False` is for the command that runs it by hand.
     """
     url = resolve_database_url(database_url, os.environ, allow_writes=allow_writes)
     os.environ["DATABASE_URL"] = url
@@ -105,4 +108,7 @@ def bootstrap(database_url: Optional[str], user_id: Optional[str],
     if uid is None and local:
         uid = get_or_create_cli_user().user_id
     set_request_user(uid)
+    if local and uid is not None and auto_migrate:
+        from harness.migrations import run_once
+        run_once(uid, url)                                # logs and returns None on any failure
     return uid, writes_allowed(url, allow_writes)

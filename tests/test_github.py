@@ -193,7 +193,15 @@ def test_a_declined_authorisation_and_a_disabled_device_flow_are_named():
     assert err.value.code == "device_flow_disabled" and "Enable Device Flow" in err.value.message
 
 
+def test_the_package_ships_the_artie_oauth_app_client_id():
+    """v0.1.1 ships the ARTie OAuth App's client ID, so a plugin install can sign in with no
+    setup. It is public by design: device-flow apps have no secret."""
+    assert gh.DEFAULT_CLIENT_ID == "Ov23liPXidZbNgjP4Oh7"
+    assert gh.client_id() == gh.DEFAULT_CLIENT_ID
+
+
 def test_with_no_client_id_login_names_the_owner_step(monkeypatch, capsys, keyring):
+    monkeypatch.setattr(gh, "DEFAULT_CLIENT_ID", "")
     assert gh.client_id() == ""
     with pytest.raises(GitHubError) as err:
         gh.request_device_code()
