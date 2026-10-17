@@ -15,7 +15,7 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 ---
 
 ## Issue 299 — The host is reminded of every constraint right before it writes, and a benchmark checks that the rendered page obeyed them
-**Status:** complete | **Tests:** 3136 pass on SQLite (22 new), 24 skipped, 2 xfailed, 0 fail; the full benchmark (about six minutes) is not part of `run_tests.py`
+**Status:** complete | **Tests:** 3437 pass on SQLite (22 new, after merging main), 24 skipped, 2 xfailed, 0 fail; the full benchmark (about six minutes) is not part of `run_tests.py`
 
 Phase 6 of 7 of the preference-anchoring plan (#295–#300). The briefing is read once and the hook restores pins after compaction, but PrefEval (ICLR 2025) found that adherence falls with the distance between a preference and the generation, and that a reminder just before generating is the largest single fix. And nothing measured whether a stored preference reached the page: `eval/README.md` marked suppression and personalization `none`.
 
