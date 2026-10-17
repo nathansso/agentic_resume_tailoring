@@ -15,8 +15,13 @@ It needs [uv](https://docs.astral.sh/uv/). The plugin runs ART with `uvx` from o
 release wheel (a GitHub Release asset, `v<version>`), which uv downloads on first use and
 then keeps in its cache, so later starts don't contact GitHub and the editor (`art ui`) is
 already in it. The first start needs the network. On Windows, see "Offline starts, and
-Windows" in [INSTALL.md](../INSTALL.md) for a short `UV_CACHE_DIR`. For PDFs you also need [tectonic](https://tectonic-typesetting.github.io)
-or pdflatex on your PATH. Without either, you get the `.tex` file.
+Windows" in [INSTALL.md](../INSTALL.md) for a short `UV_CACHE_DIR`.
+
+You don't need to install LaTeX. The first time ART renders a PDF without a LaTeX engine, it
+downloads a pinned [Tectonic](https://tectonic-typesetting.github.io) (0.16.9, checksum
+verified) to `~/.art/bin`, and Tectonic fetches its TeX files on that first compile. A
+tectonic or pdflatex already on your PATH is used instead. Set `ART_NO_DOWNLOAD=1` to turn
+the download off; offline, or with it off, you get the `.tex` file.
 
 Your data lives in `~/.art/art.db`, or `$ART_DATA_DIR`. Rendered resumes go to
 `~/.art/applications/<Company>_<Role>/`.

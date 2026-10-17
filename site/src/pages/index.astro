@@ -58,7 +58,7 @@ const steps = [
     label: "Render",
     title: "It renders a LaTeX PDF",
     body: "ART writes the .tex and the PDF to a folder on your computer. Every version is kept: /art:history lists them and /art:revert brings an old one back.",
-    points: ["PDF needs tectonic or pdflatex", "Otherwise you get the .tex file"],
+    points: ["Tectonic is downloaded on first use", "No LaTeX to install"],
   },
 ];
 
@@ -77,10 +77,6 @@ const needs = [
   {
     title: "uv",
     body: "The Python tool runner that starts ARTie. On the first start, uv downloads ARTie, so you need a network connection once.",
-  },
-  {
-    title: "tectonic or pdflatex",
-    body: "Only for PDFs. Without either you still get the .tex file.",
   },
 ];
 

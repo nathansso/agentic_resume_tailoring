@@ -154,10 +154,10 @@ def approved_by_item(user_id: UUID) -> Dict[str, List[Dict[str, Any]]]:
 def measure_line_count(text: str) -> Optional[int]:
     """Rendered lines of one bullet from the block render cache (#200), or None when
     no LaTeX engine is available. Never raises: a variant is stored without it."""
-    from agents.formatter import _find_latex_engine
     from harness import executor, render_cache
+    from harness.toolchain import latex_engine
 
-    if executor.MEASURER is None and _find_latex_engine() is None:
+    if executor.MEASURER is None and latex_engine()[0] is None:
         return None
     try:
         return int(render_cache.bullet_lines(

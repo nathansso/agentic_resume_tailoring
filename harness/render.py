@@ -76,7 +76,8 @@ def generated_tex(user_id: UUID, content: Dict) -> str:
 
 def render(user_id: UUID, job_id: str, node_id: Optional[str] = None,
            format: str = "pdf") -> Dict[str, Any]:
-    from agents.formatter import _compile_tex_to_pdf, _find_latex_engine, _pdf_page_count
+    from agents.formatter import _compile_tex_to_pdf, _pdf_page_count
+    from harness.toolchain import latex_engine
 
     try:
         jid = UUID(str(job_id))
@@ -116,6 +117,12 @@ def render(user_id: UUID, job_id: str, node_id: Optional[str] = None,
         "hint": None,
     }
 
+    # Find (or, on first need, download: #384) the engine before measuring, so the
+    # first render on a machine without LaTeX measures and compiles like any other.
+    engine, no_engine = None, None
+    if format != "tex" or not edited:
+        engine, no_engine = latex_engine()
+
     if not edited:
         try:
             from harness.render_cache import page_budget
@@ -125,8 +132,8 @@ def render(user_id: UUID, job_id: str, node_id: Optional[str] = None,
 
     if format == "tex":
         return result
-    if _find_latex_engine() is None:
-        result["hint"] = ENGINE_HINT
+    if engine is None:
+        result["hint"] = f"{ENGINE_HINT} Automatic setup: {no_engine}." if no_engine else ENGINE_HINT
         return result
     try:
         pdf = _compile_tex_to_pdf(tex)

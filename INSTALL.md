@@ -16,7 +16,8 @@ commands and the hooks:
 /plugin install art@art
 ```
 
-It needs `uv`, plus tectonic or pdflatex for PDFs. See [`plugin/README.md`](plugin/README.md).
+It needs `uv`. For PDFs, ART downloads a pinned Tectonic on first use (set `ART_NO_DOWNLOAD=1`
+to opt out). See [`plugin/README.md`](plugin/README.md).
 
 ## Codex (#203)
 
