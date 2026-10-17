@@ -1124,16 +1124,16 @@ pyproject.toml                       # art, art-mcp · extras [embed] [pdf] [ui]
 
 ## 18. Roadmap
 
-The windows are the plan and have not moved. Status is as of 2026-10-14, from the board and
+The windows are the plan and have not moved. Status is as of 2026-10-17, from the board and
 `CHANGELOG.md`.
 
 | Phase | Window | Shipped | Open | Exit test | Status |
 |---|---|---|---|---|---|
 | H0 · Decide & Spike | Sep 28 – Oct 4 | #188, #189, #209 | | One real tailoring in Claude Code with read-only tools; gap list recorded | Done |
-| H1 · Core & Jev | Oct 5 – Oct 18 | #190, #191, #192, #193, #194, #195, #210, #237, #249, #255, #256 | | Contract tests on both legs; `uvx art-mcp` without torch; every Jev point replays from cache | Done |
-| H2 · Executor & Library | Oct 19 – Nov 8 | #113, #123, #126, #185, #196, #197, #198, #199, #200, #229, #230, #232, #233, #241, #254, #257, #258, #259, #260, #279, #289 | #117, #127, #151, #163, #252, #291 | Scripted-host benchmark replays byte-identically; stuffing rejected, preference delete kept | Mostly shipped; what is open is tuning |
-| H3 · Plugin & Memory | Nov 9 – Nov 22 | #201, #202, #203, #244, #283, #290 | | Gate recall measured on a labelled set (negation separate); pins survive compaction | Done |
-| H3b · Editor | Nov 23 – Dec 6 | #204, #276, #277 | #205, #87, #82, #84, #136, #147, #278, #288 | Editor drag reaches the host's next turn; host commit reaches the editor without reload | The local editor and change feed shipped; the chat panel and the UI issues are open |
+| H1 · Core & Jev | Oct 5 – Oct 18 | #190, #191, #192, #193, #194, #195, #210, #217, #219, #237, #249, #255, #256, #349 (#350, #351, #352) | | Contract tests on both legs; `uvx art-mcp` without torch; every Jev point replays from cache | Done |
+| H2 · Executor & Library | Oct 19 – Nov 8 | #113, #123, #126, #185, #196, #197, #198, #199, #200, #229, #230, #232, #233, #241, #254, #257, #258, #259, #260, #279, #289, #291, #295, #296, #297, #298, #299, #300, #318, #326, #327, #332, #334, #342, #365 | #117, #127, #151, #163, #252, #317, #324, #333, #343 | Scripted-host benchmark replays byte-identically; stuffing rejected, preference delete kept | Mostly shipped, including preference anchoring (#291, #295–#300); what is open is tuning and follow-ups |
+| H3 · Plugin & Memory | Nov 9 – Nov 22 | #201, #202, #203, #244, #271 (#272, #273, #274, #275, #337), #283, #290, #353, #354, #356, #369 | #355 | Gate recall measured on a labelled set (negation separate); pins survive compaction | Done but for the LinkedIn ingest tool |
+| H3b · Editor | Nov 23 – Dec 6 | #136, #204, #276, #277, #278, #306, #319, #320, #321, #322, #323, #348 | #205, #87, #82, #84, #147, #288, #335, #336, #344, #345, #346, #347, #364, #367 | Editor drag reaches the host's next turn; host commit reaches the editor without reload | The local editor, change feed, evidence and area maps and bullet picker shipped; the chat panel and the remaining UI issues are open |
 | H4 · Host Evaluation | Dec 7 – Dec 27 | #181 | #206, #172 (chunks 1–6 of 7 shipped), #173, #178 | Written result, B vs A first; go/no-go on H5 | Not started |
 | H5 · Offline Policy | From Dec 28 | | #174, #152, #157, #119, #51, #114 | Arm C beats B on anchor-agreed quality on ≥ 2 hosts | Not started; runs only if H4 says go |
 
@@ -1141,7 +1141,8 @@ The windows are the plan and have not moved. Status is as of 2026-10-14, from th
 merged work (contract tests over both adapters, the `art-mcp` wheel without torch, every
 Jev point replaying from committed recordings, the scripted host replaying byte-identically,
 the memory gate measured with negation reported separately, pins re-injected after
-compaction) while their windows still run to Nov 22. Nothing was re-dated.
+compaction) while their windows still run to Nov 22. Nothing was re-dated. The evidence-brief
+plan (#311–#316), #331, #380, #381 and #382 are open and not yet assigned a phase.
 
 What is left in H2, and why:
 
@@ -1150,7 +1151,9 @@ What is left in H2, and why:
 - **#117** (keep-biased suggestions, an edit-distance guard against the parent) and **#163**
   (keyword insertion by importance × supportability) are not started.
 - **#151** splits required from preferred coverage into separate targets.
-- **#291** is an executor defect found after the fact: a hard preference scoped to a role family is not enforced by `execute_plan`, and `art_briefing` omits job-scoped ones.
+- **#317** (soft skills in the graph, kept off the page), **#324** (a rename keeps approved
+  variants and job rules), **#333** (one text for a description-only project's `#b0`) and **#343**
+  (checking `skill_area` answers on real profiles) are follow-ups to merged work.
 - **#252** tracks what is planned and not built: four Jev points (§ 4) and the tools `check_draft` and `record_feedback` (§ 9).
 
 ## 19. Evaluation (#206)
