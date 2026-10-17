@@ -14,6 +14,37 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Release v0.1.2 — repair the install: ART brings its own LaTeX engine, setup brings uv
+**Status:** complete in the repo; the tag `v0.1.2` is pushed after merge with the owner's OK | **Tests:** 3495 pass on SQLite (no new tests: a version bump), 25 skipped, 2 xfailed, 0 fail; `uv build` gives `art_mcp-0.1.2-py3-none-any.whl` with the editor; a clean `uv tool install --python 3.12` of it into throwaway uv tool, cache and data folders, on a PATH with no tectonic, pdflatex or repo venv, lists 30 tools, passes `scripts/smoke_art_mcp.py`, downloads Tectonic 0.16.9 into `$ART_DATA_DIR/bin` through `harness.toolchain.ensure_tectonic` (checksum verified), and that engine compiles a PDF
+
+v0.1.1's install needed two things the user had to find and set up alone: `uv` to run ART at all, and a LaTeX engine to get a PDF. On `main`, #384 makes ART download a pinned Tectonic the first time it needs one, and #385 makes `/art:setup` install uv and the `art` command with the user's consent, and pins every launch to Python 3.12. The setup instructions (plain text in the plugin) already reach plugin users from `main`, but the code only arrives with a new wheel, so until this release the docs said LaTeX was optional while the pinned v0.1.1 wheel still needed it. v0.1.2 moves every pin to the new wheel.
+
+### What shipped
+
+**In the wheel: new for users since v0.1.1**
+
+- **ART provisions its own LaTeX engine (#384).** With no engine on the machine, rendering and line measurement download Tectonic 0.16.9 (the calibration engine) into `$ART_DATA_DIR/bin`, verified against a pinned SHA-256 per platform; an engine the user installed still wins, and `ART_NO_DOWNLOAD=1` turns it off.
+- **Short GitHub sign-in (#385).** Login hints and the `not_logged_in` / `bad_token` messages say `art github login`, with the pinned `uvx --python 3.12 --from` form as the fallback.
+- **Preferences anchored end to end (#299, #300).** The `active_constraints` reminder on `suggest_actions` and on `execute_plan` dry runs, the post-compaction hook restoring hard page rules and pending bans, a hard-emphasize `replace` override, and `art migrate preferences` with a once-per-user auto-run on local stores.
+- **Hand edits survive a chat save (#378).** A chat supersede leaves `manually_edited` projects and experiences alone and says so.
+
+**Plugin and docs (from `main`, not the wheel)**
+
+- **`/art:setup` preflight (#385):** detect what is missing, install uv and `art` only on the user's yes, then reconnect.
+- **Every launch is pinned to Python 3.12** (`.mcp.json`, both hooks, every documented `uvx` command), so a newer Python on the machine can't make `uvx` re-resolve and fail offline.
+- **LaTeX is no longer a prerequisite** in `INSTALL.md`, the plugin README and the site.
+
+**The release itself.** `ART_VERSION`, both plugin manifests and every pinned wheel URL (`plugin/.mcp.json`, `plugin/hooks/hooks.json`, `/art:setup`, `/art:open`, the `art-setup` and `art-tailor` skills, `INSTALL.md`, `integrations/codex/README.md`, `docs/harness.md`, the site's `commands.json`) go to 0.1.2.
+
+### Deviations from spec
+
+- **An `art` command installed from v0.1.1 is not upgraded.** The plugin's `uvx` starts the new pin, but an `art` that `uv tool install` put on PATH stays at the version it was installed from. Nobody has that yet: #385's install step ships in this release. A future release should have `/art:setup` re-run `uv tool install` when `art`'s version trails the plugin's pin.
+- **Hooks on the first session after upgrading.** The hooks run `uvx --offline`, so they print nothing until the MCP server's online start has fetched the v0.1.2 wheel. That is normally the moment a session opens, the same as the v0.1.0 → v0.1.1 upgrade.
+- **Historical mentions stay:** "v0.1.1" in `harness/github_cli.py`'s keyring message, `tests/test_github.py`, the v0.1.0-hooks fixture in `tests/test_plugin.py` and earlier CHANGELOG entries describe what older wheels did.
+- **Not verified here:** a live `/art:setup` on a machine without uv, and macOS. #386's PR body has the macOS checklist.
+
+---
+
 ## Issue 385 — Zero-install setup: `/art:setup` installs uv and the `art` command when missing
 **Status:** complete | **Tests:** 3494 pass on SQLite after merging main (6 new: 5 in `test_plugin.py`, 1 in `test_github.py`; 1 rewritten), 26 skipped, 2 xfailed, 0 fail; the Postgres leg was not run locally (nothing here touches storage), CI's required leg covers it; the site was not built locally (no `node_modules`), the PR's Vercel preview builds it
 

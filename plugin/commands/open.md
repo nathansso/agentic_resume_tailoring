@@ -11,7 +11,7 @@ I want to edit a tailored resume by hand in ART's local editor.
    terminal, with the job id filled in, and don't run it yourself:
 
    ```
-   uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art ui --job <job_id>
+   uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl" art ui --job <job_id>
    ```
 
    It opens http://127.0.0.1:8765/. That wheel has the editor built in, so nothing needs
