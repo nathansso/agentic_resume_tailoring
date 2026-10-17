@@ -1,4 +1,4 @@
-# requirements-lock.txt — generated 2026-10-04 on win32
+# requirements-lock.txt — generated 2026-10-15 on win32
 # DO NOT edit manually. Regenerate with scripts/generate_lockfile.py, from a clean
 # venv (see its docstring for the three commands).
 #
@@ -54,6 +54,9 @@ hyperframe==6.1.0
 idna==3.20
 iniconfig==2.3.0
 itsdangerous==2.2.0
+jaraco.classes==3.4.0
+jaraco.context==6.1.2
+jaraco.functools==4.6.0
 Jinja2==3.1.6
 jiter==0.13.0
 joblib==1.5.3
@@ -63,6 +66,7 @@ jsonpointer==3.1.1
 jsonref==1.1.0
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
+keyring==25.7.0
 langchain==1.2.15
 langchain-anthropic==1.4.1
 langchain-core==1.3.0
@@ -80,6 +84,7 @@ MarkupSafe==3.0.3
 mcp==2.2.0
 mcp-types==2.2.0
 mdurl==0.1.2
+more-itertools==11.2.1
 mpire==2.10.2
 mpmath==1.3.0
 multidict==7.0.0
@@ -122,6 +127,7 @@ python-jose==3.5.0
 python-multipart==0.0.32
 python-pptx==1.0.2
 pywin32==311 ; sys_platform == "win32"
+pywin32-ctypes==0.2.3
 PyYAML==6.0.3
 rapidocr==3.7.0
 realtime==2.32.0

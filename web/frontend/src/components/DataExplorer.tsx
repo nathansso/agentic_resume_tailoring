@@ -30,16 +30,19 @@ const font = {
 } as const;
 import { EvidenceMap } from "./EvidenceMap";
 import { BulletPicker } from "./BulletPicker";
+import { AreaMap } from "./AreaMap";
 import {
   getSkills, getExperiences, getProjects, getEducation, getAchievements, getGraph, setSkillCore,
   updateExperience, deleteExperience, updateEducation, deleteEducation, updateProject, deleteProject,
 } from "../api/profile";
 
-type Tab = "skills" | "experiences" | "education" | "projects" | "achievements" | "graph" | "picker" | "summary" | "charts";
+type Tab = "skills" | "experiences" | "education" | "projects" | "achievements" | "graph" | "picker" | "areas" | "summary" | "charts";
 
-/** `currentJobId` is the job open in the workspace; the evidence map's "compare to a job" and the bullet picker start on it. */
+/** `currentJobId` is the job open in the workspace; the evidence map's "compare to a job", the area map's and the bullet picker start on it. */
 export function DataExplorer({ currentJobId = null }: { currentJobId?: string | null }) {
   const [tab, setTab] = useState<Tab>("graph");
+  // Set when the area map opens the evidence map on one area (#320): every other area starts folded.
+  const [mapFolded, setMapFolded] = useState<ReadonlySet<string> | undefined>(undefined);
   const [skills, setSkills] = useState<SkillRow[]>([]);
   const [exps, setExps] = useState<ExpRow[]>([]);
   const [education, setEducation] = useState<EducationRow[]>([]);
@@ -73,6 +76,7 @@ export function DataExplorer({ currentJobId = null }: { currentJobId?: string | 
   const tabs: { key: Tab; label: string }[] = [
     { key: "graph", label: "Evidence map" },
     { key: "picker", label: "Bullet picker" },
+    { key: "areas", label: "Area map" },
     { key: "skills", label: `Skills (${skills.length})` },
     { key: "experiences", label: `Experiences (${exps.length})` },
     { key: "education", label: `Education (${education.length})` },
@@ -82,7 +86,7 @@ export function DataExplorer({ currentJobId = null }: { currentJobId?: string | 
     { key: "charts", label: "Charts" },
   ];
 
-  const own = tab === "graph" || tab === "picker";
+  const own = tab === "graph" || tab === "picker" || tab === "areas";
 
   return (
     <div style={s.panel}>
@@ -91,14 +95,14 @@ export function DataExplorer({ currentJobId = null }: { currentJobId?: string | 
           <button
             key={key}
             style={{ ...s.tabBtn, ...(tab === key ? s.tabBtnActive : {}) }}
-            onClick={() => setTab(key)}
+            onClick={() => { setMapFolded(undefined); setTab(key); }}
           >
             {label}
           </button>
         ))}
       </div>
 
-      {/* The evidence map and the bullet picker manage their own scrolling and edge-to-edge layout. */}
+      {/* The evidence map, the bullet picker and the area map manage their own scrolling and edge-to-edge layout. */}
       <div className={own ? "min-h-0 flex-1 overflow-hidden" : "flex-1 overflow-y-auto p-4"}>
         {!own && loading && <p style={s.muted}>Loading…</p>}
         {!own && error && <p style={{ ...s.muted, color: colors.error }}>{error}</p>}
@@ -108,8 +112,14 @@ export function DataExplorer({ currentJobId = null }: { currentJobId?: string | 
         {!loading && !error && tab === "projects" && <ProjectsTab projects={projects} setProjects={setProjects} />}
         {!loading && !error && tab === "achievements" && <AchievementsTab achievements={achievements} />}
         {/* The map loads itself; an edit made in it refreshes the other tabs' lists. */}
-        {tab === "graph" && <EvidenceMap defaultJobId={currentJobId} onChanged={() => { void loadAll().catch(() => undefined); }} />}
+        {tab === "graph" && <EvidenceMap defaultJobId={currentJobId} initialFolded={mapFolded} onChanged={() => { void loadAll().catch(() => undefined); }} />}
         {tab === "picker" && <BulletPicker defaultJobId={currentJobId} onChanged={() => { void loadAll().catch(() => undefined); }} />}
+        {tab === "areas" && (
+          <AreaMap
+            defaultJobId={currentJobId} onChanged={() => { void loadAll().catch(() => undefined); }}
+            onOpenArea={(folded) => { setMapFolded(folded); setTab("graph"); }}
+          />
+        )}
         {!loading && !error && tab === "summary" && <GraphTab graph={graph ?? { top_skills: [], by_category: {}, evidence: {} }} />}
         {!loading && !error && tab === "charts" && <ChartsTab skills={skills} graph={graph} />}
       </div>

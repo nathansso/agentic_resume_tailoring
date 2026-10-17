@@ -4,7 +4,7 @@
       "command": "uvx",
       "args": [
         "--from",
-        "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl",
+        "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl",
         "art",
         "mcp"
       ]

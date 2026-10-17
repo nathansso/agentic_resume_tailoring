@@ -381,3 +381,197 @@ def test_planner_prompt_unchanged_without_context():
     tagged = [dict(base[0], context={"kind": "work", "under": "Intern @ IDX"})]
     prompt = _prompt(tagged)
     assert '"context"' in prompt and "Work outranks coursework" in prompt
+
+
+# ── the evidence panel's routes (#322) ───────────────────────────────────────
+
+@pytest.fixture()
+def client_for(isolated_engine, monkeypatch):
+    import database.db as db_module
+    import services
+    monkeypatch.setattr(db_module, "engine", isolated_engine)
+    monkeypatch.setattr(services, "engine", isolated_engine)
+
+    from fastapi.testclient import TestClient
+    from database.models import User
+    from web.app import create_app
+    import web.auth as web_auth_module
+
+    def make(uid):
+        with Session(isolated_engine) as s:
+            user = s.get(User, uid)
+            s.expunge(user)
+        app = create_app()
+        app.dependency_overrides[web_auth_module.get_current_user] = lambda: user
+        return TestClient(app, raise_server_exceptions=True)
+
+    return make
+
+
+def _row(engine, model, **where):
+    with Session(engine) as s:
+        return s.exec(select(model).filter_by(**where)).one()
+
+
+def _view_items(client):
+    return {i["title"]: i for i in client.get("/api/profile/graph/view").json()["items"]}
+
+
+def _other_user(engine):
+    from database.models import User
+    with Session(engine) as s:
+        other = User(name="Other", email="other@example.com")
+        s.add(other)
+        s.commit()
+        s.refresh(other)
+        s.add(Experience(user_id=other.user_id, title="Intern", company="Elsewhere"))
+        s.add(Project(user_id=other.user_id, name="theirs"))
+        s.commit()
+        return other.user_id
+
+
+def test_get_contexts_suggests_without_writing(world, isolated_engine, client_for):
+    client = client_for(world)
+    before = _project(isolated_engine, "idx_ds38")
+    rows = client.get("/api/profile/projects/contexts").json()
+    got = {r["project_id"]: r for r in rows}
+    idx = got[str(before.project_id)]
+    exp = _row(isolated_engine, Experience, title="Data Science Intern")
+    assert idx["status"] == "unreviewed" and idx["parent"] is None
+    assert [c["key"] for c in idx["candidates"]] == [f"exp/{exp.experience_id}"]
+    assert idx["candidates"][0]["title"] == "Data Science Intern @ IDX Exchange"
+    assert "idx" in idx["candidates"][0]["reason"]
+    # A course repo is offered the degree at its level, by the view's edu key.
+    ms = _row(isolated_engine, Education, degree="M.S. Data Science")
+    course = got[str(_project(isolated_engine, "dsc207miniproject").project_id)]
+    assert [c["key"] for c in course["candidates"]] == [f"edu/{ms.education_id}"]
+    # A project no rule recognises has none: "personal" is never suggested.
+    atrium = got[str(_project(isolated_engine, "Atrium").project_id)]
+    assert atrium["candidates"] == []
+    # Reading wrote nothing.
+    after = _project(isolated_engine, "idx_ds38")
+    assert (after.experience_id, after.education_id, after.context_status, after.updated_at) == (
+        None, None, "unreviewed", before.updated_at)
+    assert len(rows) == 5
+
+
+def test_get_contexts_reports_reviewed_projects(world, isolated_engine, client_for):
+    pc.set_project_context(isolated_engine, world, "idx_ds38", IDX)
+    pc.set_project_context(isolated_engine, world, "Atrium", "personal")
+    client = client_for(world)
+    got = {r["project_id"]: r for r in client.get("/api/profile/projects/contexts").json()}
+    exp = _row(isolated_engine, Experience, title="Data Science Intern")
+    idx = got[str(_project(isolated_engine, "idx_ds38").project_id)]
+    assert (idx["status"], idx["parent"]) == ("linked", f"exp/{exp.experience_id}")
+    atrium = got[str(_project(isolated_engine, "Atrium").project_id)]
+    assert (atrium["status"], atrium["parent"]) == ("personal", None)
+
+
+def test_put_context_links_relinks_marks_personal_and_resets(world, isolated_engine, client_for):
+    client = client_for(world)
+    pid = str(_project(isolated_engine, "idx_ds38").project_id)
+    exp = _row(isolated_engine, Experience, title="Data Science Intern")
+    ms = _row(isolated_engine, Education, degree="M.S. Data Science")
+
+    assert _view_items(client)["idx_ds38"]["context_status"] == "unreviewed"
+    assert _view_items(client)["idx_ds38"]["parent_key"] is None
+
+    r = client.put(f"/api/profile/projects/{pid}/context", json={"context": f"exp/{exp.experience_id}"})
+    assert r.status_code == 200
+    assert r.json() == {"project_id": pid, "status": "linked", "parent": f"exp/{exp.experience_id}"}
+    p = _project(isolated_engine, "idx_ds38")
+    assert (p.experience_id, p.education_id, p.context_status) == (exp.experience_id, None, "linked")
+    item = _view_items(client)["idx_ds38"]
+    assert (item["context_status"], item["parent_key"]) == ("linked", f"exp/{exp.experience_id}")
+
+    # Re-link to a degree: at most one context.
+    r = client.put(f"/api/profile/projects/{pid}/context", json={"context": f"edu/{ms.education_id}"})
+    assert r.json()["parent"] == f"edu/{ms.education_id}"
+    p = _project(isolated_engine, "idx_ds38")
+    assert (p.experience_id, p.education_id) == (None, ms.education_id)
+    assert _view_items(client)["idx_ds38"]["parent_key"] == f"edu/{ms.education_id}"
+
+    r = client.put(f"/api/profile/projects/{pid}/context", json={"context": "personal"})
+    assert r.json() == {"project_id": pid, "status": "personal", "parent": None}
+    p = _project(isolated_engine, "idx_ds38")
+    assert (p.experience_id, p.education_id, p.context_status) == (None, None, "personal")
+    item = _view_items(client)["idx_ds38"]
+    assert (item["context_status"], item["parent_key"]) == ("personal", None)
+
+    r = client.put(f"/api/profile/projects/{pid}/context", json={"context": "unreviewed"})
+    assert r.json() == {"project_id": pid, "status": "unreviewed", "parent": None}
+    assert _view_items(client)["idx_ds38"]["context_status"] == "unreviewed"
+
+
+def test_put_context_pins_the_row_when_two_roles_share_a_key(world, isolated_engine, client_for):
+    with Session(isolated_engine) as s:
+        twin = Experience(user_id=world, title="Data Science Intern", company="IDX Exchange")
+        s.add(twin)
+        s.commit()
+        s.refresh(twin)
+        twin_id = twin.experience_id
+    client = client_for(world)
+    pid = str(_project(isolated_engine, "idx_ds38").project_id)
+    assert client.put(f"/api/profile/projects/{pid}/context",
+                      json={"context": f"exp/{twin_id}"}).json()["parent"] == f"exp/{twin_id}"
+    assert _project(isolated_engine, "idx_ds38").experience_id == twin_id
+
+
+def test_put_context_rejects_a_bad_context(world, isolated_engine, client_for):
+    client = client_for(world)
+    pid = str(_project(isolated_engine, "idx_ds38").project_id)
+    for bad in ("school", "", "exp:data science intern|idx exchange", "exp/not-a-uuid", "proj/x"):
+        r = client.put(f"/api/profile/projects/{pid}/context", json={"context": bad})
+        assert r.status_code == 400, bad
+    p = _project(isolated_engine, "idx_ds38")
+    assert (p.experience_id, p.education_id, p.context_status) == (None, None, "unreviewed")
+
+
+def test_put_context_unknown_project_or_parent_is_404(world, isolated_engine, client_for):
+    from uuid import uuid4
+    client = client_for(world)
+    pid = str(_project(isolated_engine, "idx_ds38").project_id)
+    assert client.put(f"/api/profile/projects/{uuid4()}/context", json={"context": "personal"}).status_code == 404
+    assert client.put("/api/profile/projects/nope/context", json={"context": "personal"}).status_code == 404
+    for key in (f"exp/{uuid4()}", f"edu/{uuid4()}"):
+        assert client.put(f"/api/profile/projects/{pid}/context", json={"context": key}).status_code == 404
+    assert _project(isolated_engine, "idx_ds38").context_status == "unreviewed"
+
+
+def test_contexts_are_isolated_between_users(world, isolated_engine, client_for):
+    other = _other_user(isolated_engine)
+    mine, theirs = client_for(world), client_for(other)
+    mine_pid = str(_project(isolated_engine, "idx_ds38").project_id)
+    their_pid = str(_project(isolated_engine, "theirs").project_id)
+    their_exp = _row(isolated_engine, Experience, company="Elsewhere")
+    my_exp = _row(isolated_engine, Experience, title="Data Science Intern")
+
+    # Another user's project, and another user's role or degree, answer 404 and change nothing.
+    assert theirs.put(f"/api/profile/projects/{mine_pid}/context", json={"context": "personal"}).status_code == 404
+    assert theirs.put(f"/api/profile/projects/{their_pid}/context",
+                      json={"context": f"exp/{my_exp.experience_id}"}).status_code == 404
+    assert mine.put(f"/api/profile/projects/{mine_pid}/context",
+                    json={"context": f"exp/{their_exp.experience_id}"}).status_code == 404
+    assert mine.put(f"/api/profile/projects/{their_pid}/context", json={"context": "personal"}).status_code == 404
+    assert _project(isolated_engine, "idx_ds38").context_status == "unreviewed"
+    assert _project(isolated_engine, "theirs").context_status == "unreviewed"
+
+    # And a user's list holds only their own projects.
+    assert [r["project_id"] for r in theirs.get("/api/profile/projects/contexts").json()] == [their_pid]
+    assert their_pid not in {r["project_id"] for r in mine.get("/api/profile/projects/contexts").json()}
+
+
+def test_view_carries_context_status_on_projects_only(world, isolated_engine):
+    from knowledge_graph.evidence_view import build_evidence_view
+    pc.set_project_context(isolated_engine, world, "Atrium", "personal")
+    items = {i["title"]: i for i in build_evidence_view(world)["items"]}
+    assert items["Atrium"]["context_status"] == "personal"
+    assert items["idx_ds38"]["context_status"] == "unreviewed"
+    assert "context_status" not in items["Data Science Intern"]
+
+
+def test_harness_suggestions_carry_no_project_id(world):
+    # The UI's project_id is opt-in; the harness tool output keeps its shape.
+    from harness.contract import invoke
+    out = invoke("suggest_project_contexts", world, {})
+    assert all("project_id" not in p for p in out["projects"])

@@ -92,7 +92,8 @@ def build_server(user_id=None, allow_writes: bool = True):
             description=spec.description,
             annotations=ToolAnnotations(read_only_hint=spec.read_only,
                                         destructive_hint=False,
-                                        idempotent_hint=spec.read_only),
+                                        idempotent_hint=spec.read_only,
+                                        open_world_hint=spec.network),
             structured_output=True)
     return server
 
@@ -113,6 +114,12 @@ def main(argv=None) -> None:
     log.info("contract v%s: serving %s (%s, %s), user %s", CONTRACT_VERSION,
              ", ".join(TOOL_NAMES), scheme, "read-write" if writes else "read-only",
              user_id or "UNBOUND")
+    if writes and scheme == "sqlite":
+        # Skills ingested before a Jev key was configured: place them in the background,
+        # at most once a day per key, never delaying the server (#342). Only the user's own
+        # local store: a remote database is backfilled by hand (scripts/classify_unplaced_skills.py).
+        from knowledge_graph.areas import start_backfill_in_background
+        start_backfill_in_background(user_id)
     build_server(user_id, allow_writes=writes).run("stdio")
 
 

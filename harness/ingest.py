@@ -313,9 +313,12 @@ def _save_skills(store: _Store, user_id: UUID, items: List[Tuple[int, Dict]], so
     by_group = {normalize_skill_name(s["name"]).lower(): o for s, o in zip(saved, outcomes)}
     for group, idxs in group_of.items():
         status, row = by_group.get(group, ("skipped_empty", None))
+        message = ("The user dismissed this skill; it was not re-added."
+                   if status == "skipped_tombstone" else None)
         for n, idx in enumerate(idxs):
-            out[idx] = {"status": status if n == 0 else "merged",
-                        "key": skill_key(row) if row else None, "message": None}
+            # Every spelling of a dismissed skill is skipped; of the others only the first created it.
+            out[idx] = {"status": status if n == 0 or status == "skipped_tombstone" else "merged",
+                        "key": skill_key(row) if row else None, "message": message}
 
 
 def _upsert_rule(user_id: UUID, data: Dict) -> Dict:
@@ -421,6 +424,7 @@ def upsert_items(user_id: UUID, records: Sequence[Dict], source: str = DEFAULT_S
             store._heal_projects(session, user_id)
             store._heal_education(session, user_id)
             store._heal_achievements(session, user_id)
+            store._heal_skills(session, user_id)
             session.commit()
     if variants:
         out.update(library.import_variants(user_id, variants))

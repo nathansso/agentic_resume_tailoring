@@ -1,0 +1,747 @@
+{
+ "_comment": "Author-written HOLDOUT for the variant-choice and track-baseline fallbacks (issue #352). Same format as variants.json / baselines.json. Written before the fallback's concept lexicon and never used to fit a threshold or a margin: it is a figure to read beside the fitted one. Labels are the author's and have not been reviewed. Not used by any Jev fit (no recordings exist for it).",
+ "version": 1,
+ "status": "author-written, unreviewed, holdout only",
+ "id_namespace": "7a1d2c4e-1e0f-4b6a-8d3c-0c0ffee0352a",
+ "categories": [
+  "clear_best",
+  "close_call",
+  "no_match",
+  "synonym",
+  "keyword_trap",
+  "single"
+ ],
+ "jobs": {
+  "pricing": {
+   "title": "Data Analyst, Pricing",
+   "requirements": [
+    {
+     "text": "Estimate price elasticity and the effect of price changes using regression",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Design and analyse price tests and report the lift with its uncertainty",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Build dashboards that merchants use to track margin and sales",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Strong SQL and a working knowledge of Python or R",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Explain findings to category managers and finance partners",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Degree in economics, statistics or a related field",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ]
+  },
+  "vision": {
+   "title": "Computer Vision Engineer",
+   "requirements": [
+    {
+     "text": "Train and fine-tune convolutional and transformer models for image recognition",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Experience with PyTorch and multi-GPU training on large image datasets",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Design data augmentation and evaluation protocols that measure accuracy on held-out sets",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Optimise trained models for low-latency inference on edge devices",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Read and reproduce results from recent computer vision papers",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Publications at a vision conference",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ]
+  },
+  "platform": {
+   "title": "Data Platform Engineer",
+   "requirements": [
+    {
+     "text": "Build streaming and batch data pipelines with Kafka, Flink or Spark",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Operate workflow orchestration such as Airflow with monitoring and alerting",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Model warehouse tables and keep them fresh, tested and documented",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Strong Python or Scala",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Define data contracts and quality checks with the teams that produce data",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Experience with Redshift, Snowflake or BigQuery",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ]
+  },
+  "payments": {
+   "title": "Backend Engineer, Payments",
+   "requirements": [
+    {
+     "text": "Design and build gRPC and REST services that move money reliably",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Handle idempotency, retries and failure modes in distributed systems",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Strong Go, Java or Kotlin and relational database skills, preferably PostgreSQL",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Write thorough automated tests and review code",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Carry an on-call rotation for the services you own",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Experience with payment processors",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ]
+  },
+  "webui": {
+   "title": "Web UI Engineer",
+   "requirements": [
+    {
+     "text": "Build responsive, accessible user interfaces with Vue or React",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Strong HTML, CSS and TypeScript",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Improve page load speed and front end performance",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Work with designers to implement a component library",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Write front end tests",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Experience with Lighthouse and web vitals",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ]
+  },
+  "biostat": {
+   "title": "Biostatistician",
+   "requirements": [
+    {
+     "text": "Analyse clinical outcomes with survival analysis and mixed-effects models in R",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Account for clustering and missing data in multi-site studies",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Write statistical analysis plans and report results to clinicians",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Strong R and reproducible analysis habits",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Master's degree in biostatistics or statistics",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ]
+  },
+  "security": {
+   "title": "Security Engineer",
+   "requirements": [
+    {
+     "text": "Perform penetration tests and threat modelling on web applications",
+     "type": "required",
+     "criticality": 5
+    },
+    {
+     "text": "Triage alerts in a SIEM and lead incident response",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Knowledge of authentication protocols, TLS and network security",
+     "type": "required",
+     "criticality": 4
+    },
+    {
+     "text": "Write detection rules and automate security tooling",
+     "type": "required",
+     "criticality": 3
+    },
+    {
+     "text": "Security certification such as OSCP",
+     "type": "preferred",
+     "criticality": 2
+    }
+   ]
+  }
+ },
+ "items": {
+  "vlab": {
+   "title": "Machine Learning Research Assistant @ Vision Lab",
+   "variants": {
+    "v_cnn": {
+     "text": "Trained a ResNet-50 on 1.2M images with PyTorch across 4 GPUs, improving top-1 accuracy from 71% to 76%."
+    },
+    "v_cnn_syn": {
+     "text": "Fine-tuned a deep residual network on over a million photos using four GPUs, lifting top-1 accuracy by five points."
+    },
+    "v_aug": {
+     "text": "Implemented data augmentation pipelines (mixup, random crops) that lifted held-out accuracy by 2 points."
+    },
+    "v_poster": {
+     "text": "Presented findings at the department symposium and wrote the lab newsletter."
+    },
+    "v_docker": {
+     "text": "Containerised the training code with Docker for reproducible runs on the lab cluster."
+    }
+   }
+  },
+  "meridian": {
+   "title": "Data Engineer Intern @ Meridian Logistics",
+   "variants": {
+    "m_flink": {
+     "text": "Built a Flink job that aggregates 40k shipment events per second into one-minute windows for the operations dashboard."
+    },
+    "m_airflow": {
+     "text": "Orchestrated 14 nightly Airflow DAGs loading the Redshift warehouse, with retries and SLA alerts."
+    },
+    "m_airflow_syn": {
+     "text": "Scheduled 14 nightly jobs that load the warehouse, with automatic retries and an alert when the SLA slips."
+    },
+    "m_sql": {
+     "text": "Wrote SQL reports of weekly delivery times for the regional managers."
+    },
+    "m_wiki": {
+     "text": "Maintained the team wiki and onboarding documents for new interns."
+    }
+   }
+  },
+  "ledgerly": {
+   "title": "Backend Developer @ Ledgerly",
+   "variants": {
+    "l_api": {
+     "text": "Designed gRPC and REST endpoints for a payments ledger in Go, handling idempotent retries for 2M requests a day."
+    },
+    "l_pg": {
+     "text": "Tuned PostgreSQL queries and added indexes, cutting p95 latency from 800 ms to 120 ms."
+    },
+    "l_pg_syn": {
+     "text": "Sped up slow database queries by adding indexes, so the 95th-percentile response time fell from 800 ms to 120 ms."
+    },
+    "l_tests": {
+     "text": "Raised unit test coverage on the billing service from 41% to 87% with table-driven tests."
+    },
+    "l_standup": {
+     "text": "Facilitated daily standups and sprint retrospectives for a team of 6."
+    }
+   }
+  },
+  "clinic": {
+   "title": "Student Researcher, Clinic Outcomes",
+   "variants": {
+    "o_surv": {
+     "text": "Fit Cox proportional hazards models in R to estimate time to readmission across 3,200 patients."
+    },
+    "o_surv_syn": {
+     "text": "Modelled how long 3,200 patients took to return to hospital using hazard models in R."
+    },
+    "o_mixed": {
+     "text": "Used mixed-effects models to account for hospital-level clustering in a 14-site study."
+    },
+    "o_figs": {
+     "text": "Designed the poster and figures for the lab's annual report."
+    }
+   }
+  },
+  "corner": {
+   "title": "Pricing Analyst Intern @ Corner Market",
+   "variants": {
+    "p_elast": {
+     "text": "Estimated price elasticity for 120 products with log-log regression and presented the results to category managers."
+    },
+    "p_tab": {
+     "text": "Built a Tableau dashboard tracking weekly margin by store, used by 9 merchants."
+    },
+    "p_tab_syn": {
+     "text": "Created a weekly margin report for each store in Tableau that 9 merchants rely on."
+    },
+    "p_ab": {
+     "text": "Ran a price test on 8 stores and reported a 3% margin lift with a confidence interval."
+    },
+    "p_cashier": {
+     "text": "Trained new cashiers on the point-of-sale system."
+    }
+   }
+  },
+  "site": {
+   "title": "Personal Portfolio Site",
+   "variants": {
+    "w_vue": {
+     "text": "Built a Vue 3 portfolio site with a responsive CSS grid layout and accessible keyboard navigation."
+    },
+    "w_light": {
+     "text": "Raised the Lighthouse performance score from 62 to 96 by lazy-loading images and splitting code."
+    }
+   }
+  },
+  "ta": {
+   "title": "Teaching Assistant @ Computer Science Department",
+   "variants": {
+    "g_go": {
+     "text": "Taught weekly Go and PostgreSQL workshops to 25 students."
+    },
+    "g_grade": {
+     "text": "Graded 90 REST API and microservices assignments."
+    },
+    "g_tool": {
+     "text": "Built a Go tool that checks API assignments against a test suite, cutting grading time by 70%."
+    }
+   }
+  }
+ },
+ "cases": [
+  {
+   "id": "h_vision_cnn",
+   "category": "clear_best",
+   "job": "vision",
+   "item": "vlab",
+   "variants": [
+    "v_cnn",
+    "v_poster",
+    "v_docker"
+   ],
+   "best": [
+    "v_cnn"
+   ],
+   "poor_fit": [
+    "v_poster"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_vision_pair",
+   "category": "close_call",
+   "job": "vision",
+   "item": "vlab",
+   "variants": [
+    "v_aug",
+    "v_cnn"
+   ],
+   "best": [
+    "v_aug",
+    "v_cnn"
+   ],
+   "poor_fit": [],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_platform_stream",
+   "category": "clear_best",
+   "job": "platform",
+   "item": "meridian",
+   "variants": [
+    "m_flink",
+    "m_airflow",
+    "m_wiki"
+   ],
+   "best": [
+    "m_flink",
+    "m_airflow"
+   ],
+   "poor_fit": [
+    "m_wiki"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_platform_wiki",
+   "category": "no_match",
+   "job": "platform",
+   "item": "meridian",
+   "variants": [
+    "m_sql",
+    "m_wiki"
+   ],
+   "best": [],
+   "poor_fit": [
+    "m_wiki"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_pay_all",
+   "category": "close_call",
+   "job": "payments",
+   "item": "ledgerly",
+   "variants": [
+    "l_api",
+    "l_pg",
+    "l_tests",
+    "l_standup"
+   ],
+   "best": [
+    "l_api",
+    "l_pg",
+    "l_tests"
+   ],
+   "poor_fit": [
+    "l_standup"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_pay_standup",
+   "category": "no_match",
+   "job": "payments",
+   "item": "ledgerly",
+   "variants": [
+    "l_standup"
+   ],
+   "best": [],
+   "poor_fit": [
+    "l_standup"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_pay_cnn",
+   "category": "single",
+   "job": "payments",
+   "item": "vlab",
+   "variants": [
+    "v_cnn"
+   ],
+   "best": [],
+   "poor_fit": [
+    "v_cnn"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_bio_all",
+   "category": "clear_best",
+   "job": "biostat",
+   "item": "clinic",
+   "variants": [
+    "o_surv",
+    "o_mixed",
+    "o_figs"
+   ],
+   "best": [
+    "o_surv",
+    "o_mixed"
+   ],
+   "poor_fit": [
+    "o_figs"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_pricing_all",
+   "category": "close_call",
+   "job": "pricing",
+   "item": "corner",
+   "variants": [
+    "p_elast",
+    "p_tab",
+    "p_ab",
+    "p_cashier"
+   ],
+   "best": [
+    "p_elast",
+    "p_tab",
+    "p_ab"
+   ],
+   "poor_fit": [
+    "p_cashier"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_web_pair",
+   "category": "close_call",
+   "job": "webui",
+   "item": "site",
+   "variants": [
+    "w_vue",
+    "w_light"
+   ],
+   "best": [
+    "w_vue",
+    "w_light"
+   ],
+   "poor_fit": [],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_web_light",
+   "category": "single",
+   "job": "webui",
+   "item": "site",
+   "variants": [
+    "w_light"
+   ],
+   "best": [
+    "w_light"
+   ],
+   "poor_fit": [],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_vision_vue",
+   "category": "single",
+   "job": "vision",
+   "item": "site",
+   "variants": [
+    "w_vue"
+   ],
+   "best": [],
+   "poor_fit": [
+    "w_vue"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_sec_pay",
+   "category": "no_match",
+   "job": "security",
+   "item": "ledgerly",
+   "variants": [
+    "l_api",
+    "l_pg",
+    "l_tests"
+   ],
+   "best": [],
+   "poor_fit": [
+    "l_api",
+    "l_pg",
+    "l_tests"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_sec_cnn",
+   "category": "no_match",
+   "job": "security",
+   "item": "vlab",
+   "variants": [
+    "v_docker",
+    "v_cnn"
+   ],
+   "best": [],
+   "poor_fit": [
+    "v_cnn"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_vision_syn",
+   "category": "synonym",
+   "job": "vision",
+   "item": "vlab",
+   "variants": [
+    "v_cnn_syn",
+    "v_poster"
+   ],
+   "best": [
+    "v_cnn_syn"
+   ],
+   "poor_fit": [
+    "v_poster"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_platform_syn",
+   "category": "synonym",
+   "job": "platform",
+   "item": "meridian",
+   "variants": [
+    "m_airflow_syn",
+    "m_wiki"
+   ],
+   "best": [
+    "m_airflow_syn"
+   ],
+   "poor_fit": [
+    "m_wiki"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_pay_syn",
+   "category": "synonym",
+   "job": "payments",
+   "item": "ledgerly",
+   "variants": [
+    "l_pg_syn",
+    "l_standup"
+   ],
+   "best": [
+    "l_pg_syn"
+   ],
+   "poor_fit": [
+    "l_standup"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_pricing_syn",
+   "category": "synonym",
+   "job": "pricing",
+   "item": "corner",
+   "variants": [
+    "p_tab_syn",
+    "p_cashier"
+   ],
+   "best": [
+    "p_tab_syn"
+   ],
+   "poor_fit": [
+    "p_cashier"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_bio_syn",
+   "category": "synonym",
+   "job": "biostat",
+   "item": "clinic",
+   "variants": [
+    "o_surv_syn",
+    "o_figs"
+   ],
+   "best": [
+    "o_surv_syn"
+   ],
+   "poor_fit": [
+    "o_figs"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_pay_ta",
+   "category": "keyword_trap",
+   "job": "payments",
+   "item": "ta",
+   "variants": [
+    "g_go",
+    "g_grade",
+    "g_tool"
+   ],
+   "best": [
+    "g_tool"
+   ],
+   "poor_fit": [
+    "g_go",
+    "g_grade"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_vision_ta",
+   "category": "keyword_trap",
+   "job": "vision",
+   "item": "ta",
+   "variants": [
+    "g_go",
+    "g_grade"
+   ],
+   "best": [],
+   "poor_fit": [
+    "g_go",
+    "g_grade"
+   ],
+   "rationale": "holdout"
+  },
+  {
+   "id": "h_pricing_vision",
+   "category": "keyword_trap",
+   "job": "pricing",
+   "item": "vlab",
+   "variants": [
+    "v_poster",
+    "v_docker"
+   ],
+   "best": [],
+   "poor_fit": [
+    "v_poster",
+    "v_docker"
+   ],
+   "rationale": "holdout"
+  }
+ ]
+}

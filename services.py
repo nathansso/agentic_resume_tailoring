@@ -322,22 +322,20 @@ def set_skill_core(user_id: UUID, skill_name: str, is_core: bool) -> str:
         skill_name = (skill_name or "").strip()
         if not skill_name:
             return "Please provide a skill name."
+        from agents.skill_matching import skill_fold
+        from agents.skill_resolver import resolve_skill
+
         with Session(engine) as session:
-            skill = session.exec(select(Skill).where(Skill.name == skill_name)).first()
-            if not skill:
-                all_skills = session.exec(select(Skill)).all()
-                skill = next(
-                    (s for s in all_skills if s.name.lower() == skill_name.lower()), None
-                )
+            skill = resolve_skill(session, user_id, skill_name)    # one identity per skill (#365)
             if not skill:
                 return f"'{skill_name}' is not in your profile."
             display_name = skill.name
-            links = session.exec(
-                select(UserSkill).where(
-                    UserSkill.user_id == user_id,
-                    UserSkill.skill_id == skill.skill_id,
-                )
-            ).all()
+            # Every row of the user's whose name folds to this one, so a pin survives
+            # duplicates the user has not had merged yet.
+            fold = skill_fold(skill.name)
+            links = [l for l, s in session.exec(
+                select(UserSkill, Skill).join(Skill, Skill.skill_id == UserSkill.skill_id)
+                .where(UserSkill.user_id == user_id)).all() if skill_fold(s.name) == fold]
             if not links:
                 return f"'{skill_name}' is not in your profile."
             for link in links:
@@ -505,10 +503,36 @@ def _as_uuid(value) -> Optional[UUID]:
         return None
 
 
+class DuplicateItemError(ValueError):
+    """A rename would give two of a user's projects (or roles) the same key (issue #334).
+
+    A key (`checks.proj_key` / `exp_key`) is what a cite, a preference and the graph's
+    nodes bind by, so two items with one key cannot be told apart. The web route
+    answers 409; the message names the other item so the user can act on it.
+    """
+
+
+def _project_twin(session, user_id: UUID, name: str, own_id=None) -> Optional[Project]:
+    """Another of this user's projects whose key (`proj_key`) is `name`'s, else None."""
+    from agents.checks import proj_key
+    key = proj_key({"name": name})
+    return next((p for p in session.exec(select(Project).where(Project.user_id == user_id)).all()
+                 if p.project_id != own_id and proj_key({"name": p.name}) == key), None)
+
+
+def _experience_twin(session, user_id: UUID, title: str, company: str, own_id=None) -> Optional[Experience]:
+    """Another of this user's roles whose key (`exp_key`) is this title and company's, else None."""
+    from agents.checks import exp_key
+    key = exp_key({"title": title, "company": company})
+    return next((e for e in session.exec(select(Experience).where(Experience.user_id == user_id)).all()
+                 if e.experience_id != own_id and exp_key({"title": e.title, "company": e.company}) == key), None)
+
+
 def update_experience(user_id: Optional[UUID], experience_id: str, fields: dict) -> Optional[dict]:
     """Edit a user's own Experience row. Returns the updated row dict, or None if
-    not found / not owned. Raises ValueError on an empty required field. Sets
-    manually_edited so a later re-ingest can't revert the change (issue #92)."""
+    not found / not owned. Raises ValueError on an empty required field and
+    DuplicateItemError when the new title and company are another role's (issue #334).
+    Sets manually_edited so a later re-ingest can't revert the change (issue #92)."""
     if user_id is None:
         return None
     with Session(engine) as session:
@@ -518,16 +542,22 @@ def update_experience(user_id: Optional[UUID], experience_id: str, fields: dict)
             return None
         from agents.checks import exp_key
         old_key = exp_key({"title": row.title, "company": row.company})
+        title, company = row.title, row.company
         if "title" in fields:
             title = str(fields["title"] or "").strip()
             if not title:
                 raise ValueError("Title cannot be empty.")
-            row.title = title
         if "company" in fields:
             company = str(fields["company"] or "").strip()
             if not company:
                 raise ValueError("Company cannot be empty.")
-            row.company = company
+        if exp_key({"title": title, "company": company}) != old_key:
+            twin = _experience_twin(session, user_id, title, company, row.experience_id)
+            if twin is not None:
+                raise DuplicateItemError(
+                    f"You already have a role titled {twin.title} at {twin.company}; "
+                    "rename this one or delete the other.")
+        row.title, row.company = title, company
         for key in ("start_date", "end_date", "description"):
             if key in fields:
                 setattr(row, key, _clean_str(fields[key]))
@@ -577,7 +607,8 @@ def update_education(user_id: Optional[UUID], education_id: str, fields: dict) -
 
 
 def update_project(user_id: Optional[UUID], project_id: str, fields: dict) -> Optional[dict]:
-    """Edit a user's own Project row (issue #92)."""
+    """Edit a user's own Project row (issue #92). Raises DuplicateItemError when the new
+    name is another project's (issue #334)."""
     if user_id is None:
         return None
     with Session(engine) as session:
@@ -591,6 +622,12 @@ def update_project(user_id: Optional[UUID], project_id: str, fields: dict) -> Op
             name = str(fields["name"] or "").strip()
             if not name:
                 raise ValueError("Name cannot be empty.")
+            if proj_key({"name": name}) != old_key:
+                twin = _project_twin(session, user_id, name, row.project_id)
+                if twin is not None:
+                    raise DuplicateItemError(
+                        f"You already have a project named {twin.name}; "
+                        "rename this one or delete the other.")
             row.name = name
         for key in ("description", "repo_url", "demo_url", "start_date", "end_date"):
             if key in fields:
@@ -648,6 +685,105 @@ def get_evidence_view(user_id: Optional[UUID]) -> dict:
     return build_evidence_view(user_id)
 
 
+# ── Where a project was done, from the evidence panel (issue #322) ───────────────
+# The panel speaks the evidence view's item keys (`exp/<uuid>`, `edu/<uuid>`); the one write
+# path stays `agents.project_context.set_project_context`, which speaks `exp:`/`edu:` keys.
+
+def _context_rows(user_id: UUID):
+    from agents import project_context as pc
+
+    with Session(engine) as session:
+        exps, edus, projs = pc._user_rows(session, user_id)
+        return list(exps), list(edus), list(projs)
+
+
+def get_project_contexts(user_id: Optional[UUID]) -> list[dict]:
+    """Per project: `{project_id, status, parent, candidates}`. `parent` is the view key of
+    the role or degree it is linked to; `candidates` are the rule-based suggestions
+    (`{key, title, reason}`, view keys), best first. Reads only; nothing is written."""
+    from agents import project_context as pc
+    from agents.checks import exp_key
+
+    if user_id is None:
+        return []
+    exps, edus, projs = _context_rows(user_id)
+    view_key: dict[str, str] = {}
+    for e in exps:
+        view_key.setdefault(exp_key({"title": e.title, "company": e.company}), f"exp/{e.experience_id}")
+    for e in edus:
+        view_key.setdefault(pc.edu_key({"institution": e.institution, "degree": e.degree}),
+                            f"edu/{e.education_id}")
+    exp_ids = {e.experience_id for e in exps}
+    edu_ids = {e.education_id for e in edus}
+    parent_of: dict[str, Optional[str]] = {}
+    for p in projs:
+        parent = None
+        if p.experience_id in exp_ids:
+            parent = f"exp/{p.experience_id}"
+        elif p.education_id in edu_ids:
+            parent = f"edu/{p.education_id}"
+        parent_of[str(p.project_id)] = parent
+
+    out = []
+    for entry in pc.suggest_for_user(engine, user_id, include_reviewed=True, with_ids=True):
+        out.append({
+            "project_id": entry["project_id"],
+            "status": entry["context_status"],
+            "parent": parent_of.get(entry["project_id"]),
+            "candidates": [{"key": view_key[c["context_key"]], "title": c["title"], "reason": c["reason"]}
+                           for c in entry["suggestions"] if c["context_key"] in view_key],
+        })
+    return out
+
+
+def set_project_context(user_id: Optional[UUID], project_id: str, context: str) -> dict:
+    """Record where one of the user's projects was done, from a click in the panel (#322).
+
+    `context` is `exp/<uuid>`, `edu/<uuid>` (the view's item keys), `personal` or
+    `unreviewed`. Raises `LookupError` for a project or a role or degree that is not the
+    caller's, and `ValueError` for an unknown context. Returns
+    `{project_id, status, parent}`.
+    """
+    from agents import project_context as pc
+    from agents.checks import exp_key
+
+    pid = _as_uuid(project_id)
+    if user_id is None or pid is None:
+        raise LookupError("Project not found")
+    exps, edus, projs = _context_rows(user_id)
+    if not any(p.project_id == pid for p in projs):
+        raise LookupError("Project not found")
+
+    ctx = (context or "").strip().lower()
+    context_id: Optional[UUID] = None
+    if ctx in (pc.PERSONAL, pc.UNREVIEWED):
+        target = ctx
+    elif ctx.startswith(("exp/", "edu/")):
+        kind, _, raw = ctx.partition("/")
+        rid = _as_uuid(raw)
+        if rid is None:
+            raise ValueError("context must be exp/<id>, edu/<id>, 'personal' or 'unreviewed'.")
+        if kind == "exp":
+            row = next((e for e in exps if e.experience_id == rid), None)
+            target = exp_key({"title": row.title, "company": row.company}) if row else None
+        else:
+            row = next((e for e in edus if e.education_id == rid), None)
+            target = pc.edu_key({"institution": row.institution, "degree": row.degree}) if row else None
+        if target is None:
+            raise LookupError("That experience or education was not found")
+        context_id = rid
+    else:
+        raise ValueError("context must be exp/<id>, edu/<id>, 'personal' or 'unreviewed'.")
+
+    result = pc.set_project_context(engine, user_id, str(pid), target, context_id=context_id)
+    if "error" in result:
+        code = result["error"]["code"]
+        message = result["error"]["message"]
+        raise (LookupError if code == "not_found" else ValueError)(message)
+    after = next(c for c in get_project_contexts(user_id) if c["project_id"] == str(pid))
+    return {"project_id": str(pid), "status": after["status"], "parent": after["parent"]}
+
+
 def _profile_job_skills(job_id: UUID) -> list[dict]:
     """The job's requirements from its `JDProfile`, shaped as skill rows (issue #319).
 
@@ -657,14 +793,16 @@ def _profile_job_skills(job_id: UUID) -> list[dict]:
     left out. Two requirements with one primary term merge: required wins, the heavier
     weight wins, the terms are united.
     """
-    from agents.jd_payload import iter_requirements
-    from knowledge_graph.areas import skill_area
+    from agents.jd_payload import display_term, iter_requirements
+    from knowledge_graph.areas import skill_areas
 
     profile = load_jd_profile(job_id)
     merged: dict[str, dict] = {}
     for req in iter_requirements((profile or {}).get("payload"), types=["required", "preferred"]):
         terms = [str(t).strip() for t in (req.get("terms") or []) if str(t or "").strip()]
-        name = terms[0] if terms else str(req.get("text") or "").strip()[:80]
+        text = str(req.get("text") or "").strip()
+        # `terms` are lower-cased for matching; the name is what the chips show (#348).
+        name = display_term(terms[0], text) if terms else text[:80]
         if not name:
             continue
         try:
@@ -673,7 +811,7 @@ def _profile_job_skills(job_id: UUID) -> list[dict]:
             criticality = 3
         row = {"name": name, "required": req.get("type") == "required",
                "weight": round(max(1, min(5, criticality)) / 5, 2),
-               "area": skill_area(name, ""), "terms": terms or [name]}
+               "area": None, "terms": terms or [name]}
         key = name.lower()
         prior = merged.get(key)
         if prior is None:
@@ -682,6 +820,10 @@ def _profile_job_skills(job_id: UUID) -> list[dict]:
         prior["required"] = prior["required"] or row["required"]
         prior["weight"] = max(prior["weight"], row["weight"])
         prior["terms"] = list(dict.fromkeys(prior["terms"] + row["terms"]))
+    # One batch lookup of the Jev cache for every requirement, not one query each (#342).
+    areas = skill_areas([(row["name"], "") for row in merged.values()])
+    for row in merged.values():
+        row["area"] = areas[(row["name"], "")]
     return list(merged.values())
 
 
@@ -696,20 +838,21 @@ def get_job_skills(job_id: UUID) -> list[dict]:
     and chat), whose `terms` are just the name. Ownership is the caller's to check. A job
     with neither has no rows, which the UI reads as "analyze this job first".
     """
-    from knowledge_graph.areas import skill_area
+    from knowledge_graph.areas import skill_areas
     out = {row["name"].lower().strip(): row for row in _profile_job_skills(job_id)}
     if not out:
         with Session(engine) as session:
             rows = session.exec(
                 select(JobSkill, Skill).join(Skill, Skill.skill_id == JobSkill.skill_id)
                 .where(JobSkill.job_id == job_id)).all()
+        areas = skill_areas([(skill.name, skill.category) for _, skill in rows])    # one query (#342)
         for js, skill in rows:
             key = skill.name.lower().strip()
             prior = out.get(key)
             if prior is None or (js.required and not prior["required"]):
                 out[key] = {"name": skill.name, "required": bool(js.required),
                             "weight": float(js.weight if js.weight is not None else 1.0),
-                            "area": skill_area(skill.name, skill.category),
+                            "area": areas[(skill.name, skill.category)],
                             "terms": [skill.name]}
     return sorted(out.values(), key=lambda r: (not r["required"], r["name"].lower(), r["name"]))
 
@@ -791,6 +934,133 @@ def delete_project(user_id: Optional[UUID], project_id: str) -> bool:
         session.commit()
     _unlink_deleted(user_id, key, term)
     return True
+
+
+# ── Dismissing a skill claim that nothing proves (issue #321) ────────────────
+# A skill no bullet cites came from a source the user does not control (a LinkedIn
+# skill list, a GitHub language). Dismissing it deletes the user's `UserSkill` rows
+# and writes a `DeletedEntry` tombstone that snapshots them, so a restore puts back
+# exactly what was there and a re-ingest (`agents/kg_store._save_skills`) skips it.
+
+_SKILL_ROW_FIELDS = ("evidence_source", "evidence_detail", "proficiency", "confidence_score",
+                     "is_core", "source_context", "created_at", "updated_at")
+
+
+def _skill_tombstones(session, user_id: UUID) -> list:
+    return list(session.exec(select(DeletedEntry).where(
+        DeletedEntry.user_id == user_id, DeletedEntry.entity_type == "skill")).all())
+
+
+def _clear_skill_tombstones(session, user_id: UUID, name: str) -> None:
+    """Forget a dismissal of `name`: the user is adding it again on purpose (#321). The
+    caller commits."""
+    from agents.skill_matching import skill_fold
+
+    folded = skill_fold(name)
+    for tomb in _skill_tombstones(session, user_id):
+        if folded and skill_fold(tomb.key_a) == folded:
+            session.delete(tomb)
+
+
+def dismiss_skill(user_id: Optional[UUID], skill_id: str) -> dict:
+    """Dismiss one of the user's skills that no bullet cites (issue #321).
+
+    Deletes every `UserSkill` row of the user for it and tombstones the skill. Raises
+    `LookupError` when the user has no such skill and `ValueError(message)` when a bullet
+    cites it (that is fixed by editing the bullet). The global `Skill` row stays.
+    """
+    from agents.skill_matching import canonical_key
+    from knowledge_graph.evidence_view import cited_skill_keys
+
+    sid = _as_uuid(skill_id)
+    if user_id is None or sid is None:
+        raise LookupError("Skill not found")
+    with Session(engine) as session:
+        owned = session.exec(select(UserSkill).where(
+            UserSkill.user_id == user_id, UserSkill.skill_id == sid)).first()
+        skill = session.get(Skill, sid) if owned else None
+    if skill is None:
+        raise LookupError("Skill not found")
+    # The same evidence computation as the map, so what the panel offers and what is allowed agree.
+    if f"skill/{sid}" in cited_skill_keys(user_id):
+        raise ValueError(f"A bullet cites {skill.name}. Edit the bullet to change that; "
+                         "only a skill nothing proves can be dismissed.")
+    with Session(engine) as session:
+        rows = session.exec(select(UserSkill).where(
+            UserSkill.user_id == user_id, UserSkill.skill_id == sid)).all()
+        if not rows:
+            raise LookupError("Skill not found")
+        snapshot = [{f: (getattr(r, f).isoformat() if hasattr(getattr(r, f), "isoformat")
+                         else getattr(r, f)) for f in _SKILL_ROW_FIELDS} for r in rows]
+        _clear_skill_tombstones(session, user_id, skill.name)
+        session.add(DeletedEntry(
+            user_id=user_id, entity_type="skill", key_a=canonical_key(skill.name), key_b=None,
+            payload={"skill_id": str(sid), "name": skill.name, "category": skill.category,
+                     "rows": snapshot}))
+        for r in rows:
+            session.delete(r)
+        session.commit()
+    return {"skill_id": str(sid), "name": skill.name}
+
+
+def list_dismissed_skills(user_id: Optional[UUID]) -> list[dict]:
+    """The skills the user dismissed, A to Z: `{skill_id, name, dismissed_at, sources}`."""
+    from knowledge_graph.evidence_view import skill_source_kind
+
+    if user_id is None:
+        return []
+    with Session(engine) as session:
+        tombs = _skill_tombstones(session, user_id)
+    out = []
+    for t in tombs:
+        payload = t.payload or {}
+        if not payload.get("skill_id"):
+            continue
+        out.append({
+            "skill_id": payload["skill_id"], "name": payload.get("name") or t.key_a,
+            "dismissed_at": as_utc(t.created_at).isoformat(),
+            "sources": sorted({skill_source_kind(r.get("evidence_source"))
+                               for r in payload.get("rows") or []}),
+        })
+    return sorted(out, key=lambda d: (d["name"].lower(), d["name"]))
+
+
+def restore_skill(user_id: Optional[UUID], skill_id: str) -> Optional[dict]:
+    """Put a dismissed skill back exactly as it was and drop its tombstone. None when the
+    user has not dismissed it."""
+    from datetime import datetime
+
+    sid = _as_uuid(skill_id)
+    if user_id is None or sid is None:
+        return None
+    with Session(engine) as session:
+        tomb = next((t for t in _skill_tombstones(session, user_id)
+                     if (t.payload or {}).get("skill_id") == str(sid)), None)
+        if tomb is None:
+            return None
+        payload = tomb.payload
+        skill = session.get(Skill, sid)
+        if skill is None:       # the global row was removed meanwhile: bring it back under its id
+            skill = Skill(skill_id=sid, name=payload.get("name") or tomb.key_a,
+                          category=payload.get("category"))
+            session.add(skill)
+            session.flush()
+        for snap in payload.get("rows") or []:
+            fields = dict(snap)
+            for stamp in ("created_at", "updated_at"):
+                raw = fields.get(stamp)
+                if isinstance(raw, str):
+                    try:
+                        fields[stamp] = datetime.fromisoformat(raw)
+                    except ValueError:
+                        fields.pop(stamp)
+                elif raw is None:
+                    fields.pop(stamp, None)
+            session.add(UserSkill(user_id=user_id, skill_id=sid, **fields))
+        name = skill.name
+        session.delete(tomb)
+        session.commit()
+    return {"skill_id": str(sid), "name": name}
 
 
 def get_jobs() -> list[dict]:
@@ -996,21 +1266,26 @@ def update_resume_path(user_id: UUID, path: str) -> None:
             session.commit()
 
 
+def _classify_new_skill(pair: tuple) -> None:
+    """Place a skill the user just added by hand or in chat in an area when the keyword table
+    cannot (#342). Best effort and after the save: it never raises, and with no key it does
+    nothing."""
+    from knowledge_graph.areas import classify_skills_at_write
+
+    classify_skills_at_write([pair])
+
+
 def add_skill_to_profile(user_id: UUID, skill_name: str, target: Optional[str] = None) -> str:
     """Add a skill to the user's profile. Returns plain-English result. Never raises."""
     try:
         skill_name = skill_name.strip()
         if not skill_name:
             return "Please provide a skill name."
+        from agents.skill_resolver import SkillResolver
+
         with Session(engine) as session:
-            skill = session.exec(select(Skill).where(Skill.name == skill_name)).first()
-            if not skill:
-                all_skills = session.exec(select(Skill)).all()
-                skill = next((s for s in all_skills if s.name.lower() == skill_name.lower()), None)
-            if not skill:
-                skill = Skill(name=skill_name)
-                session.add(skill)
-                session.flush()
+            # "pytorch" joins the user's "PyTorch" instead of making a second skill (#365).
+            skill = SkillResolver(session, user_id).get_or_create(skill_name)
             existing = session.exec(
                 select(UserSkill).where(
                     UserSkill.user_id == user_id,
@@ -1019,6 +1294,8 @@ def add_skill_to_profile(user_id: UUID, skill_name: str, target: Optional[str] =
             ).first()
             if existing:
                 return f"'{skill_name}' is already in your profile."
+            placed = (skill.name, skill.category)
+            _clear_skill_tombstones(session, user_id, skill.name)    # asking for it is not a re-ingest (#321)
             evidence = f"manual:{target}" if target else "manual"
             user_skill = UserSkill(
                 user_id=user_id,
@@ -1036,6 +1313,7 @@ def add_skill_to_profile(user_id: UUID, skill_name: str, target: Optional[str] =
                 ensure_skill_embeddings(session, [skill.skill_id])
             except Exception as exc:
                 logger.warning("Skill embedding refresh skipped: %s", exc)
+        _classify_new_skill(placed)
         return f"Added '{skill_name}' to your profile."
     except Exception as e:
         logger.error("add_skill_to_profile failed: %s", e)
@@ -1076,15 +1354,10 @@ def create_artifact_from_chat(
             if not name:
                 return "Skill name is required."
             category = (data.get("category") or "").strip() or None
+            from agents.skill_resolver import SkillResolver
+
             with Session(engine) as session:
-                skill = session.exec(select(Skill).where(Skill.name == name)).first()
-                if not skill:
-                    all_skills = session.exec(select(Skill)).all()
-                    skill = next((s for s in all_skills if s.name.lower() == name.lower()), None)
-                if not skill:
-                    skill = Skill(name=name, category=category)
-                    session.add(skill)
-                    session.flush()
+                skill = SkillResolver(session, user_id).get_or_create(name, category)    # (#365)
                 existing = session.exec(
                     select(UserSkill).where(
                         UserSkill.user_id == user_id,
@@ -1094,6 +1367,8 @@ def create_artifact_from_chat(
                 if existing:
                     return f"'{name}' is already in your profile."
                 proficiency = data.get("proficiency")
+                placed = (skill.name, skill.category)
+                _clear_skill_tombstones(session, user_id, skill.name)    # asking for it is not a re-ingest (#321)
                 session.add(UserSkill(
                     user_id=user_id,
                     skill_id=skill.skill_id,
@@ -1104,6 +1379,7 @@ def create_artifact_from_chat(
                     source_context=source_context,
                 ))
                 session.commit()
+            _classify_new_skill(placed)
             return f"Added skill '{name}' to your profile (source: chat)."
         elif artifact_type == "project":
             name = (data.get("name") or "").strip()
@@ -1113,14 +1389,10 @@ def create_artifact_from_chat(
             description = (data.get("description") or evidence).strip() or None
             repo_url = (data.get("repo_url") or "").strip() or None
             with Session(engine) as session:
-                existing = session.exec(
-                    select(Project).where(
-                        Project.user_id == user_id,
-                        Project.name == name,
-                    )
-                ).first()
+                # By key, the identity a cite and the graph use: "my app" is "My App" (issue #334).
+                existing = _project_twin(session, user_id, name)
                 if existing:
-                    return f"Project '{name}' is already in your profile."
+                    return f"Project '{existing.name}' is already in your profile."
                 session.add(Project(
                     user_id=user_id,
                     name=name,
@@ -1139,13 +1411,7 @@ def create_artifact_from_chat(
             # Fall back to the evidence quote when no separate description is provided.
             description = (data.get("description") or evidence).strip() or None
             with Session(engine) as session:
-                existing = session.exec(
-                    select(Experience).where(
-                        Experience.user_id == user_id,
-                        Experience.title == title,
-                        Experience.company == company,
-                    )
-                ).first()
+                existing = _experience_twin(session, user_id, title, company)    # by key (issue #334)
                 if existing:
                     return f"Experience '{title} @ {company}' is already in your profile."
                 session.add(Experience(
@@ -1176,9 +1442,10 @@ def _supersede_skill(session, user_id: UUID, data: dict, evidence: str,
                      source_context: Optional[str]) -> Optional[str]:
     """Update an existing UserSkill in place. None when there's no row to update."""
 
+    from agents.skill_resolver import resolve_skill
+
     name = (data.get("name") or "").strip()
-    all_skills = session.exec(select(Skill)).all()
-    skill = next((s for s in all_skills if s.name.lower() == name.lower()), None)
+    skill = resolve_skill(session, user_id, name)    # the user's own skill by fold first (#365)
     if not skill:
         return None
     link = session.exec(
@@ -1232,6 +1499,7 @@ def _supersede_project(session, user_id: UUID, data: dict, evidence: str,
                        source_context: Optional[str]) -> Optional[str]:
     """Update an existing Project in place. None when there's no row to update."""
 
+    from agents.checks import proj_key
     from agents.parser import ResumeParserAgent
 
     name = (data.get("name") or "").strip()
@@ -1239,7 +1507,11 @@ def _supersede_project(session, user_id: UUID, data: dict, evidence: str,
     rows = session.exec(select(Project).where(Project.user_id == user_id)).all()
     # Reuse the ingestion deduper's matcher rather than a second notion of
     # "same project" (shared repo URL, spacing/containment on the name).
-    row = next(
+    # The row with this name's key first (the identity cites and the graph use, issue #334),
+    # then the fuzzy matcher. Matching the key twin first also means a supersede can never
+    # rename a row onto another row's key: that other row is the one it updates.
+    row = next((p for p in rows if name and proj_key({"name": p.name}) == proj_key({"name": name})), None)
+    row = row or next(
         (p for p in rows
          if ResumeParserAgent._projects_match(name, repo_url, p.name, p.repo_url)),
         None,
@@ -1292,12 +1564,17 @@ def _supersede_experience(session, user_id: UUID, data: dict, evidence: str,
     row appearing for the same job.
     """
 
+    from agents.checks import exp_key
     from agents.parser import ResumeParserAgent
 
     title = (data.get("title") or data.get("name") or "").strip()
     company = (data.get("company") or "").strip()
     rows = session.exec(select(Experience).where(Experience.user_id == user_id)).all()
-    row = next(
+    # The row with this title and company's key first (issue #334), then the fuzzy matcher.
+    row = next((e for e in rows if title and company
+                and exp_key({"title": e.title, "company": e.company})
+                == exp_key({"title": title, "company": company})), None)
+    row = row or next(
         (e for e in rows
          if ResumeParserAgent._experiences_match(title, company, e.title, e.company)),
         None,

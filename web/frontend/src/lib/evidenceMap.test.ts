@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type {
-  EvidenceEdge, EvidenceItem, EvidenceKind, EvidenceSkill, EvidenceText, EvidenceView, JobSkillRow,
+  EvidenceEdge, EvidenceItem, EvidenceKind, EvidenceSkill, EvidenceText, EvidenceView, JobSkillRow, ProjectContext,
 } from "../types";
 import {
+  DISMISSED_KEY, bareBullets, canDismiss, duplicateHint, isPanelKey, needsPlacement, placementLabel, placementOptions, projectsToPlace, skillIdOf, topSuggestion,
   arcPath, areaFoldKey, dateKey, edgeWidth, editableFields, estimateTextWidth, evidenceRows, firstMatch, fitText,
   ghostBlock, githubOnlyLinks, highlightSegments, initialDraft, jobOverlay, layoutMap, linkPath,
-  linksByBullet, neighborhood, planSave, searchSkills, skillEvidence, skillMatchKey, skillRadius,
+  linksByBullet, matchJobSkills, neighborhood, planSave, searchSkills, skillEvidence, skillMatchKey, skillRadius,
   sourceArcs, weightedMedian, type LayoutOptions,
 } from "./evidenceMap";
 
@@ -282,6 +283,137 @@ describe("the side panel's reads", () => {
   });
 });
 
+describe("bullets that name no skill (#323)", () => {
+  const job = item("exp/job", "exp", { text: text("Used Python", "Cut costs 30%", "", "Shipped it", "Wrote SQL") });
+  const side = item("proj/side", "proj", { text: text("Built a thing", "Fixed a bug") });
+  const quiet = item("exp/quiet", "exp", { text: text("Led a team", "Mentored interns") });
+  const degree = item("edu/ucsd", "edu", { text: [] });   // education carries no text entries
+  const v = view([job, side, quiet, degree, bare], [py, sql, ts], [
+    edge("exp/job", py, [0]), edge("exp/job", sql, [3]), edge("proj/side", ts, [], true),
+  ]);
+
+  it("lists the ordinals no edge cites, skipping an empty entry", () => {
+    // job's ordinals run 0, 1, 2, 3 over its four non-empty entries; the empty one has none
+    expect(bareBullets(v, "exp/job")).toEqual([1, 2]);
+  });
+
+  it("does not count a GitHub-only edge as naming a bullet", () => {
+    expect(bareBullets(v, "proj/side")).toEqual([0, 1]);
+  });
+
+  it("lists every bullet of an item no skill links, and none for education, a textless item or an unknown key", () => {
+    expect(bareBullets(v, "exp/quiet")).toEqual([0, 1]);
+    expect(bareBullets(v, "edu/ucsd")).toEqual([]);
+    expect(bareBullets(v, "proj/bare")).toEqual([]);
+    expect(bareBullets(v, "exp/nope")).toEqual([]);
+  });
+
+  it("clears a bullet as soon as an edge cites it, and ignores other items' edges", () => {
+    const fixed = view([job, side, quiet], [py, sql, ts], [
+      edge("exp/job", py, [0, 1]), edge("exp/job", sql, [3]), edge("exp/quiet", sql, [0]), edge("proj/side", ts, [0]),
+    ]);
+    expect(bareBullets(fixed, "exp/job")).toEqual([2]);
+    expect(bareBullets(fixed, "exp/quiet")).toEqual([1]);
+    expect(bareBullets(fixed, "proj/side")).toEqual([1]);
+  });
+
+  it("does not list a whitespace-only entry", () => {
+    const ws = item("exp/ws", "exp", { text: text("  ", "Did a thing") });
+    expect(bareBullets(view([ws], [py], []), "exp/ws")).toEqual([1]);
+  });
+});
+
+describe("dismissing a skill nothing proves (#321)", () => {
+  it("offers it for a skill with no link, or only a GitHub link, and not for a cited one", () => {
+    // VIEW: Python, SQL, PyTorch are cited; TypeScript is linked from GitHub only; Kafka and Docker have no link.
+    expect(canDismiss(VIEW, kafka.key)).toBe(true);
+    expect(canDismiss(VIEW, docker.key)).toBe(true);
+    expect(canDismiss(VIEW, ts.key)).toBe(true);
+    expect(canDismiss(VIEW, py.key)).toBe(false);
+    expect(canDismiss(VIEW, torch.key)).toBe(false);
+  });
+
+  it("is cited as soon as any one item's bullet names it", () => {
+    const v = view([acme, beta], [ts], [edge("proj/beta", ts, [], true), edge("exp/acme", ts, [1])]);
+    expect(canDismiss(v, ts.key)).toBe(false);
+  });
+
+  it("does not offer a skill the view does not hold", () => {
+    expect(canDismiss(VIEW, "skill/ghost")).toBe(false);
+  });
+
+  it("tells the server id from the node key, and a panel selection from a node", () => {
+    expect(skillIdOf("skill/3f2a-91")).toBe("3f2a-91");
+    expect(isPanelKey(DISMISSED_KEY)).toBe(true);
+    expect(isPanelKey("ghost:Rust")).toBe(true);
+    expect(isPanelKey(py.key) || isPanelKey(acme.key)).toBe(false);
+  });
+});
+
+describe("placing a project (#322)", () => {
+  const unplaced = (key: string, o: Partial<EvidenceItem> = {}) =>
+    item(key, "proj", { context_status: "unreviewed", ...o });
+
+  it("counts a project as to place only when it is unreviewed and standalone", () => {
+    expect(needsPlacement(unplaced("proj/a"))).toBe(true);
+    expect(needsPlacement(item("proj/b", "proj", { context_status: "personal" }))).toBe(false);
+    expect(needsPlacement(item("proj/c", "proj", { context_status: "linked", parent_key: "exp/acme" }))).toBe(false);
+    // An older payload with no status, a role and a degree are never "to place".
+    expect(needsPlacement(item("proj/d", "proj"))).toBe(false);
+    expect(needsPlacement(item("exp/e", "exp", { context_status: "unreviewed" }))).toBe(false);
+    expect(needsPlacement(item("edu/f", "edu"))).toBe(false);
+  });
+
+  it("lists the projects to place in the order the map shows them, and shrinks as they are placed", () => {
+    const newer = unplaced("proj/newer", { title: "Newer", end: "2026-01" });
+    const older = unplaced("proj/older", { title: "Older", end: "2023-01" });
+    const nested = item("proj/nested", "proj", { context_status: "linked", parent_key: "exp/acme", end: "2024-01" });
+    const personal = item("proj/mine", "proj", { context_status: "personal", end: "2025-01" });
+    const v = view([older, acme, nested, personal, newer], [], []);
+    expect(projectsToPlace(v).map((i) => i.key)).toEqual(["proj/newer", "proj/older"]);
+
+    const placed = view([older, acme, { ...newer, context_status: "linked", parent_key: "exp/acme" }], [], []);
+    expect(projectsToPlace(placed).map((i) => i.key)).toEqual(["proj/older"]);
+    expect(projectsToPlace(view([acme, alpha], [], []))).toEqual([]);
+  });
+
+  it("includes a project that needs a description, which is listed last", () => {
+    const bareUnplaced = unplaced("proj/bare2", { text: [] });
+    const first = unplaced("proj/first", { end: "2024-01" });
+    expect(projectsToPlace(view([bareUnplaced, first], [], [])).map((i) => i.key)).toEqual(["proj/first", "proj/bare2"]);
+  });
+
+  it("offers every role and degree, newest first within each group, labelled with where", () => {
+    const opts = placementOptions(view([intern, school, acme, alpha, beta], [], []));
+    expect(opts.experiences).toEqual([
+      { key: "exp/acme", label: "Engineer · Acme" }, { key: "exp/intern", label: "Intern · Beta" },
+    ]);
+    expect(opts.education).toEqual([{ key: "edu/ucsd", label: "B.S. · UCSD" }]);
+    // The same list whatever order the items arrive in.
+    expect(placementOptions(view([acme, beta, school, alpha, intern], [], []))).toEqual(opts);
+    expect(placementOptions(view([beta], [], []))).toEqual({ experiences: [], education: [] });
+  });
+
+  it("names a degree by its institution alone when it has no other title", () => {
+    expect(placementLabel(item("edu/x", "edu", { title: "UCSD", org: "UCSD" }))).toBe("UCSD");
+    expect(placementLabel(item("exp/y", "exp", { title: "Intern", org: "" }))).toBe("Intern");
+  });
+
+  it("offers the best suggestion only for a project nobody has placed", () => {
+    const candidates = [
+      { key: "exp/acme", title: "Engineer @ Acme", reason: "repo name shares 'acme' with Acme" },
+      { key: "exp/intern", title: "Intern @ Beta", reason: "description names Beta" },
+    ];
+    const ctx = (status: ProjectContext["status"], parent: string | null = null): ProjectContext =>
+      ({ project_id: "beta", status, parent, candidates });
+    expect(topSuggestion(ctx("unreviewed"))).toEqual(candidates[0]);
+    expect(topSuggestion(ctx("linked", "exp/intern"))).toBeNull();
+    expect(topSuggestion(ctx("personal"))).toBeNull();
+    expect(topSuggestion({ ...ctx("unreviewed"), candidates: [] })).toBeNull();
+    expect(topSuggestion(undefined)).toBeNull();
+  });
+});
+
 describe("highlightSegments", () => {
   it("splits text at the marks and keeps all of it", () => {
     expect(highlightSegments("Built it with torch and PyTorch.", [[14, 19], [24, 31]])).toEqual([
@@ -337,6 +469,24 @@ describe("compare to a job", () => {
     ]);
     expect(twice.required.total + twice.preferred.total).toBe(1);
     expect(twice.required.total).toBe(1);    // required wins
+  });
+
+  it("shows a missing requirement under the spelling the job sends, and matches through its lower-case terms", () => {
+    const rows: JobSkillRow[] = [
+      { name: "A/B testing", required: true, weight: 1, area: "Practices", terms: ["a/b testing"] },    // not on the profile
+      { name: "PyTorch Lightning", required: true, weight: 1, area: "ML & AI", terms: ["pytorch lightning"] },
+      { name: "Python", required: true, weight: 1, area: "Languages", terms: ["python"] },             // on the profile
+    ];
+    const ov = jobOverlay(VIEW, rows);
+    expect(ov.missing.map((m) => m.name).sort()).toEqual(["A/B testing", "PyTorch Lightning"]);
+    const chips = ghostBlock(layoutMap(VIEW, OPTS), ov.missing).chips;
+    expect(chips.map((c) => c.skill.name).sort()).toEqual(["A/B testing", "PyTorch Lightning"]);
+    expect(ov.classBySkill.get(py.key)).toBe("required-evidenced");
+    // The display name does not decide the match: a term in any case reaches the same skill.
+    const keys = (r: JobSkillRow) => matchJobSkills(VIEW, [r])[0].skills.map((s) => s.key);
+    expect(keys({ ...rows[2], name: "PYTHON" })).toEqual(keys(rows[2]));
+    expect(keys({ ...rows[2], name: "something else", terms: ["python"] })).toEqual(keys(rows[2]));
+    expect(matchJobSkills(VIEW, rows).map((m) => m.id)).toEqual(["a/btesting", "pytorchlightning", "python"]);   // by name, ids ignore case
   });
 
   it("an empty job has nothing to compare", () => {
@@ -458,5 +608,32 @@ describe("the editor", () => {
     expect(planSave(edu, d).ops).toEqual([{ kind: "education", id: "e1", body: { gpa: "4.0" } }]);
     d.fields.institution = " ";
     expect(planSave(edu, d)).toEqual({ ops: [], errors: ["Institution can't be empty."] });
+  });
+});
+
+describe("same-name items (#334)", () => {
+  const a = item("proj/a", "proj", { title: "Atlas", duplicate_of: "proj/b" });
+  const b = item("proj/b", "proj", { title: "atlas", duplicate_of: "proj/a" });
+  const solo = item("proj/c", "proj", { title: "Solo" });
+  const v = view([a, b, solo], [], []);
+
+  it("says which item shares the name and what to do", () => {
+    expect(duplicateHint(v, a)).toMatch(/^Same name as atlas\. Rename or delete one/);
+    expect(duplicateHint(v, b)).toMatch(/^Same name as Atlas\./);
+  });
+
+  it("names a role by title and company", () => {
+    const role = item("exp/x", "exp", { title: "Analyst", org: "Acme", duplicate_of: "exp/y" });
+    const twin = item("exp/y", "exp", { title: "Analyst", org: "Acme", duplicate_of: "exp/x" });
+    expect(duplicateHint(view([role, twin], [], []), role)).toContain("Analyst · Acme");
+  });
+
+  it("says nothing for a unique item, or when the server sends no field", () => {
+    expect(duplicateHint(v, solo)).toBeNull();
+    expect(duplicateHint(v, { ...solo, duplicate_of: null })).toBeNull();
+  });
+
+  it("still warns when the twin is not in the view", () => {
+    expect(duplicateHint(view([a], [], []), a)).toMatch(/^Same name as another item\./);
   });
 });

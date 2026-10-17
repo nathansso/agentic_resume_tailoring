@@ -14,7 +14,9 @@ const S = {
   codex: { id: "codex", title: "Install in Codex" },
   manual: { id: "other-clients", title: "Other MCP clients" },
   verify: { id: "check-it-worked", title: "Check that it worked" },
+  github: { id: "github", title: "Bring in your GitHub repos (optional)" },
   optional: { id: "optional", title: "Optional extras" },
+  jev: { id: "jev", title: "Optional: strengthen the checks with Jev" },
   trouble: { id: "troubleshooting", title: "Troubleshooting" },
 };
 const toc = Object.values(S);
@@ -174,6 +176,36 @@ const toc = Object.values(S);
     <p>If any of these fail, see <a href="#troubleshooting">Troubleshooting</a>.</p>
   </DocSection>
 
+  <DocSection section={S.github}>
+    <p>
+      Skip this if you would rather clone your repositories and hand your agent the folders (see
+      the <a href="/usage">Usage page</a>). Sign in with GitHub once and your agent can list
+      your repositories itself and choose which to read.
+    </p>
+    <p>
+      Run this in your own terminal, not through your agent. It prints a code and a GitHub
+      page; open the page, type the code and approve. Your password never goes through ARTie.
+      The plugin runs ARTie with <code>uvx</code> and puts no <code>art</code> command on your
+      <code>PATH</code>, so the lines below go through <code>uvx</code> as well:
+    </p>
+    <CommandBlock label="In a terminal" lines={block("github-login")} />
+    <p>
+      The first line reads your public repositories. The second, with <code>--private</code>,
+      also reads private ones. Run whichever you want; you can run the other later.
+    </p>
+    <p>
+      Nothing else needs installing: the <code>keyring</code> package ships with ARTie, and the
+      token it gets is kept in your operating system's keychain (Windows Credential Manager,
+      macOS Keychain, or your desktop's secret service). It is never stored in ARTie's
+      database, never included in an export, and never logged.
+    </p>
+    <p>
+      On a machine with no usable keychain, such as some headless Linux setups, the login says
+      so before it starts. Set <code>ART_GITHUB_TOKEN</code> to a GitHub personal access token
+      in the environment your agent starts from instead.
+    </p>
+  </DocSection>
+
   <DocSection section={S.optional}>
     <p>ARTie works fully without any of this. Add what you want, later.</p>
 
@@ -206,18 +238,29 @@ const toc = Object.values(S);
       there comes back to your agent on your next message.
     </p>
 
-    <h3>TypeSafe Jev key</h3>
+  </DocSection>
+
+  <DocSection section={S.jev}>
     <p>
-      ARTie can ask <a href="https://typesafe.ai/blog/introducing-system-one-models-and-jev" rel="noopener">TypeSafe's
-      Jev</a> a few narrow yes/no and multiple-choice questions: does a reworded bullet say more
-      than its evidence supports, does a bullet touch a topic you banned, which of your saved
-      bullets fits a job. Jev never writes resume text.
+      ARTie works fully without this, so skip it if you like. If you have a TypeSafe API key,
+      ARTie can use it, from your computer with no ARTie server in between, to ask <a href="https://typesafe.ai/blog/introducing-system-one-models-and-jev" rel="noopener">TypeSafe's
+      Jev</a> a few narrow yes/no and multiple-choice questions that plain rules answer less
+      well:
+    </p>
+    <ul>
+      <li>Does a reworded bullet say more than its cited source supports?</li>
+      <li>Does a bullet mention a topic you banned, in other words?</li>
+      <li>Which of your saved bullets fits a job best?</li>
+    </ul>
+    <p>
+      Jev never writes resume text. Without a key, each question falls back to a plain rule
+      (a check of the bullet's wording against its cited source, a literal term match, word
+      overlap, or your agent asking you), and those rules still gate your resume. Jev adds the
+      reworded cases they miss.
     </p>
     <p>
-      It needs a TypeSafe API key, and <strong>everything works without one</strong>. With no
-      key, each question falls back to a plain rule (word overlap, a literal term match, or your
-      agent asking you), and no safety check is skipped. To use a key, set it in the environment
-      Claude Code or Codex starts from, for example in your shell profile:
+      To turn it on, set the key in the environment Claude Code or Codex starts from, for
+      example in your shell profile:
     </p>
     <CommandBlock label="Shell profile (macOS, Linux, Git Bash)" lines={block("typesafe-key")} />
     <p>

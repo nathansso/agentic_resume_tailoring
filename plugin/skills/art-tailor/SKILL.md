@@ -78,6 +78,11 @@ The tools named below are the ART MCP server's tools.
   record lists its `projects`; an achievement's `project` is what it was won for.
 - `get_item` also lists the item's `variants`: wording the user approved for that
   experience or project. Approved wording beats regenerated wording (see step 4).
+- If the user wants their GitHub repos considered, have them run `uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login` in their
+  own terminal (`--private` for private repos; the tool's `not_logged_in` error repeats it), then call `list_github_repos`. Read the repos
+  worth reading, clone one only after they agree, and store what you learn with
+  `upsert_items` (`source: github:<repo>`) before you cite it; a repo is not evidence until
+  it is stored.
 - Call `get_head(job_id)`. If the job already has a version, build on it; the plan's
   `parent` must be its `node_id`. Respect anything under `editor_edits`: the user made
   those changes by hand. When the user edited the `.tex`, `editor_edits[].changes.tex_edits`
@@ -178,6 +183,10 @@ Call `execute_plan({program})`. Read the result:
   - A `reverted` reason of `faithfulness` naming `unsupported:` or `contradicts:` means
     an independent check found the bullet claims more than (or the opposite of) the
     evidence it cites. Reword it to what the cited bullets say, or cite better evidence.
+    With no Jev answer the reason ends `(fallback check: role: led)` or similar: a plain word
+    check found a seniority word, a scope claim (`entire`, `organization`, `end to end`), a
+    named method or tool, or a reversed statement that the cited evidence doesn't make. Drop
+    that word or claim, or cite the bullet that backs it; don't swap it for a synonym.
   - A `reverted` reason of `preferences` naming `negative_pin:<pin>@<item> :: "<bullet>"`
     means the bullet mentions a topic the user pinned, possibly in other words (a
     paraphrase, or a product, employer or project of that topic), so no pinned word need
@@ -185,6 +194,9 @@ Call `execute_plan({program})`. Read the result:
     or `:: name` detail means the item's own name refers to it: leave that item out of the plan.
 - `nodes[].review` (and `support.review`): bullets that were kept but that the same check
   could not clearly call supported (`label`, `p`). Show them to the user; don't drop them.
+  An entry with `source: "fallback"` has `score` and `signals` in place of `p`: the plain word
+  check found a soft stretch (`platform`, `designed`, `managed`, `deployed`) the cited evidence
+  doesn't use. Show the `signals` as the reason.
 - `nodes[].review` entries with `check: "negative_pin"` (also in `negative_pins.review`):
   text that was kept but that Jev thinks may mention a pinned topic (`pin`, `where`, `p`).
   Show them to the user and ask whether the wording is acceptable; don't decide for them.
@@ -240,7 +252,7 @@ Call `execute_plan({program})`. Read the result:
   with the job id filled in:
 
   ```
-  uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl" art ui --job <job_id>
+  uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art ui --job <job_id>
   ```
 
   Their saves come back to you: through the prompt hook if it's installed, and

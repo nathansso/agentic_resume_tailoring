@@ -15,7 +15,7 @@
  * heuristic for few crossings, and a pure function of the data.
  */
 import type {
-  EvidenceEdge, EvidenceItem, EvidenceSkill, EvidenceView, JobSkillRow,
+  EvidenceEdge, EvidenceItem, EvidenceSkill, EvidenceView, JobSkillRow, ProjectCandidate, ProjectContext,
 } from "../types";
 
 // ── geometry ───────────────────────────────────────────────────────────────────
@@ -462,6 +462,82 @@ export function skillEvidence(view: EvidenceView, skillKey: string): SkillEviden
     || cmpStr(a.item.key, b.item.key));
 }
 
+/** The selection that opens the list of dismissed skills (#321). Not a node of the map. */
+export const DISMISSED_KEY = "panel:dismissed";
+
+/** A selection that names a panel, not a node: `ghost:<name>` or `DISMISSED_KEY`. Item and skill keys have no colon. */
+export function isPanelKey(key: string): boolean {
+  return key.includes(":");
+}
+
+/**
+ * Whether a skill may be dismissed (#321): no bullet cites it. A GitHub-only link or no link at
+ * all is a claim nothing proves; a cited skill is fixed by editing the bullet. The server decides
+ * the same way and refuses (409) otherwise.
+ */
+export function canDismiss(view: EvidenceView, skillKey: string): boolean {
+  return view.skills.some((s) => s.key === skillKey)
+    && !view.edges.some((e) => e.skill_key === skillKey && e.cites.length > 0);
+}
+
+/** The server id behind a skill node key (`skill/<id>`). */
+export function skillIdOf(skillKey: string): string {
+  return skillKey.startsWith("skill/") ? skillKey.slice("skill/".length) : skillKey;
+}
+
+// ── same-name items (#334) ─────────────────────────────────────────────────────
+
+/**
+ * What to tell the user about an item that shares its name with another (the server's `duplicate_of`),
+ * or null. ART binds cites, preferences and the graph's links by name, so it cannot tell the two
+ * apart until one is renamed or deleted; a later import may also merge them.
+ */
+export function duplicateHint(view: EvidenceView, item: EvidenceItem): string | null {
+  if (!item.duplicate_of) return null;
+  const other = view.items.find((i) => i.key === item.duplicate_of);
+  const label = other ? placementLabel(other) : "another item";
+  return `Same name as ${label}. Rename or delete one so ART can tell them apart; ` +
+    "a later import may merge them.";
+}
+
+// ── where a project was done (#322) ────────────────────────────────────────────
+
+/**
+ * A project nobody has placed: unreviewed and standalone. Confirmed-personal and linked projects
+ * are not "to place". An item with no `context_status` (a role, a degree) never is.
+ */
+export const needsPlacement = (i: EvidenceItem): boolean =>
+  i.kind === "proj" && i.context_status === "unreviewed" && !i.parent_key;
+
+/** The projects still to place, in the order the map lists them (the summary's "select the first"). */
+export function projectsToPlace(view: EvidenceView): EvidenceItem[] {
+  return evidenceRows(view.items).rows.map((r) => r.item).filter(needsPlacement);
+}
+
+export interface PlacementOption {
+  key: string;        // `exp/<id>` or `edu/<id>`
+  label: string;
+}
+
+/** Every role and degree the user could place a project under, newest first within each group. */
+export function placementOptions(view: EvidenceView): { experiences: PlacementOption[]; education: PlacementOption[] } {
+  const of = (kind: EvidenceItem["kind"]) =>
+    view.items.filter((i) => i.kind === kind).sort(byRecency).map((i) => ({ key: i.key, label: placementLabel(i) }));
+  return { experiences: of("exp"), education: of("edu") };
+}
+
+/** How a role or degree is named where a project is placed: "Data Science Intern · IDX Exchange". */
+export const placementLabel = (i: EvidenceItem): string =>
+  (i.org && i.org !== i.title ? `${i.title} · ${i.org}` : i.title || i.org);
+
+/**
+ * The suggestion to offer as a one-click link: the rules' best candidate, and only for a project
+ * nobody has placed. Once the user has answered (linked or personal) it would only nag.
+ */
+export function topSuggestion(ctx: ProjectContext | undefined): ProjectCandidate | null {
+  return ctx && ctx.status === "unreviewed" ? ctx.candidates[0] ?? null : null;
+}
+
 /** The most recent experiences and projects that have text, for "edit one of these to back this skill". */
 export function recentEditable(view: EvidenceView, n = 3): EvidenceItem[] {
   return view.items.filter((i) => i.kind !== "edu").sort(byRecency).slice(0, n);
@@ -479,6 +555,20 @@ export function linksByBullet(view: EvidenceView, itemKey: string): Map<number, 
   }
   out.forEach((list, n) => out.set(n, list.sort((a, b) => cmpStr(a.name, b.name) || cmpStr(a.key, b.key))));
   return out;
+}
+
+/**
+ * The ordinals (`#b<n>`) of an item's non-empty text entries that no skill cites (#323): a bullet that
+ * names no skill ART recognizes. An empty entry has no ordinal, so it is never listed, and a GitHub-only
+ * edge cites no bullet, so it does not clear one; a whitespace-only entry is not a bullet. Only a hint: many good bullets are about impact and
+ * name no tool.
+ */
+export function bareBullets(view: EvidenceView, itemKey: string): number[] {
+  const item = view.items.find((i) => i.key === itemKey);
+  if (!item) return [];
+  const cited = new Set<number>();
+  for (const e of view.edges) if (e.item_key === itemKey) e.cites.forEach((n) => cited.add(n));
+  return item.text.flatMap((t) => (t.index !== null && t.text.trim() && !cited.has(t.index) ? [t.index] : []));
 }
 
 /** Skills that tie an item to GitHub but are named by no bullet of it. */

@@ -42,7 +42,9 @@ web/
         ChatPanel.tsx          # Chat UI with SSE streaming
         DataExplorer.tsx       # Tabs: Evidence map (default), Bullet picker, Skills, Experiences, Education, Projects, Achievements, Summary, Charts
         EvidenceMap.tsx        # Evidence map tab (#136): SVG evidence map, search, folding, compare-to-a-job
-        EvidencePanel.tsx      # Its side panel: skill evidence, item editor (saves via the PATCH routes)
+        EvidencePanel.tsx      # Its side panel: skill evidence, item editor (saves via the PATCH routes), dismiss/restore an unproven skill (#321), "Where was this done?" for a project (#322; `GET /api/profile/projects/contexts`, `PUT /api/profile/projects/{id}/context`)
+        AreaMap.tsx            # Area map tab (#320): skills packed by area on a ring, items between; click an area opens the evidence map folded to it
+        graphParts.tsx         # Shared by both maps: kind glyph, keyboard rule, job toggle and counts
         BulletPicker.tsx       # Bullet picker tab (#319): bullets ranked for a job, budget, coverage column, résumé preview
         ProfilePanel.tsx       # View/edit user profile fields
         IngestPanel.tsx        # Resume upload, GitHub ingestion
@@ -57,9 +59,11 @@ web/
       context/                 # AuthContext, ThemeContext
       hooks/useAutoCompile.ts  # Debounced LaTeX recompile on edit
       hooks/useJobSkills.ts    # A job's requirements, for the map's job overlay and the picker
+      hooks/useJobCompare.ts   # The "compare to a job" state both maps share
+      hooks/useEvidenceData.ts # The evidence view, dismissed skills and project contexts both maps read
       lib/                     # Pure, unit-tested helpers (theme, paneResize,
                                # texStructure, pdfOverlay, compileScheduler,
-                               # layoutOverride, insightMessages, welcome, evidenceMap, bulletPicker,
+                               # layoutOverride, insightMessages, welcome, evidenceMap, bulletPicker, areaMap,
                                # utils) — each with a co-located *.test.ts
       api/                     # Typed fetch wrappers for all endpoints
       types.ts                 # Shared TypeScript interfaces

@@ -158,9 +158,12 @@ def suggest_contexts(projects: Sequence[Dict], experiences: Sequence[Dict],
         if status != UNREVIEWED and not include_reviewed:
             continue
         candidates = _employer_candidates(p, experiences) or _course_candidates(p, education)
-        out.append({"project_key": proj_key(p), "project": p.get("name"),
-                    "context_status": status, "context_key": p.get("context_key"),
-                    "suggestions": candidates})
+        entry = {"project_key": proj_key(p), "project": p.get("name"),
+                 "context_status": status, "context_key": p.get("context_key"),
+                 "suggestions": candidates}
+        if "project_id" in p:       # only when the caller supplied one (the UI does)
+            entry["project_id"] = p["project_id"]
+        out.append(entry)
     return out
 
 
@@ -198,13 +201,17 @@ def context_index(session: Session, user_id: UUID) -> Dict[UUID, Dict]:
     return out
 
 
-def suggest_for_user(engine, user_id: UUID, include_reviewed: bool = False) -> List[Dict]:
-    """`suggest_contexts` over this user's stored rows."""
+def suggest_for_user(engine, user_id: UUID, include_reviewed: bool = False,
+                     with_ids: bool = False) -> List[Dict]:
+    """`suggest_contexts` over this user's stored rows. `with_ids` adds each entry's
+    `project_id`: the UI addresses a project by id, since two can share a name. The
+    harness tools leave it off, so their output is unchanged."""
     with Session(engine) as session:
         exps, edus, projs = _user_rows(session, user_id)
         index = context_index(session, user_id)
         projects = [{"name": p.name, "repo_url": p.repo_url, "description": p.description,
-                     "context_status": p.context_status, "context_key": index[p.project_id]["key"]}
+                     "context_status": p.context_status, "context_key": index[p.project_id]["key"],
+                     **({"project_id": str(p.project_id)} if with_ids else {})}
                     for p in projs]
         return suggest_contexts(
             projects,
@@ -228,13 +235,16 @@ def _find_project(projs: Sequence[Project], ref: str) -> Optional[Project]:
     return next((p for p in projs if proj_key({"name": p.name}) == key), None)
 
 
-def set_project_context(engine, user_id: UUID, project: str, context: str) -> Dict:
+def set_project_context(engine, user_id: UUID, project: str, context: str,
+                        *, context_id: Optional[UUID] = None) -> Dict:
     """Record where `project` (a key, name or id) was done.
 
     `context` is an experience key (`exp:<title>|<company>`), an education key
     (`edu:<institution>|<degree>`), `personal`, or `unreviewed` to clear it.
     Only rows owned by `user_id` resolve, so a client-supplied key can never
-    link into another user's graph.
+    link into another user's graph. `context_id` (the UI passes it) pins an `exp:` or
+    `edu:` key to one row, for two roles or degrees that share a key; the key alone
+    takes the first.
     """
     context = (context or "").strip()
     with Session(engine) as session:
@@ -248,13 +258,15 @@ def set_project_context(engine, user_id: UUID, project: str, context: str) -> Di
         if low in (PERSONAL, UNREVIEWED):
             status = low
         elif low.startswith("exp:"):
-            match = next((e for e in exps if exp_key(_exp_dict(e)) == low), None)
+            match = next((e for e in exps if exp_key(_exp_dict(e)) == low
+                          and context_id in (None, e.experience_id)), None)
             if match is None:
                 return _error("not_found", f"No experience {context!r}.",
                               [exp_key(_exp_dict(e)) for e in exps])
             exp_id, status = match.experience_id, LINKED
         elif low.startswith("edu:"):
-            match = next((e for e in edus if edu_key(_edu_dict(e)) == low), None)
+            match = next((e for e in edus if edu_key(_edu_dict(e)) == low
+                          and context_id in (None, e.education_id)), None)
             if match is None:
                 return _error("not_found", f"No education {context!r}.",
                               [edu_key(_edu_dict(e)) for e in edus])

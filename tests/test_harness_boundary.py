@@ -15,6 +15,11 @@ with `ast` so nothing is imported to test it:
    a harness change that starts calling such a function is caught in review,
    not here.
 
+3. **The network is reached through two modules only** (#353): the Jev client
+   (`harness/decisions/client.py`) and the GitHub client (`harness/github.py`).
+   Any other harness file importing an HTTP or socket library fails
+   `NETWORK_CLIENTS` below; the LinkedIn gateway client (#355) joins that list.
+
 The modules the executor (#197) reuses from `agents/` are held to rule 2 as
 well: `checks` (tailor's checks without the LLM stack), `arbitration` and
 `tailor_planner` (which reached `llm` through `jd_profile` until the pure JD
@@ -26,6 +31,13 @@ from collections import deque
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# The network allow-list (#353): the only harness modules that may import an HTTP or socket
+# library. The Jev client (#193) and the GitHub client (#353) are the whole list; the LinkedIn
+# gateway client (#355) joins it in its own change, and nothing else gets in without one.
+NETWORK_CLIENTS = ("harness/decisions/client.py", "harness/github.py")
+NETWORK_MODULES = ("requests", "httpx", "urllib3", "urllib.request", "http.client", "aiohttp",
+                   "socket", "ssl", "websockets", "websocket", "ftplib", "smtplib", "imaplib",
+                   "poplib", "telnetlib", "xmlrpc.client")
 BANNED_EXACT = {"llm", "langgraph", "openai", "anthropic"}
 BANNED_PREFIX = ("langchain",)
 EXTRA_ENTRIES = ("agents.checks", "agents.arbitration", "agents.tailor_planner",
@@ -92,6 +104,23 @@ def direct_violations(root: Path, package: str = "harness"):
     return found
 
 
+def _network(module: str) -> bool:
+    return any(module == m or module.startswith(m + ".") for m in NETWORK_MODULES)
+
+
+def network_importers(root: Path, package: str = "harness"):
+    """Rule 3: relative path -> the network libraries a harness file imports (anywhere in it)."""
+    found = {}
+    for path in sorted((root / package).rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        name = _module_name(root, path)
+        mods = sorted({m for m in _imports(tree, name, path.name == "__init__.py",
+                                           module_level_only=False) if _network(m)})
+        if mods:
+            found[path.relative_to(root).as_posix()] = mods
+    return found
+
+
 def transitive_violations(root: Path, entries):
     """Rule 2: module-level imports, followed through the repo from each entry."""
     found = []
@@ -137,6 +166,12 @@ def test_importing_harness_or_checks_loads_no_generative_client():
     assert transitive_violations(ROOT, entries) == []
 
 
+def test_the_harness_reaches_the_network_only_through_the_jev_and_github_clients():
+    """Exactly those two modules import a network library: a third is a new outbound call
+    path, and it needs the root CLAUDE.md invariant, this list and the docs to say so."""
+    assert sorted(network_importers(ROOT)) == sorted(NETWORK_CLIENTS)
+
+
 # ── the checker itself ──────────────────────────────────────────────────────
 
 def _tree(tmp_path, files):
@@ -164,6 +199,19 @@ def test_a_module_level_chain_through_the_repo_is_caught(tmp_path):
     })
     assert transitive_violations(root, ["harness.tools"]) == [
         "harness.tools -> pkg.helper -> langchain_core"]
+
+
+def test_a_network_import_outside_the_allow_list_is_caught(tmp_path):
+    root = _tree(tmp_path, {
+        "harness/__init__.py": "",
+        "harness/decisions/client.py": "import requests\n",
+        "harness/tools.py": "def f():\n    import urllib.request\n",
+        "harness/runtime.py": "from urllib.parse import quote\nfrom http import HTTPStatus\n",
+        "harness/sock.py": "from socket import create_connection\n",
+    })
+    found = network_importers(root)
+    assert sorted(found) == ["harness/decisions/client.py", "harness/sock.py", "harness/tools.py"]
+    assert sorted(set(found) - set(NETWORK_CLIENTS)) == ["harness/sock.py", "harness/tools.py"]
 
 
 def test_function_level_imports_outside_harness_are_not_followed(tmp_path):

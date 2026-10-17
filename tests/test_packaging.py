@@ -48,12 +48,19 @@ def test_the_default_install_carries_nothing_heavy():
             "python-dotenv"} <= base
 
 
+def test_keyring_ships_with_the_default_install():
+    """`art github login` keeps its token in the OS keychain. The plugin pins `art-mcp[ui]`, so
+    keyring has to be a default dependency for the plugin path to work out of the box (#353)."""
+    assert "keyring" in {_name(r) for r in PROJECT["dependencies"]}
+
+
 def test_heavy_pieces_live_in_the_extras():
     extras = {k: {_name(r) for r in v} for k, v in PROJECT["optional-dependencies"].items()}
     assert "sentence-transformers" in extras["embed"]
     assert "docling" in extras["pdf"]
     assert {"fastapi", "uvicorn"} <= extras["ui"]
     assert "psycopg2-binary" in extras["postgres"]
+    assert "keyring" in extras["keyring"]
 
 
 def test_pins_match_the_requirements_files():

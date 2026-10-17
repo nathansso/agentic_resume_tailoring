@@ -5,8 +5,9 @@ job (`variant_choice@v1`, over the variants plus `no_match`) and which saved tra
 (`track_baseline@v1`, over the tracks plus `none`). A variant is picked (its likeliest one) when the probability
 Jev puts on any variant, one minus its `no_match`, is at least `TAU_VARIANT`; a track is picked when Jev's own
 choice is a track and its probability is at least `TAU_BASELINE`. This script fits both on `eval/library_labels/variants.json` and
-`baselines.json`, synthetic cases labelled by hand, and compares Jev with the #229 fallbacks (word overlap,
-and the role-family lookup) on the same cases. It is the shape of `eval/fit_memory_gate_threshold.py` (#202),
+`baselines.json`, synthetic cases labelled by hand, and compares Jev with the Jev-free fallbacks (the concept-fit
+variant pick and the duties-based track pick of #352, which replaced #229's word overlap and title lookup)
+on the same cases. It is the shape of `eval/fit_memory_gate_threshold.py` (#202),
 whose store pinning and table helpers it reuses:
 
     python eval/fit_library_thresholds.py record     # live Jev, once, needs TYPESAFE_API_KEY
@@ -114,22 +115,23 @@ def ask_baseline_case(doc: Dict[str, Any], case: Dict[str, Any]):
 
 
 def fallback_variant(doc: Dict[str, Any], case: Dict[str, Any]) -> Optional[str]:
-    """What #229's overlap pick chooses for this case: the job's text is its title and requirements."""
+    """What the Jev-free variant pick chooses for this case (`harness.library.best_variant`, #352, which
+    replaced #229's word overlap): the job's text is its title and requirements."""
     from harness import library
 
     title, reqs, _, variants = variant_inputs(doc, case)
     terms = library.job_terms(None, "\n".join([title, *[r["text"] for r in reqs]]))
-    chosen, _best = library.best_variant(variants, terms)
+    chosen, _best = library.best_variant(variants, terms, library.job_reading(title, reqs))
     return chosen["key"] if chosen else None
 
 
 def fallback_baseline(doc: Dict[str, Any], case: Dict[str, Any]) -> Optional[str]:
-    """What #229's role-family lookup chooses: the track named after the title's family, else none."""
-    from agents.job_card import role_family_from_title
-    from harness.library import normalize_track
+    """What the Jev-free track pick chooses (`harness.library.pick_track`, #352, which replaced #229's
+    title lookup when there are requirements to read): the saved track whose role family fits the
+    job's duties, else none."""
+    from harness import library
 
-    family = normalize_track(role_family_from_title(case["title"]))
-    return family if family in {t["track"] for t in doc["tracks"]} else None
+    return library.pick_track(case["title"], case["requirements"], track_rows(doc))
 
 
 def variant_row(doc, case, decision) -> Dict[str, Any]:
@@ -333,7 +335,7 @@ def _section(title: str, rows, order, outcome, bad: str, fit, tau: float, fallba
          raw["right_picks"], badn(raw), raw["lost"]],
         [f"**Jev at the threshold {tau:.2f}**", f"**{at['correct']}/{n} ({_pct(at['correct'] / n)})**", at["picks"],
          at["right_picks"], badn(at), at["lost"]],
-        [f"The #229 fallback ({fallback_name})", f"{fb['correct']}/{n} ({_pct(fb['correct'] / n)})", fb["picks"],
+        [f"The Jev-free fallback ({fallback_name})", f"{fb['correct']}/{n} ({_pct(fb['correct'] / n)})", fb["picks"],
          fb["right_picks"], badn(fb), fb["lost"]]]))
     o.append("")
     if bad == "poor":
@@ -406,7 +408,7 @@ def render_report(vrows, brows, meta: Dict[str, Any]) -> str:
          f"Floor {GRID[0]:.2f} for both. Shipped: `TAU_VARIANT` {tv:.2f}, `TAU_BASELINE` {tb:.2f}; the fit recommends "
          f"{rec['tau_variant']:.2f} and {rec['tau_baseline']:.2f}.\n"]
     o += _section("Variant choice", vrows, VARIANT_CATEGORIES, variant_outcome, "poor", rec["variant"], tv,
-                  "word overlap", _label_variant, "no_match", mass=True)
+                  "concept fit", _label_variant, "no_match", mass=True)
     o.append("### The first design (gating Jev's own choice), not shipped\n")
     o.append("The first design picked Jev's own choice when it was a variant and its own probability reached the "
              "threshold. When two good phrasings of one bullet are on offer Jev splits its mass between them, so "
@@ -422,14 +424,15 @@ def render_report(vrows, brows, meta: Dict[str, Any]) -> str:
                      "shipped: correct", "picks", "right picks", "poor-fit picks"], body))
     o.append("")
     o += _section("Track baseline", brows, BASELINE_CATEGORIES, baseline_outcome, "wrong", rec["baseline"], tb,
-                  "role-family lookup", _label_baseline, "none")
+                  "duties fit", _label_baseline, "none")
     o.append("## What the comparison does and does not say\n")
-    o.append("The fallback is run on the same cases, with the job's text as its title and requirements (a real "
-             "posting has more words, and the overlap pick sees all of them). The role-family lookup sees only "
-             "the title, which is what it uses in production; its track names here are the role families "
-             "(`data_science`, `machine_learning`, ...), the best case for it. The cases are synthetic and the "
-             "labels are one planner's, pending the user's spot-check: read the numbers as a comparison between "
-             "two methods on the same cases, not as an accuracy to expect.\n")
+    o.append("The fallbacks (#352) are run on the same cases, with the job's title and requirements as the "
+             "production picks read them. Their vocabulary was written by hand with these labels in view and their "
+             "floors and margin were fitted on them, so the fallback rows are a fit and not a held-out figure; "
+             "`FALLBACK_FIT.md` sets leave-one-out and a separate author-written holdout beside them. The track "
+             "names here are the role families (`data_science`, `machine_learning`, ...), the best case for the "
+             "pick. The cases are synthetic and the labels are one planner's, pending the user's spot-check: read "
+             "the numbers as a comparison between two methods on the same cases, not as an accuracy to expect.\n")
     return "\n".join(o)
 
 
