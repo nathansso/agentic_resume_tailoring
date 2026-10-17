@@ -14,6 +14,24 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 378 — Chat save leaves hand-edited projects and experiences alone
+**Status:** complete | **Tests:** 3418 pass on SQLite (3 new: 2 in `test_knowledge_extraction.py`, 1 in `test_chat_artifacts_router.py`), 24 skipped, 2 xfailed, 0 fail; the Postgres leg was not run locally (no schema change), CI's required leg covers it
+
+Accepting a chat knowledge-artifact `supersede` (the chat `/save` command and `POST /api/chat/{job_id}/artifacts/decide`) overwrote Project and Experience rows the user had edited by hand. `services._supersede_project` and `_supersede_experience` were the only write paths that ignored `manually_edited` (#92): kg_store saves skip such rows, and harness `upsert_items` with `correct` returns `skipped_manual`. Supersede now leaves them alone too, and says so.
+
+### What shipped
+- **`services._supersede_project` / `_supersede_experience`** raise an internal `_ManuallyEdited` once the matched row has `manually_edited` set, before touching any field. It is raised rather than returned so `apply_artifact_decision` cannot read it as "no match" and fall back to adding a second row for the same item.
+- **`services.apply_artifact_decision_outcome(user_id, proposal, source_context)`** returns `(status, message)`: `applied`, `skipped_manual`, `no_op` or `failed` (missing evidence, unknown type, an error). `apply_artifact_decision` returns its message, so `/save` and the Knowledge-Updates eval are unchanged in shape, and `/save` now tells the user the item was left unchanged and to edit it in the editor.
+- **`POST /api/chat/{job_id}/artifacts/decide`** returns `status` alongside `saved` and `message`, and `saved` is true only when the status is `applied`.
+- **Tests (3 new).** `tests/test_knowledge_extraction.py`: a hand-edited project keeps its description through a supersede with `status == "skipped_manual"` and no second row; a hand-edited experience keeps its title through a promotion. `tests/test_chat_artifacts_router.py`: accepting that supersede over the API returns `saved: false`, `status: "skipped_manual"` and leaves the row as it was.
+
+### Deviations from spec
+- **`saved` on `/artifacts/decide` now means a write happened.** It was `true` for every accept; it is now `false` for `no_op` and `failed` as well as `skipped_manual`. No frontend reads the endpoint yet (#147 is the UI).
+- **An add that `create_artifact_from_chat` turns down still reads `applied`.** That function returns plain English for its refusals (a missing name or company), so the status cannot tell them apart without changing its return type; the message says why.
+- **Skills are not covered.** `UserSkill` has no `manually_edited` flag, so `_supersede_skill` is unchanged.
+
+---
+
 ## Release v0.1.1 — ship `main` to plugin users, GitHub login in the guides
 **Status:** complete; the tag `v0.1.1` is pushed with the owner's OK, with the ARTie OAuth App's client ID shipped in `harness/github.py` | **Tests:** 3222 pass on SQLite (1 new, `test_art_hooks_codex_replaces_the_v010_hooks_with_this_versions`, plus one assertion in `test_is_art_hook_recognises_any_source_and_only_art`), 24 skipped, 2 xfailed, 0 fail; site build and the 2 MB weight check pass (636,815 bytes); `uv build` gives `art_mcp-0.1.1-py3-none-any.whl` with `harness/github.py`, `harness/github_cli.py` and the editor, and `Requires-Dist: keyring>=24`; a clean install of it passes `scripts/smoke_art_mcp.py`; the Postgres leg was not run locally (nothing here touches storage), CI's required leg covers it
 
