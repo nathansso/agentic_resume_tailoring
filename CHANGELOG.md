@@ -15,7 +15,7 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 ---
 
 ## Issue 385 — Zero-install setup: `/art:setup` installs uv and the `art` command when missing
-**Status:** complete | **Tests:** 3478 pass on SQLite (6 new: 5 in `test_plugin.py`, 1 in `test_github.py`; 1 rewritten), 25 skipped, 2 xfailed, 0 fail; the Postgres leg was not run locally (nothing here touches storage), CI's required leg covers it; the site was not built locally (no `node_modules`), the PR's Vercel preview builds it
+**Status:** complete | **Tests:** 3494 pass on SQLite after merging main (6 new: 5 in `test_plugin.py`, 1 in `test_github.py`; 1 rewritten), 26 skipped, 2 xfailed, 0 fail; the Postgres leg was not run locally (nothing here touches storage), CI's required leg covers it; the site was not built locally (no `node_modules`), the PR's Vercel preview builds it
 
 A new user had to install `uv` before the plugin could start ART, and sign in to GitHub with a long `uvx --from "art-mcp[ui] @ <wheel URL>" art github login` line. `/art:setup` now notices when ART's tools don't answer, works out why, installs uv and ART as a command with the user's yes to each command, and says how to restart ART once for their host. The sign-in is `art github login` everywhere, with the uvx form kept as the fallback.
 
