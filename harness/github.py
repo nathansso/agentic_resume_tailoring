@@ -38,7 +38,7 @@ log = logging.getLogger(__name__)
 
 # The OAuth App's public client ID. Empty until the owner registers the App with
 # the device flow enabled (INSTALL.md, "GitHub OAuth App"); then it ships here.
-DEFAULT_CLIENT_ID = ""
+DEFAULT_CLIENT_ID = "Ov23liPXidZbNgjP4Oh7"  # the ARTie OAuth App (device flow); public by design
 CLIENT_ID_ENV, TOKEN_ENV = "ART_GITHUB_CLIENT_ID", "ART_GITHUB_TOKEN"
 KEYRING_SERVICE, KEYRING_USER = "art-mcp", "github-token"
 
