@@ -130,6 +130,9 @@ def isolate_environment(environ=None) -> list[str]:
         _SCRATCH["dir"] = tempfile.mkdtemp(prefix="art_tests_data_")
         atexit.register(shutil.rmtree, _SCRATCH["dir"], True)
     environ["ART_DATA_DIR"] = _SCRATCH["dir"]
+    # No test downloads a LaTeX engine (#384). Tests of the downloader clear this and
+    # inject a fetcher that serves an archive built in the test.
+    environ["ART_NO_DOWNLOAD"] = "1"
     return removed
 
 

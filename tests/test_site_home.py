@@ -167,8 +167,10 @@ def test_privacy_note_leads_with_local_and_puts_jev_under_the_optional_heading()
 
 def test_requirements_are_named_honestly() -> None:
     src = INDEX.read_text(encoding="utf-8")
-    for needle in ("Claude Code or Codex", "uv", "tectonic or pdflatex"):
+    for needle in ("Claude Code or Codex", "uv", "No LaTeX to install"):
         assert needle in src, needle
+    # ART downloads its own Tectonic (#384): a LaTeX engine is no longer a requirement.
+    assert "tectonic or pdflatex" not in src
     assert "free to use" in src.lower()
     assert "public on GitHub" in src
 

@@ -172,9 +172,11 @@ def _find_latex_engine() -> Optional[Tuple[str, str]]:
     """`(name, path)` of the LaTeX engine to use, or None when there is none.
 
     Tectonic is preferred — on PATH first, then alongside this Python
-    executable — and pdflatex is the fallback. Shared by the PDF compile below
-    and the line measurer in `harness/render_cache.py` (issue #200), so both
-    always run the same engine.
+    executable — and pdflatex is the fallback. The Tectonic ART downloaded
+    itself (`$ART_DATA_DIR/bin`, `harness/toolchain.py`, #384) comes last, so an
+    engine the user installed always wins. Shared by the PDF compile below and
+    the line measurer in `harness/render_cache.py` (issue #200), so both always
+    run the same engine.
     """
     import os
     import sys as _sys
@@ -190,6 +192,11 @@ def _find_latex_engine() -> Optional[Tuple[str, str]]:
     pdflatex = shutil.which("pdflatex")
     if pdflatex:
         return "pdflatex", pdflatex
+    from harness.toolchain import engine_path
+
+    provisioned = engine_path()
+    if provisioned.is_file():
+        return "tectonic", str(provisioned)
     return None
 
 

@@ -15,8 +15,9 @@ with `ast` so nothing is imported to test it:
    a harness change that starts calling such a function is caught in review,
    not here.
 
-3. **The network is reached through two modules only** (#353): the Jev client
-   (`harness/decisions/client.py`) and the GitHub client (`harness/github.py`).
+3. **The network is reached through three modules only** (#353, #384): the Jev
+   client (`harness/decisions/client.py`), the GitHub client (`harness/github.py`)
+   and the toolchain downloader (`harness/toolchain.py`, the pinned Tectonic).
    Any other harness file importing an HTTP or socket library fails
    `NETWORK_CLIENTS` below; the LinkedIn gateway client (#355) joins that list.
 
@@ -32,9 +33,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 # The network allow-list (#353): the only harness modules that may import an HTTP or socket
-# library. The Jev client (#193) and the GitHub client (#353) are the whole list; the LinkedIn
-# gateway client (#355) joins it in its own change, and nothing else gets in without one.
-NETWORK_CLIENTS = ("harness/decisions/client.py", "harness/github.py")
+# library. The Jev client (#193), the GitHub client (#353) and the toolchain downloader (#384)
+# are the whole list; the LinkedIn gateway client (#355) joins it in its own change, and nothing
+# else gets in without one.
+NETWORK_CLIENTS = ("harness/decisions/client.py", "harness/github.py", "harness/toolchain.py")
 NETWORK_MODULES = ("requests", "httpx", "urllib3", "urllib.request", "http.client", "aiohttp",
                    "socket", "ssl", "websockets", "websocket", "ftplib", "smtplib", "imaplib",
                    "poplib", "telnetlib", "xmlrpc.client")
@@ -166,8 +168,8 @@ def test_importing_harness_or_checks_loads_no_generative_client():
     assert transitive_violations(ROOT, entries) == []
 
 
-def test_the_harness_reaches_the_network_only_through_the_jev_and_github_clients():
-    """Exactly those two modules import a network library: a third is a new outbound call
+def test_the_harness_reaches_the_network_only_through_the_jev_github_and_toolchain_clients():
+    """Exactly those three modules import a network library: a fourth is a new outbound call
     path, and it needs the root CLAUDE.md invariant, this list and the docs to say so."""
     assert sorted(network_importers(ROOT)) == sorted(NETWORK_CLIENTS)
 

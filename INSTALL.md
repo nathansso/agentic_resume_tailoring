@@ -16,7 +16,8 @@ commands and the hooks:
 /plugin install art@art
 ```
 
-It needs `uv`, plus tectonic or pdflatex for PDFs. See [`plugin/README.md`](plugin/README.md).
+It needs `uv`, which `/art:setup` installs if it is missing (below). For PDFs, ART downloads a pinned Tectonic on first use (set `ART_NO_DOWNLOAD=1`
+to opt out). See [`plugin/README.md`](plugin/README.md).
 
 **No uv yet? Run `/art:setup` (#385).** When ART's tools don't answer, the setup checks for
 `uv` (on PATH, or in `~/.local/bin`, `%USERPROFILE%\.local\bin` on Windows) and, with your

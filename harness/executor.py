@@ -369,10 +369,10 @@ def start_content(user_id: UUID, job: JobDescription, kg: _KG,
 # ── context ──────────────────────────────────────────────────────────────────
 
 def _line_counter() -> Optional[Callable[[Dict], Optional[Dict[str, int]]]]:
-    from agents.formatter import _find_latex_engine
     from harness import render_cache
+    from harness.toolchain import latex_engine
 
-    if MEASURER is None and _find_latex_engine() is None:
+    if MEASURER is None and latex_engine()[0] is None:
         return None
     measurer = MEASURER or render_cache.measure_lines
 
@@ -386,10 +386,10 @@ def _line_counter() -> Optional[Callable[[Dict], Optional[Dict[str, int]]]]:
 
 
 def _page_budget(content: Dict, budget: float) -> Optional[Dict]:
-    from agents.formatter import _find_latex_engine
     from harness import render_cache
+    from harness.toolchain import latex_engine
 
-    if MEASURER is None and _find_latex_engine() is None:
+    if MEASURER is None and latex_engine()[0] is None:
         return None
     try:
         return render_cache.page_budget(content, budget=budget,

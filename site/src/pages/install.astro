@@ -38,7 +38,7 @@ const toc = Object.values(S);
   </Callout>
 
   <DocSection section={S.prerequisites}>
-    <p>You need three things on your computer. The first two are required.</p>
+    <p>You need two things on your computer, and ARTie's setup can install the second for you.</p>
 
     <h3>1. A coding agent: Claude Code or Codex</h3>
     <p>
@@ -62,14 +62,14 @@ const toc = Object.values(S);
       When it is done, open a new terminal and run <code>uv --version</code> to confirm.
     </p>
 
-    <h3>3. A LaTeX engine, for PDFs</h3>
+    <h3>No LaTeX to install</h3>
     <p>
-      ARTie writes your resume in LaTeX and needs a LaTeX engine on your <code>PATH</code> to
-      turn it into a PDF. Either of these works: <a href="https://tectonic-typesetting.github.io" rel="noopener">tectonic</a> or <code>pdflatex</code>. <code>pdflatex</code> comes
-      with <a href="https://miktex.org" rel="noopener">MiKTeX</a> on Windows, <a href="https://www.tug.org/mactex/" rel="noopener">MacTeX</a> on
-      macOS and <a href="https://www.tug.org/texlive/" rel="noopener">TeX Live</a> on Linux.
-      Without either you still get the <code>.tex</code> file, just not the PDF, so you can
-      install this later.
+      ARTie writes your resume in LaTeX. The first time it renders a PDF on a machine with no
+      LaTeX engine, it downloads a pinned <a href="https://tectonic-typesetting.github.io" rel="noopener">Tectonic</a>,
+      checks its checksum and keeps it in <code>~/.art/bin</code>. A tectonic or
+      <code>pdflatex</code> already on your <code>PATH</code> is used instead. Set
+      <code>ART_NO_DOWNLOAD=1</code> to turn the download off; you still get the
+      <code>.tex</code> file.
     </p>
 
     <h3>Notes for your system</h3>
@@ -357,9 +357,9 @@ const toc = Object.values(S);
 
     <h3>You get a .tex file but no PDF</h3>
     <p>
-      ARTie found no LaTeX engine. Install tectonic or <code>pdflatex</code> (see <a href="#prerequisites">Before
-      you start</a>), make sure it is on your <code>PATH</code>, and ask your agent to render
-      again.
+      ARTie found no LaTeX engine and could not download Tectonic: the render's hint says why
+      (offline, or <code>ART_NO_DOWNLOAD=1</code>). Connect and render again, or install
+      tectonic or <code>pdflatex</code> on your <code>PATH</code>.
     </p>
 
     <Callout title="Still stuck?">

@@ -28,7 +28,7 @@ without a key.
 
 ## Quick install
 
-In Claude Code (you need [uv](https://docs.astral.sh/uv/), plus tectonic or pdflatex for PDFs):
+In Claude Code (you need [uv](https://docs.astral.sh/uv/); ART downloads a pinned Tectonic for PDFs on first use):
 
 ```
 /plugin marketplace add nathansso/agentic_resume_tailoring
