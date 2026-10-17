@@ -1126,6 +1126,13 @@ pyproject.toml                       # art, art-mcp · extras [embed] [pdf] [ui]
 
 ## 18. Roadmap
 
+This is the internal roadmap; the public README carries none. Before the pivot, work ran in
+phases P0 to P2 on the board. **P0** (research spikes) and **P1** (preferences and knowledge)
+are complete: the P1 epic #140 closed with the JD profile, layout overrides, the preference
+and persona tiers, JobCards, chat-to-graph extraction and KG evidence in the planner. **P2**
+shipped the redundancy suite (#122) and weighted keyword scoring (#125). From 2026-09-28 the
+H phases below replace P3 and P4.
+
 The windows are the plan and have not moved. Status is as of 2026-10-17, from the board and
 `CHANGELOG.md`.
 
@@ -1144,7 +1151,9 @@ merged work (contract tests over both adapters, the `art-mcp` wheel without torc
 Jev point replaying from committed recordings, the scripted host replaying byte-identically,
 the memory gate measured with negation reported separately, pins re-injected after
 compaction) while their windows still run to Nov 22. Nothing was re-dated. The evidence-brief
-plan (#311–#316), #331, #380, #381 and #382 are open and not yet assigned a phase.
+plan (#311–#316), #331, #380, #381, #382 and the flaky rule-order tests (#388) are open and
+not yet assigned a phase. #104 (a P2 reading) and the iceboxed #60 (pgvector search) and #139
+(readings) stay open outside the H phases.
 
 What is left in H2, and why:
 
