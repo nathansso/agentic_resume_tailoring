@@ -17,7 +17,11 @@ Ask the user where their materials are:
 
 - a resume file (PDF, DOCX, Markdown or LaTeX);
 - a LinkedIn data export;
-- the local folders of projects they want considered.
+- the local folders of projects they want considered;
+- their GitHub repos. If they want these, they run `uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login` in their own terminal
+  (`--private` adds private repos; `list_github_repos`'s `not_logged_in` error repeats the command), then you call `list_github_repos`, pick the repos worth
+  reading with them, and clone one only after they agree. Store what you read with
+  `source: "github:<repo>"` (each repo's `evidence_source`). Never ask for or handle a token.
 
 Read them yourself. ART does not read files.
 

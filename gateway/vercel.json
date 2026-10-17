@@ -1,0 +1,11 @@
+{
+  "functions": {
+    "api/v1/linkedin.py": {
+      "maxDuration": 120,
+      "excludeFiles": "{tests/**,README.md,pytest.ini}"
+    }
+  },
+  "rewrites": [
+    { "source": "/v1/linkedin", "destination": "/api/v1/linkedin" }
+  ]
+}

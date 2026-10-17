@@ -158,9 +158,30 @@ export interface EvidenceItem {
   text_source: EvidenceTextSource;
   cite_key: string;
   parent_key: string | null;
+  /** Key of another role or project with the same name (#334): ART cannot tell the two apart. */
+  duplicate_of?: string | null;
   achievements: { id: string; title: string; issuer: string; date: string }[];
   repo_url: string;
+  /** Projects only (#322): has the user said where it was done? Absent on experiences and education. */
+  context_status?: ProjectContextStatus;
   fields: Record<string, string>;   // the editable columns, under their API names
+}
+
+export type ProjectContextStatus = "unreviewed" | "linked" | "personal";
+
+/** A suggested place for a project, in the view's item keys (#322). */
+export interface ProjectCandidate {
+  key: string;                      // `exp/<id>` or `edu/<id>`
+  title: string;
+  reason: string;
+}
+
+/** One project's place and the rule-based suggestions for it, from /api/profile/projects/contexts. */
+export interface ProjectContext {
+  project_id: string;
+  status: ProjectContextStatus;
+  parent: string | null;            // the view key of the role or degree it is linked to
+  candidates: ProjectCandidate[];   // best first; never "personal"
 }
 
 export interface EvidenceSkill {
@@ -195,6 +216,14 @@ export interface EvidenceView {
   skills: EvidenceSkill[];
   edges: EvidenceEdge[];
   stats: EvidenceStats;
+}
+
+/** A skill the user dismissed from the evidence map and can restore (#321). */
+export interface DismissedSkill {
+  skill_id: string;
+  name: string;
+  dismissed_at: string;             // ISO timestamp
+  sources: string[];                // the kinds of source that had claimed it
 }
 
 export interface JobSkillRow {

@@ -129,6 +129,33 @@ def set_skill_core(body: SkillCoreUpdate, user: User = Depends(get_current_user)
     return {"result": services.set_skill_core(user.user_id, body.name, body.is_core)}
 
 
+@router.get("/skills/dismissed")
+def get_dismissed_skills(user: User = Depends(get_current_user)):
+    """Skills the user dismissed from the evidence map, restorable (issue #321)."""
+    return services.list_dismissed_skills(user.user_id)
+
+
+@router.post("/skills/{skill_id}/dismiss")
+def dismiss_skill(skill_id: str, user: User = Depends(get_current_user)):
+    """Drop a skill no bullet cites and keep it dropped on re-import (issue #321). A skill a
+    bullet cites is refused (409): edit the bullet instead."""
+    try:
+        return services.dismiss_skill(user.user_id, skill_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.post("/skills/{skill_id}/restore")
+def restore_skill(skill_id: str, user: User = Depends(get_current_user)):
+    """Bring a dismissed skill back exactly as it was (issue #321)."""
+    row = services.restore_skill(user.user_id, skill_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="No dismissed skill with that id")
+    return row
+
+
 @router.get("/experiences")
 def get_experiences(user: User = Depends(get_current_user)):
     return services.get_experiences(user.user_id)
@@ -191,6 +218,8 @@ def edit_experience(
         row = services.update_experience(
             user.user_id, experience_id, body.model_dump(exclude_unset=True)
         )
+    except services.DuplicateItemError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if row is None:
@@ -235,6 +264,8 @@ def edit_project(
         row = services.update_project(
             user.user_id, project_id, body.model_dump(exclude_unset=True)
         )
+    except services.DuplicateItemError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if row is None:
@@ -259,6 +290,31 @@ def edit_project_blurb(
     if row is None:
         raise HTTPException(status_code=404, detail="Bullet not found")
     return row
+
+
+@router.get("/projects/contexts")
+def get_project_contexts(user: User = Depends(get_current_user)):
+    """Where each project was done, and the rule-based suggestion for it (issue #322).
+    Read-only: a suggestion is never stored until the user confirms it."""
+    return services.get_project_contexts(user.user_id)
+
+
+class ProjectContextUpdate(BaseModel):
+    context: str     # "exp/<uuid>", "edu/<uuid>" (the evidence view's keys), "personal" or "unreviewed"
+
+
+@router.put("/projects/{project_id}/context")
+def put_project_context(
+    project_id: str, body: ProjectContextUpdate, user: User = Depends(get_current_user),
+):
+    """Confirm where a project was done, or clear it (issue #322). The same write the
+    `set_project_context` harness tool makes."""
+    try:
+        return services.set_project_context(user.user_id, project_id, body.context)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.delete("/projects/{project_id}")

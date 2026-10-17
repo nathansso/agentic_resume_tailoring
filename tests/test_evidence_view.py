@@ -595,12 +595,12 @@ def test_job_skills_read_the_jd_profile_requirements_with_their_terms(isolated_e
 
     rows = client_for(alice).get(f"/api/jobs/{jid}/skills").json()
 
-    assert [r["name"] for r in rows] == ["python", "Ship fast", "docker"]
+    assert [r["name"] for r in rows] == ["Python", "Ship fast", "Docker"]       # display spelling (#348)
     python = rows[0]
-    assert python == {"name": "python", "required": True, "weight": 1.0, "area": "Languages",
-                      "terms": ["python", "pytorch"]}
+    assert python == {"name": "Python", "required": True, "weight": 1.0, "area": "Languages",
+                      "terms": ["python", "pytorch"]}                           # terms stay lower-case
     assert rows[1]["terms"] == ["Ship fast"] and rows[1]["weight"] == 0.6      # no terms: the text names it
-    assert rows[2] == {"name": "docker", "required": False, "weight": 0.4, "area": "Tools",
+    assert rows[2] == {"name": "Docker", "required": False, "weight": 0.4, "area": "Tools",
                        "terms": ["docker", "kubernetes"]}                     # criticality / 5; incidental dropped
 
 
@@ -611,7 +611,7 @@ def test_job_skills_prefer_the_profile_and_fall_back_to_job_skill_rows(isolated_
     empty_profile = _profile_job(isolated_engine, alice, [("Mention", "incidental", 3, ["x"])],
                                  skills=[("Python", True, 1.0)])
 
-    assert [r["name"] for r in client_for(alice).get(f"/api/jobs/{both}/skills").json()] == ["go"]
+    assert [r["name"] for r in client_for(alice).get(f"/api/jobs/{both}/skills").json()] == ["Go"]
     assert [r["name"] for r in client_for(alice).get(f"/api/jobs/{empty_profile}/skills").json()] == ["Python"]
 
 
@@ -623,7 +623,7 @@ def test_job_skills_merge_requirements_that_share_a_primary_term(isolated_engine
     ])
 
     assert client_for(alice).get(f"/api/jobs/{jid}/skills").json() == [
-        {"name": "aws", "required": True, "weight": 1.0, "area": "Infrastructure & Cloud",
+        {"name": "AWS", "required": True, "weight": 1.0, "area": "Infrastructure & Cloud",
          "terms": ["aws", "s3", "ec2"]}]
 
 
@@ -641,9 +641,46 @@ def test_a_job_opened_through_the_harness_returns_its_requirements(isolated_engi
     rows = client_for(alice).get(f"/api/jobs/{out['job_id']}/skills").json()
 
     assert [(r["name"], r["required"], r["weight"]) for r in rows] == [
-        ("python", True, 1.0), ("docker", False, 0.4)]
+        ("Python", True, 1.0), ("Docker", False, 0.4)]
     with Session(isolated_engine) as s:
         assert s.exec(select(JobSkill).where(JobSkill.job_id == UUID(out["job_id"]))).all() == []
+
+
+def test_a_missing_requirement_keeps_the_postings_spelling_not_the_lower_cased_term(isolated_engine, client_for):
+    """#348: the stored terms are lower-cased for matching; the name is what a chip shows."""
+    alice = _user(isolated_engine, "Alice")
+    jid = _profile_job(isolated_engine, alice, [
+        ("Experience designing A/B testing frameworks", "required", 5, ["A/B Testing"]),     # the posting's own case
+        ("Training models in pytorch", "required", 4, ["pytorch"]),                         # lower case there: alias map
+        ("KUBERNETES ADMINISTRATION", "preferred", 3, ["kubernetes"]),                      # shouting is not a spelling
+        ("Familiarity with feature stores", "preferred", 2, ["feature store"]),             # nothing better: capitalised
+        ("Know the GPU stack", "required", 3, ["gpu"]),                                     # an acronym keeps its case
+        ("Fluent in Next.js", "required", 3, ["something else"]),                           # term not in the text
+    ])
+
+    rows = {r["name"]: r for r in client_for(alice).get(f"/api/jobs/{jid}/skills").json()}
+
+    assert sorted(rows) == ["A/B testing", "Feature store", "GPU", "Kubernetes", "PyTorch", "Something else"]
+    assert rows["A/B testing"]["terms"] == ["a/b testing"]
+    assert rows["PyTorch"]["terms"] == ["pytorch"]
+    assert rows["GPU"]["terms"] == ["gpu"]
+
+
+def test_display_term_chooses_the_postings_spelling_then_the_alias_map_then_a_capital():
+    from agents.jd_payload import display_term
+
+    assert display_term("a/b testing", "Run A/B testing at scale") == "A/B testing"
+    assert display_term("pytorch", "we use PyTorch daily") == "PyTorch"
+    assert display_term("pytorch", "we use pytorch daily") == "PyTorch"            # lower there too: alias map
+    assert display_term("torch", "We use torch") == "PyTorch"
+    assert display_term("sql", "Strong sql skills") == "SQL"
+    assert display_term("feature store", "feature stores in prod") == "Feature store"
+    assert display_term("kubernetes", "KUBERNETES NEEDED") == "Kubernetes"
+    assert display_term("aws", "AWS") == "AWS"                                     # short capitals are acronyms
+    assert display_term("c++", "Fluent in C++.") == "C++"
+    assert display_term("go", "Good with algorithms") == "Go"                       # inside a word is not a match
+    assert display_term("Already Cased", "") == "Already Cased"                    # only lower case is capitalised
+    assert display_term("", "x") == ""
 
 
 def test_job_skills_from_a_profile_are_still_owner_only(isolated_engine, client_for):

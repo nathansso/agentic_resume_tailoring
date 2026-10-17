@@ -35,6 +35,20 @@ Your data lives in `~/.art/art.db`, or `$ART_DATA_DIR`. Rendered resumes go to
 The two skills behind these, `art-tailor` and `art-setup`, also trigger on their own
 when you ask Claude to tailor a resume or update your experience.
 
+## GitHub repos (optional)
+
+To bring in your GitHub repos, sign in once in your own terminal (add `--private` for private
+repos):
+
+```bash
+uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login
+```
+
+Claude can then call `list_github_repos`, pick the repos
+worth reading, and clone one only after you agree. The token goes to your OS keychain, never
+the ART database or an export; see "GitHub repos" in [INSTALL.md](../INSTALL.md) for the
+`keyring` requirement and the commands.
+
 ## Hooks
 
 - **Before every message:** if you edited a resume in the editor since your last
@@ -44,11 +58,12 @@ when you ask Claude to tailor a resume or update your experience.
   before discarding it.
 - **Also before every message:** ART's memory gate reads your message. If it may state a
   lasting preference ("never mention Kafka"), Claude is asked to confirm it with you and
-  record it. A clear, low-stakes one ("lead with Python") ART saves itself and Claude
-  tells you. A rule you call absolute ("never", a negative pin) is never saved without
-  your confirmation. The gate asks TypeSafe's Jev when `TYPESAFE_API_KEY` is set (your
-  message leaves your machine in that request); without a key it only flags messages for
-  Claude to confirm and saves nothing on its own. A message that leans on Claude's last
+  record it. A rule you call absolute ("never", a negative pin) is never saved without
+  your confirmation. This works without a key: the gate only flags messages for Claude
+  to confirm and saves nothing on its own. **Optional upgrade:** with a TypeSafe key
+  (`TYPESAFE_API_KEY`), the gate asks TypeSafe's Jev, and a clear, low-stakes preference
+  ("lead with Python") ART saves itself and Claude tells you (your message leaves your
+  machine in that request). With a key, a message that leans on Claude's last
   reply ("never list that again") is sent with the end of that reply (at most 600
   characters of its text, read from the transcript Claude Code passes the hook), so ART can
   tell what "that" is. No other message carries a reply. To set a key, see what Jev is sent, or

@@ -1,15 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Search } from "lucide-react";
-import { listJobs } from "../api/jobs";
-import { getEvidenceView } from "../api/profile";
-import type { EvidenceItem, EvidenceKind, EvidenceView, JobListItem, JobSkillRow } from "../types";
+import type { EvidenceItem, EvidenceKind, EvidenceView } from "../types";
 import {
-  areaFoldKey, dateRange, estimateTextWidth, firstMatch, fitText, ghostBlock, jobOverlay, layoutMap,
-  neighborhood, sourceArcs, type JobOverlay, type MapLayout, type PlacedArea, type PlacedRow,
+  DISMISSED_KEY, areaFoldKey, dateRange, estimateTextWidth, firstMatch, fitText, ghostBlock, isPanelKey, needsPlacement, projectsToPlace,
+  jobOverlay, layoutMap, neighborhood, sourceArcs, type JobOverlay, type MapLayout, type PlacedArea, type PlacedRow,
 } from "../lib/evidenceMap";
 import { cn } from "../lib/utils";
-import { useJobSkills } from "../hooks/useJobSkills";
+import { useEvidenceData } from "../hooks/useEvidenceData";
+import { useJobCompare, type JobCompare } from "../hooks/useJobCompare";
 import { EvidencePanel } from "./EvidencePanel";
+import { Count, Glyph, JobStatus, JobToggle, KIND_LABEL, onActivate } from "./graphParts";
 
 /*
  * The evidence map (issue #136): experiences and projects on the left, skills by area
@@ -19,32 +19,6 @@ import { EvidencePanel } from "./EvidencePanel";
  * runtime, so it is set as SVG attributes; every colour and type style is a Tailwind
  * utility over the `graph-*` tokens in index.css.
  */
-
-const KIND_LABEL: Record<EvidenceKind, string> = { exp: "Experience", proj: "Project", edu: "Education" };
-const KIND_FILL: Record<EvidenceKind, string> = {
-  exp: "fill-graph-experience", proj: "fill-graph-project", edu: "fill-graph-education",
-};
-
-/** Run `fn` on Enter or Space, the keys a button answers to. */
-function onActivate(fn: () => void) {
-  return (e: KeyboardEvent) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      fn();
-    }
-  };
-}
-
-/** Square for an experience, diamond for a project, triangle for education: kind never rests on hue alone. */
-function Glyph({ kind, size }: { kind: EvidenceKind; size: number }) {
-  const cls = KIND_FILL[kind];
-  if (kind === "exp") return <rect x={-size} y={-size} width={2 * size} height={2 * size} rx={1.6} className={cls} />;
-  if (kind === "proj") {
-    const s = size * 1.3;
-    return <path d={`M0,${-s}L${s},0L0,${s}L${-s},0Z`} className={cls} />;
-  }
-  return <path d={`M0,${-size * 1.25}L${size * 1.2},${size * 0.9}L${-size * 1.2},${size * 0.9}Z`} className={cls} />;
-}
 
 function Pips({ value, x }: { value: number; x: number }) {
   return (
@@ -59,33 +33,23 @@ function Pips({ value, x }: { value: number; x: number }) {
   );
 }
 
-export function EvidenceMap({ defaultJobId = null, onChanged }: { defaultJobId?: string | null; onChanged?: () => void }) {
-  const [view, setView] = useState<EvidenceView | null>(null);
-  const [error, setError] = useState<string | null>(null);
+/**
+ * `initialFolded` is the set of areas to start folded (`areaFoldKey`), for opening the map on one
+ * area from the area map (#320). It is read once, when the map mounts.
+ */
+export function EvidenceMap({ defaultJobId = null, initialFolded, onChanged }: {
+  defaultJobId?: string | null; initialFolded?: ReadonlySet<string>; onChanged?: () => void;
+}) {
+  const { view, dismissed, contexts, error, reload } = useEvidenceData();
   const [selected, setSelected] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
-  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
+  const [folded, setFolded] = useState<ReadonlySet<string>>(() => new Set(initialFolded));
   const [query, setQuery] = useState("");
   const [width, setWidth] = useState(900);
-  const [jobOn, setJobOn] = useState(false);
-  const [jobs, setJobs] = useState<JobListItem[] | null>(null);
-  const [jobId, setJobId] = useState<string | null>(defaultJobId);
-  const [jobListError, setJobListError] = useState<string | null>(null);
-  const { skills: jobSkills, error: jobSkillsError } = useJobSkills(jobOn ? jobId : null);
-  const jobError = jobListError ?? jobSkillsError;
+  const job = useJobCompare(defaultJobId);
+  const { jobOn, jobSkills } = job;
   const stage = useRef<HTMLDivElement>(null);
   const loaded = view !== null;
-
-  const reload = useCallback(async () => {
-    try {
-      setView(await getEvidenceView());
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load the evidence map");
-    }
-  }, []);
-
-  useEffect(() => { void reload(); }, [reload]);
 
   // The map is as wide as its column (never under the minimum the layout can be read at).
   useEffect(() => {
@@ -95,15 +59,6 @@ export function EvidenceMap({ defaultJobId = null, onChanged }: { defaultJobId?:
     ro.observe(el);
     return () => ro.disconnect();
   }, [loaded]);
-
-  // The job picker lists saved jobs the first time the toggle goes on.
-  useEffect(() => {
-    if (!jobOn || jobs !== null) return;
-    listJobs().then((list) => {
-      setJobs(list);
-      setJobId((cur) => (cur && list.some((j) => j.job_id === cur) ? cur : list[0]?.job_id ?? null));
-    }).catch((e) => setJobListError(e instanceof Error ? e.message : "Failed to load jobs"));
-  }, [jobOn, jobs]);
 
   const layout = useMemo(
     () => (view ? layoutMap(view, { width, folded, query }) : null),
@@ -121,13 +76,15 @@ export function EvidenceMap({ defaultJobId = null, onChanged }: { defaultJobId?:
   const known = useMemo(() => new Set([
     ...(view?.items ?? []).map((i) => i.key), ...(view?.skills ?? []).map((s) => s.key),
   ]), [view]);
-  const current = selected && (known.has(selected) || selected.startsWith("ghost:")) ? selected : null;
+  const current = selected && (
+    known.has(selected) || selected.startsWith("ghost:") || (selected === DISMISSED_KEY && dismissed.length > 0)
+  ) ? selected : null;
 
   // What stays lit: the hovered or selected node and what it links; else the search hits and theirs.
   const lit = useMemo(() => {
     if (!view || !layout) return null;
     const active = hover ?? current;
-    if (active && !active.startsWith("ghost:")) return neighborhood(view, active);
+    if (active && !isPanelKey(active)) return neighborhood(view, active);
     if (!active && layout.matches) {
       const out = new Set<string>();
       layout.matches.forEach((k) => neighborhood(view, k).forEach((n) => out.add(n)));
@@ -145,10 +102,11 @@ export function EvidenceMap({ defaultJobId = null, onChanged }: { defaultJobId?:
   });
 
   const select = (key: string) => setSelected((cur) => (cur === key ? null : key));
+  const toPlace = useMemo(() => (view ? projectsToPlace(view) : []), [view]);
 
   if (error) return <p className="p-4 text-sm text-destructive">{error}</p>;
   if (!view || !layout) return <p className="p-4 text-sm text-muted-foreground">Loading…</p>;
-  if (view.items.length === 0 && view.skills.length === 0) {
+  if (view.items.length === 0 && view.skills.length === 0 && dismissed.length === 0) {
     return (
       <p className="p-4 text-sm text-muted-foreground">
         Nothing to map yet. Ingest a resume or GitHub profile and the map will show which of your
@@ -164,9 +122,10 @@ export function EvidenceMap({ defaultJobId = null, onChanged }: { defaultJobId?:
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <Toolbar
           view={view} query={query} setQuery={setQuery}
+          dismissedCount={dismissed.length} onOpenDismissed={() => setSelected(DISMISSED_KEY)}
+          toPlace={toPlace.length} onPlace={() => { if (toPlace[0]) setSelected(toPlace[0].key); }}
           onEnter={() => { const k = firstMatch(layout); if (k) setSelected(k); }}
-          jobOn={jobOn} setJobOn={setJobOn} jobs={jobs} jobId={jobId} setJobId={setJobId}
-          jobSkills={jobSkills} jobError={jobError} overlay={overlay}
+          job={job} overlay={overlay}
         />
         <div ref={stage} className="min-h-0 flex-1 overflow-auto px-4 pb-4">
           <svg
@@ -189,7 +148,7 @@ export function EvidenceMap({ defaultJobId = null, onChanged }: { defaultJobId?:
         </div>
       </div>
       <EvidencePanel
-        view={view} selected={current} overlay={overlay} jobOn={jobOn}
+        view={view} selected={current} overlay={overlay} jobOn={jobOn} dismissed={dismissed} contexts={contexts}
         onSelect={setSelected} onSaved={async () => { await reload(); onChanged?.(); }}
       />
     </div>
@@ -198,32 +157,14 @@ export function EvidenceMap({ defaultJobId = null, onChanged }: { defaultJobId?:
 
 // ── toolbar ────────────────────────────────────────────────────────────────────
 
-function Count({ n, label, tone }: { n: number; label: string; tone?: "proven" | "gap" }) {
-  return (
-    <span className="inline-flex items-baseline gap-1.5">
-      <span
-        className={cn(
-          "font-mono text-[12px] font-medium tabular-nums",
-          tone === "proven" && "text-accent",
-          tone === "gap" && n > 0 && "text-graph-gap",
-        )}
-      >
-        {n}
-      </span>
-      <span>{label}</span>
-    </span>
-  );
-}
-
 function Toolbar(props: {
   view: EvidenceView;
+  dismissedCount: number; onOpenDismissed: () => void;
+  toPlace: number; onPlace: () => void;
   query: string; setQuery: (q: string) => void; onEnter: () => void;
-  jobOn: boolean; setJobOn: (on: boolean) => void;
-  jobs: JobListItem[] | null; jobId: string | null; setJobId: (id: string) => void;
-  jobSkills: JobSkillRow[] | null; jobError: string | null; overlay: JobOverlay | null;
+  job: JobCompare; overlay: JobOverlay | null;
 }) {
   const { stats } = props.view;
-  const noJobs = props.jobOn && props.jobs !== null && props.jobs.length === 0;
   return (
     <div className="shrink-0 space-y-2 px-4 pb-1 pt-3">
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px] text-muted-foreground" aria-label="Summary">
@@ -232,6 +173,23 @@ function Toolbar(props: {
         <Count n={stats.unevidenced} label="with no evidence" />
         <Count n={stats.github_only} label="GitHub only" />
         <Count n={stats.needs_text} label={stats.needs_text === 1 ? "item needs a description" : "items need a description"} tone="gap" />
+        {props.toPlace > 0 && (
+          <button
+            type="button" onClick={props.onPlace}
+            className="rounded-md border border-border px-2 py-0.5 text-[12px] transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <span className="font-mono tabular-nums">{props.toPlace}</span>{" "}
+            {props.toPlace === 1 ? "project to place" : "projects to place"}
+          </button>
+        )}
+        {props.dismissedCount > 0 && (
+          <button
+            type="button" onClick={props.onOpenDismissed}
+            className="rounded-md border border-border px-2 py-0.5 text-[12px] transition-colors hover:bg-muted hover:text-foreground"
+          >
+            Dismissed · <span className="font-mono tabular-nums">{props.dismissedCount}</span>
+          </button>
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <label className="relative inline-flex">
@@ -247,70 +205,11 @@ function Toolbar(props: {
             className="w-48 rounded-md border border-border bg-background py-1.5 pl-8 pr-2 text-[13px] placeholder:text-muted-foreground"
           />
         </label>
-        <button
-          type="button" role="switch" aria-checked={props.jobOn}
-          onClick={() => props.setJobOn(!props.jobOn)}
-          className={cn(
-            "inline-flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-[13px] transition-colors",
-            props.jobOn ? "border-foreground/40 bg-muted text-foreground" : "border-border text-muted-foreground hover:bg-muted",
-          )}
-        >
-          <span
-            aria-hidden="true"
-            className={cn("relative h-3.5 w-6 rounded-full transition-colors", props.jobOn ? "bg-foreground/70" : "bg-muted-foreground/30")}
-          >
-            <span
-              className={cn(
-                "absolute top-0.5 h-2.5 w-2.5 rounded-full bg-background transition-all motion-reduce:transition-none",
-                props.jobOn ? "left-3" : "left-0.5",
-              )}
-            />
-          </span>
-          Compare to a job
-        </button>
-        {props.jobOn && props.jobs && props.jobs.length > 0 && (
-          <label className="inline-flex items-center gap-2 text-[13px] text-muted-foreground">
-            <span className="sr-only">Job to compare with</span>
-            <select
-              value={props.jobId ?? ""} onChange={(e) => props.setJobId(e.target.value)}
-              className="max-w-[16rem] rounded-md border border-border bg-background px-2 py-1.5 text-[13px] text-foreground"
-            >
-              {props.jobs.map((j) => <option key={j.job_id} value={j.job_id}>{j.title} · {j.company}</option>)}
-            </select>
-          </label>
-        )}
+        <JobToggle job={props.job} />
       </div>
       <Legend />
-      {/* A fixed slot, so turning the job on adds a line without pushing the map down. */}
-      <div className="min-h-[2.75rem] space-y-1 sm:min-h-[1.5rem]">
-        {noJobs && <p className="text-[13px] text-muted-foreground">No saved jobs yet. Add one from the sidebar to compare.</p>}
-        {props.jobError && <p className="text-[13px] text-destructive">{props.jobError}</p>}
-        {props.jobOn && props.jobId && props.jobSkills && props.jobSkills.length === 0 && !props.jobError && (
-          <p className="text-[13px] text-muted-foreground">
-            This job has no analyzed skills yet. Analyze it from its page and they will appear here.
-          </p>
-        )}
-        {props.overlay && <JobLine overlay={props.overlay} />}
-      </div>
+      <JobStatus job={props.job} overlay={props.overlay} />
     </div>
-  );
-}
-
-/** Required and preferred, each as three separate counts. Never one number, and nothing from the ATS composite. */
-function JobLine({ overlay }: { overlay: JobOverlay }) {
-  const group = (name: string, c: JobOverlay["required"]) => (
-    <span className="inline-flex flex-wrap items-baseline gap-x-3">
-      <span className="font-medium text-foreground">{name}</span>
-      <Count n={c.evidenced} label="backed by a bullet" tone="proven" />
-      <Count n={c.claimed} label="claimed without evidence" tone="gap" />
-      <Count n={c.missing} label="missing" tone="gap" />
-    </span>
-  );
-  return (
-    <p className="flex flex-wrap items-baseline gap-x-6 gap-y-1 text-[13px] text-muted-foreground" aria-label="Job coverage">
-      {group("Required", overlay.required)}
-      {group("Preferred", overlay.preferred)}
-    </p>
   );
 }
 
@@ -406,12 +305,13 @@ function Row({ row, layout, selected, dim, onSelect, onHover }: {
   const x0 = row.indent * 20;
   const room = layout.leftW - x0 - 28;
   const award = it.achievements[0];
+  const unplaced = needsPlacement(it);
   const sub = [it.org || (it.kind === "proj" && !it.parent_key ? "project" : ""), dateRange(it.start, it.end)]
     .filter(Boolean).join(" · ");
   return (
     <g
       role="button" tabIndex={0} aria-pressed={selected}
-      aria-label={`${KIND_LABEL[it.kind]}: ${it.title}${row.fix ? ", needs a description" : ""}`}
+      aria-label={`${KIND_LABEL[it.kind]}: ${it.title}${row.fix ? ", needs a description" : ""}${unplaced ? ", not placed under a role or degree" : ""}`}
       transform={`translate(0,${row.y})`}
       className={cn(
         "group cursor-pointer outline-none transition-opacity duration-150 motion-reduce:transition-none",
@@ -439,8 +339,9 @@ function Row({ row, layout, selected, dim, onSelect, onHover }: {
         )}
       </text>
       <text x={x0 + 20} y={15} className="fill-muted-foreground text-[12px]">
-        {fitText(sub, room - (row.fix ? 130 : 0), 12)}
+        {fitText(sub, room - (row.fix ? 130 : 0) - (unplaced ? 66 : 0), 12)}
         {row.fix && <tspan dx={8} className="fill-graph-gap">● needs a description</tspan>}
+        {unplaced && <tspan dx={8} className="fill-muted-foreground">○ unplaced</tspan>}
       </text>
       <circle cx={layout.leftW + 3} cy={0} r={2.2} className="fill-graph-claim" aria-hidden="true" />
     </g>

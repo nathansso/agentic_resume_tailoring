@@ -233,6 +233,18 @@ _OLD_WHEEL = ("art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailori
               "download/v0.0.9/art_mcp-0.0.9-py3-none-any.whl")
 
 
+# What `art hooks codex --write` wrote under the v0.1.0 release, the wheel every install pinned
+# until v0.1.1 (#369). Spelled out, not derived from ART_VERSION, so it stays the old wheel.
+_V010_WHEEL = ("art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/"
+               "download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl")
+
+
+def _v010_hook(arg):
+    from harness.hooks import hook_command
+
+    return {"type": "command", "timeout": 30, "command": hook_command(arg, _V010_WHEEL)}
+
+
 def _old_hook(source, arg, tail=""):
     return {"type": "command", "timeout": 30, "command": f'uvx --from "{source}" art hook {arg}{tail}'}
 
@@ -270,6 +282,36 @@ def test_art_hooks_codex_replaces_hooks_from_earlier_installs(tmp_path, monkeypa
     assert len(commands) == 2 and all("git+" not in c and "0.0.9" not in c for c in commands)
     err = capsys.readouterr().err
     assert err.count("replaced") >= 5 and "git+https" in err and "/hooks" in err
+
+
+def test_art_hooks_codex_replaces_the_v010_hooks_with_this_versions(tmp_path, monkeypatch, capsys):
+    """#369: a user who ran `art hooks codex --write` under v0.1.0 re-runs it after upgrading.
+    Those two lines are ART's own, so they go and the current wheel's take their place; the
+    user's hooks keep their place and are not edited."""
+    from harness import ART_VERSION, entry
+    mine = {"type": "command", "command": "my-lint"}
+    v010 = {"hooks": {
+        "UserPromptSubmit": [{"hooks": [mine]},
+                             {"hooks": [_v010_hook("user-prompt")]}],
+        "SessionStart": [{"matcher": "compact",
+                          "hooks": [_v010_hook("session-start")]}],
+    }}
+    path = _codex_config(tmp_path, monkeypatch, v010)
+    assert "v0.1.0" in path.read_text(encoding="utf-8")
+
+    assert entry.main(["hooks", "codex", "--write"]) == 0
+    got = json.loads(path.read_text(encoding="utf-8"))
+    text = json.dumps(got)
+    assert "0.1.0" not in text and f"v{ART_VERSION}/art_mcp-{ART_VERSION}" in text
+    lines = _art_hook_lines(got)
+    assert len(lines) == 2 and all(f"v{ART_VERSION}/" in c for c in lines)
+    assert got["hooks"]["UserPromptSubmit"][0] == {"hooks": [mine]}      # the user's, in place
+    err = capsys.readouterr().err
+    assert err.count("replaced") >= 2 and "v0.1.0" in err
+
+    before = path.read_bytes()
+    assert entry.main(["hooks", "codex", "--write"]) == 0               # a second run is a no-op
+    assert path.read_bytes() == before
 
 
 def test_art_hooks_codex_keeps_other_hooks_and_their_order(tmp_path, monkeypatch):
@@ -333,6 +375,7 @@ def test_is_art_hook_recognises_any_source_and_only_art():
 
     assert is_art_hook(hook_command("user-prompt"))
     assert is_art_hook(hook_command("session-start", _OLD_WHEEL))
+    assert is_art_hook(hook_command("user-prompt", _V010_WHEEL))         # #369
     assert is_art_hook(f'uvx --from {_OLD_GIT} art hook user-prompt')
     assert is_art_hook(f'uvx --from {_OLD_GIT} art-mcp')
     for command in ("my-lint", None, 3, "",
@@ -381,9 +424,10 @@ def test_the_codex_plugin_bundles_the_hooks_pinned_to_this_version():
 def _install_plugin(home, hooks_config=None, enabled=True, plugin="art", market="art"):
     """What `codex plugin add art@art` leaves in a CODEX_HOME: the config entry and the copied
     plugin, hooks file included."""
+    from harness import ART_VERSION
     from harness.hooks import hook_config
 
-    root = home / "plugins" / "cache" / market / plugin / "0.1.0"
+    root = home / "plugins" / "cache" / market / plugin / ART_VERSION
     (root / "hooks").mkdir(parents=True)
     (root / "hooks" / "hooks.json").write_text(
         json.dumps(hook_config() if hooks_config is None else hooks_config), encoding="utf-8")
@@ -402,7 +446,7 @@ def test_write_with_the_plugin_installed_removes_its_own_hooks_not_the_users(
         tmp_path, monkeypatch, capsys):
     """The duplicate case: `--write` was run before the plugin was installed. Each ART hook must
     fire once, so the plugin's stay and the file's go; everything else in the file is kept."""
-    from harness import entry
+    from harness import ART_VERSION, entry
     from harness.hooks import hook_config
 
     mine = {"hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": "my-lint"}]}],
@@ -418,8 +462,8 @@ def test_write_with_the_plugin_installed_removes_its_own_hooks_not_the_users(
     assert entry.main(["hooks", "codex", "--write"]) == 0
     after = json.loads(path.read_text(encoding="utf-8"))
     assert after == mine                                            # only the user's remain
-    plugin_hooks = json.loads((tmp_path / "plugins/cache/art/art/0.1.0/hooks/hooks.json")
-                              .read_text(encoding="utf-8"))
+    plugin_hooks = json.loads((tmp_path / "plugins" / "cache" / "art" / "art" / ART_VERSION / "hooks"
+                               / "hooks.json").read_text(encoding="utf-8"))
     assert plugin_hooks == hook_config()
     assert len(_art_hook_lines(plugin_hooks, after)) == 2           # one of each, in all
     err = capsys.readouterr().err

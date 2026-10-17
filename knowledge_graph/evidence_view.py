@@ -7,6 +7,14 @@ assembled on top of `SkillGraphBuilder.build_graph()` and does not change it: th
 graph feeds matching and tailoring, and the GitHub provenance edges added here are
 for this view only.
 
+**Same-name items (issue #334).** The graph keys a node by name and a cite by `proj_key` /
+`exp_key`, so two projects (or two roles) with one name cannot be told apart there. ART does
+not allow it (a rename onto another item's name is refused, and ingest merges duplicates), but
+one can exist between ingests. Each such item carries `duplicate_of`, the key of the first other
+item with its cite key, and the panel says so. Items that share a graph node get none of the
+node's edges: the node holds the surviving row's links, and handing them to the other one
+would show a project evidence it does not have.
+
 **Bullet numbers.** `cites` on an edge are the ordinals the harness cites by
 (`<item key>#b<n>`, `harness/executor.py::_KG`): an experience's bullets and a
 project's blurbs are numbered over their non-empty entries, projects through
@@ -14,7 +22,6 @@ project's blurbs are numbered over their non-empty entries, projects through
 that `index` (None for an empty entry, which has no ordinal) and its `raw_index`,
 its position in the stored list, which is what an editor writes back.
 """
-import re
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
@@ -27,19 +34,13 @@ from database.models import (
     Achievement, Education, Experience, Project, ProjectBlurb, Skill, UserSkill,
 )
 from knowledge_graph.areas import skill_areas
-from knowledge_graph.builder import SkillGraphBuilder, repo_slug
+from knowledge_graph.builder import SkillGraphBuilder, names_repo, repo_slug
 
 EMPTY_VIEW: Dict[str, Any] = {
     "items": [], "skills": [], "edges": [],
     "stats": {"items": 0, "skills": 0, "evidenced": 0, "unevidenced": 0,
               "github_only": 0, "needs_text": 0},
 }
-
-
-def _names_repo(haystack: str, slug: str) -> bool:
-    """Whether `haystack` names the repo `slug` as a whole `owner/repo`: not as the start or
-    end of a longer one (`owner/app` is not `owner/app-server`, `owner/ap` is not `owner/app`)."""
-    return re.search(r"(?<![\w.-])" + re.escape(slug) + r"(?![\w.-])", haystack) is not None
 
 
 def skill_source_kind(evidence_source: Optional[str]) -> str:
@@ -79,6 +80,7 @@ def _experience_item(e: Experience) -> Dict[str, Any]:
         "text": entries,
         "text_source": "bullets" if any(x["index"] is not None for x in entries) else "none",
         "cite_key": exp_key({"title": e.title, "company": e.company}),
+        "duplicate_of": None,
         "parent_key": None, "achievements": [], "repo_url": "",
         "fields": {"title": e.title, "company": e.company, "start_date": e.start_date or "",
                    "end_date": e.end_date or "", "description": e.description or ""},
@@ -101,7 +103,10 @@ def _project_item(p: Project, blurbs: List[ProjectBlurb]) -> Dict[str, Any]:
         "description": p.description or "",
         "text": entries, "text_source": source,
         "cite_key": proj_key({"name": p.name}),
+        "duplicate_of": None,
         "parent_key": None, "achievements": [], "repo_url": p.repo_url or "",
+        # unreviewed | linked | personal (#322): the map hints at a project nobody has placed.
+        "context_status": p.context_status or "unreviewed",
         "fields": {"name": p.name, "description": p.description or "",
                    "repo_url": p.repo_url or "", "start_date": p.start_date or "",
                    "end_date": p.end_date or ""},
@@ -115,12 +120,19 @@ def _education_item(e: Education) -> Dict[str, Any]:
         "start": e.start_date or "", "end": e.end_date or "",
         "description": "",
         # Education names no skill edges (the builder derives none), so it has no text to link from.
-        "text": [], "text_source": "fields", "cite_key": "",
+        "text": [], "text_source": "fields", "cite_key": "", "duplicate_of": None,
         "parent_key": None, "achievements": [], "repo_url": "",
         "fields": {"institution": e.institution, "degree": e.degree or "",
                    "location": e.location or "", "start_date": e.start_date or "",
                    "end_date": e.end_date or "", "gpa": e.gpa or ""},
     }
+
+
+def cited_skill_keys(user_id: Optional[UUID]) -> set:
+    """Keys (`skill/<id>`) of the user's skills that at least one bullet cites: the ones a
+    dismissal is refused for (#321). Read off the view itself, not a second matcher."""
+    view = build_evidence_view(user_id)
+    return {e["skill_key"] for e in view["edges"] if e["cites"]}
 
 
 def build_evidence_view(user_id: Optional[UUID]) -> Dict[str, Any]:
@@ -160,6 +172,22 @@ def build_evidence_view(user_id: Optional[UUID]) -> Dict[str, Any]:
     items += [_project_item(p, blurbs.get(p.project_id, [])) for p in projs]
     by_id = {it["id"]: it for it in items}
     by_key = {it["key"]: it for it in items}
+
+    # Same-name items (#334): flag each, and note which share a graph node.
+    twins: Dict[str, List[Dict[str, Any]]] = {}
+    for it in items:
+        if it["cite_key"]:
+            twins.setdefault(it["cite_key"], []).append(it)
+    for group in twins.values():
+        for it in group:
+            if len(group) > 1:
+                it["duplicate_of"] = next(o["key"] for o in group if o is not it)
+    node_of = {str(e.experience_id): SkillGraphBuilder._experience_node(e) for e in exps}
+    node_of.update({str(p.project_id): SkillGraphBuilder._project_node(p) for p in projs})
+    node_count: Dict[str, int] = {}
+    for node in node_of.values():
+        node_count[node] = node_count.get(node, 0) + 1
+    collapsed = {i for i, node in node_of.items() if node_count[node] > 1}
     for p in projs:
         item = by_id[str(p.project_id)]
         parent = by_id.get(str(p.experience_id)) if p.experience_id else None
@@ -202,6 +230,8 @@ def build_evidence_view(user_id: Optional[UUID]) -> Dict[str, Any]:
         if data.get("relation") not in ("USES", "DEMONSTRATES"):
             continue
         item = by_id.get(str(graph.nodes[u].get("id")))
+        if item is not None and item["id"] in collapsed:
+            continue            # the node is two items' at once; it is neither's evidence (#334)
         skill_key = skill_key_by_name.get(graph.nodes[v].get("name"))
         if item is None or skill_key is None:
             continue
@@ -224,7 +254,7 @@ def build_evidence_view(user_id: Optional[UUID]) -> Dict[str, Any]:
             if skill_key is None or not haystack.strip():
                 continue
             for slug, matched in by_slug.items():
-                if not _names_repo(haystack, slug):
+                if not names_repo(haystack, slug):
                     continue
                 for item in matched:
                     edge = edges.setdefault((item["key"], skill_key), {

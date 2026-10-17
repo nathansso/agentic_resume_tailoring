@@ -32,7 +32,7 @@ the hooks with `/hooks` in Codex (it skips a plugin's hooks until you do). For a
 Codex, or Codex without the plugin, install them into your own `hooks.json` instead:
 
 ```bash
-uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl" art hooks codex --write
+uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art hooks codex --write
 ```
 
 With the plugin installed that command adds nothing and removes ART's own entries from
@@ -50,10 +50,10 @@ plugin pins that exact URL (`v<version>` is `ART_VERSION` in `harness/__init__.p
 
 ```bash
 # Register the MCP server with Claude Code
-claude mcp add art -- uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl" art mcp
+claude mcp add art -- uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art mcp
 
 # The same tools as a JSON CLI
-uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl" art --list
+uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art --list
 ```
 
 `art mcp` and `art-mcp` run the same server; the plugin uses `art mcp` so it needs only the
@@ -68,7 +68,7 @@ profile.
 The release wheel has the built editor in it, so no checkout, Node or `npm` is needed:
 
 ```bash
-uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.0/art_mcp-0.1.0-py3-none-any.whl" art ui --job <job_id>
+uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art ui --job <job_id>
 ```
 
 It opens http://127.0.0.1:8765/. The plugin's `/art:open` prints this command for the
@@ -83,7 +83,7 @@ From a checkout, build the editor and run it from source or from a wheel you bui
 npm --prefix web/frontend ci && npm --prefix web/frontend run build
 python -m web.local_ui                     # from source
 uv build                                   # dist/art_mcp-<version>-py3-none-any.whl
-uvx --from "dist/art_mcp-0.1.0-py3-none-any.whl[ui]" art ui
+uvx --from "dist/art_mcp-0.1.1-py3-none-any.whl[ui]" art ui
 ```
 
 CI builds that wheel, installs it with no extras into an empty venv, and drives `art-mcp`
@@ -117,16 +117,19 @@ one before starting Claude Code or Codex, in PowerShell:
 `UV_CACHE_DIR` takes effect in newly started programs. If Application Control blocks
 `art-mcp.exe`, the plugin is unaffected, since it runs `art mcp`.
 
-### Jev (optional)
+### Jev (optional): strengthen the checks
 
-ART can ask [TypeSafe's Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev) a few narrow classification questions: does a
-revised bullet say more than its evidence, does a bullet reword a topic you banned, does a bullet
-show a requirement, is a message a standing preference, which of your saved bullets or tracks fits a
-job. Jev never writes resume text. It needs a TypeSafe API key, and **everything works without
-one**: with no key, every decision point runs its own deterministic fallback (word overlap, the
-literal term match, the host asking you) and no gate is skipped.
+ART works fully without Jev, so you can skip this section. If you have a TypeSafe API key, ART can
+use it, from your machine with no ART server in between, to strengthen some checks by asking
+[TypeSafe's Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev) a few narrow classification questions that plain rules answer less well: does a
+revised bullet say more than its cited evidence, does a bullet reword a topic you banned, does a
+bullet show a requirement, is a message a standing preference, which of your saved bullets or tracks
+fits a job. Jev never writes resume text. With no key, every decision point runs its own
+deterministic fallback (a check of the bullet's wording against its cited source, the literal term
+match, word overlap, the host asking you), and the hard gates still run on those rules; Jev adds
+the reworded cases they miss.
 
-**Set the key** in one of these places, checked in this order:
+**To turn it on, set the key** in one of these places, checked in this order:
 
 ```bash
 # 1. The environment ART is started from (the usual way: Claude Code and Codex start the
@@ -206,6 +209,49 @@ security, and the import says so rather than importing nothing).
 The source is never `DATABASE_URL`, is opened read-only, and is never written to. The
 destination is always local SQLite (`$ART_DATA_DIR/art.db`). Use the id of the real
 account's profile, not the local fallback one (`user@example.com`), which import refuses.
+
+### GitHub repos (optional, #353)
+
+`art github login` signs you in with GitHub's device flow, so ART can list your repos
+(`list_github_repos`) and your agent can pick which to read. You open a page and type a code;
+no password or secret passes through ART. Run it in your own terminal:
+
+```bash
+art github login               # public repos (read:user)
+art github login --private     # also private repos (adds the repo scope)
+art github status              # who is signed in; never prints the token
+art github logout              # removes the stored token
+```
+
+The plugin runs ART through `uvx`, which puts no `art` on your PATH. From a plugin or
+`uvx` install, run the same commands through `uvx`:
+
+```bash
+uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login
+uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login --private
+```
+
+The token goes to the OS keychain through the `keyring` package (service `art-mcp`,
+user `github-token`), else it is read from `ART_GITHUB_TOKEN`, which also takes a personal
+access token. It is never stored in the database, never in an `art export` bundle, and never
+logged. `keyring` ships with ART from v0.1.1; on a machine with no usable
+keychain backend (some headless Linux setups), `art github login` says so before it starts,
+and `ART_GITHUB_TOKEN` is the way in. Nothing about your repos is sent anywhere but your
+own agent: ART reads them from `api.github.com` with your token and hands the result to it.
+
+**Maintainer note: register the GitHub OAuth App (once).** `art github login` needs a client ID
+and no client secret.
+
+1. GitHub, Settings, Developer settings, OAuth Apps, New OAuth App. Name it `ARTie`; the
+   homepage URL is https://artie-sand.vercel.app. The authorization callback URL is required
+   by the form and unused by the device flow (any URL, for example the homepage).
+2. On the App's page, tick **Enable Device Flow**, and save.
+3. Copy its **Client ID** (it is public; do not generate or keep a client secret for this).
+4. Put it in `DEFAULT_CLIENT_ID` in `harness/github.py` and ship a release. Until then
+   `ART_GITHUB_CLIENT_ID=<client id>` in the environment makes `art github login` work, and
+   with neither set it fails naming this step.
+
+---
 
 ## Option A — Docker (recommended, no Python setup needed)
 

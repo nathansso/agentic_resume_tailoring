@@ -10,3 +10,10 @@ sources, store the records with `upsert_items`, set my resume header with
 Sources: $ARGUMENTS
 
 If no sources are given above, ask me where they are.
+
+If I want my GitHub repos included, tell me to run this in my own terminal (add `--private`
+for private repos), then call `list_github_repos`:
+
+```bash
+uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login
+```

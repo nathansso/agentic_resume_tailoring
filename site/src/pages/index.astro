@@ -91,11 +91,12 @@ const faqs = [
   },
   {
     q: "Do I need an API key?",
-    a: "Not for ARTie. It makes no calls to a text-writing model, so there's nothing to pay for beyond your own Claude Code or Codex plan. You can optionally add a TypeSafe API key for a few extra checks. Everything works without one, and without one ARTie sends nothing to TypeSafe.",
+    a: "No. ARTie makes no calls to a text-writing model, so there's nothing to pay for beyond your own Claude Code or Codex plan, and every check runs without a key.",
+    more: "Optional: strengthen the checks with Jev. If you have a TypeSafe API key, ARTie can use it to ask TypeSafe's Jev a few narrow questions that plain rules answer less well. It catches a reworded claim its cited source doesn't back, catches a banned topic mentioned in other words, and picks the best approved bullet for a job more often. The privacy note above says what those requests carry.",
   },
   {
     q: "Where is my data stored?",
-    a: "On your computer. The knowledge graph, your preferences and every resume version are in ~/.art/art.db (or the folder in ART_DATA_DIR), and the rendered files go to ~/.art/applications/. What your own agent sends to its model provider is governed by that provider. If you add a TypeSafe key, the checks it runs send some text there too; the privacy note above says exactly what.",
+    a: "On your computer. The knowledge graph, your preferences and every resume version are in ~/.art/art.db (or the folder in ART_DATA_DIR), and the rendered files go to ~/.art/applications/. What your own agent sends to its model provider is governed by that provider. If you turn on the optional Jev upgrade with a TypeSafe key, its checks send some text to TypeSafe too; the privacy note above says exactly what.",
   },
   {
     q: "Will ARTie get me past applicant tracking systems (ATS)?",
@@ -225,10 +226,14 @@ const faqs = [
         <div class="min-w-0">
           <h3 id="privacy-heading" class="text-xl font-semibold tracking-tight">ARTie runs on your computer</h3>
           <p class="mt-3 leading-relaxed text-muted-foreground">
-            Your knowledge graph, preferences, resume versions and rendered files are stored on your machine. ARTie makes no calls to a text-writing model. The only things that leave your computer are what your own agent sends to its model provider, which includes whatever it reads from your resume and the posting.
+            Everything ARTie stores stays on your computer: your knowledge graph, preferences, resume versions and rendered files. ARTie makes no calls to a text-writing model. The only things that leave your computer are what your own agent sends to its model provider, which includes whatever it reads from your resume and the posting.
+          </p>
+          <h4 id="jev-heading" class="mt-6 text-base font-semibold tracking-tight">Optional: strengthen the checks with Jev</h4>
+          <p class="mt-2 leading-relaxed text-muted-foreground">
+            ARTie works fully without this. If you have a TypeSafe API key, ARTie can use it, from your computer with no ARTie server in between, to ask TypeSafe's Jev a few narrow classification questions. Jev catches a reworded claim the cited source doesn't back and a banned topic mentioned in other words, and it picks the best approved bullet for a job more often. Jev never writes resume text.
           </p>
           <p class="mt-3 leading-relaxed text-muted-foreground">
-            One optional exception: if you set a TypeSafe API key, ARTie also asks TypeSafe's Jev a few narrow classification questions. Those requests carry excerpts of your resume bullets, the posting's requirements and job title, and your messages when ARTie checks whether one states a lasting preference. Jev never writes resume text. Without a key, or with <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-sm">ART_JEV_MODE=off</code>, nothing is sent and each check uses a built-in fallback.
+            Those requests carry excerpts of your resume bullets and the source text they cite, the posting's requirements and job title, the names of your skills, roles and projects, and your messages when ARTie checks whether one states a lasting preference. Without a key, or with <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-sm">ART_JEV_MODE=off</code>, nothing is sent. Each check then runs on a plain rule: it still compares a bullet's wording with its cited source, still matches banned terms literally, and picks bullets by word overlap.
           </p>
         </div>
       </aside>
@@ -351,6 +356,7 @@ const faqs = [
               <Icon name="chevron-down" class="h-5 w-5 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
             </summary>
             <p class="mt-3 leading-relaxed text-muted-foreground">{f.a}</p>
+            {f.more && <p class="mt-3 leading-relaxed text-muted-foreground">{f.more}</p>}
           </details>
         ))}
       </div>

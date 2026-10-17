@@ -162,9 +162,14 @@ def test_baseline_labels_are_tracks_or_none_and_mean_what_the_categories_say():
 
 def test_a_title_mismatch_is_one_the_title_lookup_gets_wrong():
     """The point of the category: the title says one thing and the duties another, so #229's lookup
-    (which sees the title only) lands on another track, or none."""
+    (which sees the title only, and is still what runs for a job with no requirements) lands on another
+    track, or none. The duties-based fallback of #352 reads them and does not."""
+    from agents.job_card import role_family_from_title
+
     for c in (c for c in BCASES if c["category"] == "title_mismatch"):
-        assert fit.fallback_baseline(BDOC, c) not in c["best"], c["id"]
+        family = library.normalize_track(role_family_from_title(c["title"]))
+        assert (family if family in TRACKS else None) not in c["best"], c["id"]
+        assert fit.fallback_baseline(BDOC, c) in c["best"], c["id"]
 
 
 # ── replaying the recordings ─────────────────────────────────────────────────
@@ -364,20 +369,25 @@ def test_the_variant_threshold_sits_in_a_thin_gap_around_the_floor(replayed):
     assert jl.TAU_VARIANT - v["danger_max"] == pytest.approx(0.04) and v["kept_min"] - jl.TAU_VARIANT == pytest.approx(0.01)
 
 
-def test_jev_beats_the_fallbacks_on_the_same_cases(replayed):
+def test_jev_and_the_jev_free_fallbacks_on_the_same_cases(replayed):
+    """Jev is still ahead on variant choice (47 against 41, and one more reading of a bullet than a word
+    list can give), and on the track baseline the fallback matches the set (36, against Jev's 35). That
+    is a fit, not a held-out figure: the fallback's vocabulary was written with these labels in view, and
+    #352's `FALLBACK_FIT.md` sets leave-one-out and an author-written holdout beside it. Before #352 the
+    fallbacks were 18 (7 poor-fit picks) and 27 (8 wrong tracks)."""
     vrows, brows, _ = replayed
     v_jev = fit.tally(vrows, fit.variant_outcome, lambda r: fit.picked(r, jl.TAU_VARIANT))
     v_fb = fit.tally(vrows, fit.variant_outcome, lambda r: r["fallback_pick"])
     b_jev = fit.tally(brows, fit.baseline_outcome, lambda r: fit.picked(r, jl.TAU_BASELINE))
     b_fb = fit.tally(brows, fit.baseline_outcome, lambda r: r["fallback_pick"])
-    assert (v_jev["correct"], v_fb["correct"]) == (47, 18) and v_fb["poor"] == 7
-    assert (b_jev["correct"], b_fb["correct"]) == (35, 27) and b_fb["wrong"] == 8
-    # the synonym and title-mismatch categories are where word overlap and the title lookup fail
+    assert (v_jev["correct"], v_fb["correct"]) == (47, 41) and (v_jev["poor"], v_fb["poor"]) == (0, 0)
+    assert (b_jev["correct"], b_fb["correct"]) == (35, 36) and (b_jev["wrong"], b_fb["wrong"]) == (0, 0)
+    # the synonym and title-mismatch categories were where word overlap and the title lookup failed
     syn = [r for r in vrows if r["category"] == "synonym"]
-    assert fit.tally(syn, fit.variant_outcome, lambda r: r["fallback_pick"])["correct"] == 0
+    assert fit.tally(syn, fit.variant_outcome, lambda r: r["fallback_pick"])["correct"] == 7
     assert fit.tally(syn, fit.variant_outcome, lambda r: fit.picked(r, jl.TAU_VARIANT))["correct"] == 7
     mis = [r for r in brows if r["category"] == "title_mismatch"]
-    assert fit.tally(mis, fit.baseline_outcome, lambda r: r["fallback_pick"])["correct"] == 0
+    assert fit.tally(mis, fit.baseline_outcome, lambda r: r["fallback_pick"])["correct"] == len(mis)
     assert fit.tally(mis, fit.baseline_outcome, lambda r: r["pick0"])["correct"] == len(mis)
 
 

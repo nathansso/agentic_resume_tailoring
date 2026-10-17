@@ -1197,7 +1197,7 @@ nothing.
 
 | Point (version) | Asks | State sent | Feeds | Cutoffs | Fallback |
 |---|---|---|---|---|---|
-| `support@v1` (#193, #237) | `choice`: `supported`, `adds_unsupported`, `contradicts` | `{evidence, original?, bullet}` for each changed cited bullet | the `faithfulness` hard gate; `review` | block ≥ 0.85, review ≥ 0.35, on 1 − p(supported) | lexical drift alone |
+| `support@v1` (#193, #237) | `choice`: `supported`, `adds_unsupported`, `contradicts` | `{evidence, original?, bullet}` for each changed cited bullet | the `faithfulness` hard gate; `review` | block ≥ 0.85, review ≥ 0.35, on 1 − p(supported) | the deterministic check (#351, `support_fallback.py`, block ≥ 1.0, review ≥ 0.5 on summed signal weights); lexical drift beside it |
 | `negative_pin@v1` (#232) | `noul` per (text, pin): does it mention the topic | `{text, kind}`; the pin's topic is in the question | the `preferences` hard gate; `review` | block ≥ 0.85, review ≥ 0.15 | the term match alone |
 | `requirement_covered@v2`, `education_covered@v1` (#126) | `noul` per (bullet or education entry, requirement) | `{bullet}` or `{text, kind: education}` | the `semantic_coverage` target | covered ≥ 0.65 | the target is absent |
 | `memory_gate@v1`, `@v2` (#202, #244) | `noul`, `choice`, `score`, `choice` over the user's catalog | the message; v2 adds the previous assistant turn | `observe` and the `user-prompt` hook | 0.25 / 0.65 / 0.75; v2 0.20 / 0.65 / 0.75 | the prefilter alone |
@@ -1208,12 +1208,34 @@ nothing.
 (`requirement_covered@v1` is kept as `LEGACY_VERSION` for the benchmark recordings. The memory
 gate's three cutoffs are `TAU_LO`, `TAU_HI` and `TAU_TARGET`.)
 
+**Skill areas (#318, #342).** A skill is classified when it is written: by `_save_skills` (every
+ingest path), by the job analyzer and the chat job analysis (a posting's skills), and by the chat
+and manual add-skill paths, all through `knowledge_graph.areas.classify_skills_at_write`, which is
+best effort and never raises. Reading is cache-only (`skill_areas` is one query for any number of
+skills, which is what `get_job_skills` uses). A skill written with no key, or with Jev off, stays in
+`Other` until it is classified later: `art mcp` and `art ui` start `backfill_unplaced_if_due` on a
+daemon thread when their store is a writable local SQLite one, which runs `classify_unplaced_skills` when a key
+resolves, Jev is not off and the profile has unplaced skills, at most once per user and key per day
+(`area_backfill.json` in the data dir keeps a hash of the key, never the key). The one-off for any
+profile, including a remote one, is `scripts/classify_unplaced_skills.py --user-id <uuid>`.
+
 **Support check.** For each changed bullet that cites evidence, the evidence is the text of the
 cited source bullets and nothing else from the graph, plus the text of the approved variant the
 bullet names. A verbatim source bullet or variant, and an uncited bullet, are never sent. The
 score is the sum of the two blocking labels, which is 1 − p(supported): the larger label alone let
 through a bullet whose mass split between `adds_unsupported` and `contradicts`. The lexical
 `faithfulness` check keeps gating beside it.
+
+**Support check without Jev (#351).** When Jev has no answer (no key, `ART_JEV_MODE=off`, an API
+error), `make_support_checker` reads the same bullet with `harness/decisions/support_fallback.py`:
+small explicit word lists, no model, for role inflation, invented scope and contradictions, each
+signal weighing 1.0 or 0.5, the score their sum. The finding is `status: "heuristic"`, `source:
+"fallback"`, with its `signals`; `violations` and `reviews` read it by its own cutoffs
+(`support_fallback.tau_block` 1.0, `tau_review` 0.5; a lone soft signal never blocks) and a review
+entry carries `score` and `signals` in place of `p`. It also reads the rest of the item (its other
+source bullets and header), which can only support a claim. Jev, when it answers, decides alone:
+on the 89 labelled pairs the fallback as a floor would add two blocks, both bullets Jev already
+shows as a review, so it lowers no harmful error (`eval/support_labels/FALLBACK_REPORT.md`).
 
 **Negative pins.** The term match is literal and always runs; Jev only adds hits. A changed
 bullet or item field gets one `noul` per pin, asked positively ("does this text mention or refer
@@ -1334,9 +1356,10 @@ and the valid actions with uniform propensities. A plan bullet names a variant w
 (an approved variant of that very item, or arbitration refuses it) and inherits its cites. Writing
 from raw facts is for `no_match`.
 
-- **Fallback pick.** The share of the bullet's content tokens that are job terms, each at its keyword
-  weight over the heaviest's, so uniform weights equal `relevance_density`; a score under
-  `VARIANT_MATCH_FLOOR` (0.10) is `no_match`.
+- **Fallback pick (#352).** The job's top requirements and title are read as kinds of work
+  (`harness/concepts.py`); each approved variant is scored by how much of what it shows the job asks
+  for (`variant_fit`), 0 when it is mostly about work the posting does not ask for; a score under
+  `VARIANT_MATCH_FLOOR` (0.09, fitted) is `no_match`. Word overlap (#229) is only the tie-break.
 - **Jev pick** (`variant_choice@v1`): one request per (job, item with approved variants). The gate is
   the probability Jev puts on any variant (one minus its `no_match`), not on its own choice, because
   two good phrasings of one bullet split its probability and neither would reach the cutoff while
@@ -1344,8 +1367,10 @@ from raw facts is for `no_match`.
 - **Baseline.** `open_job` takes a `metadata.role_family`, else a deterministic title keyword map
   (`agents/job_card.TITLE_ROLE_FAMILIES`), else `other`, and never the LLM classifier. A host family
   that names a saved track exactly wins without a question (`source: host`); with any saved track, one
-  Jev `choice` (`track_baseline@v1`) decides (`jev`, `cache`); otherwise the track named after the
-  family is used (`fallback`). A job with no history starts from a copy of that node's content, with
+  Jev `choice` (`track_baseline@v1`) decides (`jev`, `cache`); otherwise (`fallback`) the saved track
+  whose role family best fits the job's requirements is used when it clears a fitted score and lead
+  over every other family (`harness.library.pick_track`, #352), and with no requirements the track
+  named after the title's family. A job with no history starts from a copy of that node's content, with
   skills re-ranked against this posting, job-scoped rule fields reset and this posting's answers
   applied (`executor.baseline_content`); the first node's provenance records the baseline. With no
   match the start is the whole graph, as before. `harness/library.py::choose_baseline` is the one
@@ -1371,7 +1396,11 @@ provisional threshold and each guard tolerance, with the fit it came from (label
 hash, model, date, source issue). The decision points (`support.py`, `negative_pins.py`,
 `coverage.py`, `memory_gate.py`, `library.py`, `acceptance.py`) read their values through
 `harness/policy.py` into the module-level names they always had; the loader's fallback table is the
-same numbers, used only if the file cannot be read. `harness.tree.commit_node` stamps the
+same numbers, used only if the file cannot be read. A fallback that is code rather than a model
+(`support_fallback`, #351) has a fit entry too, under its own `model` name (`fallback-support-v1`),
+with the labels' hash and no recordings; its cutoffs are on a grid of summed signal weights, fitted by
+`eval/fit_support_fallback.py` by the same rule (a false block first, then recall), with a floor of one
+strong signal. `harness.tree.commit_node` stamps the
 artifact's `version` into every node's provenance as `policy_version`; nodes from before it lack
 the key and load unchanged.
 

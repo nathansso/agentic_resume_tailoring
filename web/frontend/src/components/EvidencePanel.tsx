@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  updateEducation, updateExperience, updateProject, updateProjectBlurb,
-  type EducationEdit, type ExperienceEdit, type ProjectEdit,
+  dismissSkill, restoreSkill, setProjectContext, updateEducation, updateExperience, updateProject,
+  updateProjectBlurb, type EducationEdit, type ExperienceEdit, type ProjectEdit,
 } from "../api/profile";
-import type { EvidenceItem, EvidenceKind, EvidenceSkill, EvidenceView } from "../types";
+import type { DismissedSkill, EvidenceItem, EvidenceKind, EvidenceSkill, EvidenceView, ProjectContext } from "../types";
 import {
-  dateRange, editableFields, githubOnlyLinks, highlightSegments, initialDraft, linksByBullet, planSave,
-  recentEditable, skillEvidence, textIsDescription, type Draft, type JobOverlay, type SaveOp,
+  DISMISSED_KEY, bareBullets, canDismiss, dateRange, duplicateHint, editableFields, githubOnlyLinks, highlightSegments, initialDraft, linksByBullet, placementLabel,
+  placementOptions, planSave, recentEditable, skillEvidence, skillIdOf, textIsDescription, topSuggestion,
+  type Draft, type JobOverlay, type SaveOp,
 } from "../lib/evidenceMap";
 import { cn } from "../lib/utils";
 
@@ -14,7 +15,9 @@ import { cn } from "../lib/utils";
  * The side panel (issue #136): one shared selection. A skill shows what backs it, with
  * the citing bullets quoted and the words that name it marked; an item is an editor,
  * because that is where a skill's links are fixed. Skills are not edited here: they
- * follow from the text, and the map re-derives them from the saved text.
+ * follow from the text, and the map re-derives them from the saved text. The one
+ * action on a skill is to dismiss a claim no bullet proves (#321), with a list to
+ * restore it from.
  */
 
 const KIND_LABEL: Record<EvidenceKind, string> = { exp: "Experience", proj: "Project", edu: "Education" };
@@ -36,12 +39,16 @@ interface Props {
   selected: string | null;
   overlay: JobOverlay | null;
   jobOn: boolean;
+  /** Skills the user dismissed, A to Z as the server sends them (#321). */
+  dismissed: DismissedSkill[];
+  /** Where each project was done and what the rules suggest (#322). */
+  contexts: ProjectContext[];
   onSelect: (key: string | null) => void;
   /** Called after a save, so the map is re-read from the server. */
   onSaved: () => Promise<void>;
 }
 
-export function EvidencePanel({ view, selected, overlay, jobOn, onSelect, onSaved }: Props) {
+export function EvidencePanel({ view, selected, overlay, jobOn, dismissed, contexts, onSelect, onSaved }: Props) {
   const item = selected ? view.items.find((i) => i.key === selected) : undefined;
   const skill = selected ? view.skills.find((s) => s.key === selected) : undefined;
   const ghost = selected?.startsWith("ghost:") ? overlay?.missing.find((m) => `ghost:${m.name}` === selected) : undefined;
@@ -52,9 +59,21 @@ export function EvidencePanel({ view, selected, overlay, jobOn, onSelect, onSave
       className="max-h-[50vh] w-full shrink-0 overflow-y-auto border-t border-border bg-card p-4 lg:max-h-none lg:w-[24rem] lg:border-l lg:border-t-0"
     >
       {item ? (
-        <ItemEditor key={item.key} view={view} item={item} onSelect={onSelect} onSaved={onSaved} />
+        <ItemEditor
+          key={item.key} view={view} item={item} onSelect={onSelect} onSaved={onSaved}
+          placement={item.kind === "proj" ? (
+            <ProjectPlacement
+              view={view} item={item} ctx={contexts.find((c) => c.project_id === item.id)} onSaved={onSaved}
+            />
+          ) : undefined}
+        />
       ) : skill ? (
-        <SkillDetail view={view} skill={skill} overlay={overlay} jobOn={jobOn} onSelect={onSelect} />
+        <SkillDetail
+          key={skill.key} view={view} skill={skill} overlay={overlay} jobOn={jobOn}
+          onSelect={onSelect} onSaved={onSaved}
+        />
+      ) : selected === DISMISSED_KEY ? (
+        <DismissedList dismissed={dismissed} onSaved={onSaved} />
       ) : ghost ? (
         <div>
           <Kicker><span className="h-2.5 w-2.5 rounded-full border border-dashed border-graph-gap" />Missing skill</Kicker>
@@ -104,9 +123,9 @@ function Pips({ value }: { value: number }) {
 
 // ── a skill ────────────────────────────────────────────────────────────────────
 
-function SkillDetail({ view, skill, overlay, jobOn, onSelect }: {
+function SkillDetail({ view, skill, overlay, jobOn, onSelect, onSaved }: {
   view: EvidenceView; skill: EvidenceSkill; overlay: JobOverlay | null; jobOn: boolean;
-  onSelect: (key: string) => void;
+  onSelect: (key: string | null) => void; onSaved: () => Promise<void>;
 }) {
   const evidence = useMemo(() => skillEvidence(view, skill.key), [view, skill.key]);
   const bullets = evidence.reduce((n, e) => n + e.bullets.length, 0);
@@ -211,9 +230,236 @@ function SkillDetail({ view, skill, overlay, jobOn, onSelect }: {
           </div>
         ))}
       </div>
+      {canDismiss(view, skill.key) && (
+        <DismissSkill skill={skill} onDone={async () => { await onSaved(); onSelect(DISMISSED_KEY); }} />
+      )}
       <p className="mt-5 text-[12.5px] text-muted-foreground">
         Skills are not edited here. They follow from your experiences and projects.
       </p>
+    </div>
+  );
+}
+
+/** Dismiss a claim nothing proves (#321). Two steps, inline: the second says what it does. */
+function DismissSkill({ skill, onDone }: { skill: EvidenceSkill; onDone: () => Promise<void> }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const dismiss = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await dismissSkill(skillIdOf(skill.key));
+      await onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not dismiss the skill");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <h4 className={sectionHead}>Not a skill you claim?</h4>
+      {!confirming ? (
+        <button type="button" className={linkButton} onClick={() => setConfirming(true)}>
+          Dismiss this skill
+        </button>
+      ) : (
+        <div role="group" aria-label={`Dismiss ${skill.name}`} className="rounded-md border border-graph-gap/40 p-3 text-[13px]">
+          <p>
+            Dismiss <b className="font-semibold">{skill.name}</b>? It leaves your profile and tailoring,
+            and it won't come back when you re-import. You can restore it from the Dismissed list.
+          </p>
+          <div className="mt-2.5 flex gap-2">
+            <button
+              type="button" disabled={busy} onClick={dismiss}
+              className="rounded-md bg-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground transition-opacity disabled:opacity-40"
+            >
+              {busy ? "Dismissing…" : "Dismiss"}
+            </button>
+            <button
+              type="button" disabled={busy} autoFocus onClick={() => { setConfirming(false); setError(null); }}
+              className="rounded-md border border-border px-3 py-1.5 text-[13px] transition-colors hover:bg-muted disabled:opacity-40"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {error && <p role="alert" className="mt-2 text-[13px] text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+// ── the dismissed skills ───────────────────────────────────────────────────────
+
+function DismissedList({ dismissed, onSaved }: { dismissed: DismissedSkill[]; onSaved: () => Promise<void> }) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const restore = async (id: string) => {
+    setBusyId(id);
+    setError(null);
+    try {
+      await restoreSkill(id);
+      await onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not restore the skill");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div>
+      <Kicker>Dismissed · {dismissed.length}</Kicker>
+      <h3 className="mt-1 text-lg font-semibold">Skills you dismissed</h3>
+      <p className="mt-0.5 text-[13px] text-muted-foreground">
+        These are off your profile and out of tailoring, and a re-import skips them. Restore one to put it back
+        as it was.
+      </p>
+      <ul className="mt-3 space-y-2">
+        {dismissed.map((d) => (
+          <li key={d.skill_id} className="flex items-center justify-between gap-3 rounded-md border border-border p-2.5 text-[13px]">
+            <span className="min-w-0">
+              <span className="block truncate font-medium">{d.name}</span>
+              <span className="block text-[12px] text-muted-foreground">
+                {d.sources.length > 0 ? `Claimed by ${d.sources.map((s) => SOURCE_LABEL[s] ?? s).join(" and ")}` : "No source recorded"}
+              </span>
+            </span>
+            <button
+              type="button" className={cn(linkButton, "shrink-0 disabled:opacity-40")}
+              disabled={busyId !== null} aria-label={`Restore ${d.name}`} onClick={() => restore(d.skill_id)}
+            >
+              {busyId === d.skill_id ? "Restoring…" : "Restore"}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {error && <p role="alert" className="mt-3 text-[13px] text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+// ── a project: where it was done (#322) ────────────────────────────────────────
+
+/**
+ * Where was this project done? Shows what the user has said, offers the rules' best guess as a
+ * one-click link, and lets them pick any role or degree, call it personal, or take the answer back.
+ * Every write is a click on a button here: a suggestion is only shown, and choosing in the select
+ * does nothing until "Link" is pressed.
+ */
+function ProjectPlacement({ view, item, ctx, onSaved }: {
+  view: EvidenceView; item: EvidenceItem; ctx: ProjectContext | undefined; onSaved: () => Promise<void>;
+}) {
+  const [choice, setChoice] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  const parent = item.parent_key ? view.items.find((i) => i.key === item.parent_key) : undefined;
+  // A project under a role or degree reads as placed, whatever a hand-edited row says.
+  const status = parent ? "linked" : item.context_status ?? ctx?.status ?? "unreviewed";
+  const suggestion = topSuggestion(ctx);
+  const options = useMemo(() => {
+    const all = placementOptions(view);
+    // The one it is already under is not a move.
+    const rest = <T extends { key: string }>(list: T[]): T[] => list.filter((o) => o.key !== item.parent_key);
+    return { experiences: rest(all.experiences), education: rest(all.education) };
+  }, [view, item.parent_key]);
+  const hasOptions = options.experiences.length + options.education.length > 0;
+
+  const write = async (context: string, what: string) => {
+    setBusy(what);
+    setError(null);
+    setDone(false);
+    try {
+      await setProjectContext(item.id, context);
+      setChoice("");
+      await onSaved();
+      setDone(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save where this was done");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div role="group" aria-label="Where was this done?">
+      <h4 className={sectionHead}>Where was this done?</h4>
+      <p className="text-[13px]">
+        {status === "linked" && parent ? (
+          <>Done under <b className="font-semibold">{placementLabel(parent)}</b>.</>
+        ) : status === "personal" ? (
+          <>A personal project.</>
+        ) : (
+          <span className="text-muted-foreground">Not placed yet. It stands on its own in the map until you say where it was done.</span>
+        )}
+      </p>
+
+      {suggestion && (
+        <div className="mt-2.5 rounded-md border border-border bg-background p-3 text-[13px]">
+          <p><span className="text-muted-foreground">Suggested:</span> {suggestion.title}</p>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">{suggestion.reason}. A guess from the names, not a fact.</p>
+          <button
+            type="button" disabled={busy !== null} onClick={() => write(suggestion.key, "suggestion")}
+            className="mt-2 rounded-md bg-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground transition-opacity disabled:opacity-40"
+          >
+            {busy === "suggestion" ? "Linking…" : `Link to ${suggestion.title}`}
+          </button>
+        </div>
+      )}
+
+      {hasOptions && (
+        <div className="mt-2.5 flex items-center gap-2">
+          <label className="min-w-0 flex-1">
+            <span className="sr-only">{status === "linked" ? "Move this project under another role or degree" : "Link this project to a role or degree"}</span>
+            <select
+              value={choice} onChange={(e) => { setChoice(e.target.value); setDone(false); }} disabled={busy !== null}
+              className={cn(fieldClass, "text-foreground")}
+            >
+              <option value="">{status === "linked" ? "Move under another…" : "Choose a role or degree…"}</option>
+              {options.experiences.length > 0 && (
+                <optgroup label="Experience">
+                  {options.experiences.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+                </optgroup>
+              )}
+              {options.education.length > 0 && (
+                <optgroup label="Education">
+                  {options.education.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+                </optgroup>
+              )}
+            </select>
+          </label>
+          <button
+            type="button" className={cn(linkButton, "shrink-0 disabled:opacity-40")}
+            disabled={choice === "" || busy !== null} onClick={() => write(choice, "choice")}
+          >
+            {busy === "choice" ? "Linking…" : "Link"}
+          </button>
+        </div>
+      )}
+
+      <div className="mt-2.5 flex flex-wrap gap-2">
+        <button
+          type="button" className={cn(linkButton, "disabled:opacity-40")}
+          disabled={status === "personal" || busy !== null} onClick={() => write("personal", "personal")}
+        >
+          {busy === "personal" ? "Saving…" : "Personal project"}
+        </button>
+        {status !== "unreviewed" && (
+          <button
+            type="button" className={cn(linkButton, "disabled:opacity-40")}
+            disabled={busy !== null} onClick={() => write("unreviewed", "reset")}
+          >
+            {busy === "reset" ? "Saving…" : "Not sure yet"}
+          </button>
+        )}
+      </div>
+      {error && <p role="alert" className="mt-2 text-[13px] text-destructive">{error}</p>}
+      {done && !error && <p role="status" className="mt-2 text-[12.5px] text-accent">Saved. The map has been re-read.</p>}
     </div>
   );
 }
@@ -238,8 +484,10 @@ async function runOp(op: SaveOp): Promise<void> {
 }
 
 /** The item editor: shared with the bullet picker (issue #319), which opens it on an item's bullets. */
-export function ItemEditor({ view, item, onSelect, onSaved, savedNote = "Saved. The map has been re-read." }: {
+export function ItemEditor({ view, item, onSelect, onSaved, placement, savedNote = "Saved. The map has been re-read." }: {
   view: EvidenceView; item: EvidenceItem; onSelect: (key: string | null) => void; onSaved: () => Promise<void>;
+  /** A section shown above the details, for a surface that lets the user place a project (#322). */
+  placement?: ReactNode;
   /** What to say after a save, for the surface that hosts the editor. */
   savedNote?: string;
 }) {
@@ -256,8 +504,10 @@ export function ItemEditor({ view, item, onSelect, onSaved, savedNote = "Saved. 
   const dirty = JSON.stringify(draft) !== JSON.stringify(initialDraft(item));
   const links = useMemo(() => linksByBullet(view, item.key), [view, item.key]);
   const githubOnly = useMemo(() => githubOnlyLinks(view, item.key), [view, item.key]);
+  const bare = useMemo(() => new Set(bareBullets(view, item.key)), [view, item.key]);
   const parent = item.parent_key ? view.items.find((i) => i.key === item.parent_key) : undefined;
   const children = view.items.filter((i) => i.parent_key === item.key);
+  const sameName = duplicateHint(view, item);
   const asDescription = textIsDescription(item);
   const fields = editableFields(item);
   const canAdd = item.kind === "exp";
@@ -293,6 +543,10 @@ export function ItemEditor({ view, item, onSelect, onSaved, savedNote = "Saved. 
         {[item.org, dateRange(item.start, item.end)].filter(Boolean).join(" · ")}
       </p>
 
+      {sameName && (
+        <p role="note" className="mt-3 rounded-md border border-graph-gap/40 p-3 text-[13px]">{sameName}</p>
+      )}
+
       {(parent || children.length > 0 || item.achievements.length > 0) && (
         <Callout>
           {parent && (
@@ -312,6 +566,8 @@ export function ItemEditor({ view, item, onSelect, onSaved, savedNote = "Saved. 
           ))}
         </Callout>
       )}
+
+      {placement}
 
       {item.kind !== "edu" && item.text_source === "none" && (
         <Callout warn>
@@ -371,7 +627,11 @@ export function ItemEditor({ view, item, onSelect, onSaved, savedNote = "Saved. 
                   {entry && (
                     <p className="flex min-h-[1.25rem] flex-wrap items-center gap-1 text-[12px] text-muted-foreground">
                       {linked.length === 0
-                        ? <span>Links no skills</span>
+                        ? ordinal !== null && bare.has(ordinal)
+                          // A hint, not a warning (#323): many good bullets are about impact and name no tool.
+                          // It reads the saved text, so an edited bullet waits for a save to be re-checked.
+                          ? <span>{value === entry.text ? "Names no skill ART recognizes" : "Edited. Save to see which skills it names."}</span>
+                          : <span>Links no skills</span>
                         : <><span>Links</span>{linked.map((s) => (
                           <button
                             key={s.key} type="button" onClick={() => onSelect(s.key)}

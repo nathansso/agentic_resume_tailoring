@@ -5,8 +5,9 @@ library) and rules (preferences). Starting from approved text makes a run
 cheaper, more consistent and faithful by construction. Everything here is
 deterministic; the two judgment calls (which variant fits a job, which baseline
 a job starts from) are Jev's (#199, `harness/decisions/library.py`), and the
-rules below are their fallbacks: they run unchanged with no key, mode `off` or an
-API error.
+rules below are their fallbacks: they run with no key, mode `off` or an API error.
+Since #352 both fallbacks read the job's top requirements and title as kinds of work
+(`harness/concepts.py`) instead of the job's words and title alone.
 
 - **Variants** (`BulletVariant`). One phrasing of one experience or project
   bullet. An *approved* one is the user's confirmed wording: it arrives that way
@@ -17,16 +18,19 @@ API error.
 - **Baselines** (`TrackBaseline`). `save_baseline` pins a tree node as the
   baseline for a track, one per (user, track). A job's role family comes from
   the host (`open_job` metadata), else a deterministic title keyword map, else
-  `other`; the track named after it is the job's baseline, else none, and a job
-  with no history starts as a copy of that node (`harness/executor.py`). With Jev
-  (`choose_baseline`) a choice over the saved tracks decides instead, unless the
-  host named a family and a track with exactly that name exists.
+  `other`. A job with no history starts as a copy of its baseline node
+  (`harness/executor.py`). With Jev (`choose_baseline`) a choice over the saved
+  tracks decides, unless the host named a family and a track with exactly that
+  name exists. Without Jev the track whose role family best fits the job's
+  requirements is the baseline when it clears the fitted floor and margin
+  (`pick_track`), else none; a job with no requirements gets the track named
+  after the title's family, as in #229.
 - **`suggest_actions`.** Per experience or project on a node: the approved
   variant Jev picks (`source: "jev"` or `"cache"`, its probability as the score and
   the whole distribution as `propensity`) or `no_match`; with no Jev answer, the
-  approved variant with the best overlap with the job's weighted terms (above a
-  floor) or `no_match` (`source: "fallback"`). The valid actions carry uniform
-  propensities.
+  approved variant that best shows the kinds of work the job's requirements ask for
+  (above a fitted floor) or `no_match` (`source: "fallback"`). The valid actions
+  carry uniform propensities.
 
 Every function takes `user_id` and scopes every query by it, returns data and
 never raises for bad input. Model-free by rule (`tests/test_harness_boundary.py`).
@@ -52,7 +56,7 @@ from database.clock import utc_now
 from database.models import (
     BulletVariant, JobDescription, JobRoleFamily, TailorNode, TrackBaseline,
 )
-from harness import tree
+from harness import concepts, tree
 from harness import policy
 from harness.acceptance import VARIANT_DRIFT_TOLERANCE, token_distance
 from harness.decisions import library as jev
@@ -63,17 +67,24 @@ log = logging.getLogger(__name__)
 APPROVED, DRAFT = "approved", "draft"
 ROLE_FAMILIES = tuple(f.value for f in RoleFamily)
 
-# `suggest_actions` offers a variant only when its overlap with the job's weighted terms is
-# at least this: the share of the bullet's content tokens that are job terms, each counted
-# at its weight relative to the heaviest term, so with uniform weights it is exactly
-# `relevance_density`. 0.10 is a bullet whose tokens barely touch the posting (one or two
-# stray terms in a typical 12-20 token bullet); a real match is usually well above it.
-# PROVISIONAL, like the guard tolerances: picked by reasoning, not fitted on real library use
-# (there is none yet). This is now only the fallback's floor: Jev's choice (#199) decides
-# whenever it answers, with its own fitted threshold. Real scores run low because the
-# weights are relative to the heaviest term: a bullet made of the posting's top six terms
-# scored about 0.30.
+# The Jev-free variant pick (#352) offers a variant only when its `variant_fit` is at least this. The
+# fit is `concepts.demand`: the average, over the kinds of work the bullet shows, of the share of the
+# job's top requirements that ask for that kind (see `harness/concepts.py`), so a bullet about work the
+# posting does not ask for scores near 0 whatever words it repeats, and a posting the vocabulary
+# reads thinly gives every bullet a low score. FITTED on `eval/library_labels/variants.json` with
+# `eval/fit_library_fallbacks.py` (model `fallback-variant-v1`, recorded in `harness/policy.json`):
+# harmful errors first, then the most correct, then the middle of the gap. #229 shipped this floor as
+# 0.10 on a different scale (word overlap, `relevance_density`'s tokenization) and it was reasoned,
+# not fitted; Jev's own choice (#199) decides whenever it answers, with its own threshold.
 VARIANT_MATCH_FLOOR = policy.get("library.variant_match_floor")
+
+# The Jev-free track pick (#352): the saved track whose role family best fits the job's top
+# requirements and title (`concepts.family_scores`, cosine of two readings) is chosen when its score
+# is at least the floor and leads every other family (saved or not, including kinds of work no track
+# covers) by at least the margin. Fitted with `eval/fit_library_fallbacks.py` (model
+# `fallback-track-v1`). Jev's own choice (#199) decides whenever it answers.
+TRACK_FALLBACK_FLOOR = policy.get("library.fallback_track_floor")
+TRACK_FALLBACK_MARGIN = policy.get("library.fallback_track_margin")
 
 _ROUND = 4
 
@@ -411,8 +422,11 @@ def choose_baseline(user_id: UUID, job_id: UUID) -> Optional[Dict[str, Any]]:
     - `jev` or `cache`: a Jev choice over the saved tracks (`harness/decisions/library.py`),
       asked only when the user has a saved baseline. `p` is the chosen track's probability. A pick
       below `TAU_BASELINE`, or Jev's own `none`, is no baseline.
-    - `fallback`: Jev did not answer (no key, mode `off`, an API error), so #229's lookup runs
-      unchanged: the track named after the job's role family, else none.
+    - `fallback`: Jev did not answer (no key, mode `off`, an API error). With requirements to
+      read, the track whose role family best fits the job's duties (`pick_track`, #352) when it
+      clears the fitted floor and margin, else none; the title does not decide, though it is one
+      more thing read. With no requirements at all, #229's lookup runs unchanged: the track named
+      after the job's role family, else none.
 
     `family_source` is how the role family was found (`host`, `title` or `default`).
     """
@@ -434,6 +448,7 @@ def choose_baseline(user_id: UUID, job_id: UUID) -> Optional[Dict[str, Any]]:
         return result(named, "host")
 
     tracks = saved_tracks(user_id)
+    requirements: List[Dict] = []
     if tracks:
         title, requirements = _job_inputs(user_id, job_id)
         decision = jev.ask_track(title, requirements, tracks)
@@ -445,6 +460,16 @@ def choose_baseline(user_id: UUID, job_id: UUID) -> Optional[Dict[str, Any]]:
                 if row is not None:
                     session.expunge(row)
             return result(row, decision.source, decision.p) if row is not None else None
+        if concepts.requirement_rows(requirements):
+            # The Jev-free pick reads the job's duties (#352), not its title alone: a job whose title
+            # says one thing and whose requirements another follows the requirements, and a job whose
+            # duties fit no saved track (or two about equally) starts from none.
+            picked = pick_track(title, requirements, tracks)
+            with Session(_db.engine) as session:
+                row = session.get(TrackBaseline, (user_id, picked)) if picked else None
+                if row is not None:
+                    session.expunge(row)
+            return result(row, "fallback") if row is not None else None
     return result(named, "fallback") if named is not None else None
 
 
@@ -471,16 +496,93 @@ def variant_score(text: str, terms: Dict[str, float]) -> float:
     return round(sum(min(terms.get(t, 0.0) / top, 1.0) for t in tokens) / len(tokens), _ROUND)
 
 
-def best_variant(variants: Sequence[Dict], terms: Dict[str, float]) -> Tuple[Optional[Dict], float]:
-    """`(variant with its score, best score)`: the highest overlap at or above the floor,
-    ties to the shorter text then the id so the pick never depends on storage order.
-    `(None, best)` when nothing reaches the floor."""
-    scored = sorted(((variant_score(v["text"], terms), v) for v in variants),
-                    key=lambda sv: (-sv[0], len(sv[1]["text"]), sv[1]["text"], sv[1]["variant_id"]))
+def job_reading(title: str, requirements: Optional[Iterable[Dict]]) -> Dict[str, float]:
+    """The job's top requirements and title as kinds of work (`concepts.read_job`): what the Jev-free
+    variant and track picks read. Empty when the job has no requirements and no readable title."""
+    return concepts.read_job(title or "", requirements or [])
+
+
+def variant_fit(text: str, reading: Dict[str, float]) -> float:
+    """How well a bullet shows the work the job asks for, in [0, 1] (`concepts.demand`): 0 for a
+    bullet that is mostly about work the posting does not ask for (teaching, office work), however
+    many of the posting's nouns it repeats (`concepts.mostly_unasked`)."""
+    hits = concepts.read(text)
+    if concepts.mostly_unasked(hits, reading):
+        return 0.0
+    return round(concepts.demand(reading, hits), _ROUND)
+
+
+def variant_scores(variants: Sequence[Dict], terms: Dict[str, float],
+                   reading: Dict[str, float]) -> List[Tuple[float, Dict]]:
+    """`(fit, variant)` best first: by `variant_fit`, ties to the better weighted-term overlap
+    (`variant_score`, so the stored keyword weights still count), then the shorter text, then the text
+    and id so the order never depends on storage order."""
+    return sorted(((variant_fit(v["text"], reading), v) for v in variants),
+                  key=lambda sv: (-sv[0], -variant_score(sv[1]["text"], terms), len(sv[1]["text"]),
+                                  sv[1]["text"], sv[1]["variant_id"]))
+
+
+def best_variant(variants: Sequence[Dict], terms: Dict[str, float],
+                 reading: Dict[str, float]) -> Tuple[Optional[Dict], float]:
+    """`(variant with its score, best score)`: the variant that best shows the work the job asks for
+    (`variant_fit`) when that is at least `VARIANT_MATCH_FLOOR`, else `(None, best)` (`no_match`)."""
+    scored = variant_scores(variants, terms, reading)
     if not scored:
         return None, 0.0
     best, v = scored[0]
     return ({**v, "score": best} if best >= VARIANT_MATCH_FLOOR and best > 0 else None), best
+
+
+# ── the Jev-free track pick (#352) ───────────────────────────────────────────
+
+def track_family(track: str, source_title: Optional[str] = None) -> Optional[str]:
+    """The role family a saved track stands for: the track's own name when it is a family, else the
+    family of the title of the job its baseline came from, else None (the duties-based pick never
+    chooses a track it cannot place)."""
+    name = normalize_track(track)
+    if name in concepts.FAMILIES:
+        return name
+    family = role_family_from_title(source_title or "")
+    return family if family in concepts.FAMILIES else None
+
+
+def track_scores(title: str, requirements: Optional[Iterable[Dict]],
+                 tracks: Sequence[Dict]) -> Optional[Dict[str, Any]]:
+    """The best-fitting saved track for a job's duties: `{track, score, rival, margin}`, or None when
+    the job has no requirements to read or no track can be placed. `score` is the cosine of the job's
+    reading (top requirements and title) with the track's role family; `rival` is the best score of any
+    *other* family, saved or not, and kinds of work no track covers (`concepts.OFF_TRACK`). Nothing
+    here is thresholded: `pick_track` does that."""
+    if not concepts.requirement_rows(requirements or []):
+        return None
+    family_of = {}
+    for t in tracks:
+        fam = track_family(t["track"], t.get("title"))
+        if fam is not None:
+            family_of[t["track"]] = fam
+    if not family_of:
+        return None
+    fam_scores = concepts.family_scores(concepts.read_job(title or "", requirements or []))
+    # the best-scoring family, ties to the track named exactly for it, then the track name
+    best = min(family_of, key=lambda tr: (-fam_scores[family_of[tr]], tr != family_of[tr], tr))
+    fam = family_of[best]
+    rival = max((v for f, v in fam_scores.items() if f != fam), default=0.0)
+    score = fam_scores[fam]
+    return {"track": best, "family": fam, "score": round(score, _ROUND), "rival": round(rival, _ROUND),
+            "margin": round(score - rival, _ROUND)}
+
+
+def pick_track(title: str, requirements: Optional[Iterable[Dict]],
+               tracks: Sequence[Dict]) -> Optional[str]:
+    """The saved track a job's duties point to, or None: the best-fitting track (`track_scores`) when
+    its score is at least `TRACK_FALLBACK_FLOOR` and it leads every other family by at least
+    `TRACK_FALLBACK_MARGIN`. A job whose duties fit no saved track, or two about equally, starts from
+    none."""
+    found = track_scores(title, requirements, tracks)
+    if (found is None or found["score"] < TRACK_FALLBACK_FLOOR - 1e-9
+            or found["margin"] < TRACK_FALLBACK_MARGIN - 1e-9):
+        return None
+    return found["track"]
 
 
 def valid_ops(key: str, content: Dict, kg_keys_by_kind: Dict[str, Sequence[str]],
@@ -525,9 +627,12 @@ def suggest_actions(user_id: UUID, job_id: str, node_id: Optional[str] = None) -
     distribution (every variant id, and `no_match`). The pick is Jev's likeliest variant when the
     probability it puts on any variant (1 - p(`no_match`)) is at least `TAU_VARIANT`, else `no_match`.
 
-    **The fallback path** (`source: "fallback"`: no key, mode `off`, an API error): retrieval
-    overlap picks the variant, exactly as #229 shipped it. An item with no approved variant
-    asks nothing and reads the same way. Every valid action is equally likely either way.
+    **The fallback path** (`source: "fallback"`: no key, mode `off`, an API error): the variant
+    that best shows the kinds of work the job's top requirements and title ask for (`variant_fit`,
+    #352) when that clears `VARIANT_MATCH_FLOOR`, else `no_match`; a job with no requirements has
+    nothing to read and gets `no_match`. `variant.score` and `best_score` are that fit. An item with
+    no approved variant asks nothing and reads the same way. Every valid action is equally likely
+    either way.
     Deterministic ordering throughout: items in page order, actions in `OPS` order. A job with
     no history is judged on the version its first plan would start from (a baseline copy,
     else the whole KG).
@@ -563,6 +668,7 @@ def suggest_actions(user_id: UUID, job_id: str, node_id: Optional[str] = None) -
     suppress, emphasize, _ = executor._hard_preferences(user_id, jid)
     terms = job_terms(services.resolve_keyword_weights(jid, user_id, job.description or "",
                                                        persist=False), job.description or "")
+    reading = job_reading(job.title, requirements)
     library = approved_by_item(user_id)
     items = []
     for section, key_fn in (("experiences", exp_key), ("projects", proj_key)):
@@ -581,7 +687,7 @@ def suggest_actions(user_id: UUID, job_id: str, node_id: Optional[str] = None) -
                 source = decision.source
                 extra = {"propensity": decision.propensity}
             else:
-                chosen, best = best_variant(approved, terms)
+                chosen, best = best_variant(approved, terms, reading)
                 source = "fallback"
             ops = valid_ops(key, content, kg_by_kind, suppress, emphasize)
             items.append({

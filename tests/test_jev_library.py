@@ -3,8 +3,9 @@ which saved track a job starts from.
 
 Every Jev answer here is scripted on a fake transport or replayed from the cache; nothing calls
 the API. The real answers behind the thresholds are the committed recordings
-(`tests/test_library_labels.py`). With no key, mode `off` or an API error the #229 fallbacks run
-unchanged, which these tests pin against what the rules compute on their own.
+(`tests/test_library_labels.py`). With no key, mode `off` or an API error the Jev-free fallbacks run
+(the concept-fit variant pick and the duties-based track pick of #352, which replaced #229's word overlap
+and title lookup), which these tests pin against what the rules compute on their own.
 """
 
 import json
@@ -235,25 +236,32 @@ def test_a_second_run_replays_from_the_cache_and_a_changed_variant_set_asks_agai
     assert len(transport.calls) == 2
 
 
-# ── the fallbacks, unchanged ─────────────────────────────────────────────────
+# ── the fallbacks ────────────────────────────────────────────────────────────
 
-def _overlap_expectation(uid, job_id, key):
-    """What #229 computes on its own: the overlap pick and its score for one item."""
+# A bullet that shows the env job's work (a computer vision and machine learning role): it names a
+# trained model and a deep learning stack, the two kinds of work the job's title reads as.
+FITTING = "Trained a convolutional neural network classifier in PyTorch to predict defects on a production line"
+
+
+def _fit_expectation(uid, job_id, key):
+    """What the Jev-free pick computes on its own (`harness.library.best_variant`, #352): the pick and its
+    score for one item, from the job's title and requirements."""
     from database.models import JobDescription
+    from harness import executor
     import services
 
     with Session(db.engine) as s:
-        text = s.get(JobDescription, UUID(job_id)).description
+        job = s.get(JobDescription, UUID(job_id))
+        text, title = job.description, job.title
     terms = library.job_terms(services.resolve_keyword_weights(UUID(job_id), uid, text, persist=False), text)
-    chosen, best = library.best_variant(library.approved_by_item(uid).get(key, []), terms)
-    return chosen, best
+    reading = library.job_reading(title, executor.job_requirements(uid, UUID(job_id)))
+    return library.best_variant(library.approved_by_item(uid).get(key, []), terms, reading)
 
 
 @pytest.mark.parametrize("how", ["no_key", "mode_off", "api_error"])
-def test_with_no_jev_answer_suggest_actions_is_exactly_the_overlap_fallback(env, auto, monkeypatch, how):
+def test_with_no_jev_answer_suggest_actions_is_exactly_the_fit_fallback(env, auto, monkeypatch, how):
     uid, job_id, _ = env
-    top = _job_terms(uid, job_id)[:6]
-    strong = "Built " + " ".join(top) + " pipelines"
+    strong = FITTING
     for text in ("Organized the annual office holiday celebration party", strong):
         _import(uid, EXP, text)
     _import(uid, PROJ, "Built an arcade game engine with a physics loop")
@@ -265,10 +273,10 @@ def test_with_no_jev_answer_suggest_actions_is_exactly_the_overlap_fallback(env,
     out = invoke("suggest_actions", uid, {"job_id": job_id})
     assert out["floor"] == library.VARIANT_MATCH_FLOOR
     for item in out["items"]:
-        chosen, best = _overlap_expectation(uid, job_id, item["item_key"])
+        chosen, best = _fit_expectation(uid, job_id, item["item_key"])
         assert item["source"] == "fallback" and item["propensity"] is None
         assert item["variant"] == (None if chosen is None else {
-            k: v for k, v in chosen.items()})                          # byte for byte, score included
+            k: v for k, v in chosen.items()})                          # the pick, score included
         assert item["best_score"] == best
         assert item["match"] == ("variant" if chosen else "no_match")
     assert _items(out)[EXP]["variant"]["text"] == strong
