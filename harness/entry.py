@@ -10,6 +10,7 @@
     art github login|logout|status               # GitHub device-flow sign-in (#353)
     art export --out backup.zip                  # back up a profile (#195)
     art import backup.zip                        # restore it into the local store
+    art migrate preferences [--dry-run]          # anchor old preference rows; section rows become rules (#300)
     art import --from-supabase --source-url ... --user-id ...   # one-time web-app migration
 
 `art ui` hands off to `web.local_ui`, imported only when asked for, so the
@@ -51,6 +52,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if argv[:1] == ["jev"]:
         from harness.decisions.recordings import main as jev_main
         return jev_main(argv[1:])
+    if argv[:1] == ["migrate"]:
+        from harness.migrations import main as migrate_main
+        return migrate_main(argv[1:])
     if argv[:1] == ["github"]:
         from harness.github_cli import main as github_main
         return github_main(argv[1:])
