@@ -52,7 +52,7 @@ art github login
 If `art` is not on your PATH (you have not run `/art:setup`'s install step), the same command is:
 
 ```bash
-uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl" art github login
 ```
 
 Claude can then call `list_github_repos`, pick the repos

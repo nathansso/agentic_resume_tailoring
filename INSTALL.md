@@ -26,7 +26,7 @@ yes to each command, runs uv's official installer and installs ART as a command:
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh                                  # macOS, Linux
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"   # Windows
-uv tool install --python 3.12 "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl"
+uv tool install --python 3.12 "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl"
 uv tool update-shell
 ```
 
@@ -50,7 +50,7 @@ the hooks with `/hooks` in Codex (it skips a plugin's hooks until you do). For a
 Codex, or Codex without the plugin, install them into your own `hooks.json` instead:
 
 ```bash
-uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art hooks codex --write
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl" art hooks codex --write
 ```
 
 With the plugin installed that command adds nothing and removes ART's own entries from
@@ -68,10 +68,10 @@ plugin pins that exact URL (`v<version>` is `ART_VERSION` in `harness/__init__.p
 
 ```bash
 # Register the MCP server with Claude Code
-claude mcp add art -- uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art mcp
+claude mcp add art -- uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl" art mcp
 
 # The same tools as a JSON CLI
-uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art --list
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl" art --list
 ```
 
 `art mcp` and `art-mcp` run the same server; the plugin uses `art mcp` so it needs only the
@@ -86,7 +86,7 @@ profile.
 The release wheel has the built editor in it, so no checkout, Node or `npm` is needed:
 
 ```bash
-uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art ui --job <job_id>
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl" art ui --job <job_id>
 ```
 
 It opens http://127.0.0.1:8765/. The plugin's `/art:open` prints this command for the
@@ -101,7 +101,7 @@ From a checkout, build the editor and run it from source or from a wheel you bui
 npm --prefix web/frontend ci && npm --prefix web/frontend run build
 python -m web.local_ui                     # from source
 uv build                                   # dist/art_mcp-<version>-py3-none-any.whl
-uvx --from "dist/art_mcp-0.1.1-py3-none-any.whl[ui]" art ui
+uvx --from "dist/art_mcp-0.1.2-py3-none-any.whl[ui]" art ui
 ```
 
 CI builds that wheel, installs it with no extras into an empty venv, and drives `art-mcp`
@@ -246,8 +246,8 @@ plugin runs ART through `uvx`, which puts no `art` on your PATH, so run the same
 through `uvx`:
 
 ```bash
-uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login
-uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login --private
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl" art github login
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl" art github login --private
 ```
 
 The token goes to the OS keychain through the `keyring` package (service `art-mcp`,

@@ -50,7 +50,7 @@ install anything without the user's yes.**
 4. **Install ART as a command, with consent.** Show the user these two commands, with the
    same pinned release the plugin runs, and wait for a yes:
    ```bash
-   uv tool install --python 3.12 "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl"
+   uv tool install --python 3.12 "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl"
    uv tool update-shell
    ```
    Call `uv` by its full path from 2 or 3 if it is not on your PATH yet. The first puts
@@ -87,7 +87,7 @@ Ask the user where their materials are:
 - their GitHub repos. If they want these, they run `art github login` in their own terminal
   (`--private` adds private repos; `list_github_repos`'s `not_logged_in` error repeats the
   command). If `art` is not on their PATH, the same command is
-  `uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login`.
+  `uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl" art github login`.
   Then you call `list_github_repos`, pick the repos worth
   reading with them, and clone one only after they agree. Store what you read with
   `source: "github:<repo>"` (each repo's `evidence_source`). Never ask for or handle a token.
