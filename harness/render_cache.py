@@ -118,7 +118,14 @@ def measure_lines(texts: Sequence[str]) -> List[int]:
         raise ValueError("measure_lines: blank text (blank bullets never render)")
     found = _find_latex_engine()
     if not found:
-        raise RuntimeError("No LaTeX engine found. Install tectonic or pdflatex.")
+        # First need on a machine without LaTeX: download the pinned Tectonic (#384).
+        from harness.toolchain import ensure_tectonic
+
+        got = ensure_tectonic()
+        if not got.path:
+            raise RuntimeError(f"No LaTeX engine found ({got.reason}). "
+                               "Install tectonic or pdflatex.")
+        found = ("tectonic", got.path)
     name, path = found
     with tempfile.TemporaryDirectory() as tmp:
         tex_path = os.path.join(tmp, "measure.tex")
@@ -178,6 +185,10 @@ def bullet_lines(texts: Sequence[str], *,
             raise RuntimeError(f"measurer returned {len(measured)} counts for {len(misses)} texts")
         fresh = dict(zip(misses, measured))
         known.update(fresh)
+        if template is None:
+            # The measurer may have just provisioned the engine (#384), which changes
+            # `engine_id()`: store under the engine that measured, not under 'none'.
+            tpl = template_hash()
         try:
             eng = engine_id()
             with Session(db.engine) as session:

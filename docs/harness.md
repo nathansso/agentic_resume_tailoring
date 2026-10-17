@@ -399,8 +399,9 @@ metric vector and the rule, and `harness/executor.py` runs it. The details:
     always runs and Jev never removes one of its hits. Finalize runs the same check over
     the whole page, unchanged base text included, so a base paraphrase also stops the
     commit; each (text, pin) is one call once. With no key it is the term match alone.
-- **Line budget.** It is measured by #200's render cache. Without a LaTeX engine it
-  reports `unmeasured` and doesn't block.
+- **Line budget.** It is measured by #200's render cache. With no LaTeX engine, ART first
+  downloads its pinned Tectonic (#384, `harness/toolchain.py`); when that is off
+  (`ART_NO_DOWNLOAD=1`) or fails, it reports `unmeasured` and doesn't block.
 - **Saving and replay.** Every program is saved (`PlanProgram`), so `patch_plan` can
   amend one that finalize refused. `dry_run` evaluates everything and commits nothing.
 - **Visible in the editor.** A commit materializes into the job's current result, so
@@ -1047,8 +1048,9 @@ description, languages, topics, stars, last push, fork and archived flags, URLs,
 command and a README excerpt capped at 3000 characters. It pages (`next_page`), lists private
 repos only when the token holds `repo`, and needs no profile (`ToolSpec.needs_user` is
 false). It reads nothing from disk: the host picks repos, clones with the user's say-so, and
-stores what it reads with `upsert_items`, source `github:<repo>`. `harness/github.py` and the
-Jev client are the only network clients under `harness/` (`tests/test_harness_boundary.py`).
+stores what it reads with `upsert_items`, source `github:<repo>`. `harness/github.py`, the
+Jev client and the toolchain downloader (`harness/toolchain.py`, #384) are the only network
+clients under `harness/` (`tests/test_harness_boundary.py`).
 
 **Writes.** `checkout` is the first tool that writes. Local SQLite is writable. A remote or
 Postgres database is read-only, and write tools return a `read_only` error, unless the

@@ -2,8 +2,8 @@
 
 Codex uses the same plugin directory as Claude Code (`plugin/`, with a
 `.codex-plugin/plugin.json` manifest): the `art` MCP server and the `art-tailor` and
-`art-setup` skills. You need [uv](https://docs.astral.sh/uv/), plus
-[tectonic](https://tectonic-typesetting.github.io) or pdflatex for PDFs.
+`art-setup` skills. You need [uv](https://docs.astral.sh/uv/). For PDFs, ART downloads a
+pinned [Tectonic](https://tectonic-typesetting.github.io) on first use.
 
 ## Install
 

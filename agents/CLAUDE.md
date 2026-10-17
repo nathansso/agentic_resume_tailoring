@@ -47,5 +47,5 @@ Keep this file focused on routing and tool-call work. Do not duplicate generic r
 - `format_tex()` returns raw `.tex` source (Jake's Resume layout, MIT license).
 - `format_docx()` returns `.docx` bytes mirroring the same layout via python-docx.
 - `format_markdown()` is **deprecated** — emits `DeprecationWarning`. Do not use in new code.
-- tectonic binary lives at `.venv/Scripts/tectonic.exe` (Windows) and is installed via the Dockerfile on Linux. The formatter resolves it automatically alongside `sys.executable`.
+- tectonic binary lives at `.venv/Scripts/tectonic.exe` (Windows) and is installed via the Dockerfile on Linux. The formatter resolves it on PATH, then alongside `sys.executable`, then pdflatex, then the pinned Tectonic that `harness/toolchain.py` downloads to `$ART_DATA_DIR/bin` on first need (#384).
 - The `.tex` preamble guards pdflatex-specific commands (`inputenc`, `glyphtounicode`, `pdfgentounicode`) with `\ifdefined\pdftexversion` so the source compiles under both pdflatex and XeTeX/tectonic.
