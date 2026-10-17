@@ -1495,6 +1495,21 @@ def _target_name(target: Optional[str], kind: str) -> Optional[str]:
     return label or None
 
 
+class _ManuallyEdited(Exception):
+    """A supersede matched a row the user edited by hand (`manually_edited`).
+
+    Raised rather than returned so the caller can't mistake it for "no match"
+    and fall back to adding a duplicate row. Every other KG write path leaves
+    such rows alone too (kg_store saves, harness `upsert_items` correct)."""
+
+    def __init__(self, label: str):
+        super().__init__(label)
+        self.message = (
+            f"Left {label} unchanged: you edited it by hand, "
+            "so change it in the editor instead."
+        )
+
+
 def _supersede_project(session, user_id: UUID, data: dict, evidence: str,
                        source_context: Optional[str]) -> Optional[str]:
     """Update an existing Project in place. None when there's no row to update."""
@@ -1527,6 +1542,8 @@ def _supersede_project(session, user_id: UUID, data: dict, evidence: str,
         )
     if not row:
         return None
+    if row.manually_edited:
+        raise _ManuallyEdited(f"project '{row.name}'")
 
     changes = []
     if name and name.lower() != (row.name or "").lower():
@@ -1599,6 +1616,8 @@ def _supersede_experience(session, user_id: UUID, data: dict, evidence: str,
         row = at_company[0] if len(at_company) == 1 else None
     if not row:
         return None
+    if row.manually_edited:
+        raise _ManuallyEdited(f"experience '{row.title} @ {row.company}'")
 
     changes = []
     if title and title.lower() != (row.title or "").lower():
@@ -1647,6 +1666,22 @@ def apply_artifact_decision(
     Never raises. Called only after an explicit user accept — this function is
     not wired to any automatic path.
     """
+    return apply_artifact_decision_outcome(user_id, proposal, source_context)[1]
+
+
+def apply_artifact_decision_outcome(
+    user_id: UUID,
+    proposal: dict,
+    source_context: str = "chat",
+) -> tuple[str, str]:
+    """`apply_artifact_decision` with its outcome: (status, message).
+
+    status is 'skipped_manual' when a supersede matched a row the user edited by
+    hand and left it alone, 'no_op' when there was nothing to do, 'failed' when
+    the proposal was refused or errored, and 'applied' otherwise. An add that
+    `create_artifact_from_chat` turns down still reads 'applied'; its message
+    says why.
+    """
     try:
         decision = (proposal.get("decision") or "add").strip().lower()
         artifact_type = (proposal.get("type") or "").strip().lower()
@@ -1657,35 +1692,38 @@ def apply_artifact_decision(
 
         if decision == "no_op":
             label = proposal.get("name") or artifact_type or "That"
-            return f"'{label}' is already in your profile — nothing to change."
+            return "no_op", f"'{label}' is already in your profile — nothing to change."
 
         if decision != "supersede":
-            return create_artifact_from_chat(
+            return "applied", create_artifact_from_chat(
                 user_id, artifact_type, proposal, source_context=source_context)
 
         evidence = (proposal.get("evidence") or "").strip()
         if not evidence:
-            return (
+            return "failed", (
                 "Evidence is required to update this artifact from chat. "
                 "Describe what was said in the conversation that supports this."
             )
         superseder = _SUPERSEDERS.get(artifact_type)
         if not superseder:
-            return (
+            return "failed", (
                 f"Unknown artifact type: '{artifact_type}'. "
                 "Use 'skill', 'project', or 'experience'."
             )
         with Session(engine) as session:
-            result = superseder(session, user_id, proposal, evidence, source_context)
+            try:
+                result = superseder(session, user_id, proposal, evidence, source_context)
+            except _ManuallyEdited as skipped:
+                return "skipped_manual", skipped.message
         if result:
-            return result
+            return "applied", result
         # Nothing matched — the graph doesn't hold what we meant to update, so
         # the honest action is to create it rather than report a phantom update.
-        return create_artifact_from_chat(
+        return "applied", create_artifact_from_chat(
             user_id, artifact_type, proposal, source_context=source_context)
     except Exception as e:
         logger.error("apply_artifact_decision failed: %s", e)
-        return f"Failed to save artifact: {e}"
+        return "failed", f"Failed to save artifact: {e}"
 
 
 # ── JobCard: distilled completed-job memory (issue #137) ──────────────────────

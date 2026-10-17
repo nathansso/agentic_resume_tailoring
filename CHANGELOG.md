@@ -48,8 +48,26 @@ Phase 7 of 7 of the preference-anchoring plan (#295–#300). Rows written before
 
 ---
 
+## Issue 378 — Chat save leaves hand-edited projects and experiences alone
+**Status:** complete | **Tests:** 3418 pass on SQLite (3 new: 2 in `test_knowledge_extraction.py`, 1 in `test_chat_artifacts_router.py`), 24 skipped, 2 xfailed, 0 fail; the Postgres leg was not run locally (no schema change), CI's required leg covers it
+
+Accepting a chat knowledge-artifact `supersede` (the chat `/save` command and `POST /api/chat/{job_id}/artifacts/decide`) overwrote Project and Experience rows the user had edited by hand. `services._supersede_project` and `_supersede_experience` were the only write paths that ignored `manually_edited` (#92): kg_store saves skip such rows, and harness `upsert_items` with `correct` returns `skipped_manual`. Supersede now leaves them alone too, and says so.
+
+### What shipped
+- **`services._supersede_project` / `_supersede_experience`** raise an internal `_ManuallyEdited` once the matched row has `manually_edited` set, before touching any field. It is raised rather than returned so `apply_artifact_decision` cannot read it as "no match" and fall back to adding a second row for the same item.
+- **`services.apply_artifact_decision_outcome(user_id, proposal, source_context)`** returns `(status, message)`: `applied`, `skipped_manual`, `no_op` or `failed` (missing evidence, unknown type, an error). `apply_artifact_decision` returns its message, so `/save` and the Knowledge-Updates eval are unchanged in shape, and `/save` now tells the user the item was left unchanged and to edit it in the editor.
+- **`POST /api/chat/{job_id}/artifacts/decide`** returns `status` alongside `saved` and `message`, and `saved` is true only when the status is `applied`.
+- **Tests (3 new).** `tests/test_knowledge_extraction.py`: a hand-edited project keeps its description through a supersede with `status == "skipped_manual"` and no second row; a hand-edited experience keeps its title through a promotion. `tests/test_chat_artifacts_router.py`: accepting that supersede over the API returns `saved: false`, `status: "skipped_manual"` and leaves the row as it was.
+
+### Deviations from spec
+- **`saved` on `/artifacts/decide` now means a write happened.** It was `true` for every accept; it is now `false` for `no_op` and `failed` as well as `skipped_manual`. No frontend reads the endpoint yet (#147 is the UI).
+- **An add that `create_artifact_from_chat` turns down still reads `applied`.** That function returns plain English for its refusals (a missing name or company), so the status cannot tell them apart without changing its return type; the message says why.
+- **Skills are not covered.** `UserSkill` has no `manually_edited` flag, so `_supersede_skill` is unchanged.
+
+---
+
 ## Release v0.1.1 — ship `main` to plugin users, GitHub login in the guides
-**Status:** complete in the repo; the tag `v0.1.1` is pushed after merge, with the owner's OK, and the OAuth client ID is not in yet (see Deviations) | **Tests:** 3222 pass on SQLite (1 new, `test_art_hooks_codex_replaces_the_v010_hooks_with_this_versions`, plus one assertion in `test_is_art_hook_recognises_any_source_and_only_art`), 24 skipped, 2 xfailed, 0 fail; site build and the 2 MB weight check pass (636,815 bytes); `uv build` gives `art_mcp-0.1.1-py3-none-any.whl` with `harness/github.py`, `harness/github_cli.py` and the editor, and `Requires-Dist: keyring>=24`; a clean install of it passes `scripts/smoke_art_mcp.py`; the Postgres leg was not run locally (nothing here touches storage), CI's required leg covers it
+**Status:** complete; the tag `v0.1.1` is pushed with the owner's OK, with the ARTie OAuth App's client ID shipped in `harness/github.py` | **Tests:** 3222 pass on SQLite (1 new, `test_art_hooks_codex_replaces_the_v010_hooks_with_this_versions`, plus one assertion in `test_is_art_hook_recognises_any_source_and_only_art`), 24 skipped, 2 xfailed, 0 fail; site build and the 2 MB weight check pass (636,815 bytes); `uv build` gives `art_mcp-0.1.1-py3-none-any.whl` with `harness/github.py`, `harness/github_cli.py` and the editor, and `Requires-Dist: keyring>=24`; a clean install of it passes `scripts/smoke_art_mcp.py`; the Postgres leg was not run locally (nothing here touches storage), CI's required leg covers it
 
 Every install (the Claude Code plugin, Codex, a manual MCP registration) pinned the v0.1.0 wheel, which is 192 commits behind `main`. The plugin's instruction files come from `main` while its code is the wheel, so `/art:setup` and the `art-tailor` skill already told people to run `art github login`, a command v0.1.0 does not have. v0.1.1 moves every pin to the new wheel and teaches the site's install and usage pages GitHub login. Issue #369 closes after the tag ships and a fresh install is smoke-tested.
 
@@ -57,13 +75,14 @@ Every install (the Claude Code plugin, Codex, a manual MCP registration) pinned 
 
 **In the wheel: new for users since v0.1.0**
 
-- **GitHub login (#353).** `art github login [--private]`, `status` and `logout`, and the `list_github_repos` tool, so the agent can list the user's repos and pick which to read or clone. The token lives in the OS keychain, else `ART_GITHUB_TOKEN`. `keyring` is now a default dependency (it was an extra the plugin's pin did not carry), so the plugin path has a keychain. The OAuth client ID is the one open piece.
+- **GitHub login (#353).** `art github login [--private]`, `status` and `logout`, and the `list_github_repos` tool, so the agent can list the user's repos and pick which to read or clone. The token lives in the OS keychain, else `ART_GITHUB_TOKEN`. `keyring` is now a default dependency (it was an extra the plugin's pin did not carry), so the plugin path has a keychain. The package ships the ARTie OAuth App's client ID, so login works with no setup.
 - **`/art:history` and `/art:revert` no longer crash (#326).** `diff_nodes` raised a validation error whenever two versions' skills differed.
 - **Citation keys are stable (#327).** `<item key>#b<n>` named a different project bullet from one ingest to the next; project bullets now carry a position, with a backfill for existing stores.
 - **The editor round trip over MCP (#276, #277, #278, #306).** A host-tailored job opens in `art ui`; a drag in the editor lasts across the next commit; the user's own `.tex` edit is shown to the host as changed bullets, is not dropped by a commit, and is not vetoed by a guard when carried over.
 - **Removing a bullet (#279, #289).** A requested delete is judged on the hard gates alone, and `delete_bullet` is the plan op that performs the cuts `cut_hints` recommends.
 - **Preferences bind to the right thing (#291, #295, #296, #297, #298).** One scope for the briefing, the pins and the executor; a deterministic anchor resolver; preferences re-link on ingest and follow renames and deletes; items carry their preferences; `ResumeRule` for what the user said about the page, enforced at finalize.
 - **Skills cap (#185).** `select_skills` no longer renders past the cap.
+- **Robust without Jev (#349: #351, #352).** With no TypeSafe key, a deterministic support check blocks unsupported rewrites (47 of 54 should-block pairs with #123's gate, 0 of 35 supported blocked), and the approved-bullet and saved-track fallbacks pick 41/48 and 36/36 with no poor-fit or wrong picks. All are fits on the labelled sets (`eval/FALLBACKS.md`); the policy artifact is v3.
 - **Codex hooks (#290, #283).** The Codex plugin carries ART's hooks, `art hooks codex --write` no longer duplicates them, and it replaces the hooks an earlier install wrote (git source, older wheel, and now v0.1.0's; pinned by a test in this release).
 - **`art ui` evidence map and editing (#136, #318, #319, #321, #322, #323).** The Data Explorer opens on an evidence map with a job overlay and an item editor; skill areas come from a keyword table and cached Jev; a bullet picker per job; dismiss and restore a skill nothing proves; confirm where a project was done; a hint under a bullet that names no skill.
 
@@ -80,7 +99,7 @@ Every install (the Claude Code plugin, Codex, a manual MCP registration) pinned 
 
 ### Deviations from spec
 
-- **`DEFAULT_CLIENT_ID` in `harness/github.py` is still empty.** The owner registers the GitHub OAuth App (device flow) and the planner fills the ID in before the tag. Until then `art github login` fails with `not_configured`, or works with `ART_GITHUB_CLIENT_ID` set, so tagging without it ships a login that does not work.
+- **The OAuth client ID was filled in after the release PR** (`Ov23liPXidZbNgjP4Oh7`, the ARTie OAuth App with device flow on), once the owner registered the app; it went in with a test that pins it, before the tag.
 - **The stale-hook requirement needed no code change.** `is_art_hook` already recognises `art hook <event>` run through `uvx --from`, whatever wheel it pins, so the work is a test (`test_art_hooks_codex_replaces_the_v010_hooks_with_this_versions`) and one `is_art_hook` assertion.
 - **The install page shows the `uvx --from "…" art github login` form, not bare `art github login`.** The plugin runs ART through `uvx`, which puts no `art` on `PATH`. `INSTALL.md` gains those two lines beside the bare ones so the drift test holds. `plugin/README.md`, `/art:setup` and the `art-setup` and `art-tailor` skills still say bare `art github login`; changing them is outside this release's scope.
 - **Not tagged or published.** The tag, the `release.yml` dry run and a smoke test of a fresh install follow merge and are the planner's, with the owner's OK. The wheel was built locally to check its name and metadata and was not uploaded.
