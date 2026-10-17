@@ -124,6 +124,11 @@ class PinsOutput(_Output):
         description="Strength-5 document rules (#298) in scope, as the executor enforces them: "
                     "limits (pages, bullets per item, skills, a section left off) and a section "
                     "order. A plan that loosens one is refused.")
+    pending_bans: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Suppressions of something no knowledge-graph item holds yet (#299), every "
+                    "strength, each with its text, scope and `hard`: a strength-5 one is also in "
+                    "pins and is enforced as a page-wide term; a softer one is reported only.")
 
 
 # ── the memory gate (#202) ───────────────────────────────────────────────────
@@ -835,6 +840,11 @@ class Violation(_Model):
 
 
 class ExecuteOutput(_Output):
+    active_constraints: Optional[Dict[str, Any]] = Field(
+        None, description="Dry runs only (#299), first in the result: what the user has stated "
+                          "that binds this job, as suggest_actions returns it. Read it before "
+                          "you commit; a plan that breaks a hard pin or loosens a hard rule is "
+                          "refused. Absent on a commit.")
     program_id: Optional[str] = None
     parent: Optional[str] = None
     dry_run: bool = False
@@ -1007,6 +1017,12 @@ class ItemSuggestion(_Model):
 
 
 class SuggestActionsOutput(_Output):
+    active_constraints: Optional[Dict[str, Any]] = Field(
+        None, description="Read this before choosing what any item says (#299): everything the user "
+                          "has stated that binds this job, with its scope. hard_pins (a plan that "
+                          "breaks one is refused), pending_bans, item_preferences, and rules (hard, "
+                          "soft, style_notes), plus `text`, the same as a few lines. The scope "
+                          "execute_plan enforces. Also first in an execute_plan dry run.")
     job_id: Optional[str] = None
     node_id: Optional[str] = Field(None, description="The version judged; None for a job with "
                                                      "no history (its starting version).")

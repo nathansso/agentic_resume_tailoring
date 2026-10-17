@@ -316,14 +316,17 @@ def art_pins(user_id: UUID, role_family: Optional[str] = None,
     """The pins alone, word for word: what a host must restore after compaction (#202).
     The same set `art_briefing` pushes, scoped the same way (`preferences_for`). Strength-5
     document rules come with them (#298), as the rules the executor enforces: a narrower rule
-    that cannot take effect is left out."""
+    that cannot take effect is left out. `pending_bans` (#299) lists every suppression of a thing
+    no item holds yet, whatever its strength: a strength-5 one is also in `pins`, and the executor
+    enforces it as a page-wide term; a softer one is only here."""
     prefs, role_family = preferences_for(user_id, job_id, role_family)
     prefs = sorted(prefs, key=lambda p: str(p.get("preference_id")))
     pins = _pins(prefs)
     rules, _ = rules_for(user_id, job_id, role_family)
     hard = rules_mod.active_view(rules_mod.resolve(rules))["hard"]
+    from harness.constraints import pending_bans  # constraints imports this module
     return {"role_family": role_family, "job_id": job_id, "pins": pins, "count": len(pins),
-            "rules": hard}
+            "rules": hard, "pending_bans": pending_bans(prefs)}
 
 
 def art_briefing(user_id: UUID, role_family: Optional[str] = None,

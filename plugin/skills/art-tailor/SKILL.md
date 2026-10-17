@@ -106,7 +106,11 @@ The tools named below are the ART MCP server's tools.
 
 ## 4. Draft the plan and get approval
 
-Call `suggest_actions(job_id)` first. For each experience and project on the current
+Call `suggest_actions(job_id)` first. **Read `active_constraints` at the top before you
+choose or write anything**: every hard pin, pending ban, preference and page rule the user has
+stated that binds this job, each with its scope (an `execute_plan` dry run leads with the same
+block). A hard pin or hard rule you break is refused; the rest are the user's stated wishes, so
+follow them too. For each experience and project on the current
 version it names the approved variant that best fits this posting (`match: variant`,
 with `variant.variant_id`, `text`, `cites` and `score`) or `no_match`, and the actions
 that are valid for the item. Jev makes the choice (`source: jev`, or `cache` when it is an

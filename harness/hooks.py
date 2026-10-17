@@ -18,7 +18,8 @@ Three things a host loses without them (docs/harness.md § 10, § 13):
 - **`session-start`** (`SessionStart`, matcher `compact`): pinned preferences
   after compaction. A model-written summary is where negated preferences get
   lost (#129), so the pins come back from ART word for word, with the job the
-  session was working on.
+  session was working on. So do the hard page rules and the bans on things the
+  graph does not hold yet (#299), scoped to that job.
 
 A hook must never break the user's prompt: any failure prints nothing and exits
 0. Output is Claude Code's JSON (`hookSpecificOutput.additionalContext`), or
@@ -227,18 +228,37 @@ def user_prompt(user_id: UUID, payload: Dict[str, Any], allow_writes: bool = Tru
 
 # ── session-start (after compaction) ─────────────────────────────────────────
 
+def _rule_line(rule: Dict[str, Any]) -> str:
+    """A hard page rule as the user said it, with what it limits and the scope it came from."""
+    where = rule.get("scope_type") or "global"
+    scope = "" if where == "global" else (
+        f" [role family {rule.get('scope_value')}]" if where == "role_family" else " [this job]")
+    return f"- {rule['text']} ({rule.get('param')}: {rule.get('value')}){scope}"
+
+
 def session_start(user_id: UUID, payload: Dict[str, Any], allow_writes: bool = True) -> Optional[str]:
+    """What a compaction summary loses, word for word (#129, #299): the strength-5 pins, the
+    hard page rules (#298) and the bans on things the graph does not hold yet, all scoped to the
+    session's job through `preferences_for`. `art_pins` already returns these; a strength-5
+    pending ban is in `pins`, so only the softer ones are added below."""
     from harness.tools import art_pins
 
     if payload.get("source") not in (None, "compact"):
         return None
     state = load_state(str(payload.get("session_id") or "default")) or {}
-    pins = art_pins(user_id, job_id=state.get("job_id"))["pins"]
+    held = art_pins(user_id, job_id=state.get("job_id"))
     out = []
-    if pins:
+    if held["pins"]:
         out.append("ART pinned preferences, verbatim (restored after compaction; honour "
                    "every one):")
-        out += [f"- {p['text']}" for p in pins]
+        out += [f"- {p['text']}" for p in held["pins"]]
+    if held["rules"]:
+        out.append("ART hard page rules, verbatim (a plan that loosens one is refused):")
+        out += [_rule_line(r) for r in held["rules"]]
+    soft_bans = [b for b in held["pending_bans"] if not b["hard"]]
+    if soft_bans:
+        out.append("ART pending bans, verbatim (not in the knowledge graph yet; follow them):")
+        out += [f"- {b['text']}" for b in soft_bans]
     if state.get("job_id"):
         out.append(f"You were tailoring {_job_label(user_id, state['job_id'])} "
                    f"(job {state['job_id']}). Call get_head before building on it.")

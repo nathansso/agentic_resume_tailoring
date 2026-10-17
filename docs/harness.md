@@ -204,6 +204,15 @@ are never hidden: the node is `accepted` with `reason: "guard_waived: requested 
 `guard_regressions` and a `waived` map in its result, so the host can tell the user what the cut
 cost. No tolerance changes; a delete with no `because` is judged as before.
 
+**So is the `replace` that brings in a hard-emphasized project (#299).** `replace` is the only op
+that puts a project on a page (there is no `add`), so a guard or the target rule that vetoed the
+swap would leave a strength-5 emphasize unsatisfiable: finalize would report `missing:<key>` for a
+plan that did everything it could. The compliance benchmark found it on a re-tailor after the user
+changed a hard suppress into a hard emphasize. Such a `replace` (its `replacement_key` is a
+hard-emphasized `proj:` key) is `accepted` with `reason: "hard_preference_override: ..."` and the
+regressions under `waived`; every hard gate still applies in full. Its bullets are still judged
+by the hard gates, so a `replace` that carries fabricated text is refused as before.
+
 **A carried-over editor edit is not vetoed by a guard either (#306).** The user's own words are
 not an optimiser's: a hand-typed bullet is short, repeats itself and ignores the posting, so it
 lowers MTLD and keyword density, and a `revise` carrying it back (§ 13, #278) was reverted, which
@@ -483,7 +492,7 @@ construction.
 | Group | Tool | Takes → returns |
 |---|---|---|
 | Context | `art_briefing` | role family → pins, negative pins, persona traits, JobCards with rejections |
-| | `art_pins` | role family, job → strength-5 preferences and negative pins, verbatim; the set `art_briefing` pushes, plus a job's own (#202); and the strength-5 document rules in scope (#298) |
+| | `art_pins` | role family, job → strength-5 preferences and negative pins, verbatim; the set `art_briefing` pushes, plus a job's own (#202); the strength-5 document rules in scope (#298); and every `pending_bans` entry, any strength (#299) |
 | Retrieval | `kg_search` | query, kinds → items with keys and evidence IDs |
 | | `list_items` | kind → every key and title, no query needed (#191); each item also carries its `preferences` and `job_rules` (#297) |
 | | `get_item` | key → record, evidence; an experience or project also lists its approved variants (id, text, tags, cites) (#229); its `preferences` (active, keyed to it, any scope) and `job_rules` (#297) |
@@ -500,8 +509,8 @@ construction.
 | | `update_profile` | header fields (name, email, phone, location, links) → the profile row `get_profile` returns (#201) |
 | Jobs | `open_job` | JD text, requirements, optional `role_family` → job id, role family and how it was found, baseline `{track, node_id, applies, source, p}`, rules, schema errors |
 | | `list_jobs` | filter → jobs with status, HEAD, last score |
-| | `suggest_actions` | job, optional node (HEAD by default) → per item: the best approved variant with its score (Jev's probability, or the overlap on the fallback) or `no_match`, `source` (`jev`, `cache` or `fallback`), `propensity` (Jev's distribution over the variants and `no_match`; only with Jev) and the valid actions with uniform propensities (#229, #199; Jev ranking of actions is #193) |
-| Execute & history | `execute_plan` | program → node results, metric vectors, refusals, violations |
+| | `suggest_actions` | job, optional node (HEAD by default) → per item: the best approved variant with its score (Jev's probability, or the overlap on the fallback) or `no_match`, `source` (`jev`, `cache` or `fallback`), `propensity` (Jev's distribution over the variants and `no_match`; only with Jev) and the valid actions with uniform propensities (#229, #199; Jev ranking of actions is #193); leads with `active_constraints`, everything the user has stated that binds this job, by scope (#299) |
+| Execute & history | `execute_plan` | program → node results, metric vectors, refusals, violations; a dry run leads with `active_constraints` (#299) |
 | | `patch_plan` | saved program id, pointer edits → same |
 | | `checkout` | node → moves HEAD |
 | | `diff_nodes` | two nodes → bullet-level diff with rationale |
@@ -553,6 +562,21 @@ A hard pin's term is also checked in the summary, education, achievements and sk
 fields. No plan node edits those sections, so the hint names the knowledge-graph item to correct,
 or the `limit` rule that leaves the section off.
 
+### Compliance benchmark (#299)
+
+`python eval/preference_compliance.py --profiles 5 --jobs 6` crosses five synthetic profiles,
+fifteen seeded sets (a hard suppress of an experience, a project and a skill; a ban on a term the
+graph does not hold; a role-family pin and a job pin; soft preferences; the page rules; a narrower
+rule that tries to loosen a hard one; two superseded preferences) and postings from five role
+families, through the scripted host, offline. Two hosts: a *naive* one that ignores preferences
+(gate recall: nothing that violates a hard preference or rule may reach the committed, rendered
+page) and an *obedient* one that reads the reminder (over-block, scope leak, durability). The
+judge is `eval/compliance_checker.py`: standard library only, it reads the rendered `.tex`
+(escapes undone, commands stripped) and shares no code with `acceptance.py`,
+`negative_pins.py` or `rules.py`. Metrics are never combined into one number, and the ATS
+composite is not an input. Results: `eval/results/preference_compliance_<date>.{json,md}`. The live-model arm
+(PrefEval-style distance and implicitness) stays with #173 and #178.
+
 ### Migrating rows written before the anchoring model (#300)
 
 Rows an older build wrote are brought over by `art migrate preferences [--dry-run]
@@ -590,6 +614,25 @@ preferences disappear (#129: 14.8% F1 on opposed-case retrieval), so pins come b
 ART word for word. Jev is documented as weak on exactly this negation workload, so #202
 measured it against heuristics alone on 111 user-confirmed synthetic messages and reports the
 negation cases separately (`eval/memory_gate_labels/REPORT.md`).
+
+**Three pushes of the same set (#299).** The briefing is read once, at the start; a hook restores
+pins after compaction; and the reminder comes at the moment of writing. PrefEval (ICLR 2025)
+found adherence falls with the distance between the preference and the generation, and that a
+reminder just before generating is the largest single fix.
+
+- *`art_briefing` and `art_pins`* return the pins, the hard and soft document rules and every
+  preference in scope; `art_pins` also lists every `pending_bans` (a ban on a thing no item holds
+  yet, any strength; a strength-5 one is enforced as a page-wide term pin, #296).
+- *`session-start` after compaction* restores, word for word and scoped to the session's job
+  (`preferences_for`, #291): the pins, the hard page rules (with the parameter and the scope each
+  came from) and the softer pending bans. A strength-5 pending ban is already a pin and is not
+  listed twice.
+- *The reminder* (`harness/constraints.py`): `suggest_actions` and an `execute_plan` dry run lead
+  with `active_constraints`, a structured block and a few lines of `text` under the title
+  "Active constraints for this job": `hard_pins`, `pending_bans`, `item_preferences`, and
+  `rules.hard` / `rules.soft` / `rules.style_notes`, each entry with its scope. It is built from
+  `preferences_for` and `rules_for`, the scope `execute_plan` enforces, so it cannot list what
+  the executor will not apply. Additive: a commit does not carry it, and no existing field moved.
 
 **The gate** (`harness/decisions/memory_gate.py`, `harness/memory.py`):
 
