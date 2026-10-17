@@ -25,12 +25,13 @@ yes to each command, runs uv's official installer and installs ART as a command:
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh                                  # macOS, Linux
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"   # Windows
-uv tool install "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl"
+uv tool install --python 3.12 "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl"
 uv tool update-shell
 ```
 
-`art` is then a real command, and the plugin's `uvx` starts from that install without
-resolving it again. Restart ART once: `/mcp` and reconnect `art` in the Claude Code terminal,
+`art` is then a real command. The plugin's server and hooks run `uvx --python 3.12`, the
+same Python as that install, so `uvx` starts from it without resolving it again, and a
+newer Python uv picks up later can't change that. Restart ART once: `/mcp` and reconnect `art` in the Claude Code terminal,
 quit and reopen the desktop app, or restart Codex. Then run `/art:setup` again; it carries on
 with your sources. Codex runs the same steps through the `$art-setup` skill.
 
@@ -48,7 +49,7 @@ the hooks with `/hooks` in Codex (it skips a plugin's hooks until you do). For a
 Codex, or Codex without the plugin, install them into your own `hooks.json` instead:
 
 ```bash
-uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art hooks codex --write
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art hooks codex --write
 ```
 
 With the plugin installed that command adds nothing and removes ART's own entries from
@@ -66,10 +67,10 @@ plugin pins that exact URL (`v<version>` is `ART_VERSION` in `harness/__init__.p
 
 ```bash
 # Register the MCP server with Claude Code
-claude mcp add art -- uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art mcp
+claude mcp add art -- uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art mcp
 
 # The same tools as a JSON CLI
-uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art --list
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art --list
 ```
 
 `art mcp` and `art-mcp` run the same server; the plugin uses `art mcp` so it needs only the
@@ -84,7 +85,7 @@ profile.
 The release wheel has the built editor in it, so no checkout, Node or `npm` is needed:
 
 ```bash
-uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art ui --job <job_id>
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art ui --job <job_id>
 ```
 
 It opens http://127.0.0.1:8765/. The plugin's `/art:open` prints this command for the
@@ -120,7 +121,7 @@ both from the same cache:
 
 - `UV_OFFLINE=1` in the environment Claude Code or Codex starts from. uv then never
   touches the network and uses the cache as it is (after one earlier online start).
-- `uv tool install "art-mcp[ui] @ <the pinned URL>"` once. uvx runs an installed tool
+- `uv tool install --python 3.12 "art-mcp[ui] @ <the pinned URL>"` once. uvx runs an installed tool
   without re-resolving it. Upgrade it by installing the next pin.
 
 On Windows, a deep default uv cache path can break the install (long paths). Point uv at a short
@@ -244,8 +245,8 @@ plugin runs ART through `uvx`, which puts no `art` on your PATH, so run the same
 through `uvx`:
 
 ```bash
-uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login
-uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login --private
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login --private
 ```
 
 The token goes to the OS keychain through the `keyring` package (service `art-mcp`,

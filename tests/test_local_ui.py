@@ -334,7 +334,7 @@ def test_a_non_checkout_install_is_pointed_at_the_release_wheel(tmp_path, capsys
     assert not local_ui.in_checkout(tmp_path)                 # no package.json beside it
     msg = local_ui.missing_static(tmp_path, checkout=False)
     assert "npm" not in msg and "web/frontend" not in msg
-    assert f'uvx --from "{SOURCE}" art ui' in msg
+    assert f'uvx --python 3.12 --from "{SOURCE}" art ui' in msg
     assert "has not been built" in msg
 
     # Same message through the launcher, and it exits before pinning anything.

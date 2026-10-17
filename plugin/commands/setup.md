@@ -30,7 +30,7 @@ install anything without my yes: name the exact command and wait.
 - No `art`: offer to install it from the pinned release, then put it on PATH:
 
   ```bash
-  uv tool install "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl"
+  uv tool install --python 3.12 "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl"
   uv tool update-shell
   ```
 
@@ -52,5 +52,5 @@ art github login
 If `art` is not on my PATH, the same command is:
 
 ```bash
-uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login
 ```

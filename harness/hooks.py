@@ -325,6 +325,14 @@ REPO = "nathansso/agentic_resume_tailoring"
 WHEEL_URL = (f"https://github.com/{REPO}/releases/download/v{ART_VERSION}/"
              f"art_mcp-{ART_VERSION}-py3-none-any.whl")
 SOURCE = f"art-mcp[ui] @ {WHEEL_URL}"
+# The one Python every launch of the pinned wheel asks for (#385). `uvx` reuses the
+# `uv tool install` that `/art:setup` makes only while it asks for the interpreter the tool
+# was built on; without a pin, a later managed-Python install changes uv's default, and the
+# server re-resolves (a hook, offline, then exits 0 and does nothing). 3.12 is what CI
+# tests and the release builds on; `requires-python` is >=3.11.
+PYTHON = "3.12"
+UVX = f'uvx --python {PYTHON} --from "{SOURCE}"'
+TOOL_INSTALL = f'uv tool install --python {PYTHON} "{SOURCE}"'
 _WIRING = (("UserPromptSubmit", None, "user-prompt"), ("SessionStart", "compact", "session-start"))
 
 
@@ -340,8 +348,8 @@ def hook_command(arg: str, source: str = SOURCE) -> str:
     seconds, or 30 s to time out with no connection), and a cold cache is a silent no-op
     until the server has started once. `; exit 0` covers what `art hook` cannot, uvx
     failing before `art` runs (no uvx, no cache, no wheel), so a hook never blocks the
-    message."""
-    return f'uvx --offline --from "{source}" art hook {arg}; exit 0'
+    message. `--python` is the pin the server and the installed tool share (#385)."""
+    return f'uvx --offline --python {PYTHON} --from "{source}" art hook {arg}; exit 0'
 
 
 def hook_config(source: str = SOURCE) -> Dict[str, Any]:

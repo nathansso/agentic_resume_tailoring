@@ -3,6 +3,8 @@
     "art": {
       "command": "uvx",
       "args": [
+        "--python",
+        "3.12",
         "--from",
         "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl",
         "art",

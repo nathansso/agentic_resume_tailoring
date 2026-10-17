@@ -50,12 +50,13 @@ install anything without the user's yes.**
 4. **Install ART as a command, with consent.** Show the user these two commands, with the
    same pinned release the plugin runs, and wait for a yes:
    ```bash
-   uv tool install "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl"
+   uv tool install --python 3.12 "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl"
    uv tool update-shell
    ```
    Call `uv` by its full path from 2 or 3 if it is not on your PATH yet. The first puts
-   `art` in uv's tool folder (the same default folder), and the plugin's `uvx` then starts
-   from that install without resolving it again. The second makes sure the folder is on
+   `art` in uv's tool folder (the same default folder), on Python 3.12, which the plugin's
+   `uvx` also asks for, so it starts from that install without resolving it again. Keep
+   `--python 3.12`: without it a newer Python uv finds later would stop that reuse. The second makes sure the folder is on
    PATH for new terminals and apps. Check it: `art --list` (or `~/.local/bin/art --list`,
    `"$HOME/.local/bin/art.exe" --list`, `& "$env:USERPROFILE\.local\bin\art.exe" --list`)
    prints ART's tools as JSON. If the user declines, give them the `uv tool install` line
@@ -86,7 +87,7 @@ Ask the user where their materials are:
 - their GitHub repos. If they want these, they run `art github login` in their own terminal
   (`--private` adds private repos; `list_github_repos`'s `not_logged_in` error repeats the
   command). If `art` is not on their PATH, the same command is
-  `uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login`.
+  `uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login`.
   Then you call `list_github_repos`, pick the repos worth
   reading with them, and clone one only after they agree. Store what you read with
   `source: "github:<repo>"` (each repo's `evidence_source`). Never ask for or handle a token.

@@ -500,8 +500,9 @@ def test_login_hints_say_art_github_login_and_fall_back_to_the_pinned_uvx_form()
     from harness.hooks import SOURCE
     assert login_command() == "art github login"
     assert login_command(private=True) == "art github login --private"
-    assert login_fallback() == f'uvx --from "{SOURCE}" art github login'
-    assert login_fallback(private=True) == f'uvx --from "{SOURCE}" art github login --private'
+    assert login_fallback() == f'uvx --python 3.12 --from "{SOURCE}" art github login'
+    assert login_fallback(private=True) == \
+        f'uvx --python 3.12 --from "{SOURCE}" art github login --private'
     hint = login_hint()
     assert hint.startswith("art github login ") and hint.index(login_fallback()) > 0
 

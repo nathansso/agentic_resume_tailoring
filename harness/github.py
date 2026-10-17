@@ -370,8 +370,8 @@ def login_command(private: bool = False) -> str:
 def login_fallback(private: bool = False) -> str:
     """The same command through the pinned wheel, for a machine where `art` is not on PATH
     (a plugin install that never ran the setup's install step) (#369)."""
-    from harness.hooks import SOURCE  # the one pin; imported here to keep this module light
-    return f'uvx --from "{SOURCE}" {login_command(private)}'
+    from harness.hooks import UVX  # the one pin; imported here to keep this module light
+    return f"{UVX} {login_command(private)}"
 
 
 def login_hint(private: bool = False) -> str:

@@ -26,9 +26,9 @@ from typing import Optional, Sequence
 
 
 def _ui_extra_hint() -> str:
-    from harness.hooks import SOURCE
+    from harness.hooks import UVX
     return ("art ui needs the editor's server: install it with the [ui] extra, e.g.\n"
-            f'    uvx --from "{SOURCE}" art ui')
+            f"    {UVX} art ui")
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
