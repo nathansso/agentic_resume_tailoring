@@ -977,7 +977,7 @@ Codex CLI (0.149) was checked against its docs and live runs.
 so `/plugin marketplace add nathansso/agentic_resume_tailoring` then `/plugin install
 art@art` installs it.
 
-- **Server.** `.mcp.json` runs `art mcp` through `uvx --from` one pinned release wheel (#256), which has the built editor in it (#255).
+- **Server.** `.mcp.json` runs `art mcp` through `uvx --python 3.12 --from` one pinned release wheel (#256), which has the built editor in it (#255). The Python pin is shared by the hooks and the `uv tool install` `/art:setup` makes, so `uvx` always reuses that install (#385).
 - **Skills.**
   - `art-tailor`: briefing → `open_job` (with requirements and rule answers) → read the
     graph → a plan program **shown for approval** → `execute_plan` / `patch_plan` →
@@ -1063,7 +1063,7 @@ install is what the harness imports: `mcp`, `sqlmodel`, `pydantic`, `numpy`, `ne
 (the JSON CLI, plus `art ui`). INSTALL.md has the commands; a checkout still works as before:
 
 ```bash
-claude mcp add art -- uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art mcp
+claude mcp add art -- uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art mcp
 claude mcp add art -- <repo>/.venv/Scripts/python.exe <repo>/harness/mcp_server.py   # checkout
 art --list                                   # or python -m harness.cli --list
 art kg_search --args '{"query": "python"}'

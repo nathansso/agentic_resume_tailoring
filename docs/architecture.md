@@ -1519,7 +1519,7 @@ that tag. `workflow_dispatch` is a dry run that creates nothing.
 - **The editor ships in the wheel.** A git install has no `web/static` (it is not committed), so
   `art ui` from one prints the release-wheel command instead (`web/local_ui.py::missing_static`); a
   checkout is told to build the frontend.
-- **Hooks cannot fail.** A hook line is `uvx --offline --from "<pin>" art hook <event>; exit 0`: it
+- **Hooks cannot fail.** A hook line is `uvx --offline --python 3.12 --from "<pin>" art hook <event>; exit 0`: it
   uses only what the MCP server's start cached and exits 0 when uvx or the cache is missing. The server
   start itself is not offline-proof (uv re-resolves a few minutes after caching), which `INSTALL.md`
   documents with its two fixes.

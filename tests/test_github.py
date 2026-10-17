@@ -491,20 +491,38 @@ def test_the_stub_keyring_is_what_the_suite_sees_by_default():
     assert gh.resolve_token() is None and gh.keychain_available() is False
 
 
-def test_login_hints_give_the_pinned_uvx_command_not_a_bare_art():
-    """A plugin install puts no `art` on PATH, so every login hint the user or agent sees is the
-    pinned uvx form (#369): the tool's not_logged_in error and the plugin's own docs."""
-    import re
+def test_login_hints_say_art_github_login_and_fall_back_to_the_pinned_uvx_form():
+    """`/art:setup` puts `art` on PATH (#385), so every login hint says `art github login`,
+    and keeps the pinned uvx form (#369) for a machine where `art` is not on PATH: the tool's
+    errors and note, the plugin's own docs, and INSTALL.md."""
     from pathlib import Path
-    from harness.github import login_command
+    from harness.github import login_command, login_fallback, login_hint
     from harness.hooks import SOURCE
-    assert login_command() == f'uvx --from "{SOURCE}" art github login'
-    assert login_command(private=True).endswith("art github login --private")
+    assert login_command() == "art github login"
+    assert login_command(private=True) == "art github login --private"
+    assert login_fallback() == f'uvx --python 3.12 --from "{SOURCE}" art github login'
+    assert login_fallback(private=True) == \
+        f'uvx --python 3.12 --from "{SOURCE}" art github login --private'
+    hint = login_hint()
+    assert hint.startswith("art github login ") and hint.index(login_fallback()) > 0
 
-    plugin = Path(__file__).resolve().parent.parent / "plugin"
+    root = Path(__file__).resolve().parent.parent
+    plugin = root / "plugin"
     for doc in [plugin / "README.md", plugin / "commands" / "setup.md",
                 plugin / "skills" / "art-setup" / "SKILL.md",
-                plugin / "skills" / "art-tailor" / "SKILL.md"]:
+                plugin / "skills" / "art-tailor" / "SKILL.md", root / "INSTALL.md"]:
         text = doc.read_text(encoding="utf-8")
-        assert login_command() in text, doc
-        assert not re.search(r"run `art github login`", text), doc
+        short = text.find("`art github login`") if "`art github login`" in text \
+            else text.find("\nart github login")
+        assert short != -1, f"{doc.name} does not give the short `art github login`"
+        assert login_fallback() in text, f"{doc.name} lost the uvx fallback"
+        assert short < text.index(login_fallback()), f"{doc.name}: the short form comes first"
+
+
+def test_signed_out_error_gives_the_short_command_then_the_fallback():
+    out = invoke("list_github_repos", None, {})
+    msg = out["error"]["message"]
+    from harness.github import login_fallback
+    assert msg.index("art github login") < msg.index("art github login --private") \
+        < msg.index(login_fallback())
+    assert "not on their PATH" in msg

@@ -38,7 +38,7 @@ const toc = Object.values(S);
   </Callout>
 
   <DocSection section={S.prerequisites}>
-    <p>You need three things on your computer. The first two are required.</p>
+    <p>You need two things on your computer, and ARTie's setup can install the second for you.</p>
 
     <h3>1. A coding agent: Claude Code or Codex</h3>
     <p>
@@ -51,8 +51,15 @@ const toc = Object.values(S);
     <p>
       <a href="https://docs.astral.sh/uv/getting-started/installation/" rel="noopener">uv</a> is
       a Python tool runner. ARTie runs through <code>uvx</code>, which comes with uv, so you do
-      not install Python yourself. The official page has the installer for Windows, macOS and
-      Linux. When it is done, open a new terminal and run <code>uv --version</code> to confirm.
+      not install Python yourself. You can skip this step: if uv is missing, ARTie's setup
+      (<code>/art:setup</code> in Claude Code, <code>$art-setup</code> in Codex) notices, asks
+      you, and runs uv's official installer for you. To install it yourself, the official page
+      has the installer for each system, the same lines as these:
+    </p>
+    <CommandBlock label="macOS and Linux" lines={block("uv-install-unix")} />
+    <CommandBlock label="Windows (PowerShell)" lines={block("uv-install-windows")} />
+    <p>
+      When it is done, open a new terminal and run <code>uv --version</code> to confirm.
     </p>
 
     <h3>No LaTeX to install</h3>
@@ -91,6 +98,20 @@ const toc = Object.values(S);
     <p>
       The first start downloads ARTie and takes longer than later ones. It needs the network
       once, then reuses what it downloaded.
+    </p>
+    <h3>No uv yet? Run the setup</h3>
+    <p>
+      Run <code>/art:setup</code>. If ARTie's tools don't answer, it finds out why before
+      anything else. When uv is missing it names uv's official installer and waits for your
+      yes, then offers to install the <code>art</code> command from the same release the plugin
+      runs, which also puts <code>art</code> on your <code>PATH</code>. Nothing is installed
+      without your say-so; if you decline, it prints the line to run yourself.
+    </p>
+    <p>
+      Then restart ARTie once, the way the setup tells you: type <code>/mcp</code> and reconnect
+      the <code>art</code> server (or start Claude Code again from a new terminal), or quit and
+      reopen the desktop app. Run <code>/art:setup</code> again and it carries on with your
+      resume. In Codex, <code>$art-setup</code> does the same, and you restart Codex.
     </p>
   </DocSection>
 
@@ -185,14 +206,18 @@ const toc = Object.values(S);
     <p>
       Run this in your own terminal, not through your agent. It prints a code and a GitHub
       page; open the page, type the code and approve. Your password never goes through ARTie.
-      The plugin runs ARTie with <code>uvx</code> and puts no <code>art</code> command on your
-      <code>PATH</code>, so the lines below go through <code>uvx</code> as well:
     </p>
     <CommandBlock label="In a terminal" lines={block("github-login")} />
     <p>
       The first line reads your public repositories. The second, with <code>--private</code>,
       also reads private ones. Run whichever you want; you can run the other later.
     </p>
+    <p>
+      <code>/art:setup</code> puts the <code>art</code> command on your <code>PATH</code>. If
+      your terminal says it doesn't know <code>art</code>, run the same lines through
+      <code>uvx</code>:
+    </p>
+    <CommandBlock label="In a terminal" lines={block("github-login-uvx")} />
     <p>
       Nothing else needs installing: the <code>keyring</code> package ships with ARTie, and the
       token it gets is kept in your operating system's keychain (Windows Credential Manager,

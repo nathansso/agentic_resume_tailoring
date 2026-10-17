@@ -11,7 +11,7 @@ preferences, and every version, and it checks each change before committing it.
 /plugin install art@art
 ```
 
-It needs [uv](https://docs.astral.sh/uv/). The plugin runs ART with `uvx` from one pinned
+It needs [uv](https://docs.astral.sh/uv/). If uv or the `art` command is missing, `/art:setup` installs them with your permission (uv's official installer, then `uv tool install`) and tells you how to restart ART once. The plugin runs ART with `uvx` from one pinned
 release wheel (a GitHub Release asset, `v<version>`), which uv downloads on first use and
 then keeps in its cache, so later starts don't contact GitHub and the editor (`art ui`) is
 already in it. The first start needs the network. On Windows, see "Offline starts, and
@@ -46,7 +46,13 @@ To bring in your GitHub repos, sign in once in your own terminal (add `--private
 repos):
 
 ```bash
-uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login
+art github login
+```
+
+If `art` is not on your PATH (you have not run `/art:setup`'s install step), the same command is:
+
+```bash
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login
 ```
 
 Claude can then call `list_github_repos`, pick the repos

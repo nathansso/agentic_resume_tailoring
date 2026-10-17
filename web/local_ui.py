@@ -40,8 +40,8 @@ def in_checkout(frontend_dir: Path = FRONTEND_DIR) -> bool:
 
 def release_command() -> str:
     """The command that runs `art ui` from the pinned release wheel, editor included (#255)."""
-    from harness.hooks import SOURCE
-    return f'uvx --from "{SOURCE}" art ui'
+    from harness.hooks import UVX
+    return f"{UVX} art ui"
 
 
 def missing_static(static_dir: Path = STATIC_DIR, checkout: Optional[bool] = None) -> Optional[str]:

@@ -25,38 +25,57 @@
       "source": "INSTALL.md",
       "also": ["integrations/codex/README.md"],
       "lines": [
-        "uvx --from \"{SOURCE}\" art hooks codex --write"
+        "uvx --python 3.12 --from \"{SOURCE}\" art hooks codex --write"
       ]
     },
     "claude-mcp-add": {
       "source": "INSTALL.md",
       "lines": [
-        "claude mcp add art -- uvx --from \"{SOURCE}\" art mcp"
+        "claude mcp add art -- uvx --python 3.12 --from \"{SOURCE}\" art mcp"
       ]
     },
     "codex-mcp-add": {
       "source": "integrations/codex/README.md",
       "lines": [
-        "codex mcp add art -- uvx --from \"{SOURCE}\" art mcp"
+        "codex mcp add art -- uvx --python 3.12 --from \"{SOURCE}\" art mcp"
       ]
     },
     "list-tools": {
       "source": "INSTALL.md",
       "lines": [
-        "uvx --from \"{SOURCE}\" art --list"
+        "uvx --python 3.12 --from \"{SOURCE}\" art --list"
       ]
     },
     "art-ui": {
       "source": "INSTALL.md",
       "lines": [
-        "uvx --from \"{SOURCE}\" art ui --job <job_id>"
+        "uvx --python 3.12 --from \"{SOURCE}\" art ui --job <job_id>"
       ]
     },
     "github-login": {
       "source": "INSTALL.md",
       "lines": [
-        "uvx --from \"{SOURCE}\" art github login",
-        "uvx --from \"{SOURCE}\" art github login --private"
+        "art github login",
+        "art github login --private"
+      ]
+    },
+    "github-login-uvx": {
+      "source": "INSTALL.md",
+      "lines": [
+        "uvx --python 3.12 --from \"{SOURCE}\" art github login",
+        "uvx --python 3.12 --from \"{SOURCE}\" art github login --private"
+      ]
+    },
+    "uv-install-unix": {
+      "source": "INSTALL.md",
+      "lines": [
+        "curl -LsSf https://astral.sh/uv/install.sh | sh"
+      ]
+    },
+    "uv-install-windows": {
+      "source": "INSTALL.md",
+      "lines": [
+        "powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\""
       ]
     },
     "typesafe-key": {
@@ -69,8 +88,8 @@
       "source": "INSTALL.md",
       "lines": [
         {
-          "text": "uv tool install \"{SOURCE}\"",
-          "in_source": "uv tool install \"art-mcp[ui] @ <the pinned URL>\""
+          "text": "uv tool install --python 3.12 \"{SOURCE}\"",
+          "in_source": "uv tool install --python 3.12 \"art-mcp[ui] @ <the pinned URL>\""
         }
       ]
     },
