@@ -15,7 +15,7 @@ Companion documents: [`benchmark.md`](benchmark.md) (what the numbers mean),
 > model-free package driven by the user's coding agent, and most of that has merged. There are
 > now two paths over one database:
 > - **The legacy path (§§2–7)** is the web app and `cli.py`: LLM agents plan, generate and
->   evaluate. It still works as before, and the hosted web app gets no new features.
+>   evaluate. The code still runs locally; the hosted web app is frozen and currently down.
 > - **The harness path (§8)** is `art-mcp` and `art`: the host's model writes, and ART checks.
 >   The generate → evaluate loop (§3.2) becomes host-written plan programs run by an executor,
 >   the ATS composite is report-only (never a reward, §6), planning prompts give way to
