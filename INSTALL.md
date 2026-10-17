@@ -18,6 +18,22 @@ commands and the hooks:
 
 It needs `uv`, plus tectonic or pdflatex for PDFs. See [`plugin/README.md`](plugin/README.md).
 
+**No uv yet? Run `/art:setup` (#385).** When ART's tools don't answer, the setup checks for
+`uv` (on PATH, or in `~/.local/bin`, `%USERPROFILE%\.local\bin` on Windows) and, with your
+yes to each command, runs uv's official installer and installs ART as a command:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh                                  # macOS, Linux
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"   # Windows
+uv tool install "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl"
+uv tool update-shell
+```
+
+`art` is then a real command, and the plugin's `uvx` starts from that install without
+resolving it again. Restart ART once: `/mcp` and reconnect `art` in the Claude Code terminal,
+quit and reopen the desktop app, or restart Codex. Then run `/art:setup` again; it carries on
+with your sources. Codex runs the same steps through the `$art-setup` skill.
+
 ## Codex (#203)
 
 The same plugin works in Codex:
@@ -223,8 +239,9 @@ art github status              # who is signed in; never prints the token
 art github logout              # removes the stored token
 ```
 
-The plugin runs ART through `uvx`, which puts no `art` on your PATH. From a plugin or
-`uvx` install, run the same commands through `uvx`:
+`/art:setup` puts `art` on your PATH (`uv tool install`, above). If you have not run it, the
+plugin runs ART through `uvx`, which puts no `art` on your PATH, so run the same commands
+through `uvx`:
 
 ```bash
 uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login

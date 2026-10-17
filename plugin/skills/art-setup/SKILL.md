@@ -1,6 +1,6 @@
 ---
 name: art-setup
-description: Build or refresh the user's ART knowledge graph from their resume, LinkedIn export and local project repos, and set their resume header. Use on first use of ART, when the user says their experience, projects or contact details changed, or when a tailoring run finds a fact missing or stale.
+description: Build or refresh the user's ART knowledge graph from their resume, LinkedIn export and local project repos, and set their resume header. Use on first use of ART, when the user says their experience, projects or contact details changed, when a tailoring run finds a fact missing or stale, or when ART's tools are missing or fail to start (it installs uv and the `art` command, with the user's consent).
 ---
 
 # Set up ART
@@ -11,6 +11,71 @@ what the sources say. **Never invent or embellish.**
 
 The tools named below are the ART MCP server's tools.
 
+## 0. Preflight: make sure ART runs
+
+Call `get_profile` first. If it answers, ART is running: go to step 1.
+
+If ART's tools are missing or fail to start, `uv` (which runs ART) is usually missing, or
+not on the PATH the host started from. Diagnose before you change anything, and **never
+install anything without the user's yes.**
+
+1. **Find the OS.** Run `uname -s` in the shell. `Darwin` is macOS, `Linux` is Linux,
+   and `MINGW…`, `MSYS…` or `CYGWIN…` is Windows (Git Bash). If `uname` is not a command,
+   you are in PowerShell on Windows.
+2. **Look for uv and ART.** Run `uv --version` and `art --list`. If `uv` is not found,
+   look in uv's default folder: `~/.local/bin/uv` on macOS and Linux, and on Windows
+   `%USERPROFILE%\.local\bin\uv.exe` (`"$HOME/.local/bin/uv.exe"` from Git Bash,
+   `& "$env:USERPROFILE\.local\bin\uv.exe"` from PowerShell). Then:
+   - `art --list` prints ART's tools as JSON: ART is installed and the server only needs
+     to reconnect. Go to 5.
+   - uv works, by name or by its full path, but `art` does not: go to 4.
+   - No uv anywhere: go to 3.
+3. **Install uv, with consent.** Tell the user you will run uv's official installer, show
+   the exact command for their OS, and wait for a clear yes:
+   - macOS and Linux:
+     ```bash
+     curl -LsSf https://astral.sh/uv/install.sh | sh
+     ```
+   - Windows:
+     ```powershell
+     powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+     ```
+   It installs uv into the default folder above and adds that folder to PATH for new
+   terminals. It needs no sudo, no administrator rights and no Homebrew; don't use them.
+   If the user declines, give them the line for their OS to run themselves (uv's
+   install page is https://docs.astral.sh/uv/getting-started/installation/), and stop.
+   Once it finishes, your shell may still have the old PATH, so check with the full path:
+   `~/.local/bin/uv --version` (macOS, Linux), `"$HOME/.local/bin/uv.exe" --version`
+   (Git Bash) or `& "$env:USERPROFILE\.local\bin\uv.exe" --version` (PowerShell).
+4. **Install ART as a command, with consent.** Show the user these two commands, with the
+   same pinned release the plugin runs, and wait for a yes:
+   ```bash
+   uv tool install "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl"
+   uv tool update-shell
+   ```
+   Call `uv` by its full path from 2 or 3 if it is not on your PATH yet. The first puts
+   `art` in uv's tool folder (the same default folder), and the plugin's `uvx` then starts
+   from that install without resolving it again. The second makes sure the folder is on
+   PATH for new terminals and apps. Check it: `art --list` (or `~/.local/bin/art --list`,
+   `"$HOME/.local/bin/art.exe" --list`, `& "$env:USERPROFILE\.local\bin\art.exe" --list`)
+   prints ART's tools as JSON. If the user declines, give them the `uv tool install` line
+   to run themselves, and stop. On Windows, an install that fails on a long path needs a
+   short uv cache: with the user's yes, run
+   `[Environment]::SetEnvironmentVariable("UV_CACHE_DIR", "C:\uvc", "User")` in
+   PowerShell, open a new shell and install again.
+5. **Restart once.** The host tried to start ART before uv was there, and doesn't retry on
+   its own. Tell the user exactly what to do for their host:
+   - **Claude Code in a terminal:** run `/mcp`, pick the `art` server and reconnect. If it
+     still fails, the terminal predates the PATH change: quit Claude Code, open a new
+     terminal and start it again.
+   - **Claude desktop app:** quit it fully (not just its window) and open it again. On
+     macOS an app opened from the Dock may not see a PATH change made in a shell profile;
+     if the tools still don't answer, say so rather than editing the plugin's files.
+   - **Codex:** quit Codex and start it again from a new terminal.
+
+   Then ask them to run the setup again. It starts here, finds the tools, and carries on
+   with step 1.
+
 ## 1. Find the sources
 
 Ask the user where their materials are:
@@ -18,8 +83,11 @@ Ask the user where their materials are:
 - a resume file (PDF, DOCX, Markdown or LaTeX);
 - a LinkedIn data export;
 - the local folders of projects they want considered;
-- their GitHub repos. If they want these, they run `uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login` in their own terminal
-  (`--private` adds private repos; `list_github_repos`'s `not_logged_in` error repeats the command), then you call `list_github_repos`, pick the repos worth
+- their GitHub repos. If they want these, they run `art github login` in their own terminal
+  (`--private` adds private repos; `list_github_repos`'s `not_logged_in` error repeats the
+  command). If `art` is not on their PATH, the same command is
+  `uvx --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.1/art_mcp-0.1.1-py3-none-any.whl" art github login`.
+  Then you call `list_github_repos`, pick the repos worth
   reading with them, and clone one only after they agree. Store what you read with
   `source: "github:<repo>"` (each repo's `evidence_source`). Never ask for or handle a token.
 

@@ -55,8 +55,27 @@
     "github-login": {
       "source": "INSTALL.md",
       "lines": [
+        "art github login",
+        "art github login --private"
+      ]
+    },
+    "github-login-uvx": {
+      "source": "INSTALL.md",
+      "lines": [
         "uvx --from \"{SOURCE}\" art github login",
         "uvx --from \"{SOURCE}\" art github login --private"
+      ]
+    },
+    "uv-install-unix": {
+      "source": "INSTALL.md",
+      "lines": [
+        "curl -LsSf https://astral.sh/uv/install.sh | sh"
+      ]
+    },
+    "uv-install-windows": {
+      "source": "INSTALL.md",
+      "lines": [
+        "powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\""
       ]
     },
     "typesafe-key": {

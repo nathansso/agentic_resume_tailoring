@@ -627,3 +627,71 @@ def test_every_art_ui_command_in_the_docs_runs_the_pinned_wheel():
     for path in [*PLUGIN.rglob("*.md"), *PLUGIN.rglob("*.json")]:
         assert "git+https" not in path.read_text(encoding="utf-8"), path
     assert "npm" not in (PLUGIN / "commands" / "open.md").read_text(encoding="utf-8")
+
+
+# ── zero-install setup (#385) ────────────────────────────────────────────────
+
+UV_INSTALL_UNIX = "curl -LsSf https://astral.sh/uv/install.sh | sh"
+UV_INSTALL_WINDOWS = 'powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"'
+SETUP_TEXTS = [PLUGIN / "commands" / "setup.md", PLUGIN / "skills" / "art-setup" / "SKILL.md"]
+_WHEEL = re.compile(r"https://\S+?/releases/download/v[\w.]+/art_mcp-[\w.]+-py3-none-any\.whl")
+
+
+def _flat(path):
+    return re.sub(r"\s+", " ", path.read_text(encoding="utf-8"))
+
+
+def test_setup_preflight_installs_uv_and_art_from_the_servers_pin():
+    """The command and the skill both carry the bootstrap: uv's two official installers,
+    word for word, and `uv tool install` of exactly the source `.mcp.json` runs."""
+    source = _server_source()
+    for path in SETUP_TEXTS:
+        text = path.read_text(encoding="utf-8")
+        assert UV_INSTALL_UNIX in text and UV_INSTALL_WINDOWS in text, path.name
+        assert f'uv tool install "{source}"' in text, path.name
+        assert "uv tool update-shell" in text, path.name
+        for check in ("uv --version", "art --list", "uname -s", "~/.local/bin"):
+            assert check in text, (path.name, check)
+        # No sudo, no Homebrew: the official installers are the only route.
+        assert "sudo " not in text and "brew install" not in text, path.name
+
+
+def test_setup_preflight_asks_first_restarts_once_then_resumes():
+    for path in SETUP_TEXTS:
+        flat = _flat(path)
+        assert re.search(r"[Nn]ever install anything without", flat), path.name
+        assert "wait" in flat and "yes" in flat, path.name                 # names it, then waits
+        assert "decline" in flat and "stop" in flat, path.name             # declined: print, stop
+        assert "/mcp" in flat and "reconnect" in flat, path.name           # Claude Code terminal
+        assert "desktop app" in flat and "Codex" in flat, path.name        # the other hosts
+        assert "again" in flat, path.name                                  # re-run setup, resume
+    skill = SETUP_TEXTS[1].read_text(encoding="utf-8")
+    # The preflight comes first; the setup steps after it are unchanged.
+    assert skill.index("## 0. Preflight") < skill.index("## 1. Find the sources")
+    assert "carries on with step 1" in _flat(SETUP_TEXTS[1])
+
+
+def test_every_wheel_the_plugin_and_install_docs_name_is_the_servers_pin():
+    """`.mcp.json`, `hooks.json`, the `uv tool install` lines and the docs move together; a
+    release bump that misses one fails here, naming it."""
+    pinned = _server_source().split(" @ ", 1)[1]
+    files = [*PLUGIN.rglob("*.md"), *PLUGIN.rglob("*.json"), ROOT / "INSTALL.md"]
+    seen = 0
+    for path in files:
+        for url in _WHEEL.findall(path.read_text(encoding="utf-8")):
+            assert url == pinned, f"{path.relative_to(ROOT)} pins {url}, .mcp.json pins {pinned}"
+            seen += 1
+    assert seen >= 8
+    install = (ROOT / "INSTALL.md").read_text(encoding="utf-8")
+    assert f'uv tool install "{_server_source()}"' in install
+    assert UV_INSTALL_UNIX in install and UV_INSTALL_WINDOWS in install
+
+
+def test_the_plugin_still_launches_uvx_by_name_not_a_hard_coded_path():
+    """#385 makes PATH right instead of pointing the host at a uv binary: a fixed path breaks
+    Homebrew and winget installs, and how a host expands `~` or a variable is undocumented."""
+    server = _json("plugin/.mcp.json")["mcpServers"]["art"]
+    assert server["command"] == "uvx"
+    blob = json.dumps(server) + (PLUGIN / "hooks" / "hooks.json").read_text(encoding="utf-8")
+    for token in ("~", ".local", "${", "/usr/", "C:\\", "HOME"):
+        assert token not in blob, token
