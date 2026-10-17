@@ -15,7 +15,7 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 ---
 
 ## Issue 300 — Migrate existing preference rows to anchors and page rules
-**Status:** complete | **Tests:** 3447 pass on SQLite after merging main (32 new in `tests/test_preference_migration.py`), 24 skipped, 2 xfailed, 0 fail; the Postgres leg was not run locally (the Docker daemon was not running), CI covers it
+**Status:** complete | **Tests:** 3451 pass on SQLite after merging main (32 new in `tests/test_preference_migration.py`), 24 skipped, 2 xfailed, 0 fail; the Postgres leg was not run locally (the Docker daemon was not running), CI covers it
 
 Phase 7 of 7 of the preference-anchoring plan (#295–#300). Rows written before #295 to #298 were still in users' stores: unkeyed topics that now name an item, keys whose item had been deleted, and `section:` rows enforced as the dead term "section: projects". `art migrate preferences` brings them to the new model, conservatively and repeatably, and a local store gets it automatically once.
 
