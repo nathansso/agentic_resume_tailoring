@@ -22,7 +22,7 @@ Companion documents: [`benchmark.md`](benchmark.md) (what the numbers mean),
 >   `suggest_actions`, and the editor is `art ui` in local mode.
 >
 > This file keeps describing merged behaviour, and is updated as each harness issue lands. It
-> was last brought level with `CHANGELOG.md` through #287 (the mid-October merges).
+> was last brought level with `CHANGELOG.md` through #300 and #378 (the merges to 17 October).
 
 ---
 
@@ -70,6 +70,7 @@ Two vocabularies organise everything below:
 | Bullet library, baselines | harness (memory) | `harness/library.py`, `BulletVariant` / `TrackBaseline` / `JobRoleFamily` | `upsert_items` (kind `variant`), `promote_bullet`, `approve_variant`, `save_baseline` | `suggest_actions`, `open_job`, the executor |
 | Memory gate | harness (memory write path) | `harness/memory.py`, `harness/decisions/memory_gate.py` | `observe`, `record_preference`, the `user-prompt` hook | `art_briefing`, `art_pins`, the executor's pins |
 | Document rules | harness (memory) | `harness/rules.py`, `ResumeRule` | `record_rule`, `retract_rule`, `record_preference` (a page subject) | `art_briefing`, `art_pins`, the executor's finalize defaults and `rule_violations` (#298) |
+| Preference anchors | harness (memory) | `harness/anchors.py`, `harness/relink.py`, `harness/constraints.py`, `harness/migrations.py` | `record_preference`, `upsert_items`, the `services` rename and delete paths, `art migrate preferences` | the memory gate, `suggest_actions`, `execute_plan` dry runs, the post-compaction hook (§8.14) |
 | Skill retrieval | retrieval | `agents/skill_matching.py`, `knowledge_graph/builder.py` | — | `kg_default_content`, `open_job` |
 | Seniority detection | scoring input | `agents/seniority.py` | — | `ATSScoringEngine._role_level`, `agents/jd_payload.py`, the profile checks and the corpus audit |
 | Policy artifact | harness (config) | `harness/policy.json`, `harness/policy.py` | a re-fit | every threshold and guard tolerance (§8.8) |
@@ -173,7 +174,12 @@ to keep it that way. If LangGraph is unavailable the same nodes run in sequence.
 
 Nothing here writes to the database. `services.apply_artifact_decision` is the only write
 path and it is reached only by an explicit user accept (`/save` in chat, or
-`POST /api/chat/{job_id}/artifacts/decide`).
+`POST /api/chat/{job_id}/artifacts/decide`). A `supersede` that lands on a project or
+experience the user edited by hand (`manually_edited`, #92) changes nothing (#378):
+`services.apply_artifact_decision_outcome` reports `skipped_manual` (beside `applied`,
+`no_op` and `failed`), `/save` says the item was left alone, and `/artifacts/decide`
+returns that `status`, with `saved` true only for `applied`. Skills have no such flag and
+are superseded as before.
 
 ### 2.3 JobCards — one card per completed job (issue #137)
 
@@ -328,10 +334,13 @@ and the persona is recompiled in memory for that call. A missed rebuild costs
 inspectability until the next write and can never cost a preference.
 
 **The write barrier.** `tailor()` only reads. Proposing never writes. `/decide` is the
-only path in. The reason is sharper here than anywhere else in the system: these
+only path in for a new statement. The reason is sharper here than anywhere else in the system: these
 preferences are *inferred*, so a pipeline allowed to write this table would suppress an
 item, observe the suppression, infer a standing preference from it, and cite that back as
-the user's own instruction. Tests pin it.
+the user's own instruction. Tests pin it. Since #297 and #300, renaming or deleting an item, a
+harness ingest and `art migrate preferences` can supersede a row with a re-anchored copy or a
+page rule that carries the same words, polarity, strength and scope; none of them creates a
+preference the user did not state (§8.14).
 
 **The harness path (#202)** adds one more way in: the memory gate (`harness/memory.py`) reads
 the user's own message, never ART's or the host's output, so nothing launders. It stays bounded
@@ -1059,13 +1068,13 @@ checks and, for a few bounded questions, asks TypeSafe's Jev.
 ### 8.1 Adapters and the contract
 
 `harness/contract.py` declares every tool once, with pydantic input and output models and
-errors carried as an `error` field. It currently holds **27 tools**, in five groups:
+errors carried as an `error` field. It currently holds **30 tools**, in five groups:
 
 | Group | Tools |
 |---|---|
-| Context and memory | `art_briefing`, `art_pins`, `observe`, `record_preference` |
+| Context and memory | `art_briefing`, `art_pins`, `observe`, `record_preference`, `record_rule`, `retract_rule` |
 | Retrieval | `kg_search`, `list_items`, `get_item`, `get_profile` |
-| Ingest, project context, library | `ingest_schema`, `upsert_items`, `suggest_project_contexts`, `set_project_context`, `link_achievement`, `promote_bullet`, `approve_variant`, `save_baseline`, `update_profile` |
+| Ingest, project context, library | `ingest_schema`, `upsert_items`, `list_github_repos`, `suggest_project_contexts`, `set_project_context`, `link_achievement`, `promote_bullet`, `approve_variant`, `save_baseline`, `update_profile` |
 | Jobs | `open_job`, `list_jobs`, `suggest_actions` |
 | Execute and history | `execute_plan`, `patch_plan`, `get_head`, `history`, `diff_nodes`, `checkout`, `render` |
 
@@ -1074,7 +1083,7 @@ document per call; `tests/test_harness_contract.py` holds both to identical resu
 console script (`harness/entry.py`) adds what is not a tool: `art mcp` (the server, the
 command the plugin runs), `art hook` (the plugin hooks),
 `art hooks codex` (installs them in Codex's `hooks.json`, the fallback for a Codex without plugin hooks), `art jev` (§8.3), `art export` and `art import`
-(§8.9), and `art ui`. A write tool returns `read_only` on a remote or Postgres store unless the
+(§8.9), `art migrate preferences` (§8.14), `art github login|status|logout` (§8.15), and `art ui`. A write tool returns `read_only` on a remote or Postgres store unless the
 process was started with `--allow-writes`; local SQLite is writable. `record_feedback` and
 `check_draft` are named in `harness.md` and are **not built** (#252).
 
@@ -1103,8 +1112,8 @@ legacy readers keep working.
    node that fails is reverted and the independent ones continue. There is no scalar and no
    weight; the vectors are compared metric by metric.
 3. **Finalize** checks the whole page: the preferences (including the whole-page negative-pin
-   check, §8.4), non-empty sections, skills cap and floor, section order, and the per-bullet and
-   page line budget. Any violation means nothing commits, and the host gets the violations with
+   check, §8.4), non-empty sections, skills cap and floor, section order, the per-bullet and
+   page line budget, and the user's hard page rules (`rule_violations`, §8.14). Any violation means nothing commits, and the host gets the violations with
    trade hints.
 4. **Commit** writes a node with the metric vector and provenance, or `dry_run` stops short.
    A plan with a parent whose final page equals the parent's content (every node reverted,
@@ -1132,8 +1141,10 @@ callables on `Context` (`support_checker`, `pin_checker`, `pin_page_checker`,
 
 ### 8.3 The Jev decisions engine
 
-`harness/decisions/` is the only network call under `harness/`, and not a generative one: Jev
-answers a typed question about a narrow state with probabilities and cannot write text.
+`harness/decisions/` is the only model call under `harness/`, and not a generative one: Jev
+answers a typed question about a narrow state with probabilities and cannot write text. Its
+client and the GitHub client (§8.15) are the only two harness modules allowed a network library
+(`tests/test_harness_boundary.py`).
 
 ```mermaid
 flowchart LR
@@ -1310,7 +1321,8 @@ is the user's own message, never ART's or the host's output.
   below fails, hand to the host with the guess; at or above `TAU_HI` write if the target is an item
   (never a whole section) picked at `TAU_TARGET` or more and **named in the message**, the direction
   agrees with the negation flag, the strength is 4 or less, the message is one statement of at most
-  300 characters, and a job-scoped message has a known job.
+  300 characters, a job-scoped message has a known job, and the anchor resolver run on the
+  message binds exactly the key Jev picked (#295; otherwise `anchor_disagrees`, to the host).
 - **The code rules** only ever remove writes. A strength-5 preference or a negative pin is never
   written (it becomes a gate that refuses plans, so the user confirms it through
   `record_preference`); neither is a section target, a format rule, a replacement of a preference the
@@ -1329,7 +1341,7 @@ is the user's own message, never ART's or the host's output.
 - **Surfaces.** The `user-prompt` hook (`harness/hooks.py`) runs `observe` on every prompt and adds
   one line when a message may be a preference or when ART saved one, with an 8-second Jev timeout,
   and prints nothing on any failure. The `SessionStart` hook for source `compact` re-injects the
-  pins. Decisions are logged without the message to `$ART_DATA_DIR/memory_gate.jsonl`.
+  pins, the hard page rules and the pending bans (#299, §8.14). Decisions are logged without the message to `$ART_DATA_DIR/memory_gate.jsonl`.
 
 ### 8.7 The bullet library and track baselines (issues #229, #199)
 
@@ -1554,6 +1566,115 @@ Two defects stopped a host-tailored job from reaching `art ui` and back. Both ar
   plan's own `section_order`. `tests/test_layout_overrides.py` fails when the formatter's output drifts
   from the editor's committed fixture.
 
+### 8.14 Preference anchoring (issues #291, #295–#300)
+
+A preference has to bind to the thing it names, in the scope it was stated, and reach the page.
+Seven issues make that hold. All of it is model-free; the only Jev call involved is the memory
+gate's (§8.6).
+
+- **One scope (#291).** `harness/tools.py::preferences_for(user_id, job_id, role_family)` is the
+  scope every reader uses: global preferences, plus the job's own, plus its role family's (the one
+  given, else the one `open_job` recorded, `library.role_family_of`). `execute_plan`,
+  `suggest_actions`, `art_briefing` (which now takes a `job_id`), `art_pins` and the hook all read it,
+  and `rules_for` scopes page rules the same way.
+- **The resolver (#295).** `harness/anchors.py::resolve` classifies a subject as `bound` (one item,
+  trying the exact key, the label, the bare name, then for skills an alias; the first step that
+  matches anything decides), `ambiguous` (several at one step, with `candidates`), `pending` (a
+  nameable thing the graph lacks, stored with `target_key` NULL and enforced as a term),
+  `document` (a section or the page) or `multiple` ("Kafka or Spark"). A substring never binds, and a
+  name of two characters or fewer binds only by itself. `record_preference` uses it and stores
+  nothing for `ambiguous` or `multiple`; the memory gate needs `anchors.mentions` on the message to
+  agree with Jev's pick (§8.6).
+- **The labelled set (#296).** `eval/preference_anchor_labels/pairs.json` holds 241 rows over five
+  synthetic profiles, and `tests/test_preference_anchor_labels.py` gates on zero wrong-item bindings.
+  The premise that a thing no item holds cannot reach the page is tested through the executor. Two
+  gaps stay open as strict `xfail`s: an imported approved variant is not checked against evidence,
+  and a lowercase name outside the consistency gate's technology list is not caught.
+- **Preferences follow the graph (#297).** `harness/relink.py::relink` runs at the end of
+  `upsert_items` (reported as `relinked`) and supersedes a pending preference that now binds with a
+  keyed copy. A rename in `services.update_*` re-keys the item's preferences (`renamed_from`); a delete
+  supersedes them with a pending term copy (a role's `title @ company`) that re-binds only to its own
+  key (`unlinked_from`). Every such write goes through `services.reanchor_preferences`, and nothing is
+  deleted. `get_item`, `kg_search` hits and `list_items` rows carry `preferences` and `job_rules`. A
+  rename re-keys preferences only, not approved variants or job rules.
+- **Document rules (#298).** `ResumeRule` (`harness/rules.py`) holds what the user said about the page:
+  `limit` (`pages`, `bullets_per_item`, `max_skills`, `max_bullet_lines`, `<section>: 0`),
+  `section_order`, and `style_note`, which never blocks. `record_rule` and `retract_rule` write them;
+  `record_preference` stores a plain page subject ("one page", "no projects section") as a rule and
+  refuses a looser one with a `route` to `record_rule`. Rules become the `Finalize` defaults, which a
+  plan may tighten and never loosen past a hard rule; a section a rule leaves off is removed before any
+  node runs, and a node naming its items is refused `page_rule`. Among hard rules the tightest wins
+  whatever its scope; among soft ones the narrower scope wins. Soft rules and soft preferences are never
+  gates: `execute_plan` reports them under `soft_preferences`. The negative-pin check now also reads
+  the summary, education, achievements and skills.
+- **The reminder (#299).** `harness/constraints.py::active_constraints` leads the result of
+  `suggest_actions` and of an `execute_plan` dry run (not a commit): hard pins, pending bans, item
+  preferences and page rules, each with a scope label, read from `preferences_for` and `rules_for`.
+  The `compact` hook restores the pins, the hard page rules and the pending bans (`art_pins` gained
+  `pending_bans`). One executor change came with it: a `replace` that brings in a hard-emphasized
+  project is accepted over guard regressions (`hard_preference_override`, regressions under
+  `waived`), as a delete complying with a hard suppress already was. Hard gates still apply.
+- **The compliance benchmark (#299).** `eval/preference_compliance.py` runs, offline with Jev off, a
+  naive and an obedient scripted host over five profiles, 15 preference sets and six postings;
+  `eval/compliance_checker.py`, standard library only, judges the rendered `.tex`. The committed run
+  (`eval/results/preference_compliance_2026-10-15.*`, 1,020 runs) reports no hard violation rendered
+  and no scope leak for either host, and 0.00% over-block for the obedient one. Both hosts are
+  scripts, so it says nothing yet about a model host.
+- **Migration (#300).** `harness/migrations.py::migrate_preferences` gives each active row written
+  before this model one outcome: unchanged, relinked, unlinked to a pending copy, converted to a rule (a
+  `section:` suppress becomes a `limit` of 0 for that section; a page-ish row only when
+  `rules.infer_limit` reads one plain limit), or left alone with a code. It is idempotent by row state.
+  `art migrate preferences [--dry-run]` runs it by hand, and `bootstrap(prepare=True)` runs it once per
+  user on a local SQLite store (`migrations.json` beside the store marks it), never on a remote store
+  and never raising into startup.
+
+### 8.15 Ingest identity and GitHub login (issues #334, #353, #365)
+
+- **GitHub login (#353).** `harness/github.py` signs the user in with GitHub's device flow
+  (`art github login [--private]`, `status`, `logout`, in `harness/github_cli.py`); the scope is
+  `read:user`, plus `repo` with `--private`. The token is read only through `resolve_token()`
+  (`ART_GITHUB_TOKEN`, else the OS keychain, service `art-mcp`, user `github-token`) and never reaches
+  the database, an export, a log or a tool result. The package ships the ARTie OAuth App's client ID,
+  and `keyring` is a default dependency. `list_github_repos` lists the user's own repos, one page at a
+  time, with languages, topics, an optional README excerpt and a `clone_command`; it is the only tool
+  that needs no bound profile (`needs_user` false).
+- **One identity per skill (#365).** `agents/skill_resolver.py::resolve_skill` finds the `Skill` a name
+  belongs to by `skill_fold` (one the user already links, then the global row with the canonical name,
+  then any with the same fold), on every path that links a user or a job to a skill. After an ingest,
+  `merge_user_skill_duplicates` heals duplicates already stored: it repoints the user's `UserSkill`
+  rows, their own jobs' `JobSkill` rows and their dismissed-skill tombstones onto one keeper, and never
+  deletes or renames a global `Skill` row. `scripts/merge_skill_duplicates.py --user-id` is the
+  backfill. Name-keyed references (preference keys, `matched_skills`, layout overrides, the area cache)
+  are not rewritten.
+- **Same-name items (#334).** `services.update_project` and `update_experience` raise
+  `DuplicateItemError` (409 on the web routes) when a rename would give an item another item's
+  `proj:` or `exp:` key, and the chat paths match an existing item by key. The graph is not re-keyed: a
+  duplicate that already exists is flagged in the evidence view (`duplicate_of`) and gets none of the
+  shared node's edges.
+
+### 8.16 The data explorer in `art ui` (issues #136, #318–#323)
+
+`art ui`'s Data Explorer opens on the **evidence map** (#136). `GET /api/profile/graph/view`
+(`knowledge_graph/evidence_view.py`) returns the items, the skills grouped by area (§8.4, #318), and one
+edge per item and skill carrying the `#b<n>` ordinals of the bullets that cite it and a GitHub-provenance
+flag. `EvidenceMap.tsx` draws it, a toggle compares it with a saved job's requirements (required and
+preferred counted separately, never combined with the ATS composite), and the side panel edits an item
+through the profile routes, after which the map re-reads.
+
+- **Bullet picker (#319).** For one job, ranks the bullets greedily by the required weight each newly
+  covers, under a bullet-count budget. The kept set is browser state and reaches nothing downstream.
+  `services.get_job_skills` reads the job's `JDProfile` first, so a harness-opened job has requirements.
+- **Dismiss a skill (#321).** A skill no bullet cites can be dismissed: its `UserSkill` rows are deleted
+  under a `DeletedEntry` tombstone that snapshots them, ingest skips it by `skill_fold`, and Restore
+  re-creates the rows. There is no host tool for it.
+- **Where was this done? (#322).** The panel confirms a project's parent role or degree, or marks it
+  personal, through `agents.project_context.set_project_context`, the function the harness tool uses.
+- **A bullet that names no skill (#323)** says so in the item editor, and only there.
+- **The area map (#320)** is a second view of the whole graph: areas on a ring ordered so neighbours
+  share the most evidence, skills packed inside each area, and each item placed between the areas its
+  bullets cite (`lib/areaMap.ts`, a pure layout with no new package). It is an overview; the evidence
+  map stays the place to audit a claim, and clicking an area opens it with the other areas folded.
+
 ---
 
 ## 9. The landing site (issue #272)
@@ -1570,9 +1691,9 @@ sdist, and is **not** part of the web app or the harness. Its theme tokens are p
   in [`site/README.md`](../site/README.md).
 - **CI.** `.github/workflows/site.yml` runs `npm ci && npm run build` in `site/` on a pull request or a
   push to `main` that touches `site/`, so a broken site fails the PR even without Vercel.
-- **Content.** The epic is #271. #272 shipped the scaffold, a placeholder home page and stub install
-  and usage pages; the real home page (#273), the install and usage docs with a drift check (#274) and a
-  demo recording (#275) are open. The hosted web app's own `LandingPage.tsx` is frozen with the rest of
+- **Content.** The epic is #271. #272 shipped the scaffold; the home page (#273), the install and usage
+  docs with a drift check against `INSTALL.md` (#274), the demo recording and before/after resume (#275,
+  #337) and Jev presented as an optional upgrade (#356) followed. The hosted web app's own `LandingPage.tsx` is frozen with the rest of
   that app.
 
 ---
@@ -1580,30 +1701,46 @@ sdist, and is **not** part of the web app or the harness. Its theme tokens are p
 ## In flight
 
 Open issues, specified but **not shipped**. Nothing below describes a capability the system
-has. The entries that use the present tense (#278, #288, #291) report *defects* in
+has. The entries that use the present tense (#324, #333, #381) report *defects* in
 code that does exist, and are here because their fixes have not landed.
 
 **The harness pivot (epic #207, [`harness.md`](harness.md))** sequences all of it into phases
-H0–H5; § 18 there has the phase table with each issue's status. Everything in H0 and H1,
-the tree, executor, library and gates of H2, all of H3 and the editor of H3b (#204) is merged and
+H0–H5; § 18 there has the phase table with each issue's status. Everything in H0 and H1; the
+tree, executor, library, gates and preference anchoring of H2; H3 except the LinkedIn tool (#355);
+and the editor (#204), the evidence and area maps and the bullet picker of H3b are merged and
 described in §8. What follows is what is left.
 
 **Objective and scoring**
-- **#127** will fit per-guard tolerances on the #172 anchor set. Until then
-  `DEFAULT_TOLERANCES` are hand-set and provisional (§8.2). There is no λ and no scalar objective, and the
-  ATS composite is report-only. It waits on the anchor set (#172 chunk 7).
-- **#241** (shipped) gave every fitted threshold and the guard tolerances one versioned home,
-  `harness/policy.json` (§8.8). #127 writes its per-guard tolerances into the same file.
+- **#127** will fit per-guard tolerances on the #172 anchor set and write them into
+  `harness/policy.json` (§8.8). Until then `DEFAULT_TOLERANCES` are hand-set and provisional (§8.2).
+  There is no λ and no scalar objective, and the ATS composite is report-only. It waits on the anchor
+  set (#172 chunk 7).
 - **#151** will split `skill_coverage` into required and preferred components, each a separate
   target metric.
 - **#163** will rank keyword-insertion candidates by importance × supportability instead of the
   current TF-IDF. `agents/keyword_planner.py` is untouched, so its behaviour is the pre-#125 one.
 - **#152** will learn guard tolerances and ranker weights against the human anchor set.
-- **#291** reports that a hard preference scoped to a role family is not enforced by `execute_plan`,
-  and that `art_briefing` omits job-scoped ones.
+- **#380** will add a plan op `add` that brings back an experience or project a parent version
+  dropped without removing another; a hard emphasize will make such an `add` compliance, as a hard
+  suppress does for `delete`. Today `replace` is the only op that puts an item on the page (§8.14).
 - **#252** tracks what is planned and not built. Jev points (§8.4): eligibility rules, an embedding or Jev
   reading of semantic duplicates, action ranking for `suggest_actions`, and a role family for JobCards;
   their fallbacks are what runs. Tools (§8.1): `record_feedback` and `check_draft`.
+
+**Evidence brief (#311–#316)**
+- **#311** will store a confirmed, versioned evidence brief for each experience, project and
+  achievement (`ItemBrief`), with `draft_brief` and `confirm_brief` tools and the brief on `get_item`.
+  Drafts are never evidence.
+- **#312** will make confirmed brief fields citable evidence through one shared resolver, and add a
+  `do_not_claim` check and a seniority-qualifier check.
+- **#313** will make achievements plan items (keep, delete, revise title and description), with a
+  guard that keeps a title's placement and issuer.
+- **#314** will bring achievements into the bullet library, let variant cites name brief fields, and
+  mark a variant stale when a field it cites changes.
+- **#315** will add authoring: a brief step in the `art-setup` skill, and brief and achievement
+  editors in `art ui`.
+- **#316** will benchmark the briefs: unsupported-fact rate, brief coverage and planted-trap leaks,
+  with and without briefs, judged by an independent checker.
 
 **Policy and learning**
 - **#114** is the epic sequencing the policy arc onto H2–H5.
@@ -1614,29 +1751,52 @@ described in §8. What follows is what is left.
 - **#51** is now offline selection over the action space: no online bandit, per-metric off-policy
   estimates, and conditional on the H4 result.
 - **#174** will build action-ranking pairs labelled by metric dominance, the anchor set and tree siblings.
-- **#116** was closed as not planned: the executor touches only planned items by construction.
 
 **Evaluation**
 - **#206** will add the host runner and its arms (A, B, B′, C); **#172** (chunk 7, the human anchor set),
-  **#173** (the re-tailor and preference tasks) and **#178** (profile-bound conversations) feed it.
+  **#173** (the re-tailor and preference tasks) and **#178** (profile-bound conversations) feed it. The
+  live-model arm of the preference benchmark (§8.14) is #173's and #178's.
 
-**Landing site**
-- **#273**, **#274** and **#275** are the site's home page, install and usage docs (with a check that
-  the site's commands match `INSTALL.md`), and demo recording (§9).
+**Ingest and the graph**
+- **#317** will ingest soft skills, so the graph links them to the experiences that show them, without
+  any reaching a tailored resume's skills section.
+- **#324** reports that renaming an experience or project orphans its approved variants and job rules;
+  only its preferences are re-keyed (§8.14).
+- **#333** reports that for a project with no blurbs the harness and the graph disagree on the text of
+  `#b0`: the harness drops a restating lead-in (#260), the graph and the evidence map do not.
+- **#355** will add `ingest_linkedin(url)`, a harness tool on the hosted LinkedIn gateway (#354) that
+  writes the profile through the usual ingest path.
+- **#381** reports that a skill named only in a job's requirements never gets a skill area; it will
+  classify requirements when the JD profile is written and extend the startup backfill to them.
+- **#382** will store requirement terms in the posting's case in the JD profile, so an inferred term
+  is shown as the posting spelled it.
+- **#343** will check `skill_area@v1` answers on real profiles, and fit a threshold only if misfilings
+  show up.
 
 **Retrieval and infrastructure**
 - **#60** (the pgvector write path) is in the Icebox. The local default is SQLite with an FTS5/numpy
   fallback (#194).
 
 **Surfaces**
-`art ui` (#204) is merged. These issues remain:
-- **#278** reports that a host commit drops the user's editor `.tex` edits, and `diff_nodes` reports only `tex_changed`.
-  **#288** will give the host and `art ui` one shared current-job id.
+`art ui` (#204), the evidence map, the area map and the bullet picker are merged (§8.16). These issues
+remain:
+- **#288** will give the host and `art ui` one shared current-job id.
 - **#205** will add the editor chat panel (an Agent SDK session with `art-mcp`, and an API-key fallback).
 - **#147** will add the inline chat-panel UI for knowledge-artifact suggestions, in that panel. It carries
   the deferred UI for #21, #129 and #133, all of which shipped API-only.
+- **#331** will give `art ui` one place to edit each item's facts and preferences (a Facts | Preferences
+  lens and an item inspector), and a page for page rules.
+- **#344** will budget the bullet picker in lines, using the harness's line accounting.
+- **#345** will hand the bullets a user keeps for a job to the host, as a preference and not a gate.
+- **#346** will rank approved library bullets alongside item bullets in the picker.
+- **#335** will let the evidence map's editor add and delete a project's bullets without re-pointing
+  stored cites.
+- **#367** will let the user confirm from the evidence panel which project an achievement belongs to.
+- **#364** will add host tools to dismiss and restore an unproven skill claim (MCP and `--json`).
+- **#336** is the evidence and area maps' screen-reader, narrow-width, reduced-motion and load-time pass.
+- **#347** will add DOM tests (jsdom and Testing Library) for the evidence map and the bullet picker, run
+  in CI.
 - **#87** will make the rendered resume view editable.
-- **#136** will add an explorable knowledge-graph visualization.
 - **#82** and **#84** restructure the web UI's flow and tab order.
 - **#157** will log project-selection features and outcomes on tree nodes, so the project-scorer
   weights become learnable against the anchor set.
