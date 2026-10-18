@@ -65,9 +65,11 @@ omnium_interview_prep/
 /*.pdf
 
 # Tailoring benchmark artifacts (issue #51) - outputs, not source. The preference
-# compliance results (#299) are the exception: the issue commits them.
+# compliance results (#299) and the repo-dossier spike's aggregates (#397) are the exceptions:
+# their issues commit them.
 eval/results/*
 !eval/results/preference_compliance_*
+!eval/results/repo_dossier_*
 # JD-text fetch cache (issue #177). A build artifact of the corpus refresh, not
 # source: eval/jd_dataset/ is the checked-in output.
 eval/.jd_cache.db
