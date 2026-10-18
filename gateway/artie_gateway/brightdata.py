@@ -8,6 +8,7 @@ passed on.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Dict
 from urllib.parse import urlencode
 
@@ -15,14 +16,22 @@ from .errors import GatewayError
 from .transport import Transport, TransportError, TransportTimeout
 
 BRIGHTDATA_BASE = "https://api.brightdata.com/datasets/v3"
+# A record's `error_code` / `warning_code` reaches the log only if it looks like a code.
+_CODE = re.compile(r"[a-z0-9_]{1,40}")
 
 
-def _failed() -> GatewayError:
+def _failed(reason: str) -> GatewayError:
     return GatewayError(
         502,
         "upstream_error",
         "The profile could not be fetched. Check the URL, or use your LinkedIn data export instead.",
+        reason=reason,
     )
+
+
+def _code(value: Any) -> str:
+    text = value.strip().lower() if isinstance(value, str) else ""
+    return text if _CODE.fullmatch(text) else "unknown"
 
 
 class BrightDataClient:
@@ -53,21 +62,27 @@ class BrightDataClient:
                 504, "upstream_timeout", "The profile took too long to fetch. Try again later."
             )
         if result.status != 200:
-            raise _failed()
+            # The status alone diagnoses most failures (401 key, 402 billing, 403 account or
+            # permission, 400/404 dataset) without logging Bright Data's body.
+            raise _failed(f"upstream_http_{int(result.status)}")
         try:
             data = json.loads(result.body)
         except ValueError:
-            raise _failed() from None
+            raise _failed("upstream_not_json") from None
 
         if isinstance(data, list):
             records = [r for r in data if isinstance(r, dict)]
             if not records:
-                raise _failed()
+                raise _failed("upstream_empty")
             record = records[0]
         elif isinstance(data, dict):
             record = data
         else:
-            raise _failed()
-        if not record or record.get("error") or record.get("warning"):
-            raise _failed()
+            raise _failed("upstream_shape")
+        if not record:
+            raise _failed("upstream_empty")
+        if record.get("error"):
+            raise _failed(f"record_error:{_code(record.get('error_code'))}")
+        if record.get("warning"):
+            raise _failed(f"record_warning:{_code(record.get('warning_code'))}")
         return record
