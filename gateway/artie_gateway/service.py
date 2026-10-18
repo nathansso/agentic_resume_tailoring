@@ -88,23 +88,27 @@ class Gateway:
 
     def handle(self, request: Request) -> Response:
         started = self._clock()
+        reason = "-"
         try:
             response = self._handle(request)
             outcome = "ok" if response.status == 200 else str(response.body["error"]["code"])  # type: ignore[index]
         except GatewayError as err:
             response, outcome = _error(err), err.code
+            reason = err.reason or "-"
         except StoreUnavailable:
             err = GatewayError(503, "unavailable", "The service is temporarily unavailable. Try again later.")
             response, outcome = _error(err), err.code
         except Exception as exc:  # noqa: BLE001 - last resort; log the type only, never the message
             err = GatewayError(500, "internal", "Something went wrong on our side.")
             response, outcome = _error(err), f"internal:{type(exc).__name__}"
-        # Fixed fields only: no URL, token, user id, record or request text.
+        # Fixed fields only: no URL, token, user id, record or request text. `reason` comes
+        # from a fixed vocabulary (an upstream HTTP status or a sanitised record code).
         logger.info(
-            "linkedin request outcome=%s status=%d ms=%d",
+            "linkedin request outcome=%s status=%d ms=%d reason=%s",
             outcome,
             response.status,
             int((self._clock() - started) * 1000),
+            reason,
         )
         return response
 

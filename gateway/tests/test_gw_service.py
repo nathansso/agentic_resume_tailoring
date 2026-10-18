@@ -1,5 +1,6 @@
 """The request pipeline against fake GitHub, Bright Data and KV."""
 import json
+import logging
 
 import pytest
 
@@ -335,3 +336,24 @@ def test_an_unexpected_error_is_a_generic_500(network, store, clock):
     response = Gateway(make_config(), Boom(clock), network, clock).handle(post())
     assert response.status == 500
     assert "secret detail" not in json.dumps(response.body)
+
+
+# -- the log-only reason for a Bright Data failure ------------------------------
+
+@pytest.mark.parametrize("response, reason", [
+    (HttpResult(401, b'{"error": "Invalid token"}'), "upstream_http_401"),
+    (HttpResult(403, b'{"error": "Account is not active"}'), "upstream_http_403"),
+    (HttpResult(200, b"not json"), "upstream_not_json"),
+    (HttpResult(200, b"[]"), "upstream_empty"),
+    (HttpResult(200, json.dumps([{"error": "Dead page", "error_code": "dead_page"}]).encode()), "record_error:dead_page"),
+    (HttpResult(200, json.dumps([{"warning": "Partial", "warning_code": "Has spaces!"}]).encode()), "record_warning:unknown"),
+])
+def test_a_bright_data_failure_logs_why_without_its_body(gateway, network, caplog, response, reason):
+    caplog.set_level(logging.INFO)
+    network.brightdata_response = response
+    got = gateway.handle(post())
+    assert got.status == 502 and got.body["error"]["code"] == "upstream_error"
+    assert reason not in json.dumps(got.body)                       # log-only: never sent to the caller
+    line = [r.getMessage() for r in caplog.records if r.name == "artie_gateway"][-1]
+    assert line.endswith(f"reason={reason}")
+    assert "Invalid token" not in line and "not active" not in line and "Dead page" not in line
