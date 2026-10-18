@@ -67,6 +67,103 @@ with probabilities and never writes resume text.
 | Checks: citations, line budget, coverage, redundancy | Ranking candidate actions per item (propensities) | The conversation with the user |
 | Rendering, tree, decision log, provenance, Jev cache | Role family for JobCards | Explaining results |
 
+### 2.1 What the user types, what the agent does (#391)
+
+The table above splits the work between components. This section splits it between the
+**user** and their **agent**. Decided with the owner on 2026-10-17; each piece is its own
+issue under the epic #391. Until those issues ship, § 9 and § 15 describe the current tool
+surface and plugin.
+
+**The rule.** A typed command exists only for what the agent shouldn't or can't do:
+
+| Surface | What goes here | Test |
+|---|---|---|
+| Shell commands (`artie …`) | Sign-in, the visual editor, agent-free sync | It needs the user's identity or a GUI, or it must run with no agent |
+| Slash commands (`/artie:…`) | Shortcuts the user types inside the agent session | A navigation the user wants by name |
+| MCP tools | Everything the agent does for the user | Everything else |
+
+Intent always goes through plain language to the agent. There is **one consent point**:
+the tailoring plan.
+
+**The shell (#395, #400, #398).**
+
+- `artie connect` signs in to GitHub (device flow, #353) and records the LinkedIn URL.
+- `artie ingest` refreshes the connected sources with no agent.
+- `artie ui` opens the editor.
+- Bare `artie` prints example requests to give the agent, and the plumbing commands are
+  hidden from help.
+- `art` is renamed to `artie` everywhere, including the plugin id. Existing installs break,
+  which was accepted.
+
+**Slash commands (#401).** Only `/artie:setup`, `/artie:history` and `/artie:open` remain.
+Tailoring, reverting and preferences are plain language: "tailor my resume to this
+role", "go back to the last version", "never mention Kafka".
+
+**The tailoring loop.**
+
+1. The agent opens the job and drafts a plan.
+2. An `execute_plan` dry run returns a `plan_summary`, one line per change with its
+   reason (`because` is required on every node, #392), and a `plan_token`, a fingerprint
+   of the exact program.
+3. The agent shows the summary and ends its turn.
+4. The user approves, or gives feedback. Feedback becomes a new dry run, or a durable
+   preference through `observe` / `record_preference` (#202).
+5. **The commit is gated by quoted approval (#393).** It must carry the `plan_token` and
+   an `approval_quote`, the user's own approving words. The `UserPromptSubmit` hook,
+   which already sees every user message, keeps the messages sent after each dry run,
+   locally and only until commit. ART accepts the commit only if the quote appears in one
+   of them. A changed program needs a new dry run and a new approval.
+   - "Just do it" counts as approval in the user's own words.
+   - Without hooks, the gate is token-only and says so.
+   - MCP elicitation, a host Yes/No prompt, is an optional strict mode.
+6. Then the agent commits and renders.
+
+**Which job (#288, rescoped).** There is no hidden shared pointer. Each job carries a
+`last_touched_at`, updated by host writes and by opening the job in `art ui`. A ranked
+lookup matches company and title from the user's words, then recency. The agent proceeds
+on one clear match and names the job. Otherwise it asks: "Is this the <Company> <Role>
+role, or another?"
+
+**Destinations (#394).** `render` takes `save_to`: a path, or `downloads`, `desktop` or
+`documents`, resolved per OS. The agent asks where to save the first time and remembers
+the answer. With no preference given, it saves to Downloads.
+
+**Ingestion (#398, #399, #397, #396, #355).** Ingestion covers LinkedIn, GitHub repos
+(README, metadata and code), repos the user contributes to but doesn't own, and any
+resumes the user provides. ART is model-free, so it runs in two halves:
+
+- **Deterministic (`artie ingest`).**
+  - LinkedIn arrives through the hosted Bright Data gateway (#354, deployed in #396) and
+    is mapped straight into the graph.
+  - Each repo gets a **dossier** weighted by authorship: the user's files, commits and
+    messages, or their merged PRs in repos they don't own; a tree-sitter symbol map ranked
+    by PageRank seeded from the user's files (the idea behind Aider's repo map); the
+    stack and practice from manifests, CI, infrastructure and tests; notebooks; and only
+    the outcomes the repo itself states.
+  - Every fact carries its source (path, commit SHA or PR number), so bullets cite it
+    through the evidence gate.
+  - Dossiers are staged in the store.
+- **Judgment (the agent).** The agent turns staged dossiers and resumes into records
+  through `upsert_items`.
+- **Sizing.** How rich a dossier must be is settled by the #397 spike. A ladder of
+  inputs, from README only up to full code, is scored per claim against the code and the
+  owner's approved bullets, and the cheapest rung within a set margin of full-code
+  coverage wins.
+
+**Verification (#402).** Five golden transcripts run against a real agent in a
+throwaway container before each release:
+
+1. first run;
+2. tailor and approve;
+3. tailor, revise, then approve;
+4. an ambiguous "which job?";
+5. a question plus "save it to Downloads".
+
+They assert on ART's side effects, not the model's wording.
+
+**Deferred.** Consolidating the tool surface and adding MCP tool annotations
+(`readOnlyHint`, `destructiveHint`) wait until this split ships.
+
 ## 3. Component architecture
 
 ```mermaid
