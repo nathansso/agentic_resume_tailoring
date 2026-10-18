@@ -1,0 +1,14 @@
+{
+ "_comment": "Public repos for the #397 spike. 'The user' is each repo's main author, standing in for a user describing their own repo. The owner's repos, emails and reference facts are in the gitignored work dir (personal/eval_397/repos_private.json), never here.",
+ "repos": [
+  {"name": "kennethreitz/records", "dir": "kennethreitz__records", "group": "public",
+   "user_label": "Kenneth Reitz (GitHub kennethreitz), the repository's creator",
+   "user_emails": ["me@kennethreitz.org"]},
+  {"name": "sindresorhus/p-queue", "dir": "sindresorhus__p-queue", "group": "public",
+   "user_label": "Sindre Sorhus (GitHub sindresorhus), the repository's creator",
+   "user_emails": ["sindresorhus@gmail.com"]},
+  {"name": "rakyll/hey", "dir": "rakyll__hey", "group": "public",
+   "user_label": "Jaana Dogan (GitHub rakyll), the repository's creator",
+   "user_emails": ["burcujdogan@gmail.com", "jbd@google.com", "github@rakyll.org"]}
+ ]
+}
