@@ -214,8 +214,8 @@ def build_symbol_map(sources: dict[str, str], user_weights: dict[str, float] | N
     user_weights = {p: w for p, w in (user_weights or {}).items() if p in sources and w > 0}
     graph = nx.MultiDiGraph()
     graph.add_nodes_from(sources)
-    for name in set(defines) & set(references):
-        definers = defines[name]
+    for name in sorted(set(defines) & set(references)):  # sorted: the ranking is reproducible
+        definers = sorted(defines[name])
         mul = 1.0
         if len(name) >= 8 and ("_" in name or re.search(r"[a-z][A-Z]", name)):
             mul *= 10
@@ -223,7 +223,7 @@ def build_symbol_map(sources: dict[str, str], user_weights: dict[str, float] | N
             mul *= 0.1
         if len(definers) > 5:
             mul *= 0.1
-        for referencer, n in references[name].items():
+        for referencer, n in sorted(references[name].items()):
             w = mul * math.sqrt(n) * (5 if referencer in user_weights else 1)
             for definer in definers:
                 graph.add_edge(referencer, definer, weight=w, ident=name)

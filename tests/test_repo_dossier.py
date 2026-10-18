@@ -9,6 +9,8 @@ import json
 import os
 import shutil
 import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -177,6 +179,25 @@ def test_the_judge_sees_every_authors_history(fixture_repo):
     text, stats = judge_context(RepoInput(fixture_repo, "ada/demo", "Ada", [USER[1]]))
     assert "Charles Babbage" in text and "Add the normalize helper" in text
     assert "Ada Lovelace" in text and not stats["truncated"]
+
+
+def test_the_ladder_is_the_same_under_any_hash_seed(fixture_repo):
+    """Set iteration order must not leak into a dossier: imports and the symbol map ranking are
+    built from sorted collections, so cached writer calls stay valid across runs."""
+    root = Path(__file__).resolve().parent.parent
+    code = (
+        "import json, sys\n"
+        f"sys.path.insert(0, {str(root)!r})\n"
+        "from eval.repo_dossier.ladder import RepoInput, build_ladder\n"
+        f"lad = build_ladder(RepoInput({str(fixture_repo)!r}, 'ada/demo', 'Ada', [{USER[1]!r}]))\n"
+        "sys.stdout.write(json.dumps(lad.rungs))\n")
+    outs = []
+    for seed in ("1", "2", "3"):
+        env = dict(os.environ, PYTHONHASHSEED=seed, PYTHONDOTENV_DISABLED="1", PYTHON_DOTENV_DISABLED="1")
+        done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, cwd=root)
+        assert done.returncode == 0, done.stderr
+        outs.append(done.stdout)
+    assert outs[0] == outs[1] == outs[2]
 
 
 def test_the_symbol_map_is_seeded_by_the_users_files():

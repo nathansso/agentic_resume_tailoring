@@ -230,7 +230,7 @@ def imports_of(repo: Path, files: list[str], b: Budgets) -> list[str]:
             names = {("/".join(m.split("/")[:2]) if m.startswith("@") else m.split("/")[0])
                      for m in _JS_IMPORT.findall(code)}
             names = {n for n in names if not n.startswith("node:")}
-        seen.update(names)
+        seen.update(sorted(names))  # sorted: ties keep a reproducible order
     return [n for n, _ in seen.most_common(60)]
 
 

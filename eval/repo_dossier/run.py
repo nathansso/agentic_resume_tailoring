@@ -66,9 +66,53 @@ def fetch_meta(name: str, cache: Path) -> dict:
     return meta
 
 
+def _gh_json(endpoint: str):
+    done = subprocess.run(["gh", "api", endpoint], capture_output=True, text=True, encoding="utf-8")
+    return json.loads(done.stdout) if done.returncode == 0 and done.stdout.strip() else None
+
+
+def resolve_author_emails(name: str, logins: list[str], clone: Path, cache: Path) -> list[str]:
+    """The git author emails behind GitHub logins, so no email is ever written into the config.
+
+    First the commits GitHub links to each login (`repos/{name}/commits?author=<login>`), then any
+    git-log author whose name equals the account's display name. The mapping is cached in the
+    gitignored work dir only.
+    """
+    path = cache / (name.replace("/", "__") + "__authors.json")
+    if path.exists():
+        return json.loads(path.read_text(encoding="utf-8"))["emails"]
+    emails: set[str] = set()
+    for login in logins:
+        for page in range(1, 11):
+            commits = _gh_json(f"repos/{name}/commits?author={login}&per_page=100&page={page}") or []
+            for c in commits:
+                email = ((c.get("commit") or {}).get("author") or {}).get("email")
+                if email:
+                    emails.add(email)
+            if len(commits) < 100:
+                break
+        display = ((_gh_json(f"users/{login}") or {}).get("name") or "").strip().lower()
+        if display:
+            log = subprocess.run(["git", "-C", str(clone), "log", "--format=%an|%ae"],
+                                 capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
+            for line in log.splitlines():
+                author, _, email = line.partition("|")
+                if author.strip().lower() == display and email:
+                    emails.add(email)
+    cache.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"logins": logins, "emails": sorted(emails)}, indent=1), encoding="utf-8")
+    return sorted(emails)
+
+
 def repo_input(r: dict, args) -> RepoInput:
-    meta = fetch_meta(r["name"], Path(args.work_dir) / "meta")
-    return RepoInput(Path(args.clones) / r["dir"], r["name"], r["user_label"], r["user_emails"], meta)
+    """`user_emails` (the private config, gitignored) or `user_logins` (the committed public
+    config), resolved to emails at run time."""
+    work = Path(args.work_dir)
+    meta = fetch_meta(r["name"], work / "meta")
+    clone = Path(args.clones) / r["dir"]
+    emails = r.get("user_emails") or resolve_author_emails(r["name"], r.get("user_logins", []),
+                                                           clone, work / "meta")
+    return RepoInput(clone, r["name"], r["user_label"], emails, meta)
 
 
 def cmd_build(args) -> None:

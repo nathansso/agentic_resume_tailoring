@@ -65,10 +65,14 @@ python -m eval.repo_dossier.run report
 `ANTHROPIC_API_KEY` comes from the environment or the repo's `.env` (`--env` to point
 elsewhere). It is never printed or logged.
 
-**Privacy.** The work dir defaults to `personal/eval_397/` (gitignored). The owner's repos,
-author emails, reference facts and every per-repo output, claim and label stay there, along
-with the private config `repos_private.json` (same shape as `repos.json`, plus `facts`). Only
-aggregates and the public repos' examples go in `eval/results/`.
+**Privacy.** No email address is committed. `repos.json` names each public repo's user by
+GitHub login; the runner resolves a login to its git author emails at run time (the commits
+GitHub links to the login, then git-log authors matching the account's display name) and caches
+that mapping in the work dir only. The work dir defaults to `personal/eval_397/` (gitignored):
+the owner's repos, reference facts and every per-repo output, claim and label stay there, along
+with the private config `repos_private.json` (same shape as `repos.json`, plus `facts`; it may
+list `user_emails` directly). Only aggregates and the public repos' examples go in
+`eval/results/`.
 
 The offline test is `tests/test_repo_dossier.py`: it builds the ladder from a two-author fixture
 repo with no network and no API.
