@@ -13,7 +13,7 @@ const S = {
   tailor: { id: "tailor", title: "3. Tailor to a job posting" },
   approve: { id: "approve", title: "4. Approve bullets and set preferences" },
   render: { id: "render", title: "5. Render the PDF" },
-  ui: { id: "editor", title: "6. Edit by hand in art ui (optional)" },
+  ui: { id: "editor", title: "6. Edit by hand in artie ui (optional)" },
   later: { id: "later", title: "Everything else you can run" },
 };
 const toc = Object.values(S);
@@ -35,7 +35,7 @@ const toc = Object.values(S);
       that isn't there, it asks you.
     </p>
     <p>
-      In Claude Code you run <code>/art:*</code> commands. Codex has two skills instead, <code>$art-setup</code> and <code>$art-tailor</code>,
+      In Claude Code you run <code>/artie:*</code> commands. Codex has two skills instead, <code>$artie-setup</code> and <code>$artie-tailor</code>,
       and for everything else you ask in plain words. This page shows the Claude Code command
       first, then the Codex equivalent.
     </p>
@@ -60,9 +60,9 @@ const toc = Object.values(S);
       </li>
     </ul>
     <p>Then run the setup command with the paths:</p>
-    <CommandBlock label="In Claude Code (replace the placeholder with your paths)" lines={block("art-setup")} />
+    <CommandBlock label="In Claude Code (replace the placeholder with your paths)" lines={block("artie-setup")} />
     <p>
-      In Codex, run <code>$art-setup</code> and tell it where the files are. If you give no
+      In Codex, run <code>$artie-setup</code> and tell it where the files are. If you give no
       paths, the agent asks.
     </p>
     <p>What happens next:</p>
@@ -117,8 +117,8 @@ const toc = Object.values(S);
 
   <DocSection section={S.tailor}>
     <p>Paste the posting, or give a link, to the tailor command:</p>
-    <CommandBlock label="In Claude Code (replace the placeholder with the posting)" lines={block("art-tailor")} />
-    <p>In Codex, run <code>$art-tailor</code> and paste the posting.</p>
+    <CommandBlock label="In Claude Code (replace the placeholder with the posting)" lines={block("artie-tailor")} />
+    <p>In Codex, run <code>$artie-tailor</code> and paste the posting.</p>
     <p>The agent works through these steps, and you can watch each one:</p>
     <ol class="steps">
       <li>
@@ -182,7 +182,7 @@ const toc = Object.values(S);
     <p>
       A rule you call absolute ("never") becomes a pin: what it names can never reach the page,
       even in other words. ARTie never saves one without your confirmation. To see what ARTie
-      holds, run <code>/art:prefs</code> in Claude Code, or ask your agent to show your
+      holds, run <code>/artie:prefs</code> in Claude Code, or ask your agent to show your
       preferences (<code>art_briefing</code>; <code>art_pins</code> returns the pins word for
       word).
     </p>
@@ -209,7 +209,7 @@ const toc = Object.values(S);
 
   <DocSection section={S.ui}>
     <p>
-      To adjust the layout or the LaTeX yourself, open the local editor. In Claude Code, run <code>/art:open</code> and
+      To adjust the layout or the LaTeX yourself, open the local editor. In Claude Code, run <code>/artie:open</code> and
       name the job. It prints the command below with the job's id filled in. Run it yourself in
       a terminal; the agent does not start it.
     </p>
@@ -217,7 +217,7 @@ const toc = Object.values(S);
     <p>
       The editor opens at <code>http://127.0.0.1:8765/</code> and runs only on your machine.
       Anything you save or drag there comes back to the agent on your next message, and it
-      builds on your edits instead of overwriting them. In Codex, ask the agent for the <code>art
+      builds on your edits instead of overwriting them. In Codex, ask the agent for the <code>artie
       ui</code> command for your job.
     </p>
   </DocSection>
@@ -238,7 +238,7 @@ const toc = Object.values(S);
       </tbody>
     </table>
     <p>
-      The two skills behind <code>/art:setup</code> and <code>/art:tailor</code> also start on
+      The two skills behind <code>/artie:setup</code> and <code>/artie:tailor</code> also start on
       their own when you ask your agent to tailor a resume or update your experience. In Codex,
       ask for history in plain words; the agent uses <code>history</code> and <code>diff_nodes</code> to
       show versions and <code>checkout</code> to go back, after it shows you the difference and

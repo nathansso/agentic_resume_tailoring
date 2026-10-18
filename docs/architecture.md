@@ -16,10 +16,10 @@ Companion documents: [`benchmark.md`](benchmark.md) (what the numbers mean),
 > now two paths over one database:
 > - **The legacy path (§§2–7)** is the web app and `cli.py`: LLM agents plan, generate and
 >   evaluate. The code still runs locally; the hosted web app is frozen and currently down.
-> - **The harness path (§8)** is `art-mcp` and `art`: the host's model writes, and ART checks.
+> - **The harness path (§8)** is `artie-mcp` and `artie`: the host's model writes, and ART checks.
 >   The generate → evaluate loop (§3.2) becomes host-written plan programs run by an executor,
 >   the ATS composite is report-only (never a reward, §6), planning prompts give way to
->   `suggest_actions`, and the editor is `art ui` in local mode.
+>   `suggest_actions`, and the editor is `artie ui` in local mode.
 >
 > This file keeps describing merged behaviour, and is updated as each harness issue lands. It
 > was last brought level with `CHANGELOG.md` through #300 and #378 (the merges to 17 October).
@@ -64,19 +64,19 @@ Two vocabularies organise everything below:
 | Exploration policy | policy | `agents/tailor_planner.py::_choose_strategy` | — | decision log |
 | Deterministic ordering | invariant | `database/db.py::next_seq` / `latest_result` | every write site | every `created_at`-ordered read |
 | Tool contract + adapters | harness | `harness/contract.py`, `harness/mcp_server.py`, `harness/cli.py`, `harness/entry.py` | — | the host's coding agent, scripts, tests |
-| Tailoring tree | harness (memory) | `harness/tree.py`, `TailorNode` / `JobHead` / `TreeEvent` / `PlanProgram` | `harness/executor.py`, the editor | `get_head`, `history`, `art ui` |
+| Tailoring tree | harness (memory) | `harness/tree.py`, `TailorNode` / `JobHead` / `TreeEvent` / `PlanProgram` | `harness/executor.py`, the editor | `get_head`, `history`, `artie ui` |
 | Executor + acceptance rule | harness (reasoning) | `harness/executor.py`, `harness/acceptance.py`, `harness/program.py` | — | `execute_plan`, `patch_plan` |
 | Jev decisions engine | harness (judgment) | `harness/decisions/` (client, cache, engine, recordings) | the points below | every gate or target a Jev answer feeds |
 | Bullet library, baselines | harness (memory) | `harness/library.py`, `BulletVariant` / `TrackBaseline` / `JobRoleFamily` | `upsert_items` (kind `variant`), `promote_bullet`, `approve_variant`, `save_baseline` | `suggest_actions`, `open_job`, the executor |
 | Memory gate | harness (memory write path) | `harness/memory.py`, `harness/decisions/memory_gate.py` | `observe`, `record_preference`, the `user-prompt` hook | `art_briefing`, `art_pins`, the executor's pins |
 | Document rules | harness (memory) | `harness/rules.py`, `ResumeRule` | `record_rule`, `retract_rule`, `record_preference` (a page subject) | `art_briefing`, `art_pins`, the executor's finalize defaults and `rule_violations` (#298) |
-| Preference anchors | harness (memory) | `harness/anchors.py`, `harness/relink.py`, `harness/constraints.py`, `harness/migrations.py` | `record_preference`, `upsert_items`, the `services` rename and delete paths, `art migrate preferences` | the memory gate, `suggest_actions`, `execute_plan` dry runs, the post-compaction hook (§8.14) |
+| Preference anchors | harness (memory) | `harness/anchors.py`, `harness/relink.py`, `harness/constraints.py`, `harness/migrations.py` | `record_preference`, `upsert_items`, the `services` rename and delete paths, `artie migrate preferences` | the memory gate, `suggest_actions`, `execute_plan` dry runs, the post-compaction hook (§8.14) |
 | Skill retrieval | retrieval | `agents/skill_matching.py`, `knowledge_graph/builder.py` | — | `kg_default_content`, `open_job` |
 | Seniority detection | scoring input | `agents/seniority.py` | — | `ATSScoringEngine._role_level`, `agents/jd_payload.py`, the profile checks and the corpus audit |
 | Policy artifact | harness (config) | `harness/policy.json`, `harness/policy.py` | a re-fit | every threshold and guard tolerance (§8.8) |
 | Release wheel | harness (distribution) | `.github/workflows/release.yml`, `harness/hooks.py` (`WHEEL_URL`, `SOURCE`) | a `v*` tag | the plugin, the Codex hooks, `uvx` (§8.11) |
 | Landing site | outside the product | `site/` (Astro), `.github/workflows/site.yml` | — | visitors, on Vercel (§9) |
-| Export and import | harness (storage) | `harness/export_import.py` | `art export`, `art import` | the user |
+| Export and import | harness (storage) | `harness/export_import.py` | `artie export`, `artie import` | the user |
 | The clock | invariant | `database/clock.py` | every `created_at` and "now" | every datetime comparison |
 
 **There are three LangGraph graphs, not one.** `graph/pipeline.py` composes the whole flow
@@ -338,7 +338,7 @@ only path in for a new statement. The reason is sharper here than anywhere else 
 preferences are *inferred*, so a pipeline allowed to write this table would suppress an
 item, observe the suppression, infer a standing preference from it, and cite that back as
 the user's own instruction. Tests pin it. Since #297 and #300, renaming or deleting an item, a
-harness ingest and `art migrate preferences` can supersede a row with a re-anchored copy or a
+harness ingest and `artie migrate preferences` can supersede a row with a re-anchored copy or a
 page rule that carries the same words, polarity, strength and scope; none of them creates a
 preference the user did not state (§8.14).
 
@@ -1057,7 +1057,7 @@ because equal names carry equal vectors and only the opaque `skill_id` differs.
 
 ## 8. The harness path
 
-The harness path is `art-mcp` (the MCP server) and `art` (the JSON CLI), both over one tool
+The harness path is `artie-mcp` (the MCP server) and `artie` (the JSON CLI), both over one tool
 contract and one SQLite store. It is the target of [`harness.md`](harness.md); this section
 records what has merged. It shares the database, the knowledge graph (§2.1), preferences
 (§2.5) and the ordering invariants (§7) with the legacy path, and shares none of its
@@ -1079,18 +1079,18 @@ errors carried as an `error` field. It currently holds **30 tools**, in five gro
 | Execute and history | `execute_plan`, `patch_plan`, `get_head`, `history`, `diff_nodes`, `checkout`, `render` |
 
 `harness/mcp_server.py` serves the contract over stdio and `harness/cli.py` prints one JSON
-document per call; `tests/test_harness_contract.py` holds both to identical results. The `art`
-console script (`harness/entry.py`) adds what is not a tool: `art mcp` (the server, the
-command the plugin runs), `art hook` (the plugin hooks),
-`art hooks codex` (installs them in Codex's `hooks.json`, the fallback for a Codex without plugin hooks), `art jev` (§8.3), `art export` and `art import`
-(§8.9), `art migrate preferences` (§8.14), `art github login|status|logout` (§8.15), and `art ui`. A write tool returns `read_only` on a remote or Postgres store unless the
+document per call; `tests/test_harness_contract.py` holds both to identical results. The `artie`
+console script (`harness/entry.py`) adds what is not a tool: `artie mcp` (the server, the
+command the plugin runs), `artie hook` (the plugin hooks),
+`artie hooks codex` (installs them in Codex's `hooks.json`, the fallback for a Codex without plugin hooks), `artie jev` (§8.3), `artie export` and `artie import`
+(§8.9), `artie migrate preferences` (§8.14), `artie github login|status|logout` (§8.15), and `artie ui`. A write tool returns `read_only` on a remote or Postgres store unless the
 process was started with `--allow-writes`; local SQLite is writable. `record_feedback` and
 `check_draft` are named in `harness.md` and are **not built** (#252).
 
 ### 8.2 The tree, the executor and the acceptance rule
 
 Every committed version is a `TailorNode` whose parent is the version it revised
-(`harness/tree.py`), with one `JobHead` per job and a persistent `TreeEvent` feed that `art ui`
+(`harness/tree.py`), with one `JobHead` per job and a persistent `TreeEvent` feed that `artie ui`
 reads. A commit is guarded by HEAD (`StaleParent`), so a stale plan or an editor edit cannot
 silently overwrite a newer version. `UserJobResult` stays the materialized current state, so the
 legacy readers keep working.
@@ -1184,8 +1184,8 @@ flowchart LR
   any API error. An unrecognized value means `off`, so a typo cannot send text anywhere.
 - **Recordings** (`recordings.py`) are the cache's rows as versioned JSON: questions and answers,
   never the state. The committed ones come from synthetic profiles, so they are test fixtures; a
-  recording exported from a real store can name the user's items and bullets (above) and is personal, so `art jev export` prints a notice on stderr.
-  `art jev status` reports the mode,
+  recording exported from a real store can name the user's items and bullets (above) and is personal, so `artie jev export` prints a notice on stderr.
+  `artie jev status` reports the mode,
   whether a key is set (never the key) and the cached decisions per point; `export` and `import`
   move them.
 - **Tests never reach the network.** The suite is hermetic (#249, `tests/_hermetic.py`): it starts with
@@ -1224,7 +1224,7 @@ ingest path), by the job analyzer and the chat job analysis (a posting's skills)
 and manual add-skill paths, all through `knowledge_graph.areas.classify_skills_at_write`, which is
 best effort and never raises. Reading is cache-only (`skill_areas` is one query for any number of
 skills, which is what `get_job_skills` uses). A skill written with no key, or with Jev off, stays in
-`Other` until it is classified later: `art mcp` and `art ui` start `backfill_unplaced_if_due` on a
+`Other` until it is classified later: `artie mcp` and `artie ui` start `backfill_unplaced_if_due` on a
 daemon thread when their store is a writable local SQLite one, which runs `classify_unplaced_skills` when a key
 resolves, Jev is not off and the profile has unplaced skills, at most once per user and key per day
 (`area_backfill.json` in the data dir keeps a hash of the key, never the key). The one-off for any
@@ -1461,7 +1461,7 @@ question changes.
 
 ### 8.9 Export and import (issue #195)
 
-`art export` writes one zip and `art import` loads it; both print one JSON document. They are
+`artie export` writes one zip and `artie import` loads it; both print one JSON document. They are
 **not tools**: a host should not be able to restore over a store or read a hosted database by itself.
 
 - **The bundle** holds `manifest.json`, `tables/<table>.json` for 28 tables in primary-key order (26
@@ -1514,19 +1514,19 @@ It fails if the tag is not `v<ART_VERSION>` (`harness/__init__.py`) or `plugin/.
 that tag. `workflow_dispatch` is a dry run that creates nothing.
 
 - **One pin.** `harness/hooks.py` owns `WHEEL_URL` and `SOURCE = "art-mcp[ui] @ <WHEEL_URL>"`, derived
-  from `ART_VERSION`. The plugin's `.mcp.json` and `hooks.json`, `art hooks codex`, `/art:open` and the
+  from `ART_VERSION`. The plugin's `.mcp.json` and `hooks.json`, `artie hooks codex`, `/artie:open` and the
   install commands in `INSTALL.md` all use it; `tests/test_plugin.py` fails when they disagree.
 - **The editor ships in the wheel.** A git install has no `web/static` (it is not committed), so
-  `art ui` from one prints the release-wheel command instead (`web/local_ui.py::missing_static`); a
+  `artie ui` from one prints the release-wheel command instead (`web/local_ui.py::missing_static`); a
   checkout is told to build the frontend.
-- **Hooks cannot fail.** A hook line is `uvx --offline --python 3.12 --from "<pin>" art hook <event>; exit 0`: it
+- **Hooks cannot fail.** A hook line is `uvx --offline --python 3.12 --from "<pin>" artie hook <event>; exit 0`: it
   uses only what the MCP server's start cached and exits 0 when uvx or the cache is missing. The server
   start itself is not offline-proof (uv re-resolves a few minutes after caching), which `INSTALL.md`
   documents with its two fixes.
 - **Codex gets the hooks from the plugin** (#290). Codex 0.131 and later load a plugin's
   `hooks/hooks.json`, and `plugin/.codex-plugin/plugin.json` names the same file Claude Code reads, so a
   plugin install needs only the user's trust step in `/hooks`.
-- **`art hooks codex --write` is the fallback, and neither appends nor duplicates** (#283, #290).
+- **`artie hooks codex --write` is the fallback, and neither appends nor duplicates** (#283, #290).
   `harness/hooks.py::is_art_hook` recognises ART's own entries from any earlier source (a `git+` URL
   with or without a ref, or a release wheel of any version); `merge_hooks` replaces them and leaves every
   other hook and its order alone, and the command writes the file only when something changed. When an
@@ -1553,7 +1553,7 @@ Three host-ingest defects from the October live run, each fixed at one place.
 
 ### 8.13 The editor round trip (issues #276, #277)
 
-Two defects stopped a host-tailored job from reaching `art ui` and back. Both are fixed.
+Two defects stopped a host-tailored job from reaching `artie ui` and back. Both are fixed.
 
 - **The editor opens on a host-built job.** `JobWorkspace` renders the editor only for `tailored` or
   `exported` jobs, and only the web pipeline set that status. `harness/tree.py::_materialize` (used by
@@ -1624,14 +1624,14 @@ gate's (§8.6).
   before this model one outcome: unchanged, relinked, unlinked to a pending copy, converted to a rule (a
   `section:` suppress becomes a `limit` of 0 for that section; a page-ish row only when
   `rules.infer_limit` reads one plain limit), or left alone with a code. It is idempotent by row state.
-  `art migrate preferences [--dry-run]` runs it by hand, and `bootstrap(prepare=True)` runs it once per
+  `artie migrate preferences [--dry-run]` runs it by hand, and `bootstrap(prepare=True)` runs it once per
   user on a local SQLite store (`migrations.json` beside the store marks it), never on a remote store
   and never raising into startup.
 
 ### 8.15 Ingest identity and GitHub login (issues #334, #353, #365)
 
 - **GitHub login (#353).** `harness/github.py` signs the user in with GitHub's device flow
-  (`art github login [--private]`, `status`, `logout`, in `harness/github_cli.py`); the scope is
+  (`artie github login [--private]`, `status`, `logout`, in `harness/github_cli.py`); the scope is
   `read:user`, plus `repo` with `--private`. The token is read only through `resolve_token()`
   (`ART_GITHUB_TOKEN`, else the OS keychain, service `art-mcp`, user `github-token`) and never reaches
   the database, an export, a log or a tool result. The package ships the ARTie OAuth App's client ID,
@@ -1652,9 +1652,9 @@ gate's (§8.6).
   duplicate that already exists is flagged in the evidence view (`duplicate_of`) and gets none of the
   shared node's edges.
 
-### 8.16 The data explorer in `art ui` (issues #136, #318–#323)
+### 8.16 The data explorer in `artie ui` (issues #136, #318–#323)
 
-`art ui`'s Data Explorer opens on the **evidence map** (#136). `GET /api/profile/graph/view`
+`artie ui`'s Data Explorer opens on the **evidence map** (#136). `GET /api/profile/graph/view`
 (`knowledge_graph/evidence_view.py`) returns the items, the skills grouped by area (§8.4, #318), and one
 edge per item and skill carrying the `#b<n>` ordinals of the bullets that cite it and a GitHub-provenance
 flag. `EvidenceMap.tsx` draws it, a toggle compares it with a saved job's requirements (required and
@@ -1737,8 +1737,8 @@ described in §8. What follows is what is left.
   guard that keeps a title's placement and issuer.
 - **#314** will bring achievements into the bullet library, let variant cites name brief fields, and
   mark a variant stale when a field it cites changes.
-- **#315** will add authoring: a brief step in the `art-setup` skill, and brief and achievement
-  editors in `art ui`.
+- **#315** will add authoring: a brief step in the `artie-setup` skill, and brief and achievement
+  editors in `artie ui`.
 - **#316** will benchmark the briefs: unsupported-fact rate, brief coverage and planted-trap leaks,
   with and without briefs, judged by an independent checker.
 
@@ -1778,13 +1778,13 @@ described in §8. What follows is what is left.
   fallback (#194).
 
 **Surfaces**
-`art ui` (#204), the evidence map, the area map and the bullet picker are merged (§8.16). These issues
+`artie ui` (#204), the evidence map, the area map and the bullet picker are merged (§8.16). These issues
 remain:
-- **#288** will give the host and `art ui` one shared current-job id.
-- **#205** will add the editor chat panel (an Agent SDK session with `art-mcp`, and an API-key fallback).
+- **#288** will give the host and `artie ui` one shared current-job id.
+- **#205** will add the editor chat panel (an Agent SDK session with `artie-mcp`, and an API-key fallback).
 - **#147** will add the inline chat-panel UI for knowledge-artifact suggestions, in that panel. It carries
   the deferred UI for #21, #129 and #133, all of which shipped API-only.
-- **#331** will give `art ui` one place to edit each item's facts and preferences (a Facts | Preferences
+- **#331** will give `artie ui` one place to edit each item's facts and preferences (a Facts | Preferences
   lens and an item inspector), and a page for page rules.
 - **#344** will budget the bullet picker in lines, using the harness's line accounting.
 - **#345** will hand the bullets a user keeps for a job to the host, as a preference and not a gate.

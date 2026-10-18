@@ -32,7 +32,7 @@ const toc = Object.values(S);
   <Callout title="New to MCP?">
     <p>
       MCP (Model Context Protocol) is how a coding agent such as Claude Code or Codex plugs into
-      outside tools. The ARTie plugin sets up an MCP server named <code>art</code> for you, and
+      outside tools. The ARTie plugin sets up an MCP server named <code>artie</code> for you, and
       your agent calls its tools for you. You never call them yourself.
     </p>
   </Callout>
@@ -52,7 +52,7 @@ const toc = Object.values(S);
       <a href="https://docs.astral.sh/uv/getting-started/installation/" rel="noopener">uv</a> is
       a Python tool runner. ARTie runs through <code>uvx</code>, which comes with uv, so you do
       not install Python yourself. You can skip this step: if uv is missing, ARTie's setup
-      (<code>/art:setup</code> in Claude Code, <code>$art-setup</code> in Codex) notices, asks
+      (<code>/artie:setup</code> in Claude Code, <code>$artie-setup</code> in Codex) notices, asks
       you, and runs uv's official installer for you. To install it yourself, the official page
       has the installer for each system, the same lines as these:
     </p>
@@ -93,7 +93,7 @@ const toc = Object.values(S);
     <CommandBlock label="In Claude Code" lines={block("claude-plugin")} />
     <p>
       The first adds ARTie's plugin catalog. The second installs the plugin, which registers
-      the MCP server, the <code>/art:*</code> commands and the hooks in one step.
+      the MCP server, the <code>/artie:*</code> commands and the hooks in one step.
     </p>
     <p>
       The first start downloads ARTie and takes longer than later ones. It needs the network
@@ -101,17 +101,17 @@ const toc = Object.values(S);
     </p>
     <h3>No uv yet? Run the setup</h3>
     <p>
-      Run <code>/art:setup</code>. If ARTie's tools don't answer, it finds out why before
+      Run <code>/artie:setup</code>. If ARTie's tools don't answer, it finds out why before
       anything else. When uv is missing it names uv's official installer and waits for your
-      yes, then offers to install the <code>art</code> command from the same release the plugin
-      runs, which also puts <code>art</code> on your <code>PATH</code>. Nothing is installed
+      yes, then offers to install the <code>artie</code> command from the same release the plugin
+      runs, which also puts <code>artie</code> on your <code>PATH</code>. Nothing is installed
       without your say-so; if you decline, it prints the line to run yourself.
     </p>
     <p>
       Then restart ARTie once, the way the setup tells you: type <code>/mcp</code> and reconnect
-      the <code>art</code> server (or start Claude Code again from a new terminal), or quit and
-      reopen the desktop app. Run <code>/art:setup</code> again and it carries on with your
-      resume. In Codex, <code>$art-setup</code> does the same, and you restart Codex.
+      the <code>artie</code> server (or start Claude Code again from a new terminal), or quit and
+      reopen the desktop app. Run <code>/artie:setup</code> again and it carries on with your
+      resume. In Codex, <code>$artie-setup</code> does the same, and you restart Codex.
     </p>
   </DocSection>
 
@@ -140,7 +140,7 @@ const toc = Object.values(S);
     <h3>Approving writes</h3>
     <p>
       ARTie's write tools (the ones that save to your resume library or render a file) ask for
-      approval under Codex's default policy. Approve them, or choose to always allow the <code>art</code> server.
+      approval under Codex's default policy. Approve them, or choose to always allow the <code>artie</code> server.
     </p>
   </DocSection>
 
@@ -159,13 +159,13 @@ const toc = Object.values(S);
     </p>
     <Callout title="What you give up">
       <p>
-        A by-hand registration gives your agent ARTie's tools only. The <code>/art:*</code> commands,
+        A by-hand registration gives your agent ARTie's tools only. The <code>/artie:*</code> commands,
         the skills that teach the agent the workflow, and the hooks come with the plugin.
       </p>
     </Callout>
     <p>
-      The install runs <code>art mcp</code>, which is the same server as <code>art-mcp</code>.
-      Use <code>art mcp</code>: a machine's Application Control policy may block one executable
+      The install runs <code>artie mcp</code>, which is the same server as <code>artie-mcp</code>.
+      Use <code>artie mcp</code>: a machine's Application Control policy may block one executable
       and not the other.
     </p>
   </DocSection>
@@ -178,14 +178,14 @@ const toc = Object.values(S);
     <ol class="steps">
       <li>
         <strong>See that the server is connected.</strong> In Claude Code, type <code>/mcp</code> and
-        find the entry for <code>art</code>. In Codex, ask the agent in the next step.
+        find the entry for <code>artie</code>. In Codex, ask the agent in the next step.
       </li>
       <li>
         <strong>Ask the agent for ARTie's tools.</strong> Say: "List the ART tools you can use."
         The answer should include <code>art_briefing</code>, <code>open_job</code>, <code>execute_plan</code> and <code>render</code>.
       </li>
       <li>
-        <strong>Claude Code only: run a read-only command.</strong> <code>/art:prefs</code> shows
+        <strong>Claude Code only: run a read-only command.</strong> <code>/artie:prefs</code> shows
         your saved preferences. On a fresh install it has none, and that is a good result: it
         means the agent reached ARTie.
       </li>
@@ -213,8 +213,8 @@ const toc = Object.values(S);
       also reads private ones. Run whichever you want; you can run the other later.
     </p>
     <p>
-      <code>/art:setup</code> puts the <code>art</code> command on your <code>PATH</code>. If
-      your terminal says it doesn't know <code>art</code>, run the same lines through
+      <code>/artie:setup</code> puts the <code>artie</code> command on your <code>PATH</code>. If
+      your terminal says it doesn't know <code>artie</code>, run the same lines through
       <code>uvx</code>:
     </p>
     <CommandBlock label="In a terminal" lines={block("github-login-uvx")} />
@@ -238,7 +238,7 @@ const toc = Object.values(S);
     <dl>
       <dt><code>[ui]</code></dt>
       <dd>
-        <code>art ui</code>, a local editor where you adjust a tailored resume by hand. The
+        <code>artie ui</code>, a local editor where you adjust a tailored resume by hand. The
         plugin's install already includes it.
       </dd>
       <dt><code>[pdf]</code></dt>
@@ -251,10 +251,10 @@ const toc = Object.values(S);
       install is deliberately light: no torch, no model clients.
     </p>
 
-    <h3>The local editor: art ui</h3>
+    <h3>The local editor: artie ui</h3>
     <p>
       The release ships with the editor built in, so you need no checkout, Node or <code>npm</code>.
-      Fill in the job's id (your agent can tell you, or run <code>/art:open</code> in Claude
+      Fill in the job's id (your agent can tell you, or run <code>/artie:open</code> in Claude
       Code and it prints this line for you):
     </p>
     <CommandBlock label="In a terminal" lines={block("art-ui")} />
@@ -298,8 +298,8 @@ const toc = Object.values(S);
       already cached, a small piece of text goes to <code>api.typesafe.ai</code>: the bullet or
       message in question and the posting requirements it is checked against, never your whole
       resume or the whole posting. To be certain nothing is sent, leave the key unset or set <code>ART_JEV_MODE=off</code>.
-      To see whether ARTie can see a key, run the check command from above with <code>art jev
-      status</code> in place of <code>art --list</code>.
+      To see whether ARTie can see a key, run the check command from above with <code>artie jev
+      status</code> in place of <code>artie --list</code>.
     </p>
     <p>
       The full list of what is sent is in <a href={`${REPO}/blob/main/INSTALL.md`} rel="noopener">INSTALL.md</a>.
@@ -343,8 +343,8 @@ const toc = Object.values(S);
 
     <h3>Windows: Application Control blocks an executable</h3>
     <p>
-      If a policy on your machine blocks <code>art-mcp.exe</code>, the plugin is unaffected,
-      because it runs <code>art mcp</code>. If you registered the server by hand, use <code>art
+      If a policy on your machine blocks <code>artie-mcp.exe</code>, the plugin is unaffected,
+      because it runs <code>artie mcp</code>. If you registered the server by hand, use <code>artie
       mcp</code> as in <a href="#other-clients">Other MCP clients</a>.
     </p>
 

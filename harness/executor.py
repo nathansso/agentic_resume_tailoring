@@ -22,7 +22,7 @@
    violation means nothing commits; the host gets the violations and cut hints.
 5. **Commit.** A `source=host` tree node carrying the program, the metric
    vectors and provenance, materialized into the job's current result so the
-   web app and `art ui` show it.
+   web app and `artie ui` show it.
 
 Deterministic: the same program over the same store and render cache returns
 the same result, byte for byte, apart from the new node's id. Every program is
@@ -697,7 +697,7 @@ def _finalize(content: Dict, program: Dict, ctx: Context, kg: _KG,
             where = where.split(" :: ", 1)[0]
             if where in ("education", "achievements", "skills", "summary"):
                 hint = (f"{where} is not a plan node: remove or correct the item that mentions "
-                        f"{term!r} in the knowledge graph (upsert_items, or art ui), or ask the user "
+                        f"{term!r} in the knowledge graph (upsert_items, or artie ui), or ask the user "
                         "whether the rule should change")
             else:
                 hint = f"revise {where} so it no longer mentions {term!r}"

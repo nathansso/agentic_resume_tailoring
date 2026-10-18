@@ -87,8 +87,8 @@ def bootstrap(database_url: Optional[str], user_id: Optional[str],
     Returns `(user_id or None, writes_allowed)`.
 
     The user is `--user-id` / `ART_MCP_USER_ID`, else the pointer file in the
-    data dir read through `get_active_profile()`. With `prepare` (the `art-mcp`
-    and `art` entry points), a local SQLite store is created and migrated
+    data dir read through `get_active_profile()`. With `prepare` (the `artie-mcp`
+    and `artie` entry points), a local SQLite store is created and migrated
     first, and an unbound one gets the default profile, so a clean install
     answers tools instead of `no_user`. Without it nothing here writes.
 

@@ -1,5 +1,5 @@
 ---
-name: art-tailor
+name: artie-tailor
 description: Tailor the user's resume to a job posting with ART. Use when the user shares a job posting or link and wants their resume tailored, or asks to re-tailor, cut, or rework a resume for a specific role. Reads their knowledge graph, drafts a plan, waits for their approval, then executes and renders a one-page PDF.
 ---
 
@@ -9,7 +9,7 @@ ART holds the user's facts (the knowledge graph), their pinned preferences, and 
 tailored version. You do the reading and writing. ART checks each change and commits
 it. Every fact you put on the page must come from an ART tool result. **Never invent a
 metric, date, employer, tool or outcome.** If the user needs something the graph
-doesn't hold, ask them, and store it with `upsert_items` first (see the `art-setup`
+doesn't hold, ask them, and store it with `upsert_items` first (see the `artie-setup`
 skill).
 
 The tools named below are the ART MCP server's tools.
@@ -78,10 +78,10 @@ The tools named below are the ART MCP server's tools.
   record lists its `projects`; an achievement's `project` is what it was won for.
 - `get_item` also lists the item's `variants`: wording the user approved for that
   experience or project. Approved wording beats regenerated wording (see step 4).
-- If the user wants their GitHub repos considered, have them run `art github login` in their
+- If the user wants their GitHub repos considered, have them run `artie github login` in their
   own terminal (`--private` for private repos; the tool's `not_logged_in` error repeats it).
-  If `art` is not on their PATH, the same command is
-  `uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl" art github login`.
+  If `artie` is not on their PATH, the same command is
+  `uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie github login`.
   Then call `list_github_repos`. Read the repos
   worth reading, clone one only after they agree, and store what you learn with
   `upsert_items` (`source: github:<repo>`) before you cite it; a repo is not evidence until
@@ -259,7 +259,7 @@ Call `execute_plan({program})`. Read the result:
   with the job id filled in:
 
   ```
-  uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl" art ui --job <job_id>
+  uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie ui --job <job_id>
   ```
 
   Their saves come back to you: through the prompt hook if it's installed, and

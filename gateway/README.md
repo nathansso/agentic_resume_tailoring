@@ -1,6 +1,6 @@
 # ARTie LinkedIn gateway
 
-A small hosted service that fetches a public LinkedIn profile through Bright Data on ART's own key, so a user gives ART a LinkedIn URL and never needs a key. Issue #354. The client is the harness tool in #355; the GitHub token comes from `art github login` (#353).
+A small hosted service that fetches a public LinkedIn profile through Bright Data on ART's own key, so a user gives ART a LinkedIn URL and never needs a key. Issue #354. The client is the harness tool in #355; the GitHub token comes from `artie github login` (#353).
 
 It deploys as its own Vercel project (`artie-gateway`), apart from `site/`, so the landing site stays static. It uses the Python runtime and the standard library only: no `requirements.txt`, no import from the rest of the repo.
 

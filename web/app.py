@@ -25,12 +25,12 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     def _startup() -> None:
         ensure_app_dirs()
-        # A read-only `art ui` (remote Postgres without --allow-writes) must not
+        # A read-only `artie ui` (remote Postgres without --allow-writes) must not
         # attempt the schema DDL and backfill that init_db runs (#204).
         if not local_mode.read_only():
             init_db()
 
-    # `art ui` (#204): no login, so guard Host and cross-origin writes instead.
+    # `artie ui` (#204): no login, so guard Host and cross-origin writes instead.
     if local_mode.enabled():
         local_mode.install(app)
 

@@ -1,5 +1,5 @@
 {
-  "name": "art",
+  "name": "artie",
   "description": "ART, the agentic resume-tailoring toolkit, as a Claude Code plugin.",
   "owner": {
     "name": "Nathaniel Oliver",
@@ -7,7 +7,7 @@
   },
   "plugins": [
     {
-      "name": "art",
+      "name": "artie",
       "source": "./plugin",
       "description": "Tailor your resume to a job posting from your own knowledge graph, with model-free tools over MCP."
     }

@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   frontend-lock:
-    # The Dockerfile and the `art ui` build both run `npm ci`, which refuses a
+    # The Dockerfile and the `artie ui` build both run `npm ci`, which refuses a
     # package-lock.json that has drifted from package.json (#219). Check it
     # here so drift fails the PR instead of the deploy. Node 24 bundles npm 11,
     # the version the Dockerfile uses; npm 10 writes optional deps differently.
@@ -61,8 +61,8 @@ jobs:
 
   package:
     # The #194 acceptance test: build the wheel the way a release does (editor
-    # first, so `art ui` ships), install it with no extras into a venv that
-    # holds nothing else, and drive `art-mcp` over stdio as a host would. The
+    # first, so `artie ui` ships), install it with no extras into a venv that
+    # holds nothing else, and drive `artie-mcp` over stdio as a host would. The
     # smoke script also fails if torch or an LLM client is importable.
     name: package (uvx art-mcp)
     runs-on: ubuntu-latest
@@ -102,7 +102,8 @@ jobs:
           uv pip install --python /tmp/clean/bin/python dist/*.whl
           cd /tmp
           /tmp/clean/bin/python "$GITHUB_WORKSPACE/scripts/smoke_art_mcp.py"
-          ART_DATA_DIR=/tmp/art-list /tmp/clean/bin/art --list > /dev/null
+          ART_DATA_DIR=/tmp/art-list /tmp/clean/bin/artie --list > /dev/null
+          test ! -e /tmp/clean/bin/art    # renamed to artie (#395)
 
   test:
     name: tests (${{ matrix.engine }})

@@ -469,7 +469,7 @@ async def discard_tex(job_id: str, user: User = Depends(get_current_user)):
 def _known_layout_targets(content: dict) -> tuple[set, set, dict]:
     """Sections, skill names, and item->bullets this content actually has."""
     # `agents.checks` is model-free; `agents.tailor` pulls LangChain, which an
-    # `art ui` install (the model-free `[ui]` extra) does not have.
+    # `artie ui` install (the model-free `[ui]` extra) does not have.
     from agents.checks import expected_sections
 
     sections = set(expected_sections(content or {}))
@@ -635,7 +635,7 @@ def _parse_cursor(value: str | None) -> int | None:
 @router.get("/{job_id}/events")
 async def job_events(job_id: str, request: Request, since: str | None = None,
                      user: User = Depends(get_current_user)):
-    """Server-sent events for this job's tailoring tree (`art ui`, #204).
+    """Server-sent events for this job's tailoring tree (`artie ui`, #204).
 
     Each event is `event: tree`, `id: <event_id>`, data
     `{event_id, kind, node_id, source}`. Resume with `?since=<cursor>` or the

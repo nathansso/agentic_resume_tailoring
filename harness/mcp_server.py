@@ -1,13 +1,13 @@
-"""`art-mcp`: the stdio MCP server over the harness tool contract (#189, #191).
+"""`artie-mcp`: the stdio MCP server over the harness tool contract (#189, #191).
 
-Installed, it is the `art-mcp` script (#194):
+Installed, it is the `artie-mcp` script (#194, renamed in #395):
 
-    claude mcp add art -- uvx art-mcp
+    claude mcp add artie -- uvx --from art-mcp artie-mcp
 
 From a checkout, run `python -m harness.mcp_server` from the repo root, or the
 script by absolute path from anywhere (the repo root is put on `sys.path`):
 
-    claude mcp add art -- <repo>/.venv/Scripts/python.exe <repo>/harness/mcp_server.py
+    claude mcp add artie -- <repo>/.venv/Scripts/python.exe <repo>/harness/mcp_server.py
 
 On start, a local SQLite store is created and migrated if needed, and an
 unbound one gets the default profile (`harness.runtime.bootstrap(prepare=True)`).
@@ -40,7 +40,7 @@ from harness.runtime import bootstrap, force_read_only, resolve_database_url  # 
 
 TOOL_NAMES = tuple(t.name for t in TOOLS)
 
-log = logging.getLogger("art-mcp")
+log = logging.getLogger("artie-mcp")
 
 
 def _adapter(spec: ToolSpec, user_id, allow_writes: bool = True):
@@ -76,7 +76,7 @@ def build_server(user_id=None, allow_writes: bool = True):
     from mcp.types import ToolAnnotations
 
     server = MCPServer(
-        name="art",
+        name="artie",
         version=CONTRACT_VERSION,
         instructions=(
             "ART's knowledge graph. Call art_briefing first and honour its pins verbatim; "
@@ -99,7 +99,7 @@ def build_server(user_id=None, allow_writes: bool = True):
 
 
 def main(argv=None) -> None:
-    parser = argparse.ArgumentParser(prog="art-mcp", description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(prog="artie-mcp", description=__doc__.splitlines()[0])
     parser.add_argument("--database-url", help="DB URL, or 'dotenv' to use .env's DATABASE_URL")
     parser.add_argument("--user-id", help="ART user id (default: ~/.art pointer file)")
     parser.add_argument("--allow-writes", action="store_true",
@@ -107,7 +107,7 @@ def main(argv=None) -> None:
     args = parser.parse_args(argv)
 
     logging.basicConfig(stream=sys.stderr, level=logging.INFO,
-                        format="art-mcp %(levelname)s %(message)s")
+                        format="artie-mcp %(levelname)s %(message)s")
     user_id, writes = bootstrap(args.database_url, args.user_id, args.allow_writes, prepare=True)
     import os
     scheme = os.environ["DATABASE_URL"].split(":", 1)[0]

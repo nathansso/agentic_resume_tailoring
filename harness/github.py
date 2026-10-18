@@ -1,6 +1,6 @@
 """The GitHub client (#353): device-flow login, the token store, and the repo list.
 
-`art github login` signs the user in with GitHub's **device flow**, which needs
+`artie github login` signs the user in with GitHub's **device flow**, which needs
 only a public client ID: no secret, no server, no redirect. The token it returns
 is kept in one place, `resolve_token()`, which the repo list uses today and the
 LinkedIn gateway client (#355) uses to identify the user to #354.
@@ -362,21 +362,21 @@ class GitHubClient:
 # ── the tool ─────────────────────────────────────────────────────────────────
 
 def login_command(private: bool = False) -> str:
-    """The command a user runs to sign in. `/art:setup` puts `art` on PATH with
+    """The command a user runs to sign in. `/artie:setup` puts `artie` on PATH with
     `uv tool install` (#385), so this is the short form; `login_fallback` is the rest."""
-    return "art github login" + (" --private" if private else "")
+    return "artie github login" + (" --private" if private else "")
 
 
 def login_fallback(private: bool = False) -> str:
-    """The same command through the pinned wheel, for a machine where `art` is not on PATH
+    """The same command through the pinned wheel, for a machine where `artie` is not on PATH
     (a plugin install that never ran the setup's install step) (#369)."""
     from harness.hooks import UVX  # the one pin; imported here to keep this module light
     return f"{UVX} {login_command(private)}"
 
 
 def login_hint(private: bool = False) -> str:
-    """The short command, then the long one for when `art` is not on PATH."""
-    return f"{login_command(private)} (if `art` is not on PATH: {login_fallback(private)})"
+    """The short command, then the long one for when `artie` is not on PATH."""
+    return f"{login_command(private)} (if `artie` is not on PATH: {login_fallback(private)})"
 
 
 def _error(code: str, message: str) -> Dict[str, Any]:
@@ -418,7 +418,7 @@ def list_github_repos(page: int = 1, per_page: int = 20, include_private: bool =
             return _error("not_logged_in", "Not signed in to GitHub. Have the user run this in "
                                            f"their own terminal: {login_command()} (or "
                                            f"{login_command(private=True)} to include private "
-                                           "repos), then call this again. If `art` is not on "
+                                           "repos), then call this again. If `artie` is not on "
                                            f"their PATH, the same command is: {login_fallback()}")
         client = GitHubClient(token)
     per_page = max(1, min(int(per_page), MAX_PER_PAGE))

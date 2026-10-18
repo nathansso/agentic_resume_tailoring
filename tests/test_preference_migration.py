@@ -478,7 +478,7 @@ def test_bootstrap_survives_a_migration_that_fails(kg, tmp_path, monkeypatch):
 
 
 def test_importing_the_module_does_not_build_an_engine():
-    """`art migrate` reaches this module before `bootstrap` pins DATABASE_URL: a module-level import
+    """`artie migrate` reaches this module before `bootstrap` pins DATABASE_URL: a module-level import
     of `services` would connect to whatever `.env` holds (found by running it against a store copy)."""
     import subprocess
     import sys

@@ -30,13 +30,13 @@ const steps = [
     label: "Read you",
     title: "Your agent reads what you've done",
     body: "Claude Code or Codex reads your resume, your LinkedIn export and your project folders, and saves what you've done to a knowledge graph on your computer. Tell it to fix anything it got wrong.",
-    points: ["Built once with /art:setup", "Stays on your machine"],
+    points: ["Built once with /artie:setup", "Stays on your machine"],
   },
   {
     icon: "target",
     label: "Read the job",
     title: "Then it reads the posting",
-    body: "Give /art:tailor a job posting or a link. Your agent pulls out what the role requires, and ART saves the job so you can come back to it.",
+    body: "Give /artie:tailor a job posting or a link. Your agent pulls out what the role requires, and ART saves the job so you can come back to it.",
     points: ["Paste text or a URL", "One saved job per application"],
   },
   {
@@ -57,7 +57,7 @@ const steps = [
     icon: "printer",
     label: "Render",
     title: "It renders a LaTeX PDF",
-    body: "ART writes the .tex and the PDF to a folder on your computer. Every version is kept: /art:history lists them and /art:revert brings an old one back.",
+    body: "ART writes the .tex and the PDF to a folder on your computer. Every version is kept: /artie:history lists them and /artie:revert brings an old one back.",
     points: ["Tectonic is downloaded on first use", "No LaTeX to install"],
   },
 ];
@@ -281,7 +281,7 @@ const faqs = [
           Every rewritten bullet has to cite something in your knowledge graph, and ARTie rejects a plan that names something your graph doesn't hold. Numbers and names are checked against the cited evidence, and anything you've banned stays off the page.
         </p>
         <p class="mt-4 leading-relaxed text-muted-foreground">
-          You approve the plan before it's applied, and you can edit any line yourself in the local editor (<code class="rounded bg-muted px-1.5 py-0.5 font-mono text-sm">art ui</code>). Read the PDF before you send it, as you would with any resume.
+          You approve the plan before it's applied, and you can edit any line yourself in the local editor (<code class="rounded bg-muted px-1.5 py-0.5 font-mono text-sm">artie ui</code>). Read the PDF before you send it, as you would with any resume.
         </p>
       </div>
 

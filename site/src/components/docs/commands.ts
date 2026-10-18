@@ -21,7 +21,7 @@ export function block(id: keyof typeof data.blocks): string[] {
   return entry.lines.map((line) => expand(typeof line === "string" ? line : line.text));
 }
 
-/** The six /art:* commands, as plugin/README.md lists them. */
+/** The six /artie:* commands, as plugin/README.md lists them. */
 export const slashCommands: { command: string; what: string }[] = data.slash;
 
 /** The release wheel URL and the pinned spec, for prose that names them. */

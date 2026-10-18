@@ -278,7 +278,7 @@ def backfill_unplaced_if_due(user_id, *, client=None, today: Optional[str] = Non
     """Run `classify_unplaced_skills` once per user and key per day, when Jev is available and
     the user has skills the table cannot place. Returns its stats, or None when it did not
     run. A profile ingested before a `TYPESAFE_API_KEY` was configured, or with Jev off, is
-    thereby placed the next time a long-lived `art` process starts with a key.
+    thereby placed the next time a long-lived `artie` process starts with a key.
 
     The marker is written before the request, so two processes starting together, or a request
     that fails, do not retry until tomorrow or a different key. Never raises."""
@@ -301,7 +301,7 @@ def backfill_unplaced_if_due(user_id, *, client=None, today: Optional[str] = Non
 def start_backfill_in_background(user_id, **kwargs):
     """`backfill_unplaced_if_due` on a daemon thread, so startup never waits on it (the
     database read, the request) and never fails because of it. Returns the thread, or None
-    with no user. Called by `art mcp` and `art ui`, the long-lived processes, once their store
+    with no user. Called by `artie mcp` and `artie ui`, the long-lived processes, once their store
     is writable local SQLite (a remote database is backfilled by the script)."""
     if user_id is None:
         return None

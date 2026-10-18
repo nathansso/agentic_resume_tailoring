@@ -182,12 +182,12 @@ def test_a_first_plan_builds_on_the_kg_and_commits_a_host_node(isolated_engine, 
     assert node["provenance"]["program_id"] == out["program_id"]
     from harness import policy
     assert node["provenance"]["policy_version"] == policy.version() != policy.UNVERSIONED   # #241
-    with Session(isolated_engine) as s:     # materialized for the web app / art ui
+    with Session(isolated_engine) as s:     # materialized for the web app / artie ui
         result = s.exec(select(UserJobResult).where(
             UserJobResult.job_id == UUID(node["job_id"]))).one()
         assert result.tailored_resume_content == node["content"]
         assert {e["title"] for e in node["content"]["experiences"]} >= {"Machine Learning Engineer"}
-        # ...and the job says it has a resume, so art ui shows the editor for it (#276).
+        # ...and the job says it has a resume, so artie ui shows the editor for it (#276).
         assert s.get(JobDescription, UUID(job_id)).status == "tailored"
 
 
@@ -535,7 +535,7 @@ def test_an_empty_plan_on_a_parent_commits_nothing_and_a_dry_run_says_so(isolate
 
 
 def test_an_empty_first_plan_still_commits_the_baseline_copy(isolated_engine, env):
-    """The art-tailor skill commits a job's track baseline with `parent: null, nodes: []`."""
+    """The artie-tailor skill commits a job's track baseline with `parent: null, nodes: []`."""
     from harness import tree
 
     uid, job_id, _ = env
@@ -1230,7 +1230,7 @@ def _cut_index(bullet_id):
 
 
 def _nodes_from_hints(hints, because="user:fit the one-page budget"):
-    """What the art-tailor skill tells a host to do: each hint carries its op; the cut bullets
+    """What the artie-tailor skill tells a host to do: each hint carries its op; the cut bullets
     of one item share one `delete_bullet` node (a plan holds one node per item)."""
     cuts, nodes = {}, []
     for h in hints:

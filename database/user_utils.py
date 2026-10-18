@@ -154,7 +154,7 @@ def create_profile(
 
 # The profile `get_or_create_cli_user` makes on a first run. It is a placeholder, not
 # an account: seed data and stale pointers have ended up on it (#195), so
-# `art import` refuses to bind it.
+# `artie import` refuses to bind it.
 CLI_DEFAULT_NAME = "Default User"
 CLI_DEFAULT_EMAIL = "user@example.com"
 

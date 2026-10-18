@@ -1,8 +1,8 @@
-"""`art export` and `art import`: back up a profile, restore it, migrate it once (#195).
+"""`artie export` and `artie import`: back up a profile, restore it, migrate it once (#195).
 
-    art export --out backup.zip [--user-id <uuid>] [--include-cache]
-    art import backup.zip [--user-id <uuid>] [--merge | --replace --confirm-replace]
-    art import --from-supabase --source-url <postgres url> --user-id <uuid>
+    artie export --out backup.zip [--user-id <uuid>] [--include-cache]
+    artie import backup.zip [--user-id <uuid>] [--merge | --replace --confirm-replace]
+    artie import --from-supabase --source-url <postgres url> --user-id <uuid>
 
 **The bundle** is one zip (`docs/harness.md` § 12 lists what is in it):
 
@@ -1083,7 +1083,7 @@ def _jsonable(tables: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[Dict[st
 # ── the commands ─────────────────────────────────────────────────────────────
 
 def _parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="art", description="Back up and migrate an ART profile.")
+    p = argparse.ArgumentParser(prog="artie", description="Back up and migrate an ART profile.")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     e = sub.add_parser("export", help="Write the profile and applications/ to a zip bundle.")

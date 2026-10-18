@@ -8,8 +8,8 @@ What it does, in order:
 
 1. Creates a scratch `ART_DATA_DIR` (a new temp directory, never `~/.art`), strips every
    database, key and `ART_*` variable from the environment, and turns Jev off.
-2. Drives the real `art` tools through `python -m harness.entry <tool> --args <json>`, the
-   same entry point the `art` script runs, in the order `/art:setup` and `/art:tailor` take:
+2. Drives the real `artie` tools through `python -m harness.entry <tool> --args <json>`, the
+   same entry point the `artie` script runs, in the order `/artie:setup` and `/artie:tailor` take:
    a sample resume and the READMEs of three repos that are not on it go into the graph, a
    sample posting is opened, version 1 is the student's usual one-page resume (the resume's
    content, the repo projects left off, nothing reworded), and the tailoring plan is run
@@ -89,7 +89,7 @@ def clean_env(data_dir: Path, engine_dir: Path | None) -> dict:
 
 
 class Art:
-    """Calls the real tools through the `art` entry point, in a scratch data directory."""
+    """Calls the real tools through the `artie` entry point, in a scratch data directory."""
 
     def __init__(self, data_dir: Path, env: dict):
         self.data_dir, self.env, self.raw = data_dir, env, []
@@ -103,7 +103,7 @@ class Art:
         try:
             result = json.loads(proc.stdout)
         except ValueError:
-            raise SystemExit(f"`art {tool}` printed no JSON (exit {proc.returncode}):\n"
+            raise SystemExit(f"`artie {tool}` printed no JSON (exit {proc.returncode}):\n"
                              f"{proc.stdout[-600:]}\n{proc.stderr[-1200:]}")
         self.raw.append({"tool": tool, "args": args, "result": result,
                          "seconds": round(time.monotonic() - started, 2)})

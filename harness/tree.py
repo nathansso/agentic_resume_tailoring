@@ -15,7 +15,7 @@ Three properties the rest of the harness relies on:
 - **Sibling nodes share a parent, therefore a context.** `sibling_pairs` hands
   #174 its preference pairs with no annotation.
 - **The change feed is persistent.** `TreeEvent.event_id` is a cursor; the
-  writers and `art ui` (#204) are different processes.
+  writers and `artie ui` (#204) are different processes.
 
 Every function takes `user_id` explicitly and scopes every query by it.
 Model-free by rule (`tests/test_harness_boundary.py`).

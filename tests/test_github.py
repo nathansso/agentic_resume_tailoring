@@ -1,4 +1,4 @@
-"""`art github login|logout|status` and `list_github_repos` (issue #353).
+"""`artie github login|logout|status` and `list_github_repos` (issue #353).
 
 GitHub is a fake transport throughout: nothing here reaches the network, a keychain or
 a real token. The fake speaks the parts of the device flow and REST API the client
@@ -372,7 +372,7 @@ def test_private_repos_need_the_repo_scope(fake_github):
     fake_github.repos = [_repo(1), _repo(2, private=True), _repo(3)]
     out = invoke("list_github_repos", None, {})
     assert [r["name"] for r in out["repos"]] == ["repo1", "repo3"]
-    assert out["private_included"] is False and "art github login --private" in out["note"]
+    assert out["private_included"] is False and "artie github login --private" in out["note"]
     assert {parse_qs(urlsplit(c[1]).query)["visibility"][0]
             for c in fake_github.calls if urlsplit(c[1]).path == "/user/repos"} == {"public"}
 
@@ -402,7 +402,7 @@ def test_a_private_repo_the_server_returns_anyway_is_dropped_without_the_scope(
 
 def test_signed_out_the_tool_says_to_log_in_and_names_no_token(capsys):
     out = invoke("list_github_repos", None, {})
-    assert out["error"]["code"] == "not_logged_in" and "art github login" in out["error"]["message"]
+    assert out["error"]["code"] == "not_logged_in" and "artie github login" in out["error"]["message"]
     assert out["repos"] == []
 
 
@@ -492,29 +492,29 @@ def test_the_stub_keyring_is_what_the_suite_sees_by_default():
 
 
 def test_login_hints_say_art_github_login_and_fall_back_to_the_pinned_uvx_form():
-    """`/art:setup` puts `art` on PATH (#385), so every login hint says `art github login`,
-    and keeps the pinned uvx form (#369) for a machine where `art` is not on PATH: the tool's
+    """`/artie:setup` puts `artie` on PATH (#385), so every login hint says `artie github login`,
+    and keeps the pinned uvx form (#369) for a machine where `artie` is not on PATH: the tool's
     errors and note, the plugin's own docs, and INSTALL.md."""
     from pathlib import Path
     from harness.github import login_command, login_fallback, login_hint
     from harness.hooks import SOURCE
-    assert login_command() == "art github login"
-    assert login_command(private=True) == "art github login --private"
-    assert login_fallback() == f'uvx --python 3.12 --from "{SOURCE}" art github login'
+    assert login_command() == "artie github login"
+    assert login_command(private=True) == "artie github login --private"
+    assert login_fallback() == f'uvx --python 3.12 --from "{SOURCE}" artie github login'
     assert login_fallback(private=True) == \
-        f'uvx --python 3.12 --from "{SOURCE}" art github login --private'
+        f'uvx --python 3.12 --from "{SOURCE}" artie github login --private'
     hint = login_hint()
-    assert hint.startswith("art github login ") and hint.index(login_fallback()) > 0
+    assert hint.startswith("artie github login ") and hint.index(login_fallback()) > 0
 
     root = Path(__file__).resolve().parent.parent
     plugin = root / "plugin"
     for doc in [plugin / "README.md", plugin / "commands" / "setup.md",
-                plugin / "skills" / "art-setup" / "SKILL.md",
-                plugin / "skills" / "art-tailor" / "SKILL.md", root / "INSTALL.md"]:
+                plugin / "skills" / "artie-setup" / "SKILL.md",
+                plugin / "skills" / "artie-tailor" / "SKILL.md", root / "INSTALL.md"]:
         text = doc.read_text(encoding="utf-8")
-        short = text.find("`art github login`") if "`art github login`" in text \
-            else text.find("\nart github login")
-        assert short != -1, f"{doc.name} does not give the short `art github login`"
+        short = text.find("`artie github login`") if "`artie github login`" in text \
+            else text.find("\nartie github login")
+        assert short != -1, f"{doc.name} does not give the short `artie github login`"
         assert login_fallback() in text, f"{doc.name} lost the uvx fallback"
         assert short < text.index(login_fallback()), f"{doc.name}: the short form comes first"
 
@@ -523,6 +523,6 @@ def test_signed_out_error_gives_the_short_command_then_the_fallback():
     out = invoke("list_github_repos", None, {})
     msg = out["error"]["message"]
     from harness.github import login_fallback
-    assert msg.index("art github login") < msg.index("art github login --private") \
+    assert msg.index("artie github login") < msg.index("artie github login --private") \
         < msg.index(login_fallback())
     assert "not on their PATH" in msg

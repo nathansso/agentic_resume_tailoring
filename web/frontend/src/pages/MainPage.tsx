@@ -21,7 +21,7 @@ function githubConnectRedirect(): boolean {
   return new URLSearchParams(window.location.search).get("github_connected") === "1";
 }
 
-// `art ui --job <id>` (#204) opens the editor on /?job=<id>.
+// `artie ui --job <id>` (#204) opens the editor on /?job=<id>.
 function jobFromUrl(): string | null {
   return new URLSearchParams(window.location.search).get("job");
 }
@@ -221,7 +221,7 @@ export function MainPage() {
               >
                 Profile
               </button>
-              {/* `art ui` (#204) has no session to end. */}
+              {/* `artie ui` (#204) has no session to end. */}
               {!localMode && (
                 <>
                   <div className="my-1 border-t border-border" />
