@@ -1,0 +1,726 @@
+{
+ "issue": 397,
+ "date": "2026-10-18",
+ "writer_model": "claude-sonnet-5-5",
+ "judge_model": "claude-opus-5-5",
+ "samples_per_cell": 1,
+ "configured_repos": 10,
+ "scored_repos": 5,
+ "repos": {
+  "owner_and_contributed": 4,
+  "public": 1,
+  "with_reference_facts": 4
+ },
+ "rungs": {
+  "1": "README",
+  "2": "+ metadata & deps",
+  "3": "+ file tree",
+  "4": "+ authorship",
+  "5": "+ symbol map (tree-sitter)",
+  "5r": "+ symbol map (regex)",
+  "6": "+ sampled files",
+  "7": "full code"
+ },
+ "aggregate": {
+  "1": {
+   "repos": 5,
+   "accuracy": 0.9669467787114846,
+   "unsupported": 0.0,
+   "contradicted": 0.03305322128851541,
+   "contradicted_fact": 0.009523809523809523,
+   "contradicted_role": 0.023529411764705882,
+   "input_tokens": 3450,
+   "claims": 21.2,
+   "input_tokens_max": 5343,
+   "role_claim_error": 0.07692307692307693,
+   "coverage": 0.6877840909090909,
+   "coverage_repos": 4,
+   "unsupported_vs_full": -0.006060606060606061,
+   "unsupported_vs_full_ci": [
+    -0.01818181818181818,
+    0.0
+   ],
+   "coverage_vs_full": -0.07613636363636367,
+   "coverage_vs_full_ci": [
+    -0.1875,
+    0.022727272727272707
+   ],
+   "coverage_ratio": 0.9003346969133507,
+   "passes": false
+  },
+  "2": {
+   "repos": 5,
+   "accuracy": 0.9769230769230769,
+   "unsupported": 0.0,
+   "contradicted": 0.023076923076923078,
+   "contradicted_fact": 0.0,
+   "contradicted_role": 0.023076923076923078,
+   "input_tokens": 4513.6,
+   "claims": 23.8,
+   "input_tokens_max": 8615,
+   "role_claim_error": 0.07142857142857142,
+   "coverage": 0.6889204545454546,
+   "coverage_repos": 4,
+   "unsupported_vs_full": -0.006060606060606061,
+   "unsupported_vs_full_ci": [
+    -0.01818181818181818,
+    0.0
+   ],
+   "coverage_vs_full": -0.07500000000000001,
+   "coverage_vs_full_ci": [
+    -0.15000000000000002,
+    0.0
+   ],
+   "coverage_ratio": 0.901822238750465,
+   "passes": false
+  },
+  "3": {
+   "repos": 5,
+   "accuracy": 0.9556935817805383,
+   "unsupported": 0.0,
+   "contradicted": 0.0443064182194617,
+   "contradicted_fact": 0.009523809523809523,
+   "contradicted_role": 0.034782608695652174,
+   "input_tokens": 5684.4,
+   "claims": 19.8,
+   "input_tokens_max": 12670,
+   "role_claim_error": 0.13333333333333333,
+   "coverage": 0.725284090909091,
+   "coverage_repos": 4,
+   "unsupported_vs_full": -0.006060606060606061,
+   "unsupported_vs_full_ci": [
+    -0.01818181818181818,
+    0.0
+   ],
+   "coverage_vs_full": -0.03863636363636366,
+   "coverage_vs_full_ci": [
+    -0.11250000000000002,
+    0.022727272727272707
+   ],
+   "coverage_ratio": 0.9494235775381183,
+   "passes": false
+  },
+  "4": {
+   "repos": 5,
+   "accuracy": 0.950952380952381,
+   "unsupported": 0.01,
+   "contradicted": 0.039047619047619046,
+   "contradicted_fact": 0.009523809523809523,
+   "contradicted_role": 0.029523809523809525,
+   "input_tokens": 7674.4,
+   "claims": 21.6,
+   "input_tokens_max": 16224,
+   "role_claim_error": 0.08163265306122448,
+   "coverage": 0.7014204545454545,
+   "coverage_repos": 4,
+   "unsupported_vs_full": 0.00393939393939394,
+   "unsupported_vs_full_ci": [
+    0.0,
+    0.01181818181818182
+   ],
+   "coverage_vs_full": -0.06250000000000003,
+   "coverage_vs_full_ci": [
+    -0.12500000000000006,
+    0.0
+   ],
+   "coverage_ratio": 0.9181851989587207,
+   "passes": false
+  },
+  "5": {
+   "repos": 5,
+   "accuracy": 0.9826086956521739,
+   "unsupported": 0.0,
+   "contradicted": 0.017391304347826087,
+   "contradicted_fact": 0.0,
+   "contradicted_role": 0.017391304347826087,
+   "input_tokens": 9582,
+   "claims": 20,
+   "input_tokens_max": 19741,
+   "role_claim_error": 0.03773584905660377,
+   "coverage": 0.6857954545454545,
+   "coverage_repos": 4,
+   "unsupported_vs_full": -0.006060606060606061,
+   "unsupported_vs_full_ci": [
+    -0.01818181818181818,
+    0.0
+   ],
+   "coverage_vs_full": -0.078125,
+   "coverage_vs_full_ci": [
+    -0.12812500000000002,
+    -0.024999999999999994
+   ],
+   "coverage_ratio": 0.8977314986984009,
+   "passes": false
+  },
+  "5r": {
+   "repos": 5,
+   "accuracy": 0.9363076923076923,
+   "unsupported": 0.008,
+   "contradicted": 0.055692307692307694,
+   "contradicted_fact": 0.007692307692307693,
+   "contradicted_role": 0.048,
+   "input_tokens": 9578.8,
+   "claims": 24.4,
+   "input_tokens_max": 19748,
+   "role_claim_error": 0.1346153846153846,
+   "coverage": 0.7284090909090909,
+   "coverage_repos": 4,
+   "unsupported_vs_full": 0.0019393939393939393,
+   "unsupported_vs_full_ci": [
+    -0.01818181818181818,
+    0.024
+   ],
+   "coverage_vs_full": -0.035511363636363674,
+   "coverage_vs_full_ci": [
+    -0.12500000000000006,
+    0.05397727272727271
+   ],
+   "coverage_ratio": 0.9535143175901822,
+   "passes": true
+  },
+  "6": {
+   "repos": 5,
+   "accuracy": 0.9565217391304348,
+   "unsupported": 0.0,
+   "contradicted": 0.043478260869565216,
+   "contradicted_fact": 0.0,
+   "contradicted_role": 0.043478260869565216,
+   "input_tokens": 18769.8,
+   "claims": 22.2,
+   "input_tokens_max": 34198,
+   "role_claim_error": 0.10204081632653061,
+   "coverage": 0.7275568181818182,
+   "coverage_repos": 4,
+   "unsupported_vs_full": -0.006060606060606061,
+   "unsupported_vs_full_ci": [
+    -0.01818181818181818,
+    0.0
+   ],
+   "coverage_vs_full": -0.036363636363636404,
+   "coverage_vs_full_ci": [
+    -0.050000000000000044,
+    -0.012500000000000011
+   ],
+   "coverage_ratio": 0.9523986612123466,
+   "passes": true
+  },
+  "7": {
+   "repos": 5,
+   "accuracy": 0.9636363636363636,
+   "unsupported": 0.006060606060606061,
+   "contradicted": 0.030303030303030304,
+   "contradicted_fact": 0.0,
+   "contradicted_role": 0.030303030303030304,
+   "input_tokens": 90823,
+   "claims": 24.6,
+   "input_tokens_max": 202909,
+   "role_claim_error": 0.1,
+   "coverage": 0.7639204545454545,
+   "coverage_repos": 4,
+   "unsupported_vs_full": 0.0,
+   "unsupported_vs_full_ci": [
+    0.0,
+    0.0
+   ],
+   "coverage_vs_full": 0.0,
+   "coverage_vs_full_ci": [
+    0.0,
+    0.0
+   ],
+   "coverage_ratio": 1.0,
+   "passes": true
+  }
+ },
+ "aggregate_by_group": {
+  "owner_and_contributed": {
+   "1": {
+    "repos": 4,
+    "accuracy": 0.9880952380952381,
+    "unsupported": 0.0,
+    "contradicted": 0.011904761904761904,
+    "contradicted_fact": 0.011904761904761904,
+    "contradicted_role": 0.0,
+    "input_tokens": 3717.75,
+    "claims": 22.25,
+    "input_tokens_max": 5343,
+    "role_claim_error": 0.0,
+    "coverage": 0.6877840909090909,
+    "coverage_repos": 4,
+    "unsupported_vs_full": 0.0,
+    "unsupported_vs_full_ci": [
+     0.0,
+     0.0
+    ],
+    "coverage_vs_full": -0.07613636363636367,
+    "coverage_vs_full_ci": [
+     -0.1875,
+     0.022727272727272707
+    ],
+    "coverage_ratio": 0.9003346969133507,
+    "passes": false
+   },
+   "2": {
+    "repos": 4,
+    "accuracy": 1.0,
+    "unsupported": 0.0,
+    "contradicted": 0.0,
+    "contradicted_fact": 0.0,
+    "contradicted_role": 0.0,
+    "input_tokens": 4807.75,
+    "claims": 23.25,
+    "input_tokens_max": 8615,
+    "role_claim_error": 0.0,
+    "coverage": 0.6889204545454546,
+    "coverage_repos": 4,
+    "unsupported_vs_full": 0.0,
+    "unsupported_vs_full_ci": [
+     0.0,
+     0.0
+    ],
+    "coverage_vs_full": -0.07500000000000001,
+    "coverage_vs_full_ci": [
+     -0.15000000000000002,
+     0.0
+    ],
+    "coverage_ratio": 0.901822238750465,
+    "passes": false
+   },
+   "3": {
+    "repos": 4,
+    "accuracy": 0.9880952380952381,
+    "unsupported": 0.0,
+    "contradicted": 0.011904761904761904,
+    "contradicted_fact": 0.011904761904761904,
+    "contradicted_role": 0.0,
+    "input_tokens": 6199.25,
+    "claims": 19,
+    "input_tokens_max": 12670,
+    "role_claim_error": 0.0,
+    "coverage": 0.725284090909091,
+    "coverage_repos": 4,
+    "unsupported_vs_full": 0.0,
+    "unsupported_vs_full_ci": [
+     0.0,
+     0.0
+    ],
+    "coverage_vs_full": -0.03863636363636366,
+    "coverage_vs_full_ci": [
+     -0.11250000000000002,
+     0.022727272727272707
+    ],
+    "coverage_ratio": 0.9494235775381183,
+    "passes": false
+   },
+   "4": {
+    "repos": 4,
+    "accuracy": 0.9761904761904762,
+    "unsupported": 0.0,
+    "contradicted": 0.023809523809523808,
+    "contradicted_fact": 0.011904761904761904,
+    "contradicted_role": 0.011904761904761904,
+    "input_tokens": 8170.75,
+    "claims": 22,
+    "input_tokens_max": 16224,
+    "role_claim_error": 0.02857142857142857,
+    "coverage": 0.7014204545454545,
+    "coverage_repos": 4,
+    "unsupported_vs_full": 0.0,
+    "unsupported_vs_full_ci": [
+     0.0,
+     0.0
+    ],
+    "coverage_vs_full": -0.06250000000000003,
+    "coverage_vs_full_ci": [
+     -0.12500000000000006,
+     0.0
+    ],
+    "coverage_ratio": 0.9181851989587207,
+    "passes": false
+   },
+   "5": {
+    "repos": 4,
+    "accuracy": 1.0,
+    "unsupported": 0.0,
+    "contradicted": 0.0,
+    "contradicted_fact": 0.0,
+    "contradicted_role": 0.0,
+    "input_tokens": 10238.25,
+    "claims": 19.25,
+    "input_tokens_max": 19741,
+    "role_claim_error": 0.0,
+    "coverage": 0.6857954545454545,
+    "coverage_repos": 4,
+    "unsupported_vs_full": 0.0,
+    "unsupported_vs_full_ci": [
+     0.0,
+     0.0
+    ],
+    "coverage_vs_full": -0.078125,
+    "coverage_vs_full_ci": [
+     -0.12812500000000002,
+     -0.024999999999999994
+    ],
+    "coverage_ratio": 0.8977314986984009,
+    "passes": false
+   },
+   "5r": {
+    "repos": 4,
+    "accuracy": 0.9803846153846154,
+    "unsupported": 0.01,
+    "contradicted": 0.009615384615384616,
+    "contradicted_fact": 0.009615384615384616,
+    "contradicted_role": 0.0,
+    "input_tokens": 10237,
+    "claims": 24.25,
+    "input_tokens_max": 19748,
+    "role_claim_error": 0.02702702702702703,
+    "coverage": 0.7284090909090909,
+    "coverage_repos": 4,
+    "unsupported_vs_full": 0.01,
+    "unsupported_vs_full_ci": [
+     0.0,
+     0.03
+    ],
+    "coverage_vs_full": -0.035511363636363674,
+    "coverage_vs_full_ci": [
+     -0.12500000000000006,
+     0.05397727272727271
+    ],
+    "coverage_ratio": 0.9535143175901822,
+    "passes": true
+   },
+   "6": {
+    "repos": 4,
+    "accuracy": 1.0,
+    "unsupported": 0.0,
+    "contradicted": 0.0,
+    "contradicted_fact": 0.0,
+    "contradicted_role": 0.0,
+    "input_tokens": 20333.75,
+    "claims": 22,
+    "input_tokens_max": 34198,
+    "role_claim_error": 0.0,
+    "coverage": 0.7275568181818182,
+    "coverage_repos": 4,
+    "unsupported_vs_full": 0.0,
+    "unsupported_vs_full_ci": [
+     0.0,
+     0.0
+    ],
+    "coverage_vs_full": -0.036363636363636404,
+    "coverage_vs_full_ci": [
+     -0.050000000000000044,
+     -0.012500000000000011
+    ],
+    "coverage_ratio": 0.9523986612123466,
+    "passes": true
+   },
+   "7": {
+    "repos": 4,
+    "accuracy": 1.0,
+    "unsupported": 0.0,
+    "contradicted": 0.0,
+    "contradicted_fact": 0.0,
+    "contradicted_role": 0.0,
+    "input_tokens": 108901.25,
+    "claims": 22.5,
+    "input_tokens_max": 202909,
+    "role_claim_error": 0.0,
+    "coverage": 0.7639204545454545,
+    "coverage_repos": 4,
+    "unsupported_vs_full": 0.0,
+    "unsupported_vs_full_ci": [
+     0.0,
+     0.0
+    ],
+    "coverage_vs_full": 0.0,
+    "coverage_vs_full_ci": [
+     0.0,
+     0.0
+    ],
+    "coverage_ratio": 1.0,
+    "passes": true
+   }
+  },
+  "public": {
+   "1": {
+    "repos": 1,
+    "accuracy": 0.8823529411764706,
+    "unsupported": 0.0,
+    "contradicted": 0.11764705882352941,
+    "contradicted_fact": 0.0,
+    "contradicted_role": 0.11764705882352941,
+    "input_tokens": 2379,
+    "claims": 17,
+    "input_tokens_max": 2379,
+    "role_claim_error": 0.2,
+    "unsupported_vs_full": -0.030303030303030304,
+    "unsupported_vs_full_ci": [
+     -0.030303030303030304,
+     -0.030303030303030304
+    ],
+    "passes": false
+   },
+   "2": {
+    "repos": 1,
+    "accuracy": 0.8846153846153846,
+    "unsupported": 0.0,
+    "contradicted": 0.11538461538461539,
+    "contradicted_fact": 0.0,
+    "contradicted_role": 0.11538461538461539,
+    "input_tokens": 3337,
+    "claims": 26,
+    "input_tokens_max": 3337,
+    "role_claim_error": 0.17647058823529413,
+    "unsupported_vs_full": -0.030303030303030304,
+    "unsupported_vs_full_ci": [
+     -0.030303030303030304,
+     -0.030303030303030304
+    ],
+    "passes": false
+   },
+   "3": {
+    "repos": 1,
+    "accuracy": 0.8260869565217391,
+    "unsupported": 0.0,
+    "contradicted": 0.17391304347826086,
+    "contradicted_fact": 0.0,
+    "contradicted_role": 0.17391304347826086,
+    "input_tokens": 3625,
+    "claims": 23,
+    "input_tokens_max": 3625,
+    "role_claim_error": 0.26666666666666666,
+    "unsupported_vs_full": -0.030303030303030304,
+    "unsupported_vs_full_ci": [
+     -0.030303030303030304,
+     -0.030303030303030304
+    ],
+    "passes": false
+   },
+   "4": {
+    "repos": 1,
+    "accuracy": 0.85,
+    "unsupported": 0.05,
+    "contradicted": 0.1,
+    "contradicted_fact": 0.0,
+    "contradicted_role": 0.1,
+    "input_tokens": 5689,
+    "claims": 20,
+    "input_tokens_max": 5689,
+    "role_claim_error": 0.21428571428571427,
+    "unsupported_vs_full": 0.0196969696969697,
+    "unsupported_vs_full_ci": [
+     0.0196969696969697,
+     0.0196969696969697
+    ],
+    "passes": false
+   },
+   "5": {
+    "repos": 1,
+    "accuracy": 0.9130434782608695,
+    "unsupported": 0.0,
+    "contradicted": 0.08695652173913043,
+    "contradicted_fact": 0.0,
+    "contradicted_role": 0.08695652173913043,
+    "input_tokens": 6957,
+    "claims": 23,
+    "input_tokens_max": 6957,
+    "role_claim_error": 0.15384615384615385,
+    "unsupported_vs_full": -0.030303030303030304,
+    "unsupported_vs_full_ci": [
+     -0.030303030303030304,
+     -0.030303030303030304
+    ],
+    "passes": false
+   },
+   "5r": {
+    "repos": 1,
+    "accuracy": 0.76,
+    "unsupported": 0.0,
+    "contradicted": 0.24,
+    "contradicted_fact": 0.0,
+    "contradicted_role": 0.24,
+    "input_tokens": 6946,
+    "claims": 25,
+    "input_tokens_max": 6946,
+    "role_claim_error": 0.4,
+    "unsupported_vs_full": -0.030303030303030304,
+    "unsupported_vs_full_ci": [
+     -0.030303030303030304,
+     -0.030303030303030304
+    ],
+    "passes": false
+   },
+   "6": {
+    "repos": 1,
+    "accuracy": 0.782608695652174,
+    "unsupported": 0.0,
+    "contradicted": 0.21739130434782608,
+    "contradicted_fact": 0.0,
+    "contradicted_role": 0.21739130434782608,
+    "input_tokens": 12514,
+    "claims": 23,
+    "input_tokens_max": 12514,
+    "role_claim_error": 0.2777777777777778,
+    "unsupported_vs_full": -0.030303030303030304,
+    "unsupported_vs_full_ci": [
+     -0.030303030303030304,
+     -0.030303030303030304
+    ],
+    "passes": false
+   },
+   "7": {
+    "repos": 1,
+    "accuracy": 0.8181818181818182,
+    "unsupported": 0.030303030303030304,
+    "contradicted": 0.15151515151515152,
+    "contradicted_fact": 0.0,
+    "contradicted_role": 0.15151515151515152,
+    "input_tokens": 18510,
+    "claims": 33,
+    "input_tokens_max": 18510,
+    "role_claim_error": 0.23076923076923078,
+    "unsupported_vs_full": 0.0,
+    "unsupported_vs_full_ci": [
+     0.0,
+     0.0
+    ],
+    "passes": false
+   }
+  }
+ },
+ "public_per_repo": {
+  "kennethreitz/records": {
+   "group": "public",
+   "rungs": {
+    "1": {
+     "claims": 17,
+     "accuracy": 0.8823529411764706,
+     "unsupported": 0.0,
+     "contradicted": 0.11764705882352941,
+     "contradicted_fact": 0.0,
+     "contradicted_role": 0.11764705882352941,
+     "role_claims": 10,
+     "role_bad": 2,
+     "input_tokens": 2379
+    },
+    "2": {
+     "claims": 26,
+     "accuracy": 0.8846153846153846,
+     "unsupported": 0.0,
+     "contradicted": 0.11538461538461539,
+     "contradicted_fact": 0.0,
+     "contradicted_role": 0.11538461538461539,
+     "role_claims": 17,
+     "role_bad": 3,
+     "input_tokens": 3337
+    },
+    "3": {
+     "claims": 23,
+     "accuracy": 0.8260869565217391,
+     "unsupported": 0.0,
+     "contradicted": 0.17391304347826086,
+     "contradicted_fact": 0.0,
+     "contradicted_role": 0.17391304347826086,
+     "role_claims": 15,
+     "role_bad": 4,
+     "input_tokens": 3625
+    },
+    "4": {
+     "claims": 20,
+     "accuracy": 0.85,
+     "unsupported": 0.05,
+     "contradicted": 0.1,
+     "contradicted_fact": 0.0,
+     "contradicted_role": 0.1,
+     "role_claims": 14,
+     "role_bad": 3,
+     "input_tokens": 5689
+    },
+    "5": {
+     "claims": 23,
+     "accuracy": 0.9130434782608695,
+     "unsupported": 0.0,
+     "contradicted": 0.08695652173913043,
+     "contradicted_fact": 0.0,
+     "contradicted_role": 0.08695652173913043,
+     "role_claims": 13,
+     "role_bad": 2,
+     "input_tokens": 6957
+    },
+    "5r": {
+     "claims": 25,
+     "accuracy": 0.76,
+     "unsupported": 0.0,
+     "contradicted": 0.24,
+     "contradicted_fact": 0.0,
+     "contradicted_role": 0.24,
+     "role_claims": 15,
+     "role_bad": 6,
+     "input_tokens": 6946
+    },
+    "6": {
+     "claims": 23,
+     "accuracy": 0.782608695652174,
+     "unsupported": 0.0,
+     "contradicted": 0.21739130434782608,
+     "contradicted_fact": 0.0,
+     "contradicted_role": 0.21739130434782608,
+     "role_claims": 18,
+     "role_bad": 5,
+     "input_tokens": 12514
+    },
+    "7": {
+     "claims": 33,
+     "accuracy": 0.8181818181818182,
+     "unsupported": 0.030303030303030304,
+     "contradicted": 0.15151515151515152,
+     "contradicted_fact": 0.0,
+     "contradicted_role": 0.15151515151515152,
+     "role_claims": 26,
+     "role_bad": 6,
+     "input_tokens": 18510
+    }
+   }
+  }
+ },
+ "judge_spotcheck": {
+  "checked": 20,
+  "agree": 16,
+  "rate": 0.8,
+  "agree_supported_vs_not": 18,
+  "judge_labels": {
+   "supported": 11,
+   "unsupported": 3,
+   "contradicted": 6
+  },
+  "drawn_from": [
+   "(owner/contributed)",
+   "kennethreitz/records"
+  ]
+ },
+ "spend_usd": 11.55,
+ "spend_by_model": {
+  "claude-opus-5-5": {
+   "calls": 73,
+   "usd": 9.24,
+   "input_tokens": 59572,
+   "output_tokens": 145671,
+   "cache_read": 4630178,
+   "cache_write": 1031492
+  },
+  "claude-sonnet-5-5": {
+   "calls": 48,
+   "usd": 2.32,
+   "input_tokens": 1051393,
+   "output_tokens": 21641,
+   "cache_read": 0,
+   "cache_write": 0
+  }
+ },
+ "symbol_backends": {
+  "tree-sitter": 5
+ },
+ "full_code_truncated": 1,
+ "judge_evidence_truncated": 1
+}
