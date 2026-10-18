@@ -98,8 +98,11 @@ def test_bare_artie_prints_the_help_led_by_what_to_ask_the_agent(argv, capsys, m
     assert out == entry.HELP
     ask = out.index("Things to ask your agent")
     assert ask < out.index("artie ui") < out.index("artie --list")
-    for phrase in ("Tailor my resume", "bullet", "knowledge graph", "Show my jobs", "Downloads"):
+    for phrase in ("Tailor my resume", "bullet", "knowledge graph", "Show my jobs",
+                   "previous version"):
         assert phrase in out[ask:out.index("artie ui")], phrase
+    # Saving to a named folder is #394, not built yet: the help must not promise it.
+    assert "Downloads" not in out
     for command in ("artie ui", "artie github login|status|logout", "artie export",
                     "artie import", "artie --list"):
         assert command in out, command
