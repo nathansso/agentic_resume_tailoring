@@ -47,7 +47,7 @@ from typing import Any, Dict, List, Optional, Sequence
 from uuid import UUID
 
 # `services` (and everything that imports it) is imported inside the functions, never here: the
-# `art migrate` command reaches this module before `harness.runtime.bootstrap` has pinned
+# `artie migrate` command reaches this module before `harness.runtime.bootstrap` has pinned
 # `DATABASE_URL`, and a module-level import would build the engine against whatever `.env` holds.
 
 log = logging.getLogger(__name__)
@@ -329,7 +329,7 @@ def run_once(user_id: UUID, database_url: str) -> Optional[Dict[str, Any]]:
     startup, and a failed migration leaves every row as it was.
 
     The marker is a small JSON file beside the store. It is written only when the user held
-    preference rows, so a store that gets its rows later (`art import` of an older backup) is still
+    preference rows, so a store that gets its rows later (`artie import` of an older backup) is still
     migrated at its next start; running the CLI by hand always works whatever the marker says."""
     try:
         path = _marker_path(database_url)
@@ -355,10 +355,10 @@ def run_once(user_id: UUID, database_url: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-# ── `art migrate preferences` ────────────────────────────────────────────────
+# ── `artie migrate preferences` ────────────────────────────────────────────────
 
 def _parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="art migrate", description="Migrate stored data to a newer model.")
+    p = argparse.ArgumentParser(prog="artie migrate", description="Migrate stored data to a newer model.")
     p.add_argument("what", choices=["preferences"],
                    help="preferences: anchor old preference rows and convert section rows to rules")
     p.add_argument("--dry-run", action="store_true", help="report what would change; write nothing")

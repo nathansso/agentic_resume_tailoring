@@ -6,4 +6,4 @@ invariants.
 """
 
 # Recorded in every tailoring-tree node's provenance (#196).
-ART_VERSION = "0.1.2"
+ART_VERSION = "0.2.0"

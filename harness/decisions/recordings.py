@@ -1,8 +1,8 @@
-"""Recordings: the Jev cache as a file, and the `art jev` commands (#193).
+"""Recordings: the Jev cache as a file, and the `artie jev` commands (#193).
 
-    art jev status                        # mode, key present (never the key), rows by point
-    art jev export recordings.json        # every cached decision, versioned JSON
-    art jev import recordings.json        # merge them into this store
+    artie jev status                        # mode, key present (never the key), rows by point
+    artie jev export recordings.json        # every cached decision, versioned JSON
+    artie jev import recordings.json        # merge them into this store
 
 A recording is the cache's rows and nothing else: the question, the answer,
 the model version that answered, the usage share, the point and the time,
@@ -11,7 +11,7 @@ stored. A question can still carry text, though: the variant choice lists the
 user's approved bullets as its options, the memory gate lists the names of the
 user's skills, roles and projects, and a coverage question holds the posting's
 requirement text. So a recording made from a real store is personal data, and
-`art jev export` says so on stderr; only recordings made from synthetic
+`artie jev export` says so on stderr; only recordings made from synthetic
 profiles (`eval/*_labels/`) are fit to commit as test fixtures.
 
 Import keeps rows already in the store unless `--overwrite`. A recording whose
@@ -107,7 +107,7 @@ def status() -> Dict[str, Any]:
 
 
 def _parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="art jev", description="The Jev decision cache.")
+    p = argparse.ArgumentParser(prog="artie jev", description="The Jev decision cache.")
     p.add_argument("--database-url", help="DB URL, or 'dotenv' to use .env's DATABASE_URL")
     p.add_argument("--allow-writes", action="store_true",
                    help="Let import write to a remote database.")
@@ -126,7 +126,7 @@ def _emit(doc) -> None:
     sys.stdout.write(json.dumps(doc, sort_keys=True, ensure_ascii=False) + "\n")
 
 
-EXPORT_NOTICE = ("art jev export: this file holds the questions ART asked, which can name your "
+EXPORT_NOTICE = ("artie jev export: this file holds the questions ART asked, which can name your "
                  "approved bullets, skills, roles and projects and the posting's requirements. "
                  "Treat it as personal data.")
 

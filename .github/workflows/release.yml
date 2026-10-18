@@ -82,7 +82,7 @@ jobs:
           uv pip install --python /tmp/clean/bin/python dist/*.whl
           cd /tmp
           /tmp/clean/bin/python "$GITHUB_WORKSPACE/scripts/smoke_art_mcp.py"
-          /tmp/clean/bin/art mcp --help > /dev/null
+          /tmp/clean/bin/artie mcp --help > /dev/null
 
       - uses: actions/upload-artifact@v4
         with:

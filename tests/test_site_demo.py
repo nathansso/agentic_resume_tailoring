@@ -96,7 +96,7 @@ def test_transcript_is_well_formed():
 def test_the_run_follows_setup_then_posting_then_tailor_then_render():
     names = [e["name"] for e in T["events"] if e["type"] == "tool"]
     user = [e["text"] for e in T["events"] if e["type"] == "user"]
-    assert user[0].startswith("/art:setup") and user[1].startswith("/art:tailor")
+    assert user[0].startswith("/artie:setup") and user[1].startswith("/artie:tailor")
     for needed in ("upsert_items", "update_profile", "open_job", "execute_plan", "render"):
         assert needed in names, needed
     assert names.index("upsert_items") < names.index("open_job") < names.index("render")
@@ -111,7 +111,7 @@ def test_every_tool_in_the_transcript_is_in_the_real_contract():
 
 def test_every_slash_command_in_the_transcript_exists_in_the_plugin():
     plugin = {p.stem for p in (ROOT / "plugin" / "commands").glob("*.md")}
-    said = {m for e in T["events"] if e["type"] == "user" for m in re.findall(r"/art:([a-z]+)", e["text"])}
+    said = {m for e in T["events"] if e["type"] == "user" for m in re.findall(r"/artie:([a-z]+)", e["text"])}
     assert said and said <= plugin
 
 

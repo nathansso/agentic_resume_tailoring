@@ -7,33 +7,47 @@ https://artie-sand.vercel.app; this file is the full reference.
 
 ## The Claude Code plugin (#201)
 
-The simplest way to use ART is the plugin. It registers the MCP server, the `/art:*`
+The simplest way to use ART is the plugin. It registers the MCP server, the `/artie:*`
 commands and the hooks:
 
 ```
 /plugin marketplace add nathansso/agentic_resume_tailoring
-/plugin install art@art
+/plugin install artie@artie
 ```
 
-It needs `uv`, which `/art:setup` installs if it is missing (below). For PDFs, ART downloads a pinned Tectonic on first use (set `ART_NO_DOWNLOAD=1`
+It needs `uv`, which `/artie:setup` installs if it is missing (below). For PDFs, ART downloads a pinned Tectonic on first use (set `ART_NO_DOWNLOAD=1`
 to opt out). See [`plugin/README.md`](plugin/README.md).
 
-**No uv yet? Run `/art:setup` (#385).** When ART's tools don't answer, the setup checks for
+**No uv yet? Run `/artie:setup` (#385).** When ART's tools don't answer, the setup checks for
 `uv` (on PATH, or in `~/.local/bin`, `%USERPROFILE%\.local\bin` on Windows) and, with your
 yes to each command, runs uv's official installer and installs ART as a command:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh                                  # macOS, Linux
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"   # Windows
-uv tool install --python 3.12 "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl"
+uv tool install --python 3.12 "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl"
 uv tool update-shell
 ```
 
-`art` is then a real command. The plugin's server and hooks run `uvx --python 3.12`, the
+`artie` is then a real command. The plugin's server and hooks run `uvx --python 3.12`, the
 same Python as that install, so `uvx` starts from it without resolving it again, and a
-newer Python uv picks up later can't change that. Restart ART once: `/mcp` and reconnect `art` in the Claude Code terminal,
-quit and reopen the desktop app, or restart Codex. Then run `/art:setup` again; it carries on
-with your sources. Codex runs the same steps through the `$art-setup` skill.
+newer Python uv picks up later can't change that. Restart ART once: `/mcp` and reconnect `artie` in the Claude Code terminal,
+quit and reopen the desktop app, or restart Codex. Then run `/artie:setup` again; it carries on
+with your sources. Codex runs the same steps through the `$artie-setup` skill.
+
+**Upgrading from v0.1.x (`art`).** v0.2.0 renamed the command, the plugin and the commands
+from `art` to `artie` (#395), with no alias, so an old install does not carry over. Your data
+does: the store in `~/.art`, `ART_*` variables and the keychain entries keep their names.
+Remove the old command and plugin, then install as above:
+
+```
+uv tool uninstall art-mcp
+/plugin uninstall art@art
+/plugin marketplace remove art
+```
+
+In Codex, remove the `art@art` plugin and add `artie@artie` the same way. If you installed the
+hooks into `hooks.json` by hand, `artie hooks codex --write` replaces the old `art hook` lines.
 
 ## Codex (#203)
 
@@ -41,7 +55,7 @@ The same plugin works in Codex:
 
 ```bash
 codex plugin marketplace add nathansso/agentic_resume_tailoring
-codex plugin add art@art
+codex plugin add artie@artie
 ```
 
 Codex 0.131 and later load a plugin's hooks, so that is the whole install, plus trusting
@@ -49,7 +63,7 @@ the hooks with `/hooks` in Codex (it skips a plugin's hooks until you do). For a
 Codex, or Codex without the plugin, install them into your own `hooks.json` instead:
 
 ```bash
-uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl" art hooks codex --write
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie hooks codex --write
 ```
 
 With the plugin installed that command adds nothing and removes ART's own entries from
@@ -61,37 +75,37 @@ alone. See [`integrations/codex/README.md`](integrations/codex/README.md).
 
 The package is `art-mcp`. Its default install is model-free and light (no torch, no LLM
 clients); extras add `[embed]` (sentence-transformers), `[pdf]` (docling, pypdf,
-python-docx), `[ui]` (`art ui`, the local editor) and `[postgres]`. It is not on PyPI yet.
+python-docx), `[ui]` (`artie ui`, the local editor) and `[postgres]`. It is not on PyPI yet.
 Each release attaches its wheel, with the editor built in, to a GitHub Release, and the
 plugin pins that exact URL (`v<version>` is `ART_VERSION` in `harness/__init__.py`):
 
 ```bash
 # Register the MCP server with Claude Code
-claude mcp add art -- uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl" art mcp
+claude mcp add artie -- uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie mcp
 
 # The same tools as a JSON CLI
-uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl" art --list
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie --list
 ```
 
-`art mcp` and `art-mcp` run the same server; the plugin uses `art mcp` so it needs only the
-`art` entry point (a machine's Application Control policy may block one executable and not
+`artie mcp` and `artie-mcp` run the same server; the plugin uses `artie mcp` so it needs only the
+`artie` entry point (a machine's Application Control policy may block one executable and not
 the other).
 
 On first start it creates `~/.art/art.db` (or `$ART_DATA_DIR/art.db`) and a default
 profile.
 
-### The editor: `art ui` (#255)
+### The editor: `artie ui` (#255)
 
 The release wheel has the built editor in it, so no checkout, Node or `npm` is needed:
 
 ```bash
-uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl" art ui --job <job_id>
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie ui --job <job_id>
 ```
 
-It opens http://127.0.0.1:8765/. The plugin's `/art:open` prints this command for the
+It opens http://127.0.0.1:8765/. The plugin's `/artie:open` prints this command for the
 job you name. It needs the `[ui]` extra, which the pinned spec already has. An install
 straight from the repository (`uvx --from git+https://github.com/nathansso/agentic_resume_tailoring ...`)
-has no editor, because `web/static` is not committed; `art ui` says so and prints the
+has no editor, because `web/static` is not committed; `artie ui` says so and prints the
 command above.
 
 To build the editor yourself, see [Building from source](#building-from-source).
@@ -106,10 +120,10 @@ cd agentic_resume_tailoring
 npm --prefix web/frontend ci && npm --prefix web/frontend run build
 python -m web.local_ui                     # from source
 uv build                                   # dist/art_mcp-<version>-py3-none-any.whl
-uvx --from "dist/art_mcp-0.1.2-py3-none-any.whl[ui]" art ui
+uvx --from "dist/art_mcp-0.2.0-py3-none-any.whl[ui]" artie ui
 ```
 
-CI builds that wheel, installs it with no extras into an empty venv, and drives `art-mcp`
+CI builds that wheel, installs it with no extras into an empty venv, and drives `artie-mcp`
 over stdio (`scripts/smoke_art_mcp.py`). To register a checkout's server with Claude Code
 instead of the release wheel, see [`docs/harness.md`](docs/harness.md) § 15.
 
@@ -139,7 +153,7 @@ one before starting Claude Code or Codex, in PowerShell:
 ```
 
 `UV_CACHE_DIR` takes effect in newly started programs. If Application Control blocks
-`art-mcp.exe`, the plugin is unaffected, since it runs `art mcp`.
+`artie-mcp.exe`, the plugin is unaffected, since it runs `artie mcp`.
 
 ### Jev (optional): strengthen the checks
 
@@ -169,7 +183,7 @@ uvx --from keyring keyring set art-mcp typesafe-api-key
 ```
 
 The plugin's `uvx` command does not include `keyring`, so use the environment variable there. The
-key is never logged, stored in the database or put in an error message. `art jev status` shows
+key is never logged, stored in the database or put in an error message. `artie jev status` shows
 whether ART can see one (`"key": "set"`, never the key itself), the mode, and how many decisions are
 cached per point.
 
@@ -193,35 +207,35 @@ is set, then the fallback), `off` (never the cache or the network; always the fa
 nothing is sent, leave the key unset or set `ART_JEV_MODE=off`.
 
 **Recordings.** Answers are cached in your local database, so a repeated question costs nothing.
-`art jev` moves them between machines or into a test:
+`artie jev` moves them between machines or into a test:
 
 ```bash
-art jev status                       # mode, key set or not, cached decisions per point
-art jev export decisions.json        # every cached decision (questions and answers, never the state)
-art jev import decisions.json        # merge them in; --overwrite replaces rows already there
+artie jev status                       # mode, key set or not, cached decisions per point
+artie jev export decisions.json        # every cached decision (questions and answers, never the state)
+artie jev import decisions.json        # merge them in; --overwrite replaces rows already there
 ```
 
 A cached question can name text (the bullet choice lists your approved bullets, the memory gate your
 item names, a coverage question the posting's requirements), so treat an export from your own store
-as personal data; `art jev export` prints a notice to that effect on stderr. See
+as personal data; `artie jev export` prints a notice to that effect on stderr. See
 [`docs/harness.md`](docs/harness.md) § 4 and [`docs/architecture.md`](docs/architecture.md) § 8.3.
 
 ### Backup and migration (#195)
 
 ```bash
-art export --out ~/backups/art.zip                       # the profile + applications/, no secrets
-art import ~/backups/art.zip                             # into a store with no data for that user
-art import ~/backups/art.zip --merge                     # keep what is there, add the rest
-art import ~/backups/art.zip --replace --confirm-replace # delete that user's data first
+artie export --out ~/backups/art.zip                       # the profile + applications/, no secrets
+artie import ~/backups/art.zip                             # into a store with no data for that user
+artie import ~/backups/art.zip --merge                     # keep what is there, add the rest
+artie import ~/backups/art.zip --replace --confirm-replace # delete that user's data first
 ```
 
 A one-time migration from the hosted web app reads its Postgres database directly (needs
-the `[postgres]` extra, e.g. `uvx --from 'art-mcp[postgres]' art ...`):
+the `[postgres]` extra, e.g. `uvx --from 'art-mcp[postgres]' artie ...`):
 
 ```bash
 export ART_IMPORT_SOURCE_URL='postgresql://<user>:<password>@<host>:5432/postgres'
-art import --from-supabase --user-id <profile-id> --dry-run
-art import --from-supabase --user-id <profile-id> --set-active
+artie import --from-supabase --user-id <profile-id> --dry-run
+artie import --from-supabase --user-id <profile-id> --set-active
 ```
 
 `<profile-id>` is the `user_id` of the account's row in the web app's `user` table (not
@@ -236,35 +250,35 @@ account's profile, not the local fallback one (`user@example.com`), which import
 
 ### GitHub repos (optional, #353)
 
-`art github login` signs you in with GitHub's device flow, so ART can list your repos
+`artie github login` signs you in with GitHub's device flow, so ART can list your repos
 (`list_github_repos`) and your agent can pick which to read. You open a page and type a code;
 no password or secret passes through ART. Run it in your own terminal:
 
 ```bash
-art github login               # public repos (read:user)
-art github login --private     # also private repos (adds the repo scope)
-art github status              # who is signed in; never prints the token
-art github logout              # removes the stored token
+artie github login               # public repos (read:user)
+artie github login --private     # also private repos (adds the repo scope)
+artie github status              # who is signed in; never prints the token
+artie github logout              # removes the stored token
 ```
 
-`/art:setup` puts `art` on your PATH (`uv tool install`, above). If you have not run it, the
-plugin runs ART through `uvx`, which puts no `art` on your PATH, so run the same commands
+`/artie:setup` puts `artie` on your PATH (`uv tool install`, above). If you have not run it, the
+plugin runs ART through `uvx`, which puts no `artie` on your PATH, so run the same commands
 through `uvx`:
 
 ```bash
-uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl" art github login
-uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl" art github login --private
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie github login
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie github login --private
 ```
 
 The token goes to the OS keychain through the `keyring` package (service `art-mcp`,
 user `github-token`), else it is read from `ART_GITHUB_TOKEN`, which also takes a personal
-access token. It is never stored in the database, never in an `art export` bundle, and never
+access token. It is never stored in the database, never in an `artie export` bundle, and never
 logged. `keyring` ships with ART from v0.1.1; on a machine with no usable
-keychain backend (some headless Linux setups), `art github login` says so before it starts,
+keychain backend (some headless Linux setups), `artie github login` says so before it starts,
 and `ART_GITHUB_TOKEN` is the way in. Nothing about your repos is sent anywhere but your
 own agent: ART reads them from `api.github.com` with your token and hands the result to it.
 
-**Maintainer note: register the GitHub OAuth App (once).** `art github login` needs a client ID
+**Maintainer note: register the GitHub OAuth App (once).** `artie github login` needs a client ID
 and no client secret.
 
 1. GitHub, Settings, Developer settings, OAuth Apps, New OAuth App. Name it `ARTie`; the
@@ -273,5 +287,5 @@ and no client secret.
 2. On the App's page, tick **Enable Device Flow**, and save.
 3. Copy its **Client ID** (it is public; do not generate or keep a client secret for this).
 4. Put it in `DEFAULT_CLIENT_ID` in `harness/github.py` and ship a release. Until then
-   `ART_GITHUB_CLIENT_ID=<client id>` in the environment makes `art github login` work, and
+   `ART_GITHUB_CLIENT_ID=<client id>` in the environment makes `artie github login` work, and
    with neither set it fails naming this step.

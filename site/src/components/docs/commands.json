@@ -1,7 +1,7 @@
 {
   "_comment": "Every command the install and usage pages show. tests/test_site_docs.py checks each line against its `source` file (INSTALL.md, plugin/README.md or integrations/codex/README.md), so a command here cannot drift from the docs. {SOURCE} and {URL} are expanded by commands.ts; bump the version in `vars` when INSTALL.md bumps the pin.",
   "vars": {
-    "URL": "https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl",
+    "URL": "https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl",
     "SOURCE": "art-mcp[ui] @ {URL}"
   },
   "blocks": {
@@ -10,7 +10,7 @@
       "also": ["plugin/README.md"],
       "lines": [
         "/plugin marketplace add nathansso/agentic_resume_tailoring",
-        "/plugin install art@art"
+        "/plugin install artie@artie"
       ]
     },
     "codex-plugin": {
@@ -18,52 +18,52 @@
       "also": ["integrations/codex/README.md"],
       "lines": [
         "codex plugin marketplace add nathansso/agentic_resume_tailoring",
-        "codex plugin add art@art"
+        "codex plugin add artie@artie"
       ]
     },
     "codex-hooks": {
       "source": "INSTALL.md",
       "also": ["integrations/codex/README.md"],
       "lines": [
-        "uvx --python 3.12 --from \"{SOURCE}\" art hooks codex --write"
+        "uvx --python 3.12 --from \"{SOURCE}\" artie hooks codex --write"
       ]
     },
     "claude-mcp-add": {
       "source": "INSTALL.md",
       "lines": [
-        "claude mcp add art -- uvx --python 3.12 --from \"{SOURCE}\" art mcp"
+        "claude mcp add artie -- uvx --python 3.12 --from \"{SOURCE}\" artie mcp"
       ]
     },
     "codex-mcp-add": {
       "source": "integrations/codex/README.md",
       "lines": [
-        "codex mcp add art -- uvx --python 3.12 --from \"{SOURCE}\" art mcp"
+        "codex mcp add artie -- uvx --python 3.12 --from \"{SOURCE}\" artie mcp"
       ]
     },
     "list-tools": {
       "source": "INSTALL.md",
       "lines": [
-        "uvx --python 3.12 --from \"{SOURCE}\" art --list"
+        "uvx --python 3.12 --from \"{SOURCE}\" artie --list"
       ]
     },
     "art-ui": {
       "source": "INSTALL.md",
       "lines": [
-        "uvx --python 3.12 --from \"{SOURCE}\" art ui --job <job_id>"
+        "uvx --python 3.12 --from \"{SOURCE}\" artie ui --job <job_id>"
       ]
     },
     "github-login": {
       "source": "INSTALL.md",
       "lines": [
-        "art github login",
-        "art github login --private"
+        "artie github login",
+        "artie github login --private"
       ]
     },
     "github-login-uvx": {
       "source": "INSTALL.md",
       "lines": [
-        "uvx --python 3.12 --from \"{SOURCE}\" art github login",
-        "uvx --python 3.12 --from \"{SOURCE}\" art github login --private"
+        "uvx --python 3.12 --from \"{SOURCE}\" artie github login",
+        "uvx --python 3.12 --from \"{SOURCE}\" artie github login --private"
       ]
     },
     "uv-install-unix": {
@@ -105,61 +105,61 @@
         "[Environment]::SetEnvironmentVariable(\"UV_CACHE_DIR\", \"C:\\uvc\", \"User\")"
       ]
     },
-    "art-setup": {
+    "artie-setup": {
       "source": "plugin/README.md",
       "lines": [
-        "/art:setup [files]"
+        "/artie:setup [files]"
       ]
     },
-    "art-tailor": {
+    "artie-tailor": {
       "source": "plugin/README.md",
       "lines": [
-        "/art:tailor <posting or URL>"
+        "/artie:tailor <posting or URL>"
       ]
     }
   },
   "slash": [
     {
-      "command": "/art:setup [files]",
+      "command": "/artie:setup [files]",
       "source": "plugin/README.md",
       "what": "Build your knowledge graph from your resume, LinkedIn export and project folders, and set your header."
     },
     {
-      "command": "/art:tailor <posting or URL>",
+      "command": "/artie:tailor <posting or URL>",
       "source": "plugin/README.md",
       "what": "Plan a tailored resume, wait for your approval, commit it and render the PDF."
     },
     {
-      "command": "/art:open [job]",
+      "command": "/artie:open [job]",
       "source": "plugin/README.md",
-      "what": "Print the command that opens the local editor (art ui)."
+      "what": "Print the command that opens the local editor (artie ui)."
     },
     {
-      "command": "/art:history [job]",
+      "command": "/artie:history [job]",
       "source": "plugin/README.md",
       "what": "List every version and what changed."
     },
     {
-      "command": "/art:revert <job> [version]",
+      "command": "/artie:revert <job> [version]",
       "source": "plugin/README.md",
       "what": "Make an earlier version current again."
     },
     {
-      "command": "/art:prefs",
+      "command": "/artie:prefs",
       "source": "plugin/README.md",
       "what": "Show your pinned rules, preferences and job-scoped rules."
     }
   ],
   "inline": {
     "_comment": "Short commands and names the pages mention in running text. Each must appear verbatim in its source.",
-    "art jev status": "INSTALL.md",
+    "artie jev status": "INSTALL.md",
     "ART_JEV_MODE=off": "INSTALL.md",
     "TYPESAFE_API_KEY": "INSTALL.md",
     "ART_GITHUB_TOKEN": "INSTALL.md",
     "~/.art/art.db": "INSTALL.md",
     "/hooks": "INSTALL.md",
-    "$art-setup": "integrations/codex/README.md",
-    "$art-tailor": "integrations/codex/README.md",
+    "$artie-setup": "integrations/codex/README.md",
+    "$artie-tailor": "integrations/codex/README.md",
     "~/.art/applications/<Company>_<Role>/": "plugin/README.md",
     "[embed]": "INSTALL.md",
     "[pdf]": "INSTALL.md",

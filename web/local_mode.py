@@ -1,4 +1,4 @@
-"""`art ui` local mode (issue #204): the web app as a single-user local editor.
+"""`artie ui` local mode (issue #204): the web app as a single-user local editor.
 
 The launcher (`python -m web.local_ui`) sets `ART_LOCAL_UI=1` and binds the
 local user in `ART_LOCAL_UI_USER_ID` before it imports `web.app`. Nothing else

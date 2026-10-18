@@ -801,7 +801,7 @@ class TreeEvent(SQLModel, table=True):
     """Append-only change feed. `event_id` is the cursor a subscriber resumes from.
 
     Persistent rather than in-memory because the writers (MCP server, web app,
-    CLI) and the reader (`art ui`, #204) are separate processes.
+    CLI) and the reader (`artie ui`, #204) are separate processes.
     """
     event_id: Optional[int] = Field(default=None, primary_key=True)
     user_id: UUID = Field(foreign_key="user.user_id", index=True)

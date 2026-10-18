@@ -49,7 +49,7 @@ def test_the_default_install_carries_nothing_heavy():
 
 
 def test_keyring_ships_with_the_default_install():
-    """`art github login` keeps its token in the OS keychain. The plugin pins `art-mcp[ui]`, so
+    """`artie github login` keeps its token in the OS keychain. The plugin pins `art-mcp[ui]`, so
     keyring has to be a default dependency for the plugin path to work out of the box (#353)."""
     assert "keyring" in {_name(r) for r in PROJECT["dependencies"]}
 
@@ -73,10 +73,57 @@ def test_the_scripts_resolve_to_callables():
     import importlib
 
     scripts = PROJECT["scripts"]
-    assert set(scripts) == {"art", "art-mcp"}
+    # #395: the commands are `artie` and `artie-mcp`, with no `art` alias; the distribution
+    # (and so the wheel's file name and the release URL) stays `art-mcp`.
+    assert scripts == {"artie": "harness.entry:main", "artie-mcp": "harness.mcp_server:main"}
+    assert PROJECT["name"] == "art-mcp"
     for target in scripts.values():
         module, func = target.split(":")
         assert callable(getattr(importlib.import_module(module), func))
+
+
+_PLUMBING = ("mcp", "hook", "hooks", "jev", "migrate")
+
+
+@pytest.mark.parametrize("argv", [[], ["--help"], ["-h"]])
+def test_bare_artie_prints_the_help_led_by_what_to_ask_the_agent(argv, capsys, monkeypatch):
+    """#395: bare `artie` (or `--help`) is for a person, not the tool contract: example requests
+    to give the agent come first, then the commands a user runs; the plumbing is not listed."""
+    from harness import entry
+
+    monkeypatch.setattr("harness.runtime.bootstrap",
+                        lambda *a, **k: pytest.fail("help must not open a store"))
+    assert entry.main(argv) == 0
+    out = capsys.readouterr().out
+    assert out == entry.HELP
+    ask = out.index("Things to ask your agent")
+    assert ask < out.index("artie ui") < out.index("artie --list")
+    for phrase in ("Tailor my resume", "bullet", "knowledge graph", "Show my jobs",
+                   "previous version"):
+        assert phrase in out[ask:out.index("artie ui")], phrase
+    # Saving to a named folder is #394, not built yet: the help must not promise it.
+    assert "Downloads" not in out
+    for command in ("artie ui", "artie github login|status|logout", "artie export",
+                    "artie import", "artie --list"):
+        assert command in out, command
+    words = set(re.findall(r"artie ([a-z]+)", out))
+    assert not words & set(_PLUMBING), words & set(_PLUMBING)
+
+
+def test_the_hidden_plumbing_still_runs(monkeypatch):
+    """Hidden from the help, not removed: the plugin runs `artie mcp` and `artie hook`."""
+    from harness import entry
+
+    calls = []
+    monkeypatch.setattr("harness.mcp_server.main", lambda argv: calls.append("mcp"))
+    monkeypatch.setattr("harness.hooks.main", lambda argv: calls.append("hook") or 0)
+    monkeypatch.setattr("harness.hooks.codex_main", lambda argv: calls.append("hooks") or 0)
+    monkeypatch.setattr("harness.decisions.recordings.main", lambda argv: calls.append("jev") or 0)
+    monkeypatch.setattr("harness.migrations.main", lambda argv: calls.append("migrate") or 0)
+    for argv in (["mcp"], ["hook", "user-prompt"], ["hooks", "codex"], ["jev", "status"],
+                 ["migrate", "preferences"]):
+        assert entry.main(argv) == 0
+    assert calls == ["mcp", "hook", "hooks", "jev", "migrate"]
 
 
 _GRAPH_PROBE = r"""

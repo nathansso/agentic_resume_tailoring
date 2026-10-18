@@ -2,6 +2,7 @@
 stored beyond counters."""
 import json
 import logging
+import re
 
 from artie_gateway.service import Gateway
 from artie_gateway.store import InMemoryStore
@@ -20,7 +21,11 @@ def run_everything(network, store, clock):
     network.github_failure = "timeout"
     gateway.handle(post(token="gho_anotherFakeTokenWithSecrets1234"))         # 504
     network.github_failure = None
-    for response in (HttpResult(500, b"SENTINEL-UPSTREAM-BODY"), HttpResult(200, b"SENTINEL-NOT-JSON")):
+    for response in (
+        HttpResult(500, b"SENTINEL-UPSTREAM-BODY"),
+        HttpResult(200, b"SENTINEL-NOT-JSON"),
+        HttpResult(200, json.dumps([{"error": "SENTINEL-ERROR-TEXT", "error_code": "SENTINEL Code!"}]).encode()),
+    ):
         network.brightdata_response = response
         gateway.handle(post())                                                # 502
     network.brightdata_failure = "timeout"
@@ -48,10 +53,12 @@ def test_each_request_logs_only_fixed_fields(network, store, clock, caplog):
     caplog.set_level(logging.DEBUG)
     run_everything(network, store, clock)
     records = [r for r in caplog.records if r.name == "artie_gateway"]
-    assert len(records) == 8
+    assert len(records) == 9
     for record in records:
-        assert record.args and len(record.args) == 3          # outcome, status, ms: nothing else
+        assert record.args and len(record.args) == 4          # outcome, status, ms, reason: nothing else
         assert record.getMessage().startswith("linkedin request outcome=")
+        # The reason is fixed vocabulary: "-", an upstream status, or a sanitised code.
+        assert re.fullmatch(r"-|upstream_[a-z0-9_]+|record_(error|warning):[a-z0-9_]{1,40}", record.args[3])
 
 
 def test_an_unexpected_exception_logs_its_type_not_its_message(network, clock, caplog):

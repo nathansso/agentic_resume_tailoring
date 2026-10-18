@@ -3,7 +3,7 @@
 Everything in this file is **written by hand** for the demo: the lines the user types,
 the agent's narration, the records the agent extracts from the sample sources, the
 requirements it reads out of the posting, and the plan program it drafts. None of it is ART
-output. `scripts/build_site_demo.py` feeds it to the real `art` tools and records what ART
+output. `scripts/build_site_demo.py` feeds it to the real `artie` tools and records what ART
 answers. The replay labels these lines as written for the demo and the tool results as
 captured.
 
@@ -254,8 +254,8 @@ CUT_REASONS = {
 
 # --- What is said -----------------------------------------------------------------------
 
-USER_SETUP = "/art:setup resume.md, plus the READMEs of three repos that aren't on my resume"
-USER_TAILOR_TEMPLATE = ("/art:tailor {company}, {title} (sample posting, {lines} lines pasted). "
+USER_SETUP = "/artie:setup resume.md, plus the READMEs of three repos that aren't on my resume"
+USER_TAILOR_TEMPLATE = ("/artie:tailor {company}, {title} (sample posting, {lines} lines pasted). "
                         "Compare it with my usual resume: resume.md alone.")
 USER_APPROVE = "Looks good. Go ahead, and yes, drop the coffee shop job."
 

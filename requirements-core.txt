@@ -36,5 +36,5 @@ psycopg2-binary
 supabase
 # MCP server for the harness spike (issue #189); pinned because 2.x broke 1.x's API
 mcp==2.2.0
-# OS keychain for `art github login`'s token and the TypeSafe key (#353); a default dep of art-mcp.
+# OS keychain for `artie github login`'s token and the TypeSafe key (#353); a default dep of art-mcp.
 keyring

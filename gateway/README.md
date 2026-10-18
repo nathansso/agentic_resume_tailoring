@@ -1,6 +1,6 @@
 # ARTie LinkedIn gateway
 
-A small hosted service that fetches a public LinkedIn profile through Bright Data on ART's own key, so a user gives ART a LinkedIn URL and never needs a key. Issue #354. The client is the harness tool in #355; the GitHub token comes from `art github login` (#353).
+A small hosted service that fetches a public LinkedIn profile through Bright Data on ART's own key, so a user gives ART a LinkedIn URL and never needs a key. Issue #354. The client is the harness tool in #355; the GitHub token comes from `artie github login` (#353).
 
 It deploys as its own Vercel project (`artie-gateway`), apart from `site/`, so the landing site stays static. It uses the Python runtime and the standard library only: no `requirements.txt`, no import from the rest of the repo.
 
@@ -33,7 +33,7 @@ Content-Type: application/json
 
 How it works, in order: IP rate limit, then the `Authorization` header, then the body and URL (`urls.py`), then `GET https://api.github.com/user` (cached five minutes under a hash of the token), then the user's daily quota, then the monthly spend cap, then the Bright Data call. The counters key on the GitHub numeric user id. A fetch that fails refunds the user's daily slot but not the spend count, so the cap errs safe. The KV store being down fails closed with 503.
 
-Privacy: no request body, response body, token or URL is logged (one fixed line per request: outcome, status, milliseconds), and nothing about a profile is stored. The store holds counters and a hashed-token cache, all with expiry. `tests/test_gw_privacy.py` checks this by capturing logs. The public statement is `site/src/pages/privacy.astro`.
+Privacy: no request body, response body, token or URL is logged (one fixed line per request: outcome, status, milliseconds, and a reason from a fixed vocabulary such as `upstream_http_403` or `record_error:dead_page`, never upstream text), and nothing about a profile is stored. The store holds counters and a hashed-token cache, all with expiry. `tests/test_gw_privacy.py` checks this by capturing logs. The public statement is `site/src/pages/privacy.astro`.
 
 ## Environment variables
 

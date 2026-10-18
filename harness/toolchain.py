@@ -25,7 +25,7 @@ An engine the user installed (on PATH, or next to the Python executable) always 
 `agents/formatter.py::_find_latex_engine` checks the provisioned path last.
 
 Tectonic itself downloads its TeX bundle on the first compile; that is Tectonic's own
-network use, outside ART's Python. The `art-setup` skill warms it with one render.
+network use, outside ART's Python. The `artie-setup` skill warms it with one render.
 
 **This module, the Jev client and the GitHub client are the only network clients under
 `harness/`** (`tests/test_harness_boundary.py`). Nothing here is a generative call.

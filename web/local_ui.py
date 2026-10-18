@@ -1,4 +1,4 @@
-"""`art ui` launcher (issue #204): the React editor as a local, login-free app.
+"""`artie ui` launcher (issue #204): the React editor as a local, login-free app.
 
     python -m web.local_ui [--job ID] [--port 8765] [--database-url URL]
                            [--user-id UUID] [--allow-writes] [--no-open]
@@ -11,7 +11,7 @@ same way the harness entry points pin it (`harness.runtime`): local SQLite
 `--allow-writes`. That pinning must happen before anything imports `config`,
 `database` or `web.app`, so every such import below is deferred.
 
-Installed, this is `art ui` (`harness/entry.py`, #194); the release wheel ships the built
+Installed, this is `artie ui` (`harness/entry.py`, #194); the release wheel ships the built
 editor (#255), and any other install is told to use it. From a checkout, build the editor
 once with the command in `BUILD_HINT`.
 """
@@ -39,9 +39,9 @@ def in_checkout(frontend_dir: Path = FRONTEND_DIR) -> bool:
 
 
 def release_command() -> str:
-    """The command that runs `art ui` from the pinned release wheel, editor included (#255)."""
+    """The command that runs `artie ui` from the pinned release wheel, editor included (#255)."""
     from harness.hooks import UVX
-    return f"{UVX} art ui"
+    return f"{UVX} artie ui"
 
 
 def missing_static(static_dir: Path = STATIC_DIR, checkout: Optional[bool] = None) -> Optional[str]:
@@ -50,7 +50,7 @@ def missing_static(static_dir: Path = STATIC_DIR, checkout: Optional[bool] = Non
     to use the release wheel, since there is no `web/frontend` to build from."""
     if (static_dir / "index.html").is_file():
         return None
-    head = f"art ui: the editor has not been built ({static_dir / 'index.html'} is missing)."
+    head = f"artie ui: the editor has not been built ({static_dir / 'index.html'} is missing)."
     if checkout is None:
         checkout = in_checkout()
     if checkout:
@@ -103,17 +103,17 @@ def _resolve_user(user_id: Optional[str], writable: bool):
         try:
             uid = UUID(user_id)
         except ValueError:
-            raise SystemExit(f"art ui: --user-id is not a UUID: {user_id}")
+            raise SystemExit(f"artie ui: --user-id is not a UUID: {user_id}")
         with Session(_db.engine) as session:
             user = session.get(User, uid)
         if user is None:
-            raise SystemExit(f"art ui: no user {user_id} in this database")
+            raise SystemExit(f"artie ui: no user {user_id} in this database")
         return user
     user = get_active_profile()
     if user is not None:
         return user
     if not writable:
-        raise SystemExit("art ui: no active profile, and this database is read-only; "
+        raise SystemExit("artie ui: no active profile, and this database is read-only; "
                          "pass --user-id")
     return get_or_create_cli_user()
 
@@ -148,7 +148,7 @@ def main(argv: Optional[Sequence[str]] = None, static_dir: Path = STATIC_DIR) ->
 
     app = create_app()
     url = editor_url(args.port, args.job)
-    print(f"art ui: {url}  (user {user.name or user.email or user.user_id}; "
+    print(f"artie ui: {url}  (user {user.name or user.email or user.user_id}; "
           f"{'writable' if writable else 'read-only'} store; Ctrl+C to stop)", flush=True)
     if not args.no_open:
         threading.Timer(1.0, webbrowser.open, args=(url,)).start()

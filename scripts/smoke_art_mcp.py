@@ -1,10 +1,10 @@
-"""Smoke-test an installed `art-mcp` over stdio, as a host would (issue #194).
+"""Smoke-test an installed `artie-mcp` over stdio, as a host would (issue #194).
 
 Run it with the Python of the environment the package is installed in:
 
     python scripts/smoke_art_mcp.py
 
-It starts the `art-mcp` script next to that Python against a throwaway
+It starts the `artie-mcp` script next to that Python against a throwaway
 `ART_DATA_DIR`, lists the tools, upserts one experience and searches for it.
 It exits non-zero on any failure, and when torch, sentence-transformers or an
 LLM client is importable (the default install must not carry them). CI runs it
@@ -43,7 +43,7 @@ async def _run(data_dir: str) -> None:
 
     env = {**os.environ, "ART_DATA_DIR": data_dir}
     env.pop("DATABASE_URL", None)
-    params = StdioServerParameters(command=_script("art-mcp"), args=[], env=env)
+    params = StdioServerParameters(command=_script("artie-mcp"), args=[], env=env)
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()

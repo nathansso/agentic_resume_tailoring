@@ -3,7 +3,7 @@
 ## Resumes: use ART
 
 When I ask you to tailor my resume, update my experience, or look at past versions, use the
-ART tools (the `art` MCP server) and the `art-tailor` / `art-setup` skills.
+ART tools (the `artie` MCP server) and the `artie-tailor` / `artie-setup` skills.
 
 - Every fact on my resume must come from an ART tool result: `list_items`, `get_item`,
   `kg_search` or `get_profile`. Never invent a metric, date, employer, tool or outcome. If

@@ -1,10 +1,10 @@
-"""`art github login|logout|status` (#353).
+"""`artie github login|logout|status` (#353).
 
-    art github login [--private]     # device flow; the token goes to the OS keychain
-    art github status                # who is signed in, with which scopes; never the token
-    art github logout                # removes the keychain entry
+    artie github login [--private]     # device flow; the token goes to the OS keychain
+    artie github status                # who is signed in, with which scopes; never the token
+    artie github logout                # removes the keychain entry
 
-Like the other `art` subcommands it prints one JSON document on stdout. The
+Like the other `artie` subcommands it prints one JSON document on stdout. The
 instructions for the user (the code to type and where) go to stderr, so a host
 that runs it can read them without breaking the JSON. Run it in the user's own
 terminal: the user has to open a page and type a code. The token is never printed.
@@ -89,7 +89,7 @@ def status() -> int:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    p = argparse.ArgumentParser(prog="art github", description=__doc__.splitlines()[0])
+    p = argparse.ArgumentParser(prog="artie github", description=__doc__.splitlines()[0])
     sub = p.add_subparsers(dest="cmd", required=True)
     lp = sub.add_parser("login", help="Sign in with GitHub's device flow.")
     lp.add_argument("--private", action="store_true",

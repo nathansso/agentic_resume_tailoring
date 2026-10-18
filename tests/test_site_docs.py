@@ -7,7 +7,7 @@ tests (no network, no npm) hold that file to the sources of truth:
   `integrations/codex/README.md`, so an edit there that the site misses fails here;
 - the release wheel the site pins is the one the code pins (`harness.hooks`), so a
   version bump in INSTALL.md or `ART_VERSION` that the site misses fails here;
-- every `/art:*` command the site names is a command in `plugin/`, and every plugin
+- every `/artie:*` command the site names is a command in `plugin/`, and every plugin
   command is documented;
 - every tool the site names exists in the contract, and nothing #252 lists as planned
   and not built is named.
@@ -76,7 +76,7 @@ def _site_text() -> str:
 def _appears(snippet: str, text: str) -> bool:
     """The command is a whole line of the doc (a code block, optionally with a trailing
     `# comment`), or a whole inline-code span. A longer line that merely starts with it does
-    not count, so `/plugin install art@art2` does not pass for `/plugin install art@art`."""
+    not count, so `/plugin install art@art2` does not pass for `/plugin install artie@artie`."""
     pattern = rf"(?m)^[ \t]*{re.escape(snippet)}[ \t]*(?:#.*)?$|`{re.escape(snippet)}`"
     return re.search(pattern, text) is not None
 
@@ -161,37 +161,48 @@ def test_every_art_subcommand_shown_exists_in_the_cli():
             if "art-mcp[ui]" not in shown or "--from" not in shown:
                 continue
             tokens = shlex.split(shown)
-            rest = tokens[tokens.index("art", tokens.index("--from") + 2) + 1:]
+            rest = tokens[tokens.index("artie", tokens.index("--from") + 2) + 1:]
             sub = " ".join(rest[:2]) if rest[:1] == ["hooks"] else rest[0]
-            assert f"art {sub}" in entry, f"`art {sub}` is not a documented subcommand of harness/entry.py"
+            assert f"artie {sub}" in entry, f"`artie {sub}` is not a documented subcommand of harness/entry.py"
             checked.add(sub.split()[0])
     assert {"--list", "mcp", "ui", "hooks"} <= checked
     assert "jev status" in _read("INSTALL.md")
-    assert "art jev status" in entry
+    assert "artie jev status" in entry
 
 
 def _site_slash_names() -> set[str]:
-    return set(re.findall(r"/art:([a-z]+)", _site_text()))
+    return set(re.findall(r"/artie:([a-z]+)", _site_text()))
 
 
 def test_every_slash_command_the_site_names_exists_in_the_plugin():
     plugin = {p.stem for p in PLUGIN_COMMANDS.glob("*.md")}
     named = _site_slash_names()
-    assert named, "the site names no /art: command"
-    assert named <= plugin, f"the site names /art:{sorted(named - plugin)}, which plugin/commands/ lacks"
+    assert named, "the site names no /artie: command"
+    assert named <= plugin, f"the site names /artie:{sorted(named - plugin)}, which plugin/commands/ lacks"
 
 
 def test_every_plugin_command_is_documented_on_the_usage_page():
     plugin = {p.stem for p in PLUGIN_COMMANDS.glob("*.md")}
-    table = {re.match(r"/art:([a-z]+)", item["command"]).group(1) for item in DATA["slash"]}
+    table = {re.match(r"/artie:([a-z]+)", item["command"]).group(1) for item in DATA["slash"]}
     assert table == plugin, f"usage table {sorted(table)} vs plugin/commands {sorted(plugin)}"
     usage = PAGES["usage"].read_text(encoding="utf-8")
     assert "slashCommands" in usage, "the usage page no longer renders the command table"
 
 
 def test_the_codex_skills_named_exist():
-    for name in re.findall(r"\$(art-[a-z]+)", _site_text()):
+    named = re.findall(r"\$(artie-[a-z]+)", _site_text())
+    assert named, "the site names no $artie- skill"
+    for name in named:
         assert (ROOT / "plugin" / "skills" / name / "SKILL.md").is_file(), name
+
+
+def test_the_site_uses_no_command_name_from_before_the_artie_rename():
+    """#395 renamed the command, the plugin and the skills from `art` to `artie`. A leftover
+    `/art:`, `$art-`, `art@art` or `art <subcommand>` would send a user to something that is gone."""
+    text = _expand(_site_text())
+    stale = re.compile(r"/art:|\$art-|(?<![\w-])art@art|(?<![\w./-])art (?:ui|mcp|hook|hooks|github"
+                       r"|export|import|jev|migrate|--list)|<code>art</code>")
+    assert not stale.findall(text), stale.findall(text)
 
 
 # --- tools --------------------------------------------------------------------------------

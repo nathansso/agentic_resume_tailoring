@@ -1,8 +1,8 @@
-"""Claude Code hooks for the ART plugin (issue #201): `art hook <event>`.
+"""Claude Code hooks for the ART plugin (issue #201): `artie hook <event>`.
 
 Three things a host loses without them (docs/harness.md § 10, § 13):
 
-- **`user-prompt`** (`UserPromptSubmit`): the user's edits in `art ui`. Every
+- **`user-prompt`** (`UserPromptSubmit`): the user's edits in `artie ui`. Every
   `.tex` save and drag commits an `editor` node (#196, #204); before each
   message this hook tells the host which jobs the user changed since the last
   message, and what changed, so the host builds on that HEAD instead of
@@ -285,12 +285,12 @@ def run(event: str, payload: Dict[str, Any], user_id: Optional[UUID],
 
 
 def main(argv: Sequence[str]) -> int:
-    """`art hook <event>`: read the hook's JSON from stdin, answer on stdout.
+    """`artie hook <event>`: read the hook's JSON from stdin, answer on stdout.
     Always exits 0: a hook failure must not block the user's message."""
     try:
         event = argv[0] if argv else ""
         if event not in EVENTS:
-            print(f"art hook: unknown event {event!r}; one of {', '.join(EVENTS)}",
+            print(f"artie hook: unknown event {event!r}; one of {', '.join(EVENTS)}",
                   file=sys.stderr)
             return 0
         raw = sys.stdin.read()
@@ -301,7 +301,7 @@ def main(argv: Sequence[str]) -> int:
         if reply:
             sys.stdout.write(json.dumps(reply) + "\n")
     except (Exception, SystemExit) as exc:            # never block the prompt
-        print(f"art hook: {exc}", file=sys.stderr)
+        print(f"artie hook: {exc}", file=sys.stderr)
     return 0
 
 
@@ -310,7 +310,7 @@ def main(argv: Sequence[str]) -> int:
 # Both hosts read the same JSON, and both load it from the plugin
 # (plugin/hooks/hooks.json): Codex 0.131 and later load a plugin's hooks by default
 # (`hooks/hooks.json`, or the manifest's `hooks` entry), and ask the user to trust them
-# (`/hooks`). So a Codex plugin install already carries ART's hooks. `art hooks codex
+# (`/hooks`). So a Codex plugin install already carries ART's hooks. `artie hooks codex
 # --write` is the fallback for a Codex without plugin hooks (or one used without the
 # plugin): it puts them in the user's `$CODEX_HOME/hooks.json` or a repo's
 # `.codex/hooks.json`. Running both fires every hook twice, so `--write` checks whether an
@@ -326,7 +326,7 @@ WHEEL_URL = (f"https://github.com/{REPO}/releases/download/v{ART_VERSION}/"
              f"art_mcp-{ART_VERSION}-py3-none-any.whl")
 SOURCE = f"art-mcp[ui] @ {WHEEL_URL}"
 # The one Python every launch of the pinned wheel asks for (#385). `uvx` reuses the
-# `uv tool install` that `/art:setup` makes only while it asks for the interpreter the tool
+# `uv tool install` that `/artie:setup` makes only while it asks for the interpreter the tool
 # was built on; without a pin, a later managed-Python install changes uv's default, and the
 # server re-resolves (a hook, offline, then exits 0 and does nothing). 3.12 is what CI
 # tests and the release builds on; `requires-python` is >=3.11.
@@ -346,14 +346,14 @@ def hook_command(arg: str, source: str = SOURCE) -> str:
     `--offline` makes uvx use only what the MCP server's start already cached: a hook
     never waits on the network (an online start re-checks the package indexes and takes
     seconds, or 30 s to time out with no connection), and a cold cache is a silent no-op
-    until the server has started once. `; exit 0` covers what `art hook` cannot, uvx
-    failing before `art` runs (no uvx, no cache, no wheel), so a hook never blocks the
+    until the server has started once. `; exit 0` covers what `artie hook` cannot, uvx
+    failing before `artie` runs (no uvx, no cache, no wheel), so a hook never blocks the
     message. `--python` is the pin the server and the installed tool share (#385)."""
-    return f'uvx --offline --python {PYTHON} --from "{source}" art hook {arg}; exit 0'
+    return f'uvx --offline --python {PYTHON} --from "{source}" artie hook {arg}; exit 0'
 
 
 def hook_config(source: str = SOURCE) -> Dict[str, Any]:
-    """The hooks JSON both hosts read, running `art hook` from `source`."""
+    """The hooks JSON both hosts read, running `artie hook` from `source`."""
     hooks: Dict[str, Any] = {}
     for event, matcher, arg in _WIRING:
         group: Dict[str, Any] = {} if matcher is None else {"matcher": matcher}
@@ -365,16 +365,21 @@ def hook_config(source: str = SOURCE) -> Dict[str, Any]:
 
 _UVX = re.compile(r"\buvx\b")
 _FROM = re.compile(r"--from\b")
-_HOOK_CALL = re.compile(r"\bart hook (?:%s)\b" % "|".join(re.escape(e) for e in EVENTS))
-_SERVER_CALL = re.compile(r"(?:^|\s)(?:art-mcp|art mcp)(?:\s|$)")
+# Both command names count: `artie` since v0.2.0 (#395), and `art`, which every install before
+# it wrote. So `artie hooks codex --write` replaces an `art hook` line instead of adding a
+# second copy beside it.
+_HOOK_CALL = re.compile(r"\bart(?:ie)? hook (?:%s)\b" % "|".join(re.escape(e) for e in EVENTS))
+_SERVER_CALL = re.compile(r"(?:^|\s)(?:art(?:ie)?-mcp|art(?:ie)? mcp)(?:\s|$)")
 
 
 def is_art_hook(command: Any) -> bool:
     """Whether `command` is one of ART's own hook lines, whichever source an earlier install
     pointed `uvx --from` at: a git source with or without a ref, or a release wheel of any
-    version (#283). `art hook <event>` run through `uvx --from` is ART's by its name alone; the
-    server entry point `art-mcp` / `art mcp` counts only when the line names this repo, since
-    other projects ship an `art-mcp`. Anything else is the user's."""
+    version (#283), and whichever name the command had: `artie`, or `art` before v0.2.0 (#395).
+    `artie hook <event>` (or `art hook <event>`) run through `uvx --from` is ART's by its name
+    alone; the server entry point (`artie-mcp` / `artie mcp`, or `art-mcp` / `art mcp`) counts
+    only when the line names this repo, since other projects ship an `art-mcp`. Anything else is
+    the user's."""
     if not isinstance(command, str) or not _UVX.search(command) or not _FROM.search(command):
         return False
     if _HOOK_CALL.search(command):
@@ -471,10 +476,10 @@ def _has_art_hook(config: Any) -> bool:
 
 def plugin_with_art_hooks(home: Path) -> Optional[str]:
     """The id (`name@marketplace`) of an enabled Codex plugin whose installed copy bundles ART's
-    hooks, or None. Codex records installs in `<home>/config.toml` (`[plugins."art@art"]
+    hooks, or None. Codex records installs in `<home>/config.toml` (`[plugins."artie@artie"]
     enabled = true`) and copies each into `<home>/plugins/cache/<marketplace>/<name>/<version>/`;
     the answer is read from the copied `hooks/hooks.json`, so a different plugin that happens to
-    be called `art` does not count."""
+    be called `artie` does not count."""
     import tomllib
 
     try:
@@ -507,10 +512,10 @@ def remove_art_hooks(existing: Dict[str, Any]) -> List[Tuple[str, str]]:
 
 
 def codex_main(argv: Sequence[str]) -> int:
-    """`art hooks codex [--project] [--write] [--from SOURCE] [--standalone]`."""
+    """`artie hooks codex [--project] [--write] [--from SOURCE] [--standalone]`."""
     import argparse
 
-    p = argparse.ArgumentParser(prog="art hooks codex", description=(
+    p = argparse.ArgumentParser(prog="artie hooks codex", description=(
         "Print the ART hooks for Codex, or merge them into its hooks.json. A Codex plugin "
         "install already carries them; with it, --write removes ART's own entries from the "
         "file instead, so they do not fire twice."))
@@ -528,7 +533,7 @@ def codex_main(argv: Sequence[str]) -> int:
     plugin = None if args.standalone else plugin_with_art_hooks(codex_home())
     version = codex_version() if plugin else None
     if plugin and version is not None and version < PLUGIN_HOOKS_MIN_CODEX:
-        print(f"art hooks: plugin {plugin} bundles the hooks, but Codex "
+        print(f"artie hooks: plugin {plugin} bundles the hooks, but Codex "
               f"{'.'.join(map(str, version))} does not load plugin hooks by default (0.131 "
               "and later do); installing them in the file.", file=sys.stderr)
         plugin = None
@@ -536,7 +541,7 @@ def codex_main(argv: Sequence[str]) -> int:
     if not args.write:
         sys.stdout.write(json.dumps(config, indent=2) + "\n")
         if plugin:
-            print(f"art hooks: plugin {plugin} already carries these; you do not need to "
+            print(f"artie hooks: plugin {plugin} already carries these; you do not need to "
                   "install them.", file=sys.stderr)
         return 0
     path = codex_hooks_path(args.project)
@@ -545,7 +550,7 @@ def codex_main(argv: Sequence[str]) -> int:
         try:
             existing = json.loads(path.read_text(encoding="utf-8") or "{}")
         except ValueError:
-            print(f"art hooks: {path} is not valid JSON; not touching it.", file=sys.stderr)
+            print(f"artie hooks: {path} is not valid JSON; not touching it.", file=sys.stderr)
             return 2
 
     if plugin:
@@ -553,26 +558,26 @@ def codex_main(argv: Sequence[str]) -> int:
         # one fires once. Nothing is added, and a file without any is not created or touched.
         removed = remove_art_hooks(existing)
         if not removed:
-            print(f"art hooks: plugin {plugin} already carries the ART hooks and {path} has "
+            print(f"artie hooks: plugin {plugin} already carries the ART hooks and {path} has "
                   "none; nothing changed.", file=sys.stderr)
             return 0
         path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
         for event, command in removed:
-            print(f"art hooks: removed {event} hook, plugin {plugin} runs it: {command}",
+            print(f"artie hooks: removed {event} hook, plugin {plugin} runs it: {command}",
                   file=sys.stderr)
-        print(f"art hooks: plugin {plugin} already carries the ART hooks, so {len(removed)} "
+        print(f"artie hooks: plugin {plugin} already carries the ART hooks, so {len(removed)} "
               f"duplicate(s) were removed from {path}.", file=sys.stderr)
         return 0
 
     added, removed = merge_hooks(existing, config)
     if not (added or removed):
-        print(f"art hooks: {path} already has the ART hooks; nothing changed.", file=sys.stderr)
+        print(f"artie hooks: {path} already has the ART hooks; nothing changed.", file=sys.stderr)
         return 0
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
     for event, command in removed:
-        print(f"art hooks: replaced {event} hook from an earlier install: {command}",
+        print(f"artie hooks: replaced {event} hook from an earlier install: {command}",
               file=sys.stderr)
-    print(f"art hooks: {added} hook group(s) added, {len(removed)} replaced, in {path}. In Codex, "
+    print(f"artie hooks: {added} hook group(s) added, {len(removed)} replaced, in {path}. In Codex, "
           "run /hooks to review and trust them.", file=sys.stderr)
     return 0
