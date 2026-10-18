@@ -5,7 +5,7 @@ import { getAuthCapabilities, getMe, logout as apiLogout } from "../api/auth";
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
-  /** `"none"` in `art ui` local mode (#204): no login, no sign-out. */
+  /** `"none"` in `artie ui` local mode (#204): no login, no sign-out. */
   authMode: string;
   /** Shorthand for `authMode === "none"`. */
   localMode: boolean;

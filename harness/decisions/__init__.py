@@ -10,7 +10,7 @@ boundary test (`tests/test_harness_boundary.py`) keeps it that way.
 - `client`: `JevClient`, the HTTP call with an injectable transport.
 - `cache`: the `JevDecision` table, one row per (state, question, model).
 - `engine`: `decide(point, state, questions, fallback)` and its three modes.
-- `recordings`: export and import of cache rows, and the `art jev` commands.
+- `recordings`: export and import of cache rows, and the `artie jev` commands.
 - `support`: the first decision point, the cited-bullet support check.
 - `support_fallback`: the deterministic reading of a cited bullet when Jev has no answer (#351):
   small word lists, no model, its own fitted cutoffs.

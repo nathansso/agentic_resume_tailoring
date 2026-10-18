@@ -25,7 +25,7 @@ def _unauthorized() -> GatewayError:
     return GatewayError(
         401,
         "unauthorized",
-        "Send a GitHub token from `art github login` as 'Authorization: Bearer <token>'.",
+        "Send a GitHub token from `artie github login` as 'Authorization: Bearer <token>'.",
         {"WWW-Authenticate": 'Bearer realm="artie-gateway"'},
     )
 

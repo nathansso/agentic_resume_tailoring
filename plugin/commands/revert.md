@@ -10,5 +10,5 @@ Revert a tailored resume with ART.
    and ask me.
 2. Show me what I'd get back: `diff_nodes(HEAD, target)`. Ask me to confirm.
 3. Call `checkout(job_id, node_id)`. Nothing is deleted: the later versions stay in
-   `/art:history`.
+   `/artie:history`.
 4. Offer to `render` the restored version.

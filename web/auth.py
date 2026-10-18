@@ -93,7 +93,7 @@ def _user_from_local_cookie(token: str) -> Optional[User]:
 
 
 def get_current_user(request: Request) -> User:
-    # `art ui` local mode (#204): the launcher binds one local user and there
+    # `artie ui` local mode (#204): the launcher binds one local user and there
     # is no login. Off by default, so a cookieless hosted request still 401s.
     from web import local_mode
     if local_mode.enabled():

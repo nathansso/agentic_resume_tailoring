@@ -8,12 +8,12 @@ preferences, and every version, and it checks each change before committing it.
 
 ```
 /plugin marketplace add nathansso/agentic_resume_tailoring
-/plugin install art@art
+/plugin install artie@artie
 ```
 
-It needs [uv](https://docs.astral.sh/uv/). If uv or the `art` command is missing, `/art:setup` installs them with your permission (uv's official installer, then `uv tool install`) and tells you how to restart ART once. The plugin runs ART with `uvx` from one pinned
+It needs [uv](https://docs.astral.sh/uv/). If uv or the `artie` command is missing, `/artie:setup` installs them with your permission (uv's official installer, then `uv tool install`) and tells you how to restart ART once. The plugin runs ART with `uvx` from one pinned
 release wheel (a GitHub Release asset, `v<version>`), which uv downloads on first use and
-then keeps in its cache, so later starts don't contact GitHub and the editor (`art ui`) is
+then keeps in its cache, so later starts don't contact GitHub and the editor (`artie ui`) is
 already in it. The first start needs the network. On Windows, see "Offline starts, and
 Windows" in [INSTALL.md](../INSTALL.md) for a short `UV_CACHE_DIR`.
 
@@ -30,14 +30,14 @@ Your data lives in `~/.art/art.db`, or `$ART_DATA_DIR`. Rendered resumes go to
 
 | Command | What it does |
 |---|---|
-| `/art:setup [files]` | Build your knowledge graph from your resume, LinkedIn export and project folders, and set your header |
-| `/art:tailor <posting or URL>` | Plan a tailored resume, wait for your approval, commit it and render the PDF |
-| `/art:open [job]` | Print the command that opens the local LaTeX editor (`art ui`, from the release wheel: no build step) |
-| `/art:history [job]` | List every version and what changed |
-| `/art:revert <job> [version]` | Make an earlier version current again |
-| `/art:prefs` | Show your pinned rules, preferences and job-scoped rules |
+| `/artie:setup [files]` | Build your knowledge graph from your resume, LinkedIn export and project folders, and set your header |
+| `/artie:tailor <posting or URL>` | Plan a tailored resume, wait for your approval, commit it and render the PDF |
+| `/artie:open [job]` | Print the command that opens the local LaTeX editor (`artie ui`, from the release wheel: no build step) |
+| `/artie:history [job]` | List every version and what changed |
+| `/artie:revert <job> [version]` | Make an earlier version current again |
+| `/artie:prefs` | Show your pinned rules, preferences and job-scoped rules |
 
-The two skills behind these, `art-tailor` and `art-setup`, also trigger on their own
+The two skills behind these, `artie-tailor` and `artie-setup`, also trigger on their own
 when you ask Claude to tailor a resume or update your experience.
 
 ## GitHub repos (optional)
@@ -46,13 +46,13 @@ To bring in your GitHub repos, sign in once in your own terminal (add `--private
 repos):
 
 ```bash
-art github login
+artie github login
 ```
 
-If `art` is not on your PATH (you have not run `/art:setup`'s install step), the same command is:
+If `artie` is not on your PATH (you have not run `/artie:setup`'s install step), the same command is:
 
 ```bash
-uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl" art github login
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie github login
 ```
 
 Claude can then call `list_github_repos`, pick the repos

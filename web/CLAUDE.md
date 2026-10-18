@@ -1,10 +1,10 @@
 # Web Layer — Implementation Guide
 
 > **Status (harness pivot, #207):** the hosted deploy is frozen, so don't add hosted-only
-> features (landing, sign-up, SMTP, per-user quotas). This layer is becoming `art ui`, a local
+> features (landing, sign-up, SMTP, per-user quotas). This layer is becoming `artie ui`, a local
 > companion editor: local mode with SQLite and no login (#204), a change feed over SSE, editor
 > edits committed as tailoring-tree nodes, and a chat panel driven by a Claude Agent SDK
-> session with `art-mcp`, plus an API-key fallback (#205). The editor itself (`texStructure`,
+> session with `artie-mcp`, plus an API-key fallback (#205). The editor itself (`texStructure`,
 > `layoutOverride`, drag reorder, auto-compile) carries over unchanged. Target design:
 > [`docs/harness.md`](../docs/harness.md) § 13.
 
@@ -145,7 +145,7 @@ cd web/frontend && npm run dev -- --port 5173
 
 App is at http://localhost:5173.
 
-`art ui` (#204): `python -m web.local_ui --job <id>` serves the built SPA on 127.0.0.1 in
+`artie ui` (#204): `python -m web.local_ui --job <id>` serves the built SPA on 127.0.0.1 in
 local mode (`web/local_mode.py`: no login, no quotas, Host and Origin guards) with a live
 SSE change feed at `/api/jobs/{id}/events`. See `docs/harness.md` § 13.
 

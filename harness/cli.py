@@ -29,7 +29,7 @@ from harness.contract import BY_NAME, CONTRACT_VERSION, ValidationError, describ
 
 
 def _parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="art", description="ART harness tools, JSON out.")
+    p = argparse.ArgumentParser(prog="artie", description="ART harness tools, JSON out.")
     p.add_argument("tool", nargs="?", help="Tool name (see --list).")
     p.add_argument("--args", default="{}", help="Tool arguments as a JSON object.")
     p.add_argument("--list", action="store_true", help="Print the tool contract.")

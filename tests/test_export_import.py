@@ -1,4 +1,4 @@
-"""`art export` / `art import` and the one-time web-app migration (#195).
+"""`artie export` / `artie import` and the one-time web-app migration (#195).
 
 Every row here is synthetic. Nothing reaches a real database: the stores are
 temp SQLite files and, on the Postgres leg, throwaway `art_test_*` schemas on
@@ -40,7 +40,7 @@ FAKE_DB_URL = "postgresql://svc_user:hunter2pass@db.example.test:5432/prod"
 
 @pytest.fixture(autouse=True)
 def _own_pointer(tmp_path, monkeypatch):
-    """`art import` reads (and with --set-active writes) the profile pointer; keep it
+    """`artie import` reads (and with --set-active writes) the profile pointer; keep it
     out of the developer's ~/.art."""
     import database.user_utils as uu
     monkeypatch.setattr(uu, "ACTIVE_PROFILE_FILE", tmp_path / "pointer" / "active_profile_id")
@@ -867,7 +867,7 @@ def test_the_fallback_check():
     assert not is_fallback_profile("ada@example.org") and not is_fallback_profile(None)
 
 
-# ── end to end through the `art` entry point ─────────────────────────────────
+# ── end to end through the `artie` entry point ─────────────────────────────────
 
 def _art(args, data_dir, **env):
     full = {k: v for k, v in os.environ.items()

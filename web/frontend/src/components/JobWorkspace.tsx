@@ -64,7 +64,7 @@ export function JobWorkspace({ job, autoStart, onJobUpdate, onViewChange }: Prop
     readStoredNumber(localStorage.getItem(CHAT_WIDTH_KEY)),
   );
   const [dragging, setDragging] = useState(false);
-  // `art ui` change feed (#204): a new version from the agent bumps `revision`,
+  // `artie ui` change feed (#204): a new version from the agent bumps `revision`,
   // which remounts the editor so it reloads .tex and layout. With unsaved
   // keystrokes in the buffer it raises `agentVersion` and asks instead.
   const { localMode } = useAuth();

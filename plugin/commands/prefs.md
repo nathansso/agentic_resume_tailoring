@@ -12,6 +12,6 @@ if one is given, and list:
 3. **Job-scoped rules**: each question, the field it sets, and its values.
 
 If I state a new standing preference, confirm it with me and record it with
-`record_preference`, as the `art-tailor` skill describes. For a posting-dependent fact
+`record_preference`, as the `artie-tailor` skill describes. For a posting-dependent fact
 (such as a graduation date), record a job-scoped rule with `upsert_items` (kind `rule`),
-as the `art-setup` skill describes. Call `art_pins` if you need the pins on their own.
+as the `artie-setup` skill describes. Call `art_pins` if you need the pins on their own.

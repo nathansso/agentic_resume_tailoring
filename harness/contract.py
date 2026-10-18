@@ -1090,7 +1090,7 @@ class GithubReposInput(_Model):
     per_page: int = Field(20, ge=1, le=50, description="Repos per page (at most 50).")
     include_private: bool = Field(
         True, description="Include private repos. They appear only when the user signed in with "
-                          "`art github login --private`; otherwise this is ignored.")
+                          "`artie github login --private`; otherwise this is ignored.")
     include_readme: bool = Field(True, description="Fetch each README excerpt (a few KB).")
 
 
@@ -1435,7 +1435,7 @@ TOOLS: List[ToolSpec] = [
         "The signed-in user's own GitHub repos, most recently pushed first, so you can pick "
         "which to read: name, description, languages, topics, stars, last push, fork and "
         "archived flags, URLs, a clone command and a README excerpt. The user must have signed "
-        "in once in their own terminal (`art github login`, or its uvx form when `art` is not "
+        "in once in their own terminal (`artie github login`, or its uvx form when `artie` is not "
         "on PATH); without it you get not_logged_in, whose message gives both. Public repos only unless the token has the repo "
         "scope. Page with next_page. Clone a repo only after the user agrees; store what you "
         "read with upsert_items, source github:<repo> (evidence_source).",

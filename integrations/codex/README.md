@@ -1,8 +1,8 @@
 # ART for Codex
 
 Codex uses the same plugin directory as Claude Code (`plugin/`, with a
-`.codex-plugin/plugin.json` manifest): the `art` MCP server and the `art-tailor` and
-`art-setup` skills. You need [uv](https://docs.astral.sh/uv/); `$art-setup` installs it, with
+`.codex-plugin/plugin.json` manifest): the `artie` MCP server and the `artie-tailor` and
+`artie-setup` skills. You need [uv](https://docs.astral.sh/uv/); `$artie-setup` installs it, with
 your yes, if it is missing. For PDFs, ART downloads a
 pinned [Tectonic](https://tectonic-typesetting.github.io) on first use.
 
@@ -10,13 +10,13 @@ pinned [Tectonic](https://tectonic-typesetting.github.io) on first use.
 
 ```bash
 codex plugin marketplace add nathansso/agentic_resume_tailoring
-codex plugin add art@art
+codex plugin add artie@artie
 ```
 
 Or register only the server:
 
 ```bash
-codex mcp add art -- uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl" art mcp
+codex mcp add artie -- uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie mcp
 ```
 
 The plugin carries the hooks. Codex 0.131 and later load a plugin's `hooks/hooks.json`
@@ -29,13 +29,13 @@ Use the file install only if your Codex is older than 0.131 or you run it withou
 It puts the hooks in `~/.codex/hooks.json`, or into `.codex/hooks.json` with `--project`:
 
 ```bash
-uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl" art hooks codex --write
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie hooks codex --write
 ```
 
 Then run `/hooks` in Codex to review and trust them.
 
 **No duplicates.** The plugin and the file would each run every hook. With the ART plugin
-installed and enabled, `art hooks codex --write` adds nothing and removes ART's own entries from
+installed and enabled, `artie hooks codex --write` adds nothing and removes ART's own entries from
 the file, so if you ran it before installing the plugin, run it once more afterwards. On a Codex
 older than 0.131 it installs the hooks anyway, since the plugin's don't load there.
 `--standalone` forces the file install.
@@ -47,14 +47,14 @@ replaced, and leaves every other hook alone. A second run changes nothing.
 - **Windows.** Codex runs a hook with the shell of the session. On Windows that is PowerShell
   (`powershell -NoProfile -Command`), which runs the hook line as written. Only if Codex has no
   session shell does it fall back to `%COMSPEC%` (`cmd.exe`), where `;` is not a separator, so
-  the hook line is not supported there: `art hook` is handed `user-prompt;` and exits 0 without
+  the hook line is not supported there: `artie hook` is handed `user-prompt;` and exits 0 without
   doing anything. Use a PowerShell or bash session shell.
 
 - **Where hooks are loaded from.** Codex loads user-level hooks (`~/.codex/hooks.json`)
   everywhere. A project's `.codex/hooks.json` loads only in a project Codex trusts.
 - **Approving writes.** ART's write tools (`upsert_items`, `open_job`, `execute_plan`,
   `patch_plan`, `render`, and so on) ask for approval under Codex's default policy. Approve
-  them, or choose to always allow the `art` server.
+  them, or choose to always allow the `artie` server.
 
 The hooks do two things:
 
@@ -69,6 +69,6 @@ Optionally, paste [`AGENTS.md`](AGENTS.md) into your repo's `AGENTS.md`.
 
 ## Use
 
-- Run `$art-setup` once to build your knowledge graph.
-- Run `$art-tailor` with a job posting. Codex also picks either skill up when you ask in
+- Run `$artie-setup` once to build your knowledge graph.
+- Run `$artie-tailor` with a job posting. Codex also picks either skill up when you ask in
   plain words.

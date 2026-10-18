@@ -1,6 +1,6 @@
 ---
-name: art-setup
-description: Build or refresh the user's ART knowledge graph from their resume, LinkedIn export and local project repos, and set their resume header. Use on first use of ART, when the user says their experience, projects or contact details changed, when a tailoring run finds a fact missing or stale, or when ART's tools are missing or fail to start (it installs uv and the `art` command, with the user's consent).
+name: artie-setup
+description: Build or refresh the user's ART knowledge graph from their resume, LinkedIn export and local project repos, and set their resume header. Use on first use of ART, when the user says their experience, projects or contact details changed, when a tailoring run finds a fact missing or stale, or when ART's tools are missing or fail to start (it installs uv and the `artie` command, with the user's consent).
 ---
 
 # Set up ART
@@ -22,13 +22,13 @@ install anything without the user's yes.**
 1. **Find the OS.** Run `uname -s` in the shell. `Darwin` is macOS, `Linux` is Linux,
    and `MINGW…`, `MSYS…` or `CYGWIN…` is Windows (Git Bash). If `uname` is not a command,
    you are in PowerShell on Windows.
-2. **Look for uv and ART.** Run `uv --version` and `art --list`. If `uv` is not found,
+2. **Look for uv and ART.** Run `uv --version` and `artie --list`. If `uv` is not found,
    look in uv's default folder: `~/.local/bin/uv` on macOS and Linux, and on Windows
    `%USERPROFILE%\.local\bin\uv.exe` (`"$HOME/.local/bin/uv.exe"` from Git Bash,
    `& "$env:USERPROFILE\.local\bin\uv.exe"` from PowerShell). Then:
-   - `art --list` prints ART's tools as JSON: ART is installed and the server only needs
+   - `artie --list` prints ART's tools as JSON: ART is installed and the server only needs
      to reconnect. Go to 5.
-   - uv works, by name or by its full path, but `art` does not: go to 4.
+   - uv works, by name or by its full path, but `artie` does not: go to 4.
    - No uv anywhere: go to 3.
 3. **Install uv, with consent.** Tell the user you will run uv's official installer, show
    the exact command for their OS, and wait for a clear yes:
@@ -50,15 +50,15 @@ install anything without the user's yes.**
 4. **Install ART as a command, with consent.** Show the user these two commands, with the
    same pinned release the plugin runs, and wait for a yes:
    ```bash
-   uv tool install --python 3.12 "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl"
+   uv tool install --python 3.12 "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl"
    uv tool update-shell
    ```
    Call `uv` by its full path from 2 or 3 if it is not on your PATH yet. The first puts
-   `art` in uv's tool folder (the same default folder), on Python 3.12, which the plugin's
+   `artie` in uv's tool folder (the same default folder), on Python 3.12, which the plugin's
    `uvx` also asks for, so it starts from that install without resolving it again. Keep
    `--python 3.12`: without it a newer Python uv finds later would stop that reuse. The second makes sure the folder is on
-   PATH for new terminals and apps. Check it: `art --list` (or `~/.local/bin/art --list`,
-   `"$HOME/.local/bin/art.exe" --list`, `& "$env:USERPROFILE\.local\bin\art.exe" --list`)
+   PATH for new terminals and apps. Check it: `artie --list` (or `~/.local/bin/artie --list`,
+   `"$HOME/.local/bin/artie.exe" --list`, `& "$env:USERPROFILE\.local\bin\artie.exe" --list`)
    prints ART's tools as JSON. If the user declines, give them the `uv tool install` line
    to run themselves, and stop. On Windows, an install that fails on a long path needs a
    short uv cache: with the user's yes, run
@@ -66,7 +66,7 @@ install anything without the user's yes.**
    PowerShell, open a new shell and install again.
 5. **Restart once.** The host tried to start ART before uv was there, and doesn't retry on
    its own. Tell the user exactly what to do for their host:
-   - **Claude Code in a terminal:** run `/mcp`, pick the `art` server and reconnect. If it
+   - **Claude Code in a terminal:** run `/mcp`, pick the `artie` server and reconnect. If it
      still fails, the terminal predates the PATH change: quit Claude Code, open a new
      terminal and start it again.
    - **Claude desktop app:** quit it fully (not just its window) and open it again. On
@@ -84,10 +84,10 @@ Ask the user where their materials are:
 - a resume file (PDF, DOCX, Markdown or LaTeX);
 - a LinkedIn data export;
 - the local folders of projects they want considered;
-- their GitHub repos. If they want these, they run `art github login` in their own terminal
+- their GitHub repos. If they want these, they run `artie github login` in their own terminal
   (`--private` adds private repos; `list_github_repos`'s `not_logged_in` error repeats the
-  command). If `art` is not on their PATH, the same command is
-  `uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl" art github login`.
+  command). If `artie` is not on their PATH, the same command is
+  `uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie github login`.
   Then you call `list_github_repos`, pick the repos worth
   reading with them, and clone one only after they agree. Store what you read with
   `source: "github:<repo>"` (each repo's `evidence_source`). Never ask for or handle a token.
@@ -216,16 +216,16 @@ ART's data is local, with no server copy. These are shell commands, not tools, a
 them only when the user asks. Neither writes to anything but a zip file (export) or the
 local store (import).
 
-- **Back up:** `art export --out <path>.zip` writes the profile and the `applications/`
+- **Back up:** `artie export --out <path>.zip` writes the profile and the `applications/`
   folder as one zip, with no keys or passwords. Suggest it before a restore, a machine
   change, or a risky edit. Add `--user-id <uuid>` if the user has more than one profile.
-- **Restore:** `art import <path>.zip`. It refuses a profile that already has data; the
+- **Restore:** `artie import <path>.zip`. It refuses a profile that already has data; the
   user chooses `--merge` (add what is missing) or `--replace --confirm-replace` (delete
   first). Run it with `--dry-run` first and show the counts.
 - **One-time migration from the hosted web app:** the user gives you their web-app
   profile id (the `user_id` of their row, not a Supabase Auth uid) and the web app's
   Postgres URL. Put the URL in `ART_IMPORT_SOURCE_URL` rather than on the command line,
-  run `art import --from-supabase --user-id <uuid> --dry-run`, show the counts and
+  run `artie import --from-supabase --user-id <uuid> --dry-run`, show the counts and
   warnings, and only then run it for real (add `--set-active` to make it the profile ART
   uses). Never guess the id, never use a `@local` or `user@example.com` profile, and never
   read a database URL from a `.env` file yourself.

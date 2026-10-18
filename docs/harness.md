@@ -6,7 +6,7 @@ model-free package that a coding agent the user already pays for drives through 
 user's own plan. ART keeps the knowledge graph, an approved-bullet library, standing
 preferences, the gates that enforce them, and the history the offline policy learns from.
 It makes bounded judgment calls with TypeSafe's Jev, and the web app's LaTeX editor
-survives as `art ui`, a local companion.
+survives as `artie ui`, a local companion.
 
 This document is **the target architecture**. [`architecture.md`](architecture.md)
 describes what is merged today; where the two differ, this file says where things are
@@ -25,9 +25,9 @@ section below names the issues that deliver it.
 | Plans | The host submits a whole **plan program**; the executor applies each node under the per-metric acceptance rule (#197). |
 | Source text | Tailoring refines bullets from an **approved library** and branches from a **track baseline** (#199). |
 | Storage | Everything local: SQLite plus rendered files under `applications/`. Raw chat stays with the host. |
-| Editor | Kept as `art ui` (#204). The default chat mode is side by side with the host; an Agent SDK chat panel and an API-key fallback are options (#205). |
+| Editor | Kept as `artie ui` (#204). The default chat mode is side by side with the host; an Agent SDK chat panel and an API-key fallback are options (#205). |
 | Learning | Offline, on the benchmark, across several hosts. No online bandit (#51, #119). |
-| Distribution | `uvx art-mcp`, with extras `[embed]`, `[pdf]`, `[ui]` (#194). |
+| Distribution | `uvx --from art-mcp artie-mcp`, with extras `[embed]`, `[pdf]`, `[ui]` (#194). |
 | Bullet promotion | A committed bullet scored ≥ 4 becomes a draft library variant; the user confirms before it is approved. |
 | Hosted sync | Deferred until after the H4 evaluation (#206). |
 
@@ -45,7 +45,7 @@ flowchart LR
     end
     subgraph Proposed
         H[User's coding agent<br/>Claude Code · Codex] -->|user pays| MP2[Model provider]
-        H -->|tool calls| MCP[art-mcp adapter]
+        H -->|tool calls| MCP[artie-mcp adapter]
         MCP --> CORE[art-core<br/>no generative calls]
         CORE --> DB[(~/.art/art.db)]
         CORE -->|classify| JEV[Jev API]
@@ -91,9 +91,11 @@ the tailoring plan.
 - `artie ingest` refreshes the connected sources with no agent.
 - `artie ui` opens the editor.
 - Bare `artie` prints example requests to give the agent, and the plumbing commands are
-  hidden from help.
+  hidden from help (shipped in v0.2.0, `harness/entry.py::HELP`).
 - `art` is renamed to `artie` everywhere, including the plugin id. Existing installs break,
-  which was accepted.
+  which was accepted. Shipped in v0.2.0 (#395): the console scripts are `artie` and
+  `artie-mcp`; the distribution `art-mcp`, `~/.art`, `ART_*` and the keychain service keep
+  their names.
 
 **Slash commands (#401).** Only `/artie:setup`, `/artie:history` and `/artie:open` remain.
 Tailoring, reverting and preferences are plain language: "tailor my resume to this
@@ -119,7 +121,7 @@ role", "go back to the last version", "never mention Kafka".
 6. Then the agent commits and renders.
 
 **Which job (#288, rescoped).** There is no hidden shared pointer. Each job carries a
-`last_touched_at`, updated by host writes and by opening the job in `art ui`. A ranked
+`last_touched_at`, updated by host writes and by opening the job in `artie ui`. A ranked
 lookup matches company and title from the user's words, then recency. The agent proceeds
 on one clear match and names the job. Otherwise it asks: "Is this the <Company> <Role>
 role, or another?"
@@ -168,10 +170,10 @@ They assert on ART's side effects, not the model's wording.
 
 ```mermaid
 flowchart TB
-    CC[Claude Code] --> MCP[MCP server<br/>art-mcp · stdio]
+    CC[Claude Code] --> MCP[MCP server<br/>artie-mcp · stdio]
     CX[Codex] --> MCP
     SC[Scripts · CI · benchmark] --> CLI[CLI · --json]
-    BR[Browser editor] --> UI[art ui server<br/>local FastAPI · SSE]
+    BR[Browser editor] --> UI[artie ui server<br/>local FastAPI · SSE]
     subgraph core[art-core · no generative calls]
         SVC[Service API · services.py]
         SVC --> MEM[Memory<br/>KG · prefs · JobCards · pins]
@@ -233,7 +235,7 @@ reported confidence.
 question, requested model), with the resolved model version stored on the row; a request
 sends only the questions the cache lacks, batched per state. `ART_JEV_MODE` is `off`
 (always the fallback), `replay` (cache only; a miss raises, never a live call) or `auto`
-(default: cache, then Jev when `TYPESAFE_API_KEY` is set, then the fallback). `art jev
+(default: cache, then Jev when `TYPESAFE_API_KEY` is set, then the fallback). `artie jev
 status|export|import` manages recordings, which hold questions and answers and never the state. A
 question can still name text (the variant choice lists the approved bullets, the memory gate the user's
 item names), so the committed recordings are built from synthetic profiles and one exported from a real
@@ -358,7 +360,7 @@ sequenceDiagram
     participant H as Host agent + model
     participant K as Host hook
     participant A as art-core (+ Jev)
-    U->>H: /art:tailor + job description
+    U->>H: /artie:tailor + job description
     H->>A: art_briefing(role_family)
     A-->>H: pins · persona · JobCards with rejections
     Note over H: extract requirements
@@ -502,7 +504,7 @@ metric vector and the rule, and `harness/executor.py` runs it. The details:
 - **Saving and replay.** Every program is saved (`PlanProgram`), so `patch_plan` can
   amend one that finalize refused. `dry_run` evaluates everything and commits nothing.
 - **Visible in the editor.** A commit materializes into the job's current result, so
-  the web app and `art ui` show it.
+  the web app and `artie ui` show it.
 - **Scripted host.** `python -m eval.scripted_host` drives benchmark tasks through the
   contract with a fixed, model-free policy.
 
@@ -595,7 +597,7 @@ construction.
 | | `list_items` | kind → every key and title, no query needed (#191); each item also carries its `preferences` and `job_rules` (#297) |
 | | `get_item` | key → record, evidence; an experience or project also lists its approved variants (id, text, tags, cites) (#229); its `preferences` (active, keyed to it, any scope) and `job_rules` (#297) |
 | | `get_profile` | → name and contact details for the header (#191) |
-| | `list_github_repos` | page, per_page, include_private, include_readme → the signed-in user's own repos with languages, topics, stars, last push, fork and archived flags, clone command and README excerpt; needs `art github login`, and no profile (#353) |
+| | `list_github_repos` | page, per_page, include_private, include_readme → the signed-in user's own repos with languages, topics, stars, last push, fork and archived flags, clone command and README excerpt; needs `artie github login`, and no profile (#353) |
 | Ingest & library | `ingest_schema` | kind → JSON schema the host fills |
 | | `upsert_items` | records with evidence → keys, merges, conflicts; kind `variant` imports the user's curated bullets, approved (#229) |
 | | `promote_bullet` | node, bullet, optional item key and track → a **draft** variant, or the existing one (#229) |
@@ -651,7 +653,7 @@ recorded (naming the broader rule) and listed under `rules.overridden` if it exi
 soft rules the narrower scope overrides the broader, and a soft rule never loosens a hard one. A
 narrower hard `section_order` may only extend a broader one.
 
-**The user's editor layout outranks a rule's section order.** A drag in `art ui` is laid over the
+**The user's editor layout outranks a rule's section order.** A drag in `artie ui` is laid over the
 plan's order after the rule's default and the plan's own order were settled (#277), and is never a
 violation. A plan's own `section_order` is still checked against a hard rule.
 
@@ -677,9 +679,9 @@ composite is not an input. Results: `eval/results/preference_compliance_<date>.{
 
 ### Migrating rows written before the anchoring model (#300)
 
-Rows an older build wrote are brought over by `art migrate preferences [--dry-run]
+Rows an older build wrote are brought over by `artie migrate preferences [--dry-run]
 [--user-id <uuid>]` (`harness/migrations.py`; a CLI command, not an MCP tool), and automatically
-once per user when a local SQLite store is opened by `art-mcp` or `art`. It never guesses and
+once per user when a local SQLite store is opened by `artie-mcp` or `artie`. It never guesses and
 never deletes (a changed row is `superseded`, with `provenance.migration`), and a second run
 changes nothing.
 
@@ -791,7 +793,7 @@ reminder just before generating is the largest single fix.
   (`renamed_from`); deleting it turns them back into pending rows under its name
   (`unlinked_from`), which re-bind only to that same key. Nothing is deleted. `get_item`,
   `kg_search` and `list_items` return each item's `preferences` and `job_rules`.
-- **One-time import.** The gate captures only new statements, so `art-setup` tells the host
+- **One-time import.** The gate captures only new statements, so `artie-setup` tells the host
   to import the user's existing standing preferences and negative pins through
   `record_preference`. There is no import path of its own.
 
@@ -823,18 +825,18 @@ migrate as a linear chain.
 | Jev decision cache, block render cache | SQLite (clearable) |
 | Chat transcripts | The host's storage; ART keeps extracted preferences, feedback and the session ID |
 | Keys (TypeSafe; optionally Anthropic for the chat panel, planned in #205) | `TYPESAFE_API_KEY` in the environment, else the OS keychain through the optional `keyring` package (service `art-mcp`); never in the DB |
-| GitHub token (`art github login`, #353) | The OS keychain through the optional `keyring` package (service `art-mcp`, user `github-token`), else `ART_GITHUB_TOKEN`; never in the DB, an export bundle or a log |
+| GitHub token (`artie github login`, #353) | The OS keychain through the optional `keyring` package (service `art-mcp`, user `github-token`), else `ART_GITHUB_TOKEN`; never in the DB, an export bundle or a log |
 
 ### Backup, restore and the one-time migration (#195)
 
-`art export` and `art import` (`harness/export_import.py`) are CLI commands that print one
-JSON document, like the other `art` subcommands. They are **not MCP tools**: a host
+`artie export` and `artie import` (`harness/export_import.py`) are CLI commands that print one
+JSON document, like the other `artie` subcommands. They are **not MCP tools**: a host
 should not be able to restore over a store or read a hosted database on its own.
 
 ```bash
-art export --out ~/backups/art.zip [--user-id <uuid>] [--include-cache]
-art import ~/backups/art.zip [--user-id <uuid>] [--merge | --replace --confirm-replace] [--dry-run]
-art import --from-supabase --source-url <postgresql://...> --user-id <uuid> [--set-active]
+artie export --out ~/backups/art.zip [--user-id <uuid>] [--include-cache]
+artie import ~/backups/art.zip [--user-id <uuid>] [--merge | --replace --confirm-replace] [--dry-run]
+artie import --from-supabase --source-url <postgresql://...> --user-id <uuid> [--set-active]
 ```
 
 **The bundle** is one zip: `manifest.json` (format `art-export`, `format_version`,
@@ -887,25 +889,25 @@ and columns are dropped).
 ## 13. Editor and chat (#204, #205)
 
 The React editor keeps the LaTeX buffer with `%% ART-SECTION` markers, drag reordering,
-automatic compile and layout overrides (#71, #118). It runs unchanged as `art ui`, served
+automatic compile and layout overrides (#71, #118). It runs unchanged as `artie ui`, served
 by the same routers in local mode (SQLite, no login).
 
 ```mermaid
 flowchart LR
-    HC[Host conversation] -->|tool calls| MCP[art-mcp]
+    HC[Host conversation] -->|tool calls| MCP[artie-mcp]
     CP[Editor chat panel<br/>Agent SDK] -.->|SDK session| MCP
     MCP -->|commit| CORE[art-core<br/>tree · HEAD · change feed]
-    UIS[art ui server] <-->|edits · events| CORE
+    UIS[artie ui server] <-->|edits · events| CORE
     UIS <-->|HTTP + SSE| ED[LaTeX editor + PDF]
     CORE -->|render| FS[applications/ files]
 ```
 
 There are three ways to chat-edit:
 
-1. **Side by side (default).** `/art:open` opens the editor, in the Claude desktop browser
+1. **Side by side (default).** `/artie:open` opens the editor, in the Claude desktop browser
    pane where available. The prompt hook injects the user's editor edits from `get_head`,
    so the host never overwrites manual work.
-2. **The chat panel.** It drives a Claude Agent SDK session with `art-mcp` attached.
+2. **The chat panel.** It drives a Claude Agent SDK session with `artie-mcp` attached.
    Anthropic's help center currently lets third-party apps authenticate users' own
    subscriptions through the Agent SDK, against a per-user monthly credit. Re-verify this
    before shipping.
@@ -921,10 +923,10 @@ There are three ways to chat-edit:
 | Faithful keep | Nodes branch from HEAD |
 | Drag reorder → layout override | Unchanged, and each drag is also a node |
 
-### Running `art ui` (#204)
+### Running `artie ui` (#204)
 
 ```bash
-art ui --job <job_id>                        # installed with [ui]; opens http://127.0.0.1:8765/?job=<job_id>
+artie ui --job <job_id>                        # installed with [ui]; opens http://127.0.0.1:8765/?job=<job_id>
 npm --prefix web/frontend ci && npm --prefix web/frontend run build   # from a checkout, once
 python -m web.local_ui --job <job_id>        # from a checkout
 ```
@@ -996,8 +998,8 @@ flowchart LR
 
 | Host | Tools via | Workflow via | Per-message hook | After compaction | Editor |
 |---|---|---|---|---|---|
-| Claude Code (#201) | MCP, stdio | Plugin skills, `/art:*` | `UserPromptSubmit` | `SessionStart`, source `compact` | Desktop browser pane or tab |
-| Codex (#203) | MCP, stdio | Plugin skills (`$art-tailor`) + `AGENTS.md` snippet | `UserPromptSubmit`, in the plugin (`art hooks codex --write` before Codex 0.131) | `SessionStart`, source `compact`, same | Browser tab |
+| Claude Code (#201) | MCP, stdio | Plugin skills, `/artie:*` | `UserPromptSubmit` | `SessionStart`, source `compact` | Desktop browser pane or tab |
+| Codex (#203) | MCP, stdio | Plugin skills (`$artie-tailor`) + `AGENTS.md` snippet | `UserPromptSubmit`, in the plugin (`artie hooks codex --write` before Codex 0.131) | `SessionStart`, source `compact`, same | Browser tab |
 | Cursor, others | MCP | Rules file | None | None | Browser tab |
 
 ART targets mainstream coding agents: Claude Code and Codex (decided 2026-09-25; pi and
@@ -1010,11 +1012,11 @@ Codex CLI (0.149) was checked against its docs and live runs.
 - **Plugin.** `plugin/` carries a second manifest, `.codex-plugin/plugin.json`, which shares
   the skills and `.mcp.json`. The repo's `.agents/plugins/marketplace.json` lists it:
   `codex plugin marketplace add nathansso/agentic_resume_tailoring`, then
-  `codex plugin add art@art`. The Claude-only `commands/` directory is ignored, and the
+  `codex plugin add artie@artie`. The Claude-only `commands/` directory is ignored, and the
   skills are host-neutral.
 - **Hooks.**
   - Codex has `UserPromptSubmit` and `SessionStart` (source `compact`), with the same stdin
-    and `hookSpecificOutput.additionalContext` JSON as Claude Code, so `art hook` serves both.
+    and `hookSpecificOutput.additionalContext` JSON as Claude Code, so `artie hook` serves both.
   - It also has `PreCompact` / `PostCompact`, which ART doesn't use.
   - **The transcript (#244).** Both hosts put `transcript_path` in the hook's input, and the
     memory gate reads the previous assistant turn from it. Claude Code's is JSONL, one
@@ -1037,12 +1039,12 @@ Codex CLI (0.149) was checked against its docs and live runs.
     hooks page: [learn.chatgpt.com/docs/hooks](https://learn.chatgpt.com/docs/hooks)
     (developers.openai.com/codex/hooks redirects there), § "Plugin-bundled hooks". Installing a
     plugin does not trust its hooks: Codex skips them until the user reviews them in `/hooks`.
-    Verified live on 0.149: after `codex plugin add art@art`, the app-server's `hooks/list`
+    Verified live on 0.149: after `codex plugin add art@art` (the id before #395), the app-server's `hooks/list`
     returns `plugin/hooks/hooks.json`'s two hooks with `source: "plugin"`, `trustStatus:
     "untrusted"`. So the Codex plugin names that one file in its manifest (`"hooks":
     "./hooks/hooks.json"`), the file Claude Code reads, and installs need no extra command
     beyond the trust step.
-  - **The file install is a fallback.** `art hooks codex --write` merges the hooks into
+  - **The file install is a fallback.** `artie hooks codex --write` merges the hooks into
     `$CODEX_HOME/hooks.json` for a Codex that does not load plugin hooks (before 0.131), or one
     used without the plugin. It checks `$CODEX_HOME/config.toml` and the installed plugin copy
     for an enabled plugin that bundles ART's hooks (`plugin_with_art_hooks`). With one, it adds
@@ -1061,7 +1063,7 @@ Codex CLI (0.149) was checked against its docs and live runs.
   `approval_policy="never"`, `open_job` fails ("requires approval"). Users approve them or
   always-allow the server; `--approve-for-me` works headless.
 - **Verified live** (`codex exec`):
-  - A benchmark posting tailored end to end through `$art-tailor`: 17 ART calls, one
+  - A benchmark posting tailored end to end through `$artie-tailor`: 17 ART calls, one
     `patch_plan`, a committed version and a one-page PDF.
   - The prompt hook's editor-edit message reached the model.
   - `codex exec` would not compact on demand (no `/compact`, and a low
@@ -1072,19 +1074,19 @@ Codex CLI (0.149) was checked against its docs and live runs.
 
 `plugin/` is the plugin, and the repo root's `.claude-plugin/marketplace.json` lists it,
 so `/plugin marketplace add nathansso/agentic_resume_tailoring` then `/plugin install
-art@art` installs it.
+artie@artie` installs it.
 
-- **Server.** `.mcp.json` runs `art mcp` through `uvx --python 3.12 --from` one pinned release wheel (#256), which has the built editor in it (#255). The Python pin is shared by the hooks and the `uv tool install` `/art:setup` makes, so `uvx` always reuses that install (#385).
+- **Server.** `.mcp.json` runs `artie mcp` through `uvx --python 3.12 --from` one pinned release wheel (#256), which has the built editor in it (#255). The Python pin is shared by the hooks and the `uv tool install` `/artie:setup` makes, so `uvx` always reuses that install (#385).
 - **Skills.**
-  - `art-tailor`: briefing → `open_job` (with requirements and rule answers) → read the
+  - `artie-tailor`: briefing → `open_job` (with requirements and rule answers) → read the
     graph → a plan program **shown for approval** → `execute_plan` / `patch_plan` →
     `render`.
-  - `art-setup`: read the user's sources → `upsert_items`, using `correct` for stale
+  - `artie-setup`: read the user's sources → `upsert_items`, using `correct` for stale
     facts → `update_profile` → job-scoped rules.
-- **Commands.** `/art:tailor`, `/art:setup`, `/art:open`, `/art:history`,
-  `/art:revert` and `/art:prefs` (read-only).
-- **Hooks** (`art hook <event>`, `harness/hooks.py`), local and model-free:
-  - `UserPromptSubmit` tells the host which jobs the user edited in `art ui` since the
+- **Commands.** `/artie:tailor`, `/artie:setup`, `/artie:open`, `/artie:history`,
+  `/artie:revert` and `/artie:prefs` (read-only).
+- **Hooks** (`artie hook <event>`, `harness/hooks.py`), local and model-free:
+  - `UserPromptSubmit` tells the host which jobs the user edited in `artie ui` since the
     last message, and what changed. It keeps a per-session event cursor in
     `$ART_DATA_DIR/sessions/`. It also runs the memory gate (#202) on the message: one
     line when it may be a standing preference, or when ART saved one. A message that leans
@@ -1134,7 +1136,7 @@ graduation date that depends on post-internship enrollment). Rules are recorded 
 Each job has an application status (drafting, applied, interview, closed) that
 `list_jobs(status)` filters on.
 
-**GitHub (#353).** `art github login|logout|status` signs the user in with GitHub's device
+**GitHub (#353).** `artie github login|logout|status` signs the user in with GitHub's device
 flow, which needs only a public client ID (`ART_GITHUB_CLIENT_ID`, else the one the package
 ships once the owner has registered the OAuth App: no secret, no server, no redirect). It asks
 for `read:user`; `--private` adds `repo`. The token is kept as the Keys row above says, and
@@ -1156,14 +1158,14 @@ process is started with `--allow-writes`.
 **Installed (#194).** The package is `art-mcp` (`pyproject.toml`, hatchling). Its default
 install is what the harness imports: `mcp`, `sqlmodel`, `pydantic`, `numpy`, `networkx`,
 `requests`, `python-dotenv`. There is no torch and no LLM client. The extras are `[embed]`,
-`[pdf]`, `[ui]` and `[postgres]`. It provides two scripts: `art-mcp` (the server) and `art`
-(the JSON CLI, plus `art ui`). INSTALL.md has the commands; a checkout still works as before:
+`[pdf]`, `[ui]` and `[postgres]`. It provides two scripts: `artie-mcp` (the server) and `artie`
+(the JSON CLI, plus `artie ui`). INSTALL.md has the commands; a checkout still works as before:
 
 ```bash
-claude mcp add art -- uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl" art mcp
-claude mcp add art -- <repo>/.venv/Scripts/python.exe <repo>/harness/mcp_server.py   # checkout
-art --list                                   # or python -m harness.cli --list
-art kg_search --args '{"query": "python"}'
+claude mcp add artie -- uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie mcp
+claude mcp add artie -- <repo>/.venv/Scripts/python.exe <repo>/harness/mcp_server.py   # checkout
+artie --list                                   # or python -m harness.cli --list
+artie kg_search --args '{"query": "python"}'
 ```
 
 - **Database.** It reads local SQLite (`$ART_DATA_DIR/art.db`, default `~/.art/art.db`).
@@ -1171,7 +1173,7 @@ art kg_search --args '{"query": "python"}'
   `--database-url <url>`, or `--database-url dotenv` to take `.env`'s `DATABASE_URL`
   explicitly without putting the secret on the command line. Postgres sessions are
   forced read-only (`default_transaction_read_only=on`).
-- **First run.** `art-mcp` and `art` create and migrate a local SQLite store on start and
+- **First run.** `artie-mcp` and `artie` create and migrate a local SQLite store on start and
   bind a default profile when none is bound, so a clean install answers tools instead of
   returning `no_user`. A store named by `ART_DATA_DIR` starts empty; only the default
   `~/.art` still adopts a checkout's legacy `art.db`.
@@ -1209,16 +1211,16 @@ harness/
   executor.py  acceptance.py  program.py                # plan programs and the metric rule
   tree.py  library.py  memory.py  ingest.py  tools.py   # history, bullets, preferences, ingestion
   render.py  render_cache.py  hooks.py  transcript.py  runtime.py
-  export_import.py                   # art export / art import (#195)
+  export_import.py                   # artie export / artie import (#195)
   github.py  github_cli.py           # GitHub device-flow login, token store, repo list (#353)
   decisions/                         # Jev client, cache, engine, recordings, one module per point
-web/                                 # art ui (local mode, SSE); the SDK chat panel is planned (#205)
+web/                                 # artie ui (local mode, SSE); the SDK chat panel is planned (#205)
 site/                                # the public landing site (#271): Astro, on Vercel, apart from the harness
 plugin/                              # Claude Code plugin: skills, commands, hooks
 integrations/codex/
 eval/hosts/                          # planned (#206): taskground-style host runner
 eval/*_labels/                       # labelled sets, recordings and fits for each Jev point
-pyproject.toml                       # art, art-mcp · extras [embed] [pdf] [ui] [keyring] [postgres]
+pyproject.toml                       # artie, artie-mcp · extras [embed] [pdf] [ui] [keyring] [postgres]
 ```
 
 ## 18. Roadmap

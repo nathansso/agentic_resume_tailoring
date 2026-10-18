@@ -1,6 +1,6 @@
 """The memory gate (#202): is a user message a standing preference, and what is it?
 
-A host left to itself under-calls memory tools (When2Tool, #105), so `art hook user-prompt`
+A host left to itself under-calls memory tools (When2Tool, #105), so `artie hook user-prompt`
 runs `observe` on every message. This module is the decision behind it. It never writes: it
 returns a routing decision, and `harness/memory.py` acts on it.
 

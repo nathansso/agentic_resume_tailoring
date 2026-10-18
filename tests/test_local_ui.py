@@ -1,4 +1,4 @@
-"""`art ui` (issue #204): local mode, its guards, the SSE change feed, the launcher."""
+"""`artie ui` (issue #204): local mode, its guards, the SSE change feed, the launcher."""
 
 import gc
 import json
@@ -287,7 +287,7 @@ def test_a_drag_in_local_mode_appears_in_the_hosts_next_turn(
 
 def test_a_drag_saves_without_the_llm_stack(job, isolated_engine, local_client, short_stream,
                                             monkeypatch):
-    """An `art ui` install is model-free (`art-mcp[ui]`): PUT /layout must not import
+    """An `artie ui` install is model-free (`art-mcp[ui]`): PUT /layout must not import
     `agents.tailor`, which pulls LangChain. Live smoke test (Oct): it returned a 500."""
     import sys
     from harness import tree
@@ -334,7 +334,7 @@ def test_a_non_checkout_install_is_pointed_at_the_release_wheel(tmp_path, capsys
     assert not local_ui.in_checkout(tmp_path)                 # no package.json beside it
     msg = local_ui.missing_static(tmp_path, checkout=False)
     assert "npm" not in msg and "web/frontend" not in msg
-    assert f'uvx --python 3.12 --from "{SOURCE}" art ui' in msg
+    assert f'uvx --python 3.12 --from "{SOURCE}" artie ui' in msg
     assert "has not been built" in msg
 
     # Same message through the launcher, and it exits before pinning anything.

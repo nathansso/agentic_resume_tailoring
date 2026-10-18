@@ -176,7 +176,7 @@ def decide(point: str, state: Any, questions: Sequence[Question], fallback: Fall
             f"{point}: {len(missing)} of {len(questions)} decisions are not in the cache "
             f"({', '.join(sorted({questions[i].version for i in missing}))}; "
             f"key {keys[missing[0]][:12]}). Replay never calls the API: re-record with "
-            f"{MODE_ENV}=auto, or run `art jev import`.")
+            f"{MODE_ENV}=auto, or run `artie jev import`.")
 
     if missing:
         _ask(point, state, questions, keys, missing, answers, fallback, client, model)

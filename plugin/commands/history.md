@@ -14,4 +14,4 @@ Show me the history of a tailored resume with ART.
    the changes in one line: items added or removed, bullets changed, skills, and
    hand edits to the .tex or the layout.
 
-Offer `/art:revert` if I want an earlier version back.
+Offer `/artie:revert` if I want an earlier version back.

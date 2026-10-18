@@ -3,7 +3,7 @@
 `harness/decisions/memory_gate.py` decides; this module acts. It is the only place a preference is
 written from a message.
 
-- **`observe(text)`**: runs the gate on one user message (`art hook user-prompt` calls it on every
+- **`observe(text)`**: runs the gate on one user message (`artie hook user-prompt` calls it on every
   prompt) and returns the decision: `drop`, `host` (it may be a preference: confirm with the user
   and call `record_preference`) or `write` (a clear, low-stakes preference ART saved itself).
   Without a key, in mode `off`, or on an API error, the prefilter alone decides and nothing is

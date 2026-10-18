@@ -3,7 +3,7 @@
 The plugin is text a model reads, so the tests hold it to the code: every tool
 a skill or command tells the model to call exists in the contract, and none of
 the tools still to come (#199) is taught early. The hooks are tested as
-functions and through `art hook` with a real stdin payload.
+functions and through `artie hook` with a real stdin payload.
 """
 
 import io
@@ -34,12 +34,13 @@ def _frontmatter(path):
 
 
 def test_manifests_point_at_the_plugin_and_its_server():
-    assert _json("plugin/.claude-plugin/plugin.json")["name"] == "art"
+    assert _json("plugin/.claude-plugin/plugin.json")["name"] == "artie"
     market = _json(".claude-plugin/marketplace.json")
     assert [p["source"] for p in market["plugins"]] == ["./plugin"]
-    server = _json("plugin/.mcp.json")["mcpServers"]["art"]
-    # The plugin runs through the `art` entry point alone (#256).
-    assert server["command"] == "uvx" and server["args"][-2:] == ["art", "mcp"]
+    assert [p["name"] for p in market["plugins"]] == ["artie"] and market["name"] == "artie"
+    server = _json("plugin/.mcp.json")["mcpServers"]["artie"]
+    # The plugin runs through the `artie` entry point alone (#256, renamed in #395).
+    assert server["command"] == "uvx" and server["args"][-2:] == ["artie", "mcp"]
 
 
 def test_hooks_run_art_hook_events_from_the_same_package_as_the_server():
@@ -184,11 +185,11 @@ def test_art_hook_speaks_claude_codes_json_and_never_fails(job, monkeypatch, cap
 def test_codex_shares_the_plugin_directory_and_its_skills():
     codex = _json("plugin/.codex-plugin/plugin.json")
     claude = _json("plugin/.claude-plugin/plugin.json")
-    assert codex["name"] == claude["name"] == "art" and codex["version"] == claude["version"]
+    assert codex["name"] == claude["name"] == "artie" and codex["version"] == claude["version"]
     assert (PLUGIN / codex["skills"]).resolve() == (PLUGIN / "skills").resolve()
     assert (PLUGIN / codex["mcpServers"]).is_file()
     [entry] = _json(".agents/plugins/marketplace.json")["plugins"]
-    assert entry["name"] == "art" and entry["source"] == {"source": "local", "path": "./plugin"}
+    assert entry["name"] == "artie" and entry["source"] == {"source": "local", "path": "./plugin"}
 
 
 def test_one_hook_config_serves_both_hosts():
@@ -200,7 +201,7 @@ def test_one_hook_config_serves_both_hosts():
 
 def test_skills_name_no_host_specific_slash_command():
     for path in PLUGIN.glob("skills/*/SKILL.md"):
-        assert "/art:" not in path.read_text(encoding="utf-8"), path
+        assert "/artie:" not in path.read_text(encoding="utf-8"), path
 
 
 def test_art_hooks_codex_merges_without_touching_existing_hooks(tmp_path, monkeypatch, capsys):
@@ -242,7 +243,9 @@ _V010_WHEEL = ("art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailor
 def _v010_hook(arg):
     from harness.hooks import hook_command
 
-    return {"type": "command", "timeout": 30, "command": hook_command(arg, _V010_WHEEL)}
+    # Every release before v0.2.0 ran the command as `art` (#395).
+    command = hook_command(arg, _V010_WHEEL).replace(" artie hook ", " art hook ")
+    return {"type": "command", "timeout": 30, "command": command}
 
 
 def _old_hook(source, arg, tail=""):
@@ -285,8 +288,8 @@ def test_art_hooks_codex_replaces_hooks_from_earlier_installs(tmp_path, monkeypa
 
 
 def test_art_hooks_codex_replaces_the_v010_hooks_with_this_versions(tmp_path, monkeypatch, capsys):
-    """#369: a user who ran `art hooks codex --write` under v0.1.0 re-runs it after upgrading.
-    Those two lines are ART's own, so they go and the current wheel's take their place; the
+    """#369: a user who ran `art hooks codex --write` under v0.1.0 re-runs it (as `artie`, #395)
+    after upgrading. Those two lines are ART's own, so they go and the current wheel's take their place; the
     user's hooks keep their place and are not edited."""
     from harness import ART_VERSION, entry
     mine = {"type": "command", "command": "my-lint"}
@@ -308,6 +311,46 @@ def test_art_hooks_codex_replaces_the_v010_hooks_with_this_versions(tmp_path, mo
     assert got["hooks"]["UserPromptSubmit"][0] == {"hooks": [mine]}      # the user's, in place
     err = capsys.readouterr().err
     assert err.count("replaced") >= 2 and "v0.1.0" in err
+
+    before = path.read_bytes()
+    assert entry.main(["hooks", "codex", "--write"]) == 0               # a second run is a no-op
+    assert path.read_bytes() == before
+
+
+# What `art hooks codex --write` wrote under v0.1.2, the last release whose command was `art`.
+# Spelled out word for word, so it stays the old line whatever hook_command becomes.
+_V012_SOURCE = ("art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/"
+                "download/v0.1.2/art_mcp-0.1.2-py3-none-any.whl")
+
+
+def _v012_hook(arg):
+    return {"type": "command", "timeout": 30,
+            "command": f'uvx --offline --python 3.12 --from "{_V012_SOURCE}" art hook {arg}; exit 0'}
+
+
+def test_artie_hooks_codex_replaces_the_hooks_an_art_install_wrote(tmp_path, monkeypatch, capsys):
+    """#395: the command was renamed `art` -> `artie`. A user who ran `art hooks codex --write`
+    runs `artie hooks codex --write`: the `art hook` lines are ART's own, so they are replaced by
+    the `artie hook` ones rather than left to fire beside them (and fail: there is no `art` in the
+    new wheel). The user's hooks keep their place."""
+    from harness import entry
+    from harness.hooks import hook_config, is_art_hook
+
+    mine = {"type": "command", "command": "my-lint"}
+    path = _codex_config(tmp_path, monkeypatch, {"hooks": {
+        "UserPromptSubmit": [{"hooks": [mine]}, {"hooks": [_v012_hook("user-prompt")]}],
+        "SessionStart": [{"matcher": "compact", "hooks": [_v012_hook("session-start")]}]}})
+    assert all(is_art_hook(_v012_hook(a)["command"]) for a in ("user-prompt", "session-start"))
+
+    assert entry.main(["hooks", "codex", "--write"]) == 0
+    got = json.loads(path.read_text(encoding="utf-8"))
+    ours = hook_config()["hooks"]
+    assert got["hooks"]["UserPromptSubmit"] == [{"hooks": [mine]}] + ours["UserPromptSubmit"]
+    assert got["hooks"]["SessionStart"] == ours["SessionStart"]
+    text = json.dumps(got)
+    assert " art hook " not in text and text.count(" artie hook ") == 2
+    err = capsys.readouterr().err
+    assert err.count("replaced") >= 2 and " art hook user-prompt" in err
 
     before = path.read_bytes()
     assert entry.main(["hooks", "codex", "--write"]) == 0               # a second run is a no-op
@@ -376,13 +419,18 @@ def test_is_art_hook_recognises_any_source_and_only_art():
     assert is_art_hook(hook_command("user-prompt"))
     assert is_art_hook(hook_command("session-start", _OLD_WHEEL))
     assert is_art_hook(hook_command("user-prompt", _V010_WHEEL))         # #369
-    assert is_art_hook(f'uvx --from {_OLD_GIT} art hook user-prompt')
+    assert is_art_hook(f'uvx --from {_OLD_GIT} artie hook user-prompt')
+    assert is_art_hook(f'uvx --from {_OLD_GIT} art hook user-prompt')         # before #395
     assert is_art_hook(f'uvx --from {_OLD_GIT} art-mcp')
+    assert is_art_hook(f'uvx --from {_OLD_GIT} artie-mcp')
+    assert is_art_hook(f'uvx --from "art-mcp @ {_OLD_GIT}" artie mcp')
     for command in ("my-lint", None, 3, "",
                     "uvx --from ruff ruff check",                       # uvx, not ART
                     "uvx --from other-pkg other hook user-prompt",
                     'uvx --from "art-mcp" art-mcp',                      # another project's art-mcp
-                    f"art hook user-prompt",                             # no uvx --from
+                    "artie hook user-prompt",                            # no uvx --from
+                    "art hook user-prompt",
+                    "uvx --from other-pkg party hook user-prompt",       # `art` inside a word
                     f"echo uvx --from {_OLD_GIT}"):
         assert not is_art_hook(command), command
 
@@ -421,8 +469,8 @@ def test_the_codex_plugin_bundles_the_hooks_pinned_to_this_version():
     assert "commandWindows" not in text and "command_windows" not in text
 
 
-def _install_plugin(home, hooks_config=None, enabled=True, plugin="art", market="art"):
-    """What `codex plugin add art@art` leaves in a CODEX_HOME: the config entry and the copied
+def _install_plugin(home, hooks_config=None, enabled=True, plugin="artie", market="artie"):
+    """What `codex plugin add artie@artie` leaves in a CODEX_HOME: the config entry and the copied
     plugin, hooks file included."""
     from harness import ART_VERSION
     from harness.hooks import hook_config
@@ -462,12 +510,12 @@ def test_write_with_the_plugin_installed_removes_its_own_hooks_not_the_users(
     assert entry.main(["hooks", "codex", "--write"]) == 0
     after = json.loads(path.read_text(encoding="utf-8"))
     assert after == mine                                            # only the user's remain
-    plugin_hooks = json.loads((tmp_path / "plugins" / "cache" / "art" / "art" / ART_VERSION / "hooks"
+    plugin_hooks = json.loads((tmp_path / "plugins" / "cache" / "artie" / "artie" / ART_VERSION / "hooks"
                                / "hooks.json").read_text(encoding="utf-8"))
     assert plugin_hooks == hook_config()
     assert len(_art_hook_lines(plugin_hooks, after)) == 2           # one of each, in all
     err = capsys.readouterr().err
-    assert "art@art" in err and "2 duplicate" in err
+    assert "artie@artie" in err and "2 duplicate" in err
 
     before = path.read_bytes()
     assert entry.main(["hooks", "codex", "--write"]) == 0          # a second run changes nothing
@@ -490,7 +538,7 @@ def test_write_with_the_plugin_installed_creates_nothing(tmp_path, monkeypatch, 
 
 def test_write_still_installs_when_the_plugin_does_not_supply_the_hooks(tmp_path, monkeypatch):
     """The file install stays the path for a Codex without plugin hooks, a disabled plugin, an
-    unrelated plugin called `art`, and `--standalone`."""
+    unrelated plugin called `artie`, and `--standalone`."""
     from harness import entry
     from harness.hooks import hook_config
 
@@ -526,14 +574,14 @@ def test_plugin_detection_ignores_a_missing_or_broken_config(tmp_path):
     assert plugin_with_art_hooks(tmp_path) is None
     (tmp_path / "config.toml").write_text("[plugins\n", encoding="utf-8")
     assert plugin_with_art_hooks(tmp_path) is None
-    (tmp_path / "config.toml").write_text('[plugins."art@art"]\nenabled = true\n', encoding="utf-8")
+    (tmp_path / "config.toml").write_text('[plugins."artie@artie"]\nenabled = true\n', encoding="utf-8")
     assert plugin_with_art_hooks(tmp_path) is None                  # enabled, but no cache copy
 
 
 # ── a pinned, offline-safe source (#256) ─────────────────────────────────────
 
 def _server_args():
-    return _json("plugin/.mcp.json")["mcpServers"]["art"]["args"]
+    return _json("plugin/.mcp.json")["mcpServers"]["artie"]["args"]
 
 
 def _server_source():
@@ -563,9 +611,9 @@ def test_a_hook_line_cannot_fail_or_wait_on_the_network():
 
     line = hook_command("user-prompt")
     # Offline: only what the server's start cached. `; exit 0`: uvx failing before
-    # `art` runs (no uvx, cold cache) still exits 0.
+    # `artie` runs (no uvx, cold cache) still exits 0.
     assert line.startswith("uvx --offline --python 3.12 --from ")
-    assert line.endswith("art hook user-prompt; exit 0")
+    assert line.endswith("artie hook user-prompt; exit 0")
     assert f'"{SOURCE}"' in line
     # Plain words, double quotes and `;`, so sh, Git Bash and PowerShell all run it.
     for token in ("||", "&&", "2>", "$", "'", "`"):
@@ -615,20 +663,20 @@ def test_the_release_workflow_builds_the_editor_into_a_tagged_wheel():
 
 
 def test_every_art_ui_command_in_the_docs_runs_the_pinned_wheel():
-    """`/art:open`, the skill and INSTALL tell the user one `art ui` command, and it is the
+    """`/artie:open`, the skill and INSTALL tell the user one `artie ui` command, and it is the
     release wheel with the editor in it (#255), not a git install, which has none."""
     from harness.hooks import SOURCE
 
-    files = [PLUGIN / "commands" / "open.md", PLUGIN / "skills" / "art-tailor" / "SKILL.md",
+    files = [PLUGIN / "commands" / "open.md", PLUGIN / "skills" / "artie-tailor" / "SKILL.md",
              ROOT / "INSTALL.md"]
     for path in files:
         text = path.read_text(encoding="utf-8")
-        lines = [ln.strip() for ln in text.splitlines() if " art ui" in ln and "uvx" in ln]
+        lines = [ln.strip() for ln in text.splitlines() if " artie ui" in ln and "uvx" in ln]
         assert lines, path
         for ln in lines:
             if "dist/" in ln:                       # INSTALL's build-it-yourself line
                 continue
-            assert ln.startswith(f'uvx --python 3.12 --from "{SOURCE}" art ui'), (path.name, ln)
+            assert ln.startswith(f'uvx --python 3.12 --from "{SOURCE}" artie ui'), (path.name, ln)
     for path in [*PLUGIN.rglob("*.md"), *PLUGIN.rglob("*.json")]:
         assert "git+https" not in path.read_text(encoding="utf-8"), path
     assert "npm" not in (PLUGIN / "commands" / "open.md").read_text(encoding="utf-8")
@@ -638,7 +686,7 @@ def test_every_art_ui_command_in_the_docs_runs_the_pinned_wheel():
 
 UV_INSTALL_UNIX = "curl -LsSf https://astral.sh/uv/install.sh | sh"
 UV_INSTALL_WINDOWS = 'powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"'
-SETUP_TEXTS = [PLUGIN / "commands" / "setup.md", PLUGIN / "skills" / "art-setup" / "SKILL.md"]
+SETUP_TEXTS = [PLUGIN / "commands" / "setup.md", PLUGIN / "skills" / "artie-setup" / "SKILL.md"]
 _WHEEL = re.compile(r"https://\S+?/releases/download/v[\w.]+/art_mcp-[\w.]+-py3-none-any\.whl")
 
 
@@ -655,7 +703,7 @@ def test_setup_preflight_installs_uv_and_art_from_the_servers_pin():
         assert UV_INSTALL_UNIX in text and UV_INSTALL_WINDOWS in text, path.name
         assert f'uv tool install --python 3.12 "{source}"' in text, path.name
         assert "uv tool update-shell" in text, path.name
-        for check in ("uv --version", "art --list", "uname -s", "~/.local/bin"):
+        for check in ("uv --version", "artie --list", "uname -s", "~/.local/bin"):
             assert check in text, (path.name, check)
         # No sudo, no Homebrew: the official installers are the only route.
         assert "sudo " not in text and "brew install" not in text, path.name
@@ -736,7 +784,7 @@ def test_every_launch_of_the_pinned_wheel_asks_for_the_same_python():
 def test_the_plugin_still_launches_uvx_by_name_not_a_hard_coded_path():
     """#385 makes PATH right instead of pointing the host at a uv binary: a fixed path breaks
     Homebrew and winget installs, and how a host expands `~` or a variable is undocumented."""
-    server = _json("plugin/.mcp.json")["mcpServers"]["art"]
+    server = _json("plugin/.mcp.json")["mcpServers"]["artie"]
     assert server["command"] == "uvx"
     blob = json.dumps(server) + (PLUGIN / "hooks" / "hooks.json").read_text(encoding="utf-8")
     for token in ("~", ".local", "${", "/usr/", "C:\\", "HOME"):

@@ -14,6 +14,38 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 395 & Release v0.2.0 — the product is `artie`: the command, the plugin id and `/artie:*`
+**Status:** complete in the repo; the tag `v0.2.0` is pushed after merge | **Tests:** 3501 pass on SQLite (6 new: 4 in `test_packaging.py`, 1 in `test_plugin.py`, 1 in `test_site_docs.py`; the plugin, site-drift and GitHub-hint tests updated for the new names), 25 skipped, 2 xfailed, 0 fail; the Postgres leg was not run locally (nothing here touches storage), CI's required leg covers it; `uv build` gives `art_mcp-0.2.0-py3-none-any.whl` with the editor; a clean `uv tool install --python 3.12` of it into throwaway uv tool, bin, cache and data folders installs exactly `artie` and `artie-mcp` (no `art`), `artie --list` lists 30 tools, bare `artie` prints the new help, `artie mcp --help` and `artie ui --help` answer, and `scripts/smoke_art_mcp.py` passes run with the installed tool's Python, `-I`, from a neutral folder
+
+Decided 2026-10-17 under the MCP revision (#391, `docs/harness.md` § 2.1): the product's name is `artie` everywhere a user types or sees it. Existing installs break, which the owner accepted (there are no outside users yet). Main's plugin files are what plugin users load and must never call a command the pinned wheel lacks, so the rename ships with the release bump in one PR, the way v0.1.2 did.
+
+### What shipped
+
+**In the wheel**
+
+- **The commands are `artie` and `artie-mcp`** (`pyproject.toml` `[project.scripts]`), with no `art` alias. The distribution stays `art-mcp`, so the wheel's file name and the release URL pattern are unchanged.
+- **Bare `artie` prints help for a person** (`harness/entry.py::HELP`; also `--help`, `-h`, `help`), not the tool contract and without opening a store: "Things to ask your agent" first (tailor to a pasted posting, revise a bullet, what's in my graph, show my jobs, save the PDF to Downloads), a pointer to `/artie:setup` / `$artie-setup`, then the user commands (`artie ui`, `artie github login|status|logout`, `artie export|import`, `artie --list`). The plumbing (`mcp`, `hook`, `hooks`, `jev`, `migrate`) is left out of it and still runs. `artie <tool> --help` still reaches the tool parser.
+- **`artie hooks codex --write` replaces the `art` era's hooks.** `is_art_hook` now recognises `artie hook <event>` and `art hook <event>`, and the server lines `artie-mcp` / `artie mcp` as well as `art-mcp` / `art mcp` (still only with this repo named), so an `art hook` line an earlier install wrote is replaced, not left beside the new one to fail.
+- **Every message the code prints says `artie`:** the login hints (`harness/github.py`: `artie github login`, its uvx fallback, `not_logged_in` / `bad_token`), the `list_github_repos` description, `artie ui`'s missing-extra and missing-editor hints (`harness/entry.py`, `web/local_ui.py`), the `artie hook:` / `artie hooks:` / `artie jev` / `artie migrate` messages and `prog` names, and the hosted gateway's 401 text. The MCP server's name is `artie`.
+
+**Plugin and docs (from `main`, not the wheel)**
+
+- **The plugin id is `artie`** in both manifests, and the marketplaces (`.claude-plugin/marketplace.json`, `.agents/plugins/marketplace.json`, display name `artie`) and their plugin entries are `artie`: install is `/plugin install artie@artie` and `codex plugin add artie@artie`. Commands are `/artie:*`.
+- **The MCP server key in `plugin/.mcp.json` is `artie`**, and every launch line runs `… artie mcp` / `… artie hook <event>`.
+- **Skills renamed** `art-setup` → `artie-setup` and `art-tailor` → `artie-tailor` (directories and front matter; Codex's `$artie-setup`, `$artie-tailor`).
+- **Every reference updated:** skills, commands, `INSTALL.md` (with a new "Upgrading from v0.1.x" note), `README.md`, `plugin/README.md`, `integrations/codex/`, the site (`site/src/**`, `commands.json`; the demo transcript's two durations follow the longer `/artie:` prompts), `docs/harness.md`, `docs/architecture.md`, root and `web/` `CLAUDE.md`, the CI and release workflows (the CI package job also checks no `art` is installed), the smoke script and the code comments. The site drift test also fails on any leftover `/art:`, `$art-`, `art@art` or `art <subcommand>`.
+
+**The release itself.** `ART_VERSION`, both plugin manifests and every pinned wheel URL (`plugin/.mcp.json`, `plugin/hooks/hooks.json`, `/artie:setup`, `/artie:open`, both skills, `INSTALL.md`, `integrations/codex/README.md`, `docs/harness.md`, the site's `commands.json`) go to 0.2.0.
+
+### Deviations from spec
+
+- **A v0.1.x install must be removed by hand.** There is no alias, so an `art` that `uv tool install` put on PATH stays at v0.1.x and the old plugin keeps its old id. Remove them with `uv tool uninstall art-mcp`, `/plugin uninstall art@art` and `/plugin marketplace remove art` (in Codex, remove `art@art`), then install `artie@artie`. `INSTALL.md` says so.
+- **Kept as `art` on purpose:** the `ART_*` environment variables, the data directory `~/.art` and its file names (`art.db`), the keychain service `art-mcp`, the distribution and wheel names, Python package and module names, the `"host": "art"` tree provenance, the browser `localStorage` keys (`art:theme`, …), the Postgres test credentials, the legacy root `cli.py`, and the product's prose name "ART" in the docs. Renaming any of the stored ones would orphan users' stores, tokens and settings. `CONTRACT_VERSION` is unchanged: no tool name changed (`art_briefing` and `art_pins` keep theirs).
+- **Historical mentions stay:** earlier CHANGELOG entries, the test fixtures for what v0.1.0 and v0.1.2 wrote (now spelled with `art hook`, as those releases did), and the Codex 0.149 verification in `docs/harness.md` § 15, which was done with `art@art`.
+- **Not verified here:** a live plugin install as `artie@artie` in Claude Code or Codex, and macOS. Nothing is tagged or published; the tag follows the merge.
+
+---
+
 ## Release v0.1.2 — repair the install: ART brings its own LaTeX engine, setup brings uv
 **Status:** complete in the repo; the tag `v0.1.2` is pushed after merge with the owner's OK | **Tests:** 3495 pass on SQLite (no new tests: a version bump), 25 skipped, 2 xfailed, 0 fail; `uv build` gives `art_mcp-0.1.2-py3-none-any.whl` with the editor; a clean `uv tool install --python 3.12` of it into throwaway uv tool, cache and data folders, on a PATH with no tectonic, pdflatex or repo venv, lists 30 tools, passes `scripts/smoke_art_mcp.py`, downloads Tectonic 0.16.9 into `$ART_DATA_DIR/bin` through `harness.toolchain.ensure_tectonic` (checksum verified), and that engine compiles a PDF
 

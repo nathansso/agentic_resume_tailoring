@@ -20,39 +20,39 @@ In Claude Code, add the plugin:
 
 ```
 /plugin marketplace add nathansso/agentic_resume_tailoring
-/plugin install art@art
+/plugin install artie@artie
 ```
 
 In Codex, the same plugin:
 
 ```bash
 codex plugin marketplace add nathansso/agentic_resume_tailoring
-codex plugin add art@art
+codex plugin add artie@artie
 ```
 
 Then run the setup:
 
 ```
-/art:setup
+/artie:setup
 ```
 
-If `uv` or the `art` command is missing, the setup installs them, asking before each
+If `uv` or the `artie` command is missing, the setup installs them, asking before each
 command, and tells you how to restart ART once. It then builds your knowledge graph from
-your resume, LinkedIn export and project folders. (In Codex the setup is the `$art-setup`
+your resume, LinkedIn export and project folders. (In Codex the setup is the `$artie-setup`
 skill.)
 
 To bring in your GitHub repos, sign in once in your own terminal (add `--private` for
 private repos):
 
 ```bash
-art github login
+artie github login
 ```
 
 You don't need to install LaTeX: the first time ART renders a PDF, it downloads its own
 pinned engine (Tectonic). Then tailor a resume:
 
 ```
-/art:tailor <posting or URL>
+/artie:tailor <posting or URL>
 ```
 
 [`INSTALL.md`](INSTALL.md) covers registering the MCP server by hand, Codex hooks, the
@@ -88,7 +88,7 @@ its evidence, is this message a lasting preference), ART can ask TypeSafe's Jev 
 it a key. Without one, every check runs on plain rules. What is sent, and how to turn it
 off, is in [INSTALL.md § Jev](INSTALL.md#jev-optional-strengthen-the-checks).
 
-**`art ui` is the local editor.** It opens any version of a tailored resume in your browser
+**`artie ui` is the local editor.** It opens any version of a tailored resume in your browser
 for hand edits, and your agent is told about those edits on your next message.
 
 ## Links

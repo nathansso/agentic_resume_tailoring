@@ -32,7 +32,7 @@ function Root() {
   const { user, loading, localMode } = useAuth();
   if (loading) return <Splash />;
   if (user) return <MainPage />;
-  // `art ui` (#204) has no login and no marketing page to fall back to.
+  // `artie ui` (#204) has no login and no marketing page to fall back to.
   return localMode ? <LocalUnavailable /> : <LandingPage />;
 }
 
