@@ -10,7 +10,7 @@ import { IngestPanel, type IngestTab } from "../components/IngestPanel";
 import { JobWorkspace } from "../components/JobWorkspace";
 import { WelcomePanel } from "../components/WelcomePanel";
 import { ThemeToggle } from "../components/ThemeToggle";
-import { listJobs, createJob, deleteJob, getJob } from "../api/jobs";
+import { listJobs, createJob, deleteJob, getJob, markJobOpened } from "../api/jobs";
 import type { JobListItem, JobDetail } from "../types";
 
 type ActiveView = "chat" | "data" | "ingest" | "profile" | "job";
@@ -80,6 +80,11 @@ export function MainPage() {
       setJobMissing(true);
     });
   }, [selectedJobId]);
+
+  // `artie ui` (#288): opening a job is a signal the agent reads ("which job?").
+  useEffect(() => {
+    if (localMode && selectedJobId) markJobOpened(selectedJobId).catch(() => {});
+  }, [localMode, selectedJobId]);
 
   // Jobs created this session with a pasted JD — the workspace auto-runs
   // analyze + tailor for these (issue #70).

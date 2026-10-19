@@ -187,6 +187,12 @@ def _migrate_db() -> None:
         "ALTER TABLE project ADD COLUMN education_id UUID",
         "ALTER TABLE project ADD COLUMN context_status TEXT DEFAULT 'unreviewed'",
         "ALTER TABLE achievement ADD COLUMN project_id UUID",
+        # issue 288: which job? When the host last wrote to a job or the user opened it in
+        # `artie ui`, and when the user last opened it there. Nullable with a NULL default:
+        # an existing row reads as never touched, and the ranked lookup puts it after the
+        # touched ones, newest first.
+        "ALTER TABLE jobdescription ADD COLUMN last_touched_at TIMESTAMP DEFAULT NULL",
+        "ALTER TABLE jobdescription ADD COLUMN last_opened_at TIMESTAMP DEFAULT NULL",
     ]
     with engine.connect() as conn:
         for stmt in migrations:

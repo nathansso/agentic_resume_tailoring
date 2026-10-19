@@ -173,6 +173,25 @@ def get_job(job_id: str, user: User = Depends(get_current_user)):
         return _job_detail(job, latest)
 
 
+# ── Opened in `artie ui` (#288) ──────────────────────────────
+
+@router.post("/{job_id}/open")
+def open_in_editor(job_id: str, user: User = Depends(get_current_user)):
+    """The user opened this job in `artie ui`: record it as the job they last touched and
+    opened, so the agent's ranked lookup and its prompt hook know. Local mode only (the hosted
+    app is frozen); a POST, so the same-origin write guard covers it like the editor's other
+    writes. A read-only store records nothing."""
+    from web import local_mode
+    if not local_mode.enabled():
+        raise HTTPException(status_code=404, detail="Not found")
+    job, session = _get_owned_job(job_id, user)
+    session.close()
+    if local_mode.read_only():
+        return {"touched": False}
+    from harness.jobs import touch
+    return {"touched": touch(user.user_id, job.job_id, opened=True)}
+
+
 # ── Save description ─────────────────────────────────────────
 
 @router.post("/{job_id}/description")
