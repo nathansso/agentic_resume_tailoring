@@ -14,6 +14,36 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 401 — Slash commands trimmed to setup, history and open; the skills rewritten for the user/agent split
+**Status:** complete | **Tests:** `python run_tests.py` passes in full on SQLite (3642 tests collected, 6 new in `tests/test_plugin.py`, 1 rewritten there and 1 line in `tests/test_site_demo.py`); the Postgres leg was not run locally (nothing here touches storage), CI runs it
+
+Under the MCP revision (#391) tailoring, reverting and preferences are plain language to the agent, not commands. The tools for that all shipped (#392, #393, #288, #394, #395); this is the text that makes an agent use them: the plugin's commands trimmed, `artie-tailor` rewritten around what the user says, and every doc that named a removed command updated.
+
+### What shipped
+- **Commands.** `plugin/commands/tailor.md`, `revert.md` and `prefs.md` are deleted. `setup.md` is unchanged. `history.md` and `open.md` now find the job with `list_jobs(query=$ARGUMENTS)`: one clear match is named and used, several or none get "Is this the <Company> <Role> role, or another?", and neither guesses.
+- **`artie-tailor`, reorganised into the five journeys** (a "the user says" index, then one section each):
+  - **Which job** (#288): no clear job in the conversation means `list_jobs(query=<their words>)`; `matched` of 1 proceeds and names the job, anything else asks; the job a reply echoes is named in the agent's own reply; the prompt hook's "opened a different job in the editor" line is confirmed, not assumed.
+  - **Tailor and approve** (#392, #393): the existing brief / open / read / draft steps, then the dry run, `plan_summary.text` shown verbatim, **end the turn**, and a commit with `plan_token` plus `approval_quote` set to the user's whole reply. "Never commit a plan the user has not seen"; `approval: "token_only"` is reported to the user; the only ungated commit is the first, empty plan.
+  - **Revise from feedback** (#202): an objection is a new dry run and a new approval; a revision after a commit is a new plan on HEAD that names only the touched items; a standing rule goes through `observe` / `record_preference` (or `record_rule` for page rules) and then a re-plan; a wrong fact goes through `upsert_items` with `correct`; going back is `history` then `diff_nodes` then `checkout`, asking only when the version is unclear.
+  - **Questions about their data**: answered from `kg_search`, `get_item`, `list_items`, `list_jobs`, `history`, `diff_nodes`, `art_briefing` and `art_pins`, "never from memory".
+  - **Save** (#394): `render`; on `destination: "ask_user"` ask once and call `render` again with `save_to` and `remember: true` (Downloads when they have no preference); on `not_saved: "over_page_limit"` cut through a dry-run `patch_plan` and render again.
+- **Kept**, moved but not reworded: the briefing and page-rule reading, open_job and baselines, the `.tex`-edit carry-over, `suggest_actions` / `active_constraints` / approved variants, the node kinds and `cut_hints`, every result-status explanation (faithfulness, negative pins, semantic coverage), promote / approve / save-baseline, and the memory-gate section.
+- **`artie-setup`** gains one line at the end: tell the user to paste a posting and ask for a tailoring, since there is no command for it. Its GitHub sign-in lines are untouched (#400).
+- **Docs.** `plugin/README.md` (three commands, then what to say for each journey), `README.md` quickstart, `docs/harness.md` (the sequence diagram and the plugin section), the site (`usage.astro`, `install.astro`, `index.astro`, `commands.json`; the dead `artie-tailor` command block is gone, the tailor step is a "say this to your agent" block) and `site/README.md`. Bare `artie` help gains one example, "Never mention Kafka on my resumes", for the standing-rule journey.
+- **The landing-site demo** shows the user saying "Tailor my resume to this posting: ..." instead of `/artie:tailor ...`. `scripts/site_demo/demo_script.py` is the source; `transcript.json` was edited in place (text, that event's `ms`, `total_ms` 88412 to 89012) rather than rebuilt, because the build runs a real render; the next rebuild reads the new line from `demo_script.py`.
+- **Tests (`tests/test_plugin.py`).** The commands are exactly `setup`, `open`, `history`; `history` and `open` use the ranked lookup and ask when unsure; no doc, skill, script or site file names `/artie:tailor`, `/artie:revert` or `/artie:prefs` (CHANGELOG excepted, as history); the skill has a section per journey and names the inputs it teaches (`plan_token`, `approval_quote`, `query`, `save_to`, `remember`), each checked against the contract's models; and a commit may not skip the shown plan. `tests/test_site_demo.py` follows the demo's new first line.
+
+### Deviations from spec
+- **`record_feedback` is not taught.** The issue says #252's `record_feedback` "gets its first caller". It is still a planned tool, not in the contract, and `tests/test_plugin.py` (`NOT_YET`) fails a skill that names it. The skill has no score-the-result step; this stays with #252.
+- **No `add` op, so no advice on bringing a dropped item back.** #380 is open. The skill says an item an earlier version dropped can only return through `replace`, which takes another item off.
+- **#117's keep-biased suggestions are not built**, so a narrow revision relies on the plan listing only the touched items (untouched items carry over from HEAD by construction), not on `suggest_actions` ranking `keep` first.
+- **Going back asks no confirmation unless the version is unclear.** The old `/artie:revert` showed the diff and confirmed first. `checkout` deletes nothing and the later versions stay in `history`, so under "one consent point" the user's request is the consent; the agent says what came back and what went away.
+- **One line under `harness/`.** The brief says bare `artie`'s help keeps pace with the skills, and the help text lives in `harness/entry.py`; that string is the only thing changed there.
+- **Skills are ahead of the pinned wheel in two ways.** The plugin's skills load from `main` while installs run the v0.2.0 wheel, whose `execute_plan` has no `plan_token` and whose `render` has no `save_to`. The skill keeps its fallback for `save_to` (render without it). The approval gate has no fallback: an installed ART without it simply commits, and the skill still shows the plan first. v0.3.0 carries both.
+- **Not verified:** the skills against a live agent (that is #402's golden transcripts); the Postgres leg (nothing here touches storage).
+
+---
+
 ## Issue 393 — Quoted-approval gate: a plan commits only with the user's own approving words
 **Status:** complete | **Tests:** 3609 pass on SQLite after merging main (16 new: 15 in `tests/test_approval_gate.py`, 1 contract case), 25 skipped, 2 xfailed, 0 fail; the Postgres leg was not run locally (Docker was not running; nothing here touches the database), CI runs it
 
