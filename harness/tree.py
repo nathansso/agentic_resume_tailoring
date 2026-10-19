@@ -465,7 +465,9 @@ def list_jobs(user_id, status: Optional[str] = None) -> List[Dict[str, Any]]:
                  "application_status": j.application_status or "drafting",
                  "url": j.source_url,
                  "head": str(heads[j.job_id]) if j.job_id in heads else None,
-                 "created_at": j.created_at.isoformat() if j.created_at else None}
+                 "created_at": j.created_at.isoformat() if j.created_at else None,
+                 "last_touched_at": (j.last_touched_at.isoformat()
+                                     if j.last_touched_at else None)}
                 for j in jobs]
     if status:
         rows = [r for r in rows if r["application_status"] == status]
