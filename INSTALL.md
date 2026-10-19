@@ -248,11 +248,25 @@ The source is never `DATABASE_URL`, is opened read-only, and is never written to
 destination is always local SQLite (`$ART_DATA_DIR/art.db`). Use the id of the real
 account's profile, not the local fallback one (`user@example.com`), which import refuses.
 
-### GitHub repos (optional, #353)
+### Connect GitHub and LinkedIn (optional, #353, #400)
 
-`artie github login` signs you in with GitHub's device flow, so ART can list your repos
-(`list_github_repos`) and your agent can pick which to read. You open a page and type a code;
-no password or secret passes through ART. Run it in your own terminal:
+`artie connect` signs you in with GitHub's device flow, so ART can list your repos
+(`list_github_repos`) and your agent can pick which to read, and then asks for your LinkedIn
+profile URL and saves it to your profile. You open a page and type a code; no password or
+secret passes through ART. Run it in your own terminal:
+
+```bash
+artie connect                    # GitHub (public repos, read:user), then your LinkedIn URL
+artie connect --private          # also private and organisation repos (adds the repo scope)
+```
+
+It is safe to run again: it shows who is signed in and your saved URL and changes nothing,
+unless you ask. `--reauth` signs in to GitHub again, `--linkedin-url <url>` replaces the URL
+(and skips the question, for scripts), `--github-only` and `--linkedin-only` skip a step, and
+`--json` prints one JSON document. It only saves the URL: it makes no LinkedIn request.
+
+`artie github login` is the same GitHub sign-in on its own, and the lower-level commands
+that go with it:
 
 ```bash
 artie github login               # public repos (read:user)
@@ -266,19 +280,19 @@ plugin runs ART through `uvx`, which puts no `artie` on your PATH, so run the sa
 through `uvx`:
 
 ```bash
-uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie github login
-uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie github login --private
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie connect
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie connect --private
 ```
 
 The token goes to the OS keychain through the `keyring` package (service `art-mcp`,
 user `github-token`), else it is read from `ART_GITHUB_TOKEN`, which also takes a personal
 access token. It is never stored in the database, never in an `artie export` bundle, and never
 logged. `keyring` ships with ART from v0.1.1; on a machine with no usable
-keychain backend (some headless Linux setups), `artie github login` says so before it starts,
+keychain backend (some headless Linux setups), `artie connect` says so before it starts,
 and `ART_GITHUB_TOKEN` is the way in. Nothing about your repos is sent anywhere but your
 own agent: ART reads them from `api.github.com` with your token and hands the result to it.
 
-**Maintainer note: register the GitHub OAuth App (once).** `artie github login` needs a client ID
+**Maintainer note: register the GitHub OAuth App (once).** `artie connect` needs a client ID
 and no client secret.
 
 1. GitHub, Settings, Developer settings, OAuth Apps, New OAuth App. Name it `ARTie`; the
@@ -287,5 +301,5 @@ and no client secret.
 2. On the App's page, tick **Enable Device Flow**, and save.
 3. Copy its **Client ID** (it is public; do not generate or keep a client secret for this).
 4. Put it in `DEFAULT_CLIENT_ID` in `harness/github.py` and ship a release. Until then
-   `ART_GITHUB_CLIENT_ID=<client id>` in the environment makes `artie github login` work, and
+   `ART_GITHUB_CLIENT_ID=<client id>` in the environment makes `artie connect` work, and
    with neither set it fails naming this step.

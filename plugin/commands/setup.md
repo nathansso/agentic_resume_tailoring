@@ -43,14 +43,15 @@ install anything without my yes: name the exact command and wait.
 If no sources are given above, ask me where they are.
 
 If I want my GitHub repos included, tell me to run this in my own terminal (add `--private`
-for private repos), then call `list_github_repos`:
+for private repos; it also asks for my LinkedIn URL, and `artie github login` is the GitHub
+sign-in alone), then call `list_github_repos`:
 
 ```bash
-artie github login
+artie connect
 ```
 
 If `artie` is not on my PATH, the same command is:
 
 ```bash
-uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie github login
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie connect
 ```

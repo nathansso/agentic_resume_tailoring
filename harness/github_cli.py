@@ -29,22 +29,21 @@ def _emit(doc) -> None:
     sys.stdout.write(json.dumps(doc, sort_keys=True, ensure_ascii=False) + "\n")
 
 
-def _fail(code: str, message: str) -> int:
-    _emit({"ok": False, "error": {"code": code, "message": message}})
-    return 1
-
-
-def login(private: bool = False, client_id: Optional[str] = None, *,
-          transport=None, sleep: Callable[[float], None] = time.sleep,
-          clock: Callable[[], float] = time.monotonic, say=None) -> int:
+def sign_in(private: bool = False, client_id: Optional[str] = None, *,
+            transport=None, sleep: Callable[[float], None] = time.sleep,
+            clock: Callable[[], float] = time.monotonic, say=None) -> dict:
+    """The device flow, as data: `{"ok": True, login, scopes, private_scope, stored}` or
+    `{"ok": False, "error": {code, message}}`. Never the token. `login` prints it as the
+    JSON document; `artie connect` (#400) renders it in its own words."""
     say = say or (lambda line: print(line, file=sys.stderr, flush=True))
+    err = lambda code, message: {"ok": False, "error": {"code": code, "message": message}}  # noqa: E731
     try:
         gh.require_client_id(client_id)
     except GitHubError as exc:
-        return _fail(exc.code, exc.message)
+        return err(exc.code, exc.message)
     if not gh.keychain_available():
         # Checked before the flow starts, so a code is not spent on a token with nowhere to go.
-        return _fail("no_keychain", (
+        return err("no_keychain", (
             "ART keeps the GitHub token in the OS keychain through the `keyring` package, and "
             "no usable keychain was found here (an ART older than v0.1.1 lacks keyring; some "
             "headless Linux setups have no keychain backend). Upgrade ART, or install keyring "
@@ -58,14 +57,21 @@ def login(private: bool = False, client_id: Optional[str] = None, *,
                                     clock=clock)
         who = GitHubClient(granted.token, transport=transport).user()
     except GitHubError as exc:
-        return _fail(exc.code, exc.message)
+        return err(exc.code, exc.message)
     if not gh.store_token(granted.token):
-        return _fail("keychain_write_failed", "The keychain refused the token, so it was not "
-                                              "saved. Nothing is signed in.")
+        return err("keychain_write_failed", "The keychain refused the token, so it was not "
+                                            "saved. Nothing is signed in.")
     scopes = who["scopes"] or list(granted.scopes)
-    _emit({"ok": True, "login": who["login"], "scopes": scopes,
-           "private_scope": "repo" in scopes, "stored": "keychain"})
-    return 0
+    return {"ok": True, "login": who["login"], "scopes": scopes,
+            "private_scope": "repo" in scopes, "stored": "keychain"}
+
+
+def login(private: bool = False, client_id: Optional[str] = None, *,
+          transport=None, sleep: Callable[[float], None] = time.sleep,
+          clock: Callable[[], float] = time.monotonic, say=None) -> int:
+    doc = sign_in(private, client_id, transport=transport, sleep=sleep, clock=clock, say=say)
+    _emit(doc)
+    return 0 if doc["ok"] else 1
 
 
 def logout() -> int:
