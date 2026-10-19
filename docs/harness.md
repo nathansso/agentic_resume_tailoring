@@ -397,7 +397,7 @@ sequenceDiagram
     participant H as Host agent + model
     participant K as Host hook
     participant A as art-core (+ Jev)
-    U->>H: /artie:tailor + job description
+    U->>H: "Tailor my resume to this posting" + job description
     H->>A: art_briefing(role_family)
     A-->>H: pins · persona · JobCards with rejections
     Note over H: extract requirements
@@ -1186,11 +1186,18 @@ artie@artie` installs it.
 - **Skills.**
   - `artie-tailor`: briefing → `open_job` (with requirements and rule answers) → read the
     graph → a plan program **shown for approval** → `execute_plan` / `patch_plan` →
-    `render`.
+    `render`. Since #401 it is organised by what the user says, in five journeys: tailor and
+    approve (a dry run's `plan_summary` shown verbatim, then a commit with `plan_token` and
+    the user's whole reply as `approval_quote`), revise from feedback (a new dry run, or
+    `observe` / `record_preference`; going back is `history` → `checkout`), which job
+    (`list_jobs(query=...)`, ask when unsure), questions answered from the tools, and save
+    (`render` with `save_to`).
   - `artie-setup`: read the user's sources → `upsert_items`, using `correct` for stale
     facts → `update_profile` → job-scoped rules.
-- **Commands.** `/artie:tailor`, `/artie:setup`, `/artie:open`, `/artie:history`,
-  `/artie:revert` and `/artie:prefs` (read-only).
+- **Commands (#401).** `/artie:setup`, `/artie:history` and `/artie:open`, thin navigation:
+  `/artie:history` and `/artie:open` find the job with `list_jobs(query=...)` and ask when it is
+  ambiguous. The tailor, revert and prefs commands were removed; tailoring,
+  reverting and preferences are plain language to the `artie-tailor` skill (§ 2.1).
 - **Hooks** (`artie hook <event>`, `harness/hooks.py`), local and model-free:
   - `UserPromptSubmit` tells the host which jobs the user edited in `artie ui` since the
     last message, and what changed. It keeps a per-session event cursor in

@@ -1,20 +1,53 @@
 ---
 name: artie-tailor
-description: Tailor the user's resume to a job posting with ART. Use when the user shares a job posting or link and wants their resume tailored, or asks to re-tailor, cut, or rework a resume for a specific role. Reads their knowledge graph, drafts a plan, waits for their approval, then executes and renders a one-page PDF.
+description: Work on the user's resume with ART, in plain language. Use when the user shares a job posting or link, asks to tailor, re-tailor, cut, reword or rework a resume, gives feedback on a draft or a standing rule ("never mention Kafka"), wants an earlier version back, asks what ART holds about them or their jobs, or wants the PDF saved. Reads their knowledge graph, drafts a plan with a reason on every change, waits for their approval, then commits and renders a one-page PDF.
 ---
 
-# Tailor a resume with ART
+# Work on a resume with ART
 
 ART holds the user's facts (the knowledge graph), their pinned preferences, and every
-tailored version. You do the reading and writing. ART checks each change and commits
-it. Every fact you put on the page must come from an ART tool result. **Never invent a
-metric, date, employer, tool or outcome.** If the user needs something the graph
-doesn't hold, ask them, and store it with `upsert_items` first (see the `artie-setup`
-skill).
+tailored version. You do the reading and writing. ART checks each change and commits it.
+Every fact you put on the page must come from an ART tool result. **Never invent a metric,
+date, employer, tool or outcome.** If the user needs something the graph doesn't hold, ask
+them, and store it with `upsert_items` first (see the `artie-setup` skill).
 
-The tools named below are the ART MCP server's tools.
+The user types no commands for any of this. They talk to you ("tailor my resume to this",
+"go back to the last version", "never mention Kafka", "save it to my Downloads") and you
+call ART's tools. The tools named below are the ART MCP server's tools.
 
-## 1. Read the brief
+**The tailoring plan is the one place the user must say yes.** Nothing else asks for
+approval: not a revert, not a save, not a question.
+
+| The user says | Go to |
+|---|---|
+| A posting or link, "tailor my resume" | Which job, then Tailor and approve |
+| "Change X", "too long", "I don't like that bullet", "never mention Y" | Revise from feedback |
+| "Go back to the last version" | Revise from feedback, "Going back" |
+| "What do I have about Python?", "what changed?", "show my jobs" | Questions about their data |
+| "Save it to my Downloads", or a render that needs a place | Save |
+
+## Which job
+
+Every job-scoped tool takes a `job_id`, and every reply to one echoes `job` (id, title,
+company). **Name the job in your own reply** whenever you act on it.
+
+- The conversation already has a clear job (you opened it, or the user just named it): use it.
+- Otherwise call `list_jobs(query=<the user's words>)`. It ranks the jobs whose company or
+  title the words name, then the most recently touched, and gives each a `reason`.
+  - `matched` is 1: that is the job. Say "Working on the <Company> <Role> job" and go on.
+  - `matched` is 0 or several close: ask, "Is this the <Company> <Role> role, or another?"
+    naming the top two or three. **Never guess silently**, and never pick the most recent
+    job just because it is the most recent.
+  - No words to go on (the user just says "my resume"): call `list_jobs` with no query. If
+    there is exactly one job, name it and go on. Otherwise name the most recently touched,
+    list the next one or two, and ask the same question.
+- A new posting is a new job: go to Tailor and approve and call `open_job`; no lookup.
+- If ART's prompt hook says the user opened a different job in the editor since their last
+  message, and they may now mean that one, name it and confirm before acting on it.
+
+## Tailor and approve
+
+### 1. Read the brief
 
 - Call `art_briefing` with the posting's role family if it is obvious. The families are
   `software_engineering`, `machine_learning`, `data_science`, `data_engineering`,
@@ -36,7 +69,7 @@ The tools named below are the ART MCP server's tools.
 - Call `get_profile`. If the name is "Default User" or contact fields are empty, ask
   the user and call `update_profile`.
 
-## 2. Open the job
+### 2. Open the job
 
 - Get the posting text. If the user gave a URL, fetch it.
 - Extract its requirements as atomic statements. `ingest_schema("requirement")` gives
@@ -49,8 +82,8 @@ The tools named below are the ART MCP server's tools.
   of the user's saved baseline for that track instead of the whole graph. Say so to the
   user. The copy is made when the job's first version is committed, so `get_head` returns no
   version until then. To read the baseline's wording before planning, commit it with an
-  empty plan (`execute_plan` with `parent` null and `nodes: []`), then call `get_head`.
-  `baseline.source` says who chose the
+  empty plan (`execute_plan` with `parent` null and `nodes: []`), then call `get_head`; that
+  first empty plan needs no approval. `baseline.source` says who chose the
   track: `host` (the `role_family` you gave names a saved track exactly, so ART did not ask
   Jev), `jev` or `cache` (Jev chose among the user's saved tracks by reading the posting;
   `p` is its probability, not a calibrated confidence), or `fallback` (no Jev answer, so
@@ -66,7 +99,7 @@ The tools named below are the ART MCP server's tools.
 - If any rule comes back `needs_answer`, ask the user, then call
   `open_job(job_id=…, rule_answers=…)` again.
 
-## 3. Read the candidate
+### 3. Read the candidate
 
 - Call `list_items` to see every experience, project, skill, education entry and
   achievement.
@@ -78,10 +111,10 @@ The tools named below are the ART MCP server's tools.
   record lists its `projects`; an achievement's `project` is what it was won for.
 - `get_item` also lists the item's `variants`: wording the user approved for that
   experience or project. Approved wording beats regenerated wording (see step 4).
-- If the user wants their GitHub repos considered, have them run `artie github login` in their
+- If the user wants their GitHub repos considered, have them run `artie connect` in their
   own terminal (`--private` for private repos; the tool's `not_logged_in` error repeats it).
   If `artie` is not on their PATH, the same command is
-  `uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie github login`.
+  `uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie connect`.
   Then call `list_github_repos`. Read the repos
   worth reading, clone one only after they agree, and store what you learn with
   `upsert_items` (`source: github:<repo>`) before you cite it; a repo is not evidence until
@@ -107,7 +140,7 @@ The tools named below are the ART MCP server's tools.
   the user does not want an edit kept, ask them, and only then set
   `discard_editor_edits: true`; the response lists what was discarded, so tell them.
 
-## 4. Draft the plan and get approval
+### 4. Draft the plan, dry-run it, and stop
 
 Call `suggest_actions(job_id)` first. **Read `active_constraints` at the top before you
 choose or write anything**: every hard pin, pending ban, preference and page rule the user has
@@ -140,7 +173,8 @@ Draft a plan program for `execute_plan`. Its input schema is published with the 
 
 - **nodes**, one per experience or project you touch. **Every node needs a short `because`**,
   the reason the user will read: `job:<what in the posting calls for it>`, `user:<what they
-  asked>` or `pref:<preference_id>`. A node without one is refused.
+  asked>` or `pref:<preference_id>`. A node without one is refused. Write it for the user,
+  not for yourself.
   - `keep`: include the item unchanged.
   - `revise`: rewrite its bullets. Give the full new `bullets` list; each bullet
     `cites` the evidence ids it rests on (or names a `from_variant`). Set `strategy` to one of `keyword_weave`,
@@ -166,11 +200,13 @@ Draft a plan program for `execute_plan`. Its input schema is published with the 
   plus the skills cap and floor, or the user's page rules when they set any. Don't invent a
   smaller budget; cut content instead when finalize reports `line_budget`.
 
-**Show the user the plan before you execute it.** Run it with `dry_run: true` and show the
-user `plan_summary.text` from the result, verbatim: each item, the change, its reason, and the
-skills line. Keep the result's `plan_token`. Then **end your turn** and wait for their reply.
+**Never commit a plan the user has not seen.** Run it with `dry_run: true`. The result has
+`plan_summary` (one line per change with its reason, and the skills line) and `plan_token`, a
+fingerprint of exactly this program. Show `plan_summary.text` **verbatim**, not retold in your own
+words, keep the `plan_token`, and **end your turn**. Do not commit in the same turn, and do not
+treat anything you said earlier as approval.
 
-## 5. Execute
+### 5. Commit on approval
 
 When the user approves, call `execute_plan({program, plan_token, approval_quote})` with the
 same program, the dry run's `plan_token`, and `approval_quote` set to **the user's whole reply**,
@@ -178,12 +214,12 @@ copied exactly ("looks good, go ahead"). If they said to skip approval ("just do
 ask"), that reply is the quote. ART checks the quote against the messages the user sent after
 the dry run: a short quote must be the whole message, so "ok" taken from "ok, but change the
 second bullet" is refused; only a long reply may be quoted in part, by its approving sentence of
-20 characters or more. Never write a quote yourself. If they asked for changes, change the
-program, dry-run it again and show the new summary: a changed program needs a new token and a
-new approval. A refusal with `approval_required` says what is missing. `approval: "token_only"`
-means this ART has no prompt hook to check the words: tell the user only the token was checked.
-A `patch_plan` commit works the same way: dry-run the patch, show its summary, then commit with
-its `plan_token` and the user's words. The first empty plan in step 2 needs neither.
+20 characters or more. **Never write a quote yourself**, and never quote a message from before the
+dry run. If they asked for changes instead, that is the next journey: a changed program needs a
+new dry run, a new token and a new approval. A refusal with `approval_required` says what is
+missing. `approval: "token_only"` in a reply means this ART has no prompt hook to check the
+words: tell the user only the token was checked. A `patch_plan` commit works the same way:
+dry-run the patch, show its summary, then commit with its `plan_token` and the user's words.
 
 Read the result:
 
@@ -255,26 +291,75 @@ Read the result:
   carries it out: a `cut_bullet` is a `delete_bullet` (one node per item, all its bullets in
   `cut_bullets`) and a `drop_item` is a `delete`, both with `because: "user:fit the one-page
   budget"`. Add those nodes with `patch_plan`. `stale_parent`
-  means the user edited in the meantime: read `get_head`, then replace `/parent`.
+  means the user edited in the meantime: read `get_head`, then replace `/parent`. A patch is a
+  changed program: dry-run it and show its summary before you commit it, as above.
 - `committed: false` with `reason: "no_change"`: the plan left the page identical to its
   parent (every node reverted, refused or kept), so no version was made. Read `nodes[]` for
   why, then revise the plan or tell the user nothing needed to change. This is not an error.
 - `rules_applied`: the job-scoped values ART set, such as a graduation date. Mention
   them.
 
-## 6. Render
+Then go to Save.
+
+## Revise from feedback
+
+The user reacts to a draft, a committed version, or just says what they want different.
+
+- **An objection or a change request** ("the second bullet is too long", "lead with the
+  recommender project", "drop that job") means a **new dry run and a new approval**. Change
+  the program, run `dry_run: true` again, show the new `plan_summary.text`, end your turn. The
+  old approval and token do not carry over. Give such a node `because: "user:<what they
+  asked>"`.
+- **After a commit, a revision is a new plan on HEAD.** Call `get_head(job_id)` and make the
+  plan's `parent` HEAD's `node_id`. Include nodes only for the items the feedback names; the
+  rest carries over from HEAD unchanged. Do not re-tailor the whole page for a narrow request.
+  Mind `editor_edits` and `discards_editor_edits` (step 3 above). An item the earlier
+  version dropped can only come back through `replace`, which takes another item off.
+- **A standing rule** ("never mention Kafka", "always lead with Python", "keep it to one
+  page") is a durable preference, not a one-off edit. Follow "Remembering preferences" below
+  to record it, then re-plan so the new rule applies. Recording a rule is not approval of
+  any plan.
+- **A fact is wrong or missing** ("that was a team of four, not ten"): correct it with
+  `upsert_items` (`"correct": true`, see the `artie-setup` skill), then re-plan.
+- **Going back** ("go back to the last version", "undo that", "the one before the Kafka
+  change"): call `history(job_id)` and pick the version the user means (versions are oldest
+  first; each has a source and a note). The words usually name it. If they don't, say which you
+  would restore and ask. Run `diff_nodes(HEAD, target)`, then `checkout(job_id, node_id)`
+  and tell the user in a line what came back and what went away. Nothing is deleted: the later
+  versions stay in `history`, so they can undo it. Offer to render the restored version.
+
+## Questions about their data
+
+Answer from ART's tools every time, **never from memory or from what you said earlier**. A
+fact in the graph may have changed, and the user's own edits win.
+
+- What the graph holds ("what do I have about Python?", "which projects use SQL?"):
+  `kg_search`, then `get_item` for the record, or `list_items` for the whole inventory.
+- Their jobs ("which jobs have I tailored?", "what's the status of the Stripe one?"):
+  `list_jobs`, with `query` when they name one.
+- What changed ("what did you cut?", "how does this differ from before?"): `history` for the
+  versions, `diff_nodes(from, to)` for the changes by item and bullet. The reason for each
+  change is the `because` on its plan node and the version's note.
+- Their rules ("what preferences do you have for me?"): `art_briefing` (add `job_id` for one
+  job's), or `art_pins` for the pins word for word.
+- If the tools do not hold the answer, say so and offer to look in their sources or ask them.
+  Do not fill a gap from general knowledge about them.
+
+## Save
 
 - Call `render(job_id)`. It writes `resume.tex` and `resume.pdf` and returns their
   paths, `pages` and `line_budget`. If the user named a place ("save it to my Downloads"),
   pass `save_to`: `downloads`, `desktop`, `documents` or a folder path.
 - If the reply says `destination: "ask_user"`, ask the user once where to save their
   resumes, then render again with `save_to` and `remember: true`. With no preference, use
-  `save_to: "downloads"`. Later renders save there on their own. If `render` rejects
-  `save_to` as an unknown argument, the installed ART predates it: render without it.
+  `save_to: "downloads"` (and `remember: true`). Later renders save there on their own. If
+  `render` rejects `save_to` as an unknown argument, the installed ART predates it: render
+  without it.
 - If `pages` > 1, cut using `line_budget.cut_hints` through `patch_plan` (the same
-  `delete_bullet` and `delete` nodes as in step 5), then render again. A page over the
-  limit is not saved for the user (`not_saved: "over_page_limit"`); the copy is saved once
-  it fits, replacing ART's own earlier copy of the job.
+  `delete_bullet` and `delete` nodes as in step 5, dry-run and shown like any plan), then
+  render again. A page over the limit is not saved for the user (`not_saved:
+  "over_page_limit"`); the copy is saved once it fits, replacing ART's own earlier copy of
+  the job.
 - If `pdf_path` is null, give the user the `.tex` path and the `hint`.
 - Tell the user where the PDF is: `saved_paths` when it was saved for them, else
   `pdf_path`.
@@ -291,15 +376,11 @@ Read the result:
 
 ## Afterwards
 
-- A bullet the user is happy with can join their library: `promote_bullet(node_id,
-  bullet)` makes a **draft**, and only after the user says yes call
-  `approve_variant(variant_id)`. Never approve one on your own. If they want a version to
-  be the starting point for a kind of role, `save_baseline(node_id, track)` pins it, with
-  `track` named after the role family (for example `data_science`).
-
-- To see versions, use `history` and `diff_nodes`. To go back, use `checkout`: show
-  the diff and confirm with the user first.
-- Remember what the user says they want. See the next section.
+A bullet the user is happy with can join their library: `promote_bullet(node_id, bullet)`
+makes a **draft**, and only after the user says yes call `approve_variant(variant_id)`. Never
+approve one on your own. If they want a version to be the starting point for a kind of role,
+`save_baseline(node_id, track)` pins it, with `track` named after the role family (for example
+`data_science`).
 
 ## Remembering preferences
 
@@ -307,10 +388,10 @@ A lasting preference is a rule about how every resume (or one job's) should read
 list coursework", "always lead with the recommender project". A one-off edit ("shorten
 that bullet") and a fact about their experience are not; facts go to `upsert_items`.
 
-- ART's prompt hook runs its memory gate on every message. When it adds a line starting
-  "ART: this message may be a standing preference", **ask the user** in your reply whether
-  it is a lasting rule, saying how you read it: what it is about, whether to feature it or
-  leave it out, how firm, and whether it is for every resume or only this job. Call
+- ART's prompt hook runs its memory gate (`observe`) on every message. When it adds a line
+  starting "ART: this message may be a standing preference", **ask the user** in your reply
+  whether it is a lasting rule, saying how you read it: what it is about, whether to feature it
+  or leave it out, how firm, and whether it is for every resume or only this job. Call
   `record_preference` only after they say yes.
   - `strength` is 1 (a passing remark) to 5 (an absolute rule they stated as
     non-negotiable, such as "never"). A 5 becomes a hard gate on every plan, and a 5
@@ -338,5 +419,8 @@ that bullet") and a fact about their experience are not; facts go to `upsert_ite
   transcript.
 - A message like that is easy to misread alone, so when you confirm one, say what you took
   "that" to be.
+- A saved rule changes what the next plan may say, not the plan already on the page. When the
+  user stated it while giving feedback on a draft or a version, re-plan (Revise from
+  feedback) so it takes effect, and show the new summary for approval.
 - `art_pins` returns the pins word for word, for example after your context was trimmed.
   Honour every one.

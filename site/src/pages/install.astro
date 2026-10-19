@@ -185,9 +185,9 @@ const toc = Object.values(S);
         The answer should include <code>art_briefing</code>, <code>open_job</code>, <code>execute_plan</code> and <code>render</code>.
       </li>
       <li>
-        <strong>Claude Code only: run a read-only command.</strong> <code>/artie:prefs</code> shows
-        your saved preferences. On a fresh install it has none, and that is a good result: it
-        means the agent reached ARTie.
+        <strong>Ask what it has saved.</strong> Say: "What preferences does ARTie have for me?"
+        (the agent calls <code>art_briefing</code>). On a fresh install the answer is none, and that
+        is a good result: it means the agent reached ARTie.
       </li>
     </ol>
     <p>

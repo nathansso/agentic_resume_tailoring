@@ -110,12 +110,6 @@
       "lines": [
         "/artie:setup [files]"
       ]
-    },
-    "artie-tailor": {
-      "source": "plugin/README.md",
-      "lines": [
-        "/artie:tailor <posting or URL>"
-      ]
     }
   },
   "slash": [
@@ -125,29 +119,14 @@
       "what": "Build your knowledge graph from your resume, LinkedIn export and project folders, and set your header."
     },
     {
-      "command": "/artie:tailor <posting or URL>",
-      "source": "plugin/README.md",
-      "what": "Plan a tailored resume, wait for your approval, commit it and render the PDF."
-    },
-    {
       "command": "/artie:open [job]",
       "source": "plugin/README.md",
-      "what": "Print the command that opens the local editor (artie ui)."
+      "what": "Find a job and print the command that opens the local editor (artie ui)."
     },
     {
       "command": "/artie:history [job]",
       "source": "plugin/README.md",
-      "what": "List every version and what changed."
-    },
-    {
-      "command": "/artie:revert <job> [version]",
-      "source": "plugin/README.md",
-      "what": "Make an earlier version current again."
-    },
-    {
-      "command": "/artie:prefs",
-      "source": "plugin/README.md",
-      "what": "Show your pinned rules, preferences and job-scoped rules."
+      "what": "Find a job and list every version and what changed."
     }
   ],
   "inline": {

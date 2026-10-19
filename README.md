@@ -49,11 +49,12 @@ artie connect
 ```
 
 You don't need to install LaTeX: the first time ART renders a PDF, it downloads its own
-pinned engine (Tectonic). Then tailor a resume:
+pinned engine (Tectonic). Then ask your agent in plain words:
 
-```
-/artie:tailor <posting or URL>
-```
+> Tailor my resume to this posting: <paste the posting or a link>
+
+It shows you a plan, with a reason for every change, and waits for your OK before anything is
+saved. "Go back to the last version" and "save it to my Downloads" work the same way.
 
 [`INSTALL.md`](INSTALL.md) covers registering the MCP server by hand, Codex hooks, the
 editor, backups, building from source, and troubleshooting (offline starts and long paths
