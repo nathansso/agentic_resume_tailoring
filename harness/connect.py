@@ -38,6 +38,16 @@ from harness.linkedin_url import InvalidLinkedInURL, normalize_profile_url
 _PROMPT_TRIES = 3
 
 
+def _ask_on_stderr(prompt: str) -> str:
+    """Prompt on stderr and read stdin, so stdout carries only the result (`--json`)."""
+    sys.stderr.write(prompt)
+    sys.stderr.flush()
+    line = sys.stdin.readline()
+    if not line:
+        raise EOFError
+    return line.rstrip("\r\n")
+
+
 def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="artie connect", description=__doc__.splitlines()[0])
     p.add_argument("--private", action="store_true",
@@ -81,6 +91,15 @@ def _github_step(args, *, transport, sleep, clock, say) -> Dict[str, Any]:
             # The environment token wins over the keychain, so a new sign-in could not take effect.
             return have(f"The token comes from {gh.TOKEN_ENV}, which a new sign-in cannot "
                         "replace. Unset it, or set a token with the scopes you want.")
+    elif state.get("error") and state["source"] == "env":
+        # A rejected or unverifiable environment token wins over the keychain, so signing in
+        # would store a token no tool call ever reads.
+        return {"connected": False, "action": "failed", "login": None, "scopes": [],
+                "private_scope": False, "source": "env",
+                "error": {"code": state["error"]["code"],
+                          "message": (f"The token in {gh.TOKEN_ENV} was not accepted "
+                                      f"({state['error']['code']}). Unset it, or replace it with "
+                                      "a working token; a new sign-in could not take its place.")}}
     elif state.get("error") and state["error"]["code"] != "bad_token":
         # A token is stored but GitHub could not be asked about it (offline, rate limit):
         # not a reason to start a new sign-in.
@@ -140,8 +159,11 @@ def _linkedin_step(args, *, user_id, allow_writes, interactive, ask) -> Dict[str
         return {"connected": True, "action": "already", "url": current}
     elif interactive:
         for _ in range(_PROMPT_TRIES):
-            answer = ask("Your LinkedIn profile URL (linkedin.com/in/<name>), "
-                         "or press Enter to skip: ").strip()
+            try:
+                answer = ask("Your LinkedIn profile URL (linkedin.com/in/<name>), "
+                             "or press Enter to skip: ").strip()
+            except EOFError:                                   # stdin closed: same as Enter
+                answer = ""
             if not answer:
                 break
             url = _read_url(answer)
@@ -238,7 +260,7 @@ def run(args, *, user_id=None, allow_writes: bool = True, interactive: bool = Fa
     sleep = sleep or time.sleep
     clock = clock or time.monotonic
     say = say or (lambda line: print(line, file=sys.stderr, flush=True))
-    ask = ask or input
+    ask = ask or _ask_on_stderr
     write = write or (lambda text: sys.stdout.write(text + "\n"))
 
     result: Dict[str, Any] = {"ok": True}

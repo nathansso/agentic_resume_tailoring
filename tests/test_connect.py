@@ -405,3 +405,45 @@ def test_connect_makes_no_network_client_of_its_own():
         source = (ROOT / "harness" / name).read_text(encoding="utf-8")
         assert not re.search(r"^\s*(?:import|from)\s+(requests|httpx|urllib\.request|socket|"
                              r"http\.client|artie_gateway)\b", source, re.M), name
+
+
+# â”€â”€ review fixes: stdout carries only the result; a bad environment token â”€â”€â”€â”€â”€
+
+def test_the_prompt_goes_to_stderr_so_json_stdout_stays_one_document(kg, keyring, monkeypatch,  # noqa: F811
+                                                                     capsys):
+    import io
+
+    fake = FakeGitHub()
+    monkeypatch.setattr(gh, "_requests_transport", fake)
+    monkeypatch.setattr(sys, "stdin", io.StringIO("linkedin.com/in/ada-lovelace\r\n"))
+    args = connect._parser().parse_args(["--json"])
+    code = connect.run(args, user_id=kg, interactive=True, transport=fake, sleep=_nosleep,
+                       clock=lambda: 0, say=lambda line: None)
+    seen = capsys.readouterr()
+    assert code == 0
+    doc = json.loads(seen.out)                       # the whole of stdout is the one document
+    assert doc["linkedin"]["url"] == URL and seen.out.count("\n") == 1
+    assert "Your LinkedIn profile URL" in seen.err and "Your LinkedIn profile URL" not in seen.out
+
+
+def test_the_prompt_is_on_stderr_in_text_mode_too_and_closed_stdin_skips(kg, keyring,  # noqa: F811
+                                                                         monkeypatch, capsys):
+    import io
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+    args = connect._parser().parse_args(["--linkedin-only"])
+    assert connect.run(args, user_id=kg, interactive=True) == 0
+    seen = capsys.readouterr()
+    assert "Your LinkedIn profile URL" in seen.err and "Your LinkedIn profile URL" not in seen.out
+    assert "LinkedIn skipped." in seen.out and _stored(kg) is None
+
+
+def test_a_rejected_environment_token_is_not_answered_with_a_new_sign_in(keyring, monkeypatch):  # noqa: F811
+    monkeypatch.setenv("ART_GITHUB_TOKEN", TOKEN)
+    run = Run(["--github-only"], fake=FakeGitHub(user_status=401), monkeypatch=monkeypatch)
+    assert run.code == 1
+    assert not any(c[1] == gh.DEVICE_CODE_URL for c in run.fake.calls)    # no device flow
+    assert keyring.store == {}                                           # nothing stored
+    assert "ART_GITHUB_TOKEN" in run.text and "Unset it" in run.text
+    assert "Signed in" not in run.text and "  GitHub    not signed in" in run.text
+    assert TOKEN not in run.text
