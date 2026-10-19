@@ -1,7 +1,7 @@
 {
   "functions": {
     "api/v1/linkedin.py": {
-      "maxDuration": 120,
+      "maxDuration": 300,
       "excludeFiles": "{tests/**,README.md,pytest.ini}"
     }
   },

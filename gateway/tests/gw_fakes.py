@@ -29,6 +29,9 @@ class FakeNetwork:
     github_failure: Optional[str] = None            # "timeout" | "unreachable" | "500"
     brightdata_response: Optional[HttpResult] = None
     brightdata_failure: Optional[str] = None        # "timeout" | "unreachable"
+    progress: List[str] = field(default_factory=lambda: ["ready"])   # statuses, one per poll; the last repeats
+    snapshot_building: int = 0                      # 202 "building" answers before the snapshot file
+    snapshot_response: Optional[HttpResult] = None
     calls: List[tuple] = field(default_factory=list)
 
     def __call__(self, method, url, headers, body, timeout) -> HttpResult:
@@ -52,6 +55,16 @@ class FakeNetwork:
             if self.brightdata_response is not None:
                 return self.brightdata_response
             return HttpResult(200, json.dumps([RECORD]).encode())
+        if url.startswith("https://api.brightdata.com/datasets/v3/progress/"):
+            status = self.progress.pop(0) if len(self.progress) > 1 else self.progress[0]
+            return HttpResult(200, json.dumps({"snapshot_id": url.rsplit("/", 1)[1], "status": status}).encode())
+        if url.startswith("https://api.brightdata.com/datasets/v3/snapshot/"):
+            if self.snapshot_building > 0:
+                self.snapshot_building -= 1
+                return HttpResult(202, b'{"status": "building"}')
+            if self.snapshot_response is not None:
+                return self.snapshot_response
+            return HttpResult(200, json.dumps([RECORD]).encode())
         raise AssertionError(f"unexpected network call: {method} {url}")
 
     def calls_to(self, host: str) -> list:
@@ -64,6 +77,9 @@ class Clock:
 
     def __call__(self) -> float:
         return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
 
 
 def make_config(**overrides) -> Config:

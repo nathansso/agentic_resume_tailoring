@@ -23,4 +23,4 @@ def store(clock) -> InMemoryStore:
 
 @pytest.fixture
 def gateway(network, store, clock) -> Gateway:
-    return Gateway(make_config(), store, network, clock)
+    return Gateway(make_config(), store, network, clock, sleep=clock.advance)
