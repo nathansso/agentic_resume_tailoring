@@ -451,9 +451,50 @@ def language_of(path: str) -> str | None:
     return None
 
 
-def _rank(sources, defines: dict, references: dict, def_keys, user_weights) -> list[tuple]:
+def pagerank(graph, personalization: dict | None, alpha: float = 0.85, max_iter: int = 100,
+             tol: float = 1.0e-6) -> dict:
+    """Weighted personalized PageRank in plain Python, with networkx's semantics (parallel edges
+    summed, dangling mass sent by the personalization vector). networkx's own `pagerank` needs
+    SciPy, which art-mcp does not ship, and silently falls back otherwise; this needs nothing,
+    and visits nodes and edges in a fixed order, so it gives the same floats on every platform."""
+    nodes = list(graph.nodes)
+    n = len(nodes)
+    if n == 0:
+        return {}
+    out_w: dict = defaultdict(float)
+    links: dict = defaultdict(lambda: defaultdict(float))
+    for u, v, d in graph.edges(data=True):
+        links[u][v] += d.get("weight", 1.0)
+        out_w[u] += d.get("weight", 1.0)
+    if personalization:
+        total = sum(personalization.get(v, 0.0) for v in nodes)
+        p = {v: personalization.get(v, 0.0) / total for v in nodes}
+    else:
+        p = {v: 1.0 / n for v in nodes}
+    x = {v: 1.0 / n for v in nodes}
+    dangling = [v for v in nodes if out_w[v] == 0]
+    for _ in range(max_iter):
+        last = x
+        x = dict.fromkeys(nodes, 0.0)
+        dsum = alpha * sum(last[v] for v in dangling)
+        for u in nodes:
+            if out_w[u]:
+                share = alpha * last[u] / out_w[u]
+                for v, w in links[u].items():
+                    x[v] += share * w
+        for v in nodes:
+            x[v] += dsum * p[v] + (1.0 - alpha) * p[v]
+        if sum(abs(x[v] - last[v]) for v in nodes) < n * tol:
+            return x
+    raise RuntimeError("pagerank did not converge")
+
+
+def _rank(sources, defines: dict, references: dict, def_keys, user_weights,
+          pure: bool = False) -> list[tuple]:
     """(path, name) definition keys, best first: personalized PageRank over the file graph,
-    each file's rank shared out over the definitions it references."""
+    each file's rank shared out over the definitions it references. `pure` (the variants) uses
+    `pagerank` above and rounds scores to 10 significant digits before ordering, so float noise
+    can't reorder near-ties across platforms; #397's rungs keep networkx's."""
     def_lines = def_keys
     user_weights = {p: w for p, w in (user_weights or {}).items() if p in sources and w > 0}
     graph = nx.MultiDiGraph()
@@ -475,7 +516,8 @@ def _rank(sources, defines: dict, references: dict, def_keys, user_weights) -> l
     total = sum(user_weights.values())
     pers = {node: user_weights.get(node, 0.0) / total for node in graph.nodes} if total else None
     try:
-        rank = nx.pagerank(graph, weight="weight", personalization=pers, dangling=pers)
+        rank = (pagerank(graph, pers) if pure else
+                nx.pagerank(graph, weight="weight", personalization=pers, dangling=pers))
     except Exception:  # e.g. no convergence on a degenerate graph
         rank = {node: 1.0 / max(1, len(graph)) for node in graph.nodes}
 
@@ -487,6 +529,8 @@ def _rank(sources, defines: dict, references: dict, def_keys, user_weights) -> l
             scores[(dst, d["ident"])] += rank[src] * d["weight"] / weight
     for key in def_lines:  # unreferenced definitions still rank, below any referenced one
         scores.setdefault(key, rank.get(key[0], 0.0) * 0.01)
+    if pure:
+        scores = {k: float(f"{v:.10g}") for k, v in scores.items()}
     return sorted((k for k in scores if k in def_lines), key=lambda k: (-scores[k], k))
 
 
@@ -570,7 +614,7 @@ def build_symbol_map_v2(sources: dict[str, str], user_weights: dict[str, float] 
                 def_info[(path, name)] = (start, end, sig[:140])
         for name, _ in refs:
             references[name][path] += 1
-    ranked = _rank(sources, defines, references, def_info, user_weights)
+    ranked = _rank(sources, defines, references, def_info, user_weights, pure=True)
     notes: dict[tuple, str] = {}
 
     def line_for(key):

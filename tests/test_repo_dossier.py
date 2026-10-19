@@ -420,6 +420,37 @@ def test_the_cli_backend_runs_claude_on_the_subscription_and_caches(tmp_path, mo
     assert rec["backend"] == "claude-cli"
 
 
+def test_the_plain_pagerank_matches_networkx():
+    """art-mcp ships networkx without SciPy, and networkx's pagerank needs SciPy; the variants'
+    own power iteration must give networkx's answer."""
+    pytest.importorskip("scipy")
+    import networkx as nx
+
+    from eval.repo_dossier.symbols import pagerank
+    g = nx.MultiDiGraph()
+    g.add_nodes_from(["a", "b", "c", "d", "lonely"])
+    for u, v, w in [("a", "b", 2.0), ("a", "b", 1.0), ("b", "c", 1.0), ("c", "a", 0.5), ("d", "c", 3.0)]:
+        g.add_edge(u, v, weight=w)
+    pers = {"a": 0.7, "b": 0.0, "c": 0.0, "d": 0.3, "lonely": 0.0}
+    mine = pagerank(g, pers)
+    ref = nx.pagerank(g, weight="weight", personalization=pers, dangling=pers)
+    assert mine.keys() == ref.keys()
+    assert all(abs(mine[k] - ref[k]) < 1e-6 for k in ref)
+    assert pagerank(g, None) == pagerank(g, None)
+
+
+def test_a_crlf_checkout_gives_the_same_dossier(ctx, fixture_repo):
+    """A Windows clone (core.autocrlf) has CRLF where a Linux clone has LF: same dossier."""
+    from eval.repo_dossier import ladder as lad
+    before = {v: build_variant(ctx, v)[0] for v in ("5r-10k", "own-10k")}
+    for p in ("README.md", "pkg/core.py", "pkg/util.py", "app.ts", "requirements.txt"):
+        f = fixture_repo / p
+        f.write_bytes(f.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+    lad._SIZES.clear()
+    again = make_context(RepoInput(fixture_repo, "ada/demo", "Ada Lovelace", [USER[1]]), PRS)
+    assert {v: build_variant(again, v)[0] for v in before} == before
+
+
 def test_the_cli_backend_refuses_a_folder_under_a_claude_md(tmp_path):
     from eval.repo_dossier import llm
     (tmp_path / "CLAUDE.md").write_text("private guidance", encoding="utf-8")

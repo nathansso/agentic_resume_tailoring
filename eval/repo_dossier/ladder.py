@@ -117,6 +117,25 @@ def list_files(repo: Path) -> list[str]:
     return sorted(out)
 
 
+_SIZES: dict[str, dict[str, int]] = {}
+
+
+def file_size(repo: Path, path: str) -> int:
+    """A file's size as committed (`git ls-tree -l`), not on disk, where a Windows checkout's CRLF
+    makes it larger; on-disk size for anything not in HEAD."""
+    key = str(Path(repo).resolve())
+    if key not in _SIZES:
+        sizes = {}
+        for line in _git(Path(repo), "ls-tree", "-r", "-l", "HEAD").splitlines():
+            meta, _, name = line.partition("	")
+            parts = meta.split()
+            if len(parts) == 4 and parts[3].isdigit():
+                sizes[name] = int(parts[3])
+        _SIZES[key] = sizes
+    got = _SIZES[key].get(path)
+    return got if got is not None else (Path(repo) / path).stat().st_size
+
+
 def _ext(path: str) -> str:
     return Path(path).suffix.lower()
 
@@ -129,7 +148,9 @@ def read_text(repo: Path, path: str) -> str:
     data = (repo / path).read_bytes()
     if b"\x00" in data[:4096]:
         return ""
-    return data.decode("utf-8", errors="replace")
+    # a Windows checkout (core.autocrlf) has CRLF where Linux has LF: normalise, so the dossier
+    # is the same bytes whichever way the clone was made
+    return data.decode("utf-8", errors="replace").replace("\r\n", "\n")
 
 
 def notebook_text(raw: str, output_chars: int, code_only: bool = False) -> str:
@@ -239,7 +260,7 @@ def language_bytes(repo: Path, files: list[str]) -> dict[str, int]:
     for f in files:
         e = _ext(f)
         if e in CODE_EXT:
-            sizes[e.lstrip(".")] += (repo / f).stat().st_size
+            sizes[e.lstrip(".")] += file_size(repo, f)
     return dict(sizes.most_common(8))
 
 
@@ -282,7 +303,7 @@ def metadata_section(repo: Path, files: list[str], meta: dict | None, b: Budgets
 def tree_section(repo: Path, files: list[str], b: Budgets) -> str:
     """Paths with sizes; past the line cap, the deepest directories collapse to file counts."""
     def size(f):
-        n = (repo / f).stat().st_size
+        n = file_size(repo, f)
         return f"{n / 1024:.0f}K" if n >= 1024 else f"{n}B"
 
     lines = [f"{f}  ({size(f)})" for f in files]
