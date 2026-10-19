@@ -193,6 +193,9 @@ def _migrate_db() -> None:
         # touched ones, newest first.
         "ALTER TABLE jobdescription ADD COLUMN last_touched_at TIMESTAMP DEFAULT NULL",
         "ALTER TABLE jobdescription ADD COLUMN last_opened_at TIMESTAMP DEFAULT NULL",
+        # issue 394: where render saves the user's copy. Nullable: NULL means "ask
+        # the user", so existing rows load and the agent asks on the next render.
+        'ALTER TABLE "user" ADD COLUMN default_output_dir TEXT',
     ]
     with engine.connect() as conn:
         for stmt in migrations:
