@@ -24,6 +24,12 @@ export async function getJobSkills(jobId: string): Promise<JobSkillRow[]> {
   return json(await fetch(`/api/jobs/${jobId}/skills`, { credentials: "include" }));
 }
 
+// `artie ui` (#288): tell ART the user opened this job, so the agent's next turn knows
+// which job they are looking at. Local mode only; the server answers 404 elsewhere.
+export async function markJobOpened(jobId: string): Promise<void> {
+  await fetch(`/api/jobs/${jobId}/open`, { method: "POST", credentials: "include" });
+}
+
 export async function getJob(jobId: string): Promise<JobDetail> {
   return json(await fetch(`/api/jobs/${jobId}`, { credentials: "include" }));
 }

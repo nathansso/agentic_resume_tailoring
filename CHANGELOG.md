@@ -15,7 +15,7 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 ---
 
 ## Issue 394 — `render` saves where the user asks: "save it to my Downloads"
-**Status:** complete | **Tests:** 3561 pass on SQLite (47 new, in `tests/test_render_destinations.py`; the help test in `tests/test_packaging.py` updated), 25 skipped, 2 xfailed, 0 fail; the Postgres leg was not run locally (Docker was not running), CI's required leg covers it
+**Status:** complete | **Tests:** 3576 pass on SQLite after merging main (47 new, in `tests/test_render_destinations.py`; the help test in `tests/test_packaging.py` updated), 25 skipped, 2 xfailed, 0 fail; the Postgres leg was not run locally (Docker was not running), CI's required leg covers it
 
 Part of the MCP revision (#391, `docs/harness.md` § 2.1 "Destinations"). The user names a place in plain words and never types a path: `render` copies the PDF there, and the first time the agent asks and ART remembers the answer.
 
@@ -39,6 +39,32 @@ Part of the MCP revision (#391, `docs/harness.md` § 2.1 "Destinations"). The us
 - **Nothing is copied when no PDF was made** (no engine, or a compile error) unless the `.tex` was asked for; the note says so rather than copying the `.tex` unasked.
 - **Extra arguments** beyond the spec: `save_tex` names "the `.tex` when asked"; a few extra spellings of the names ("the Desktop folder", "download", "docs") are accepted.
 - **Not verified here:** macOS and Linux on real machines (both are covered by fakes), and the Postgres leg.
+
+---
+
+## Issue 288 — Which job? A last-touched signal and a ranked job lookup, so the agent confirms the job the user means
+**Status:** complete | **Tests:** 3529 pass on SQLite (15 new), 25 skipped, 2 xfailed; frontend 225 pass (typecheck clean); the Postgres leg was not run locally (Docker was not running), CI runs it
+
+Rescoped under #391: no hidden current-job pointer. ART records when each job was last touched and ranks the user's jobs against their words; the agent proceeds on one clear match and names it, or asks (that skill text lands with #401). Tools that take a `job_id` still require it.
+
+### What shipped
+- **Schema.** `JobDescription.last_touched_at` and `last_opened_at`, both nullable, added by backward-compatible `ALTER TABLE jobdescription ADD COLUMN … TIMESTAMP DEFAULT NULL` in `database/db.py::_migrate_db`. An existing row reads as never touched.
+- **The signal (`harness/jobs.py::touch`).** The contract stamps `last_touched_at` after each host write succeeds: `open_job`, an `execute_plan` commit (a dry run does not), `patch_plan`, `checkout` and `render`. It does this in one wrapper (`contract._on_job`), so the MCP server and `--json` mode cannot differ. A failed call, an unknown job or another user's job is not stamped, and a stamp that fails never fails the write.
+- **Opening a job in `artie ui`.** `POST /api/jobs/{id}/open` (local mode only, 404 otherwise; the same-origin write guard covers it, and a read-only store records nothing) sets both columns. `MainPage` posts it whenever the selected job changes in local mode, including the job `artie ui --job` opens on.
+- **Ranked lookup: `list_jobs` gains `query` and `limit`.** The user's words are folded with ingestion's name normaliser (case and punctuation insensitive), and the resolver's company stop words and role words ("role", "job", "resume") are dropped. A word naming the company scores 2, a word naming the title 1, with a prefix match from 4 letters ("engineering" names "Engineer") and a squashed company ("openai" names "Open AI"). Ties go to `last_touched_at` (never-touched last), then newest created. Each job carries `last_touched_at`, `score`, `matched_words` and `reason` (`matched "zendar" (company); touched 2 h ago`), and the output carries `query` and `matched`, how many jobs the query named. Without a query, jobs come most recently touched first.
+- **Every job-scoped reply names its job.** A new `job` field (`job_id`, `title`, `company`) on `art_briefing` and `art_pins` (when given a job), `get_head`, `history`, `checkout`, `suggest_actions`, `execute_plan`, `patch_plan` and `render`. `open_job` already returned them. Absent on an error.
+- **Prompt hook (`harness/hooks.py::_opened_in_editor`).** When the user opened a different job in `artie ui` since their last message, one line names it (title @ company, job id) and asks the host to confirm before acting on it. It reuses the per-session state file: a new `opened_at` cursor, set quietly on a session's first prompt (or the first prompt of a session from before this change). "Different" is from the session's `job_id`, and a reported switch becomes it, so a later compaction names the job the user switched to. A host write is never reported as a switch.
+- **Docs.** `docs/harness.md` § 2.1 (what shipped), § 9 (the `list_jobs` row and the `job` echo) and § 13.
+- **Tests.** `tests/test_job_lookup.py` (14): each write path stamps the job and a dry run, a read and a failed write do not; touch ignores another user's job; the `artie ui` open stamps both columns through a same-origin POST and is refused cross-origin and outside local mode; ranking with storage order, creation order and recency all disagreeing with the right answer (a company match outranks a title match touched 2 h ago and a non-match touched just now); case, punctuation and role words; company plus title words adding up; no query; no match; user scoping; the `job` echo on every job-scoped reply; the hook line (once, not on a host write, not on reopening the same job, again on switching back, named by a later compaction); a pre-#288 session state; an old database without the columns migrating (twice) and reading as never touched. `tests/test_harness_contract.py` gains a `list_jobs` call with a query, so all three adapters are compared on it.
+
+### Deviations from spec
+- **A second column, `last_opened_at`.** The issue names one. With `last_touched_at` alone the hook cannot tell the user opening job B in the editor from the host (or another session) writing to B, and would report host writes as editor switches. `last_opened_at` is set only by the editor open.
+- **`list_jobs(query=...)`, not a `find_job` tool.** One tool already lists jobs, takes the status filter that composes with the query, and is what `/artie:open`, `/artie:history` and `/artie:revert` call, so no skill or command changed. A second tool returning the same rows would have split the surface #391 plans to consolidate.
+- **Without a query, `list_jobs` now orders by recency, not creation.** It was newest-created first. Most-recently-touched first is what the commands ask for ("the job I most recently worked on"), and a store with nothing touched yet keeps the old order.
+- **The writes are stamped in the contract, not inside `executor.py` and `render.py`.** Neither module changed, which keeps clear of #392 and #394. Every host call goes through `contract.invoke`; the legacy web pipeline and `cli.py` do not stamp, by design (they are not the host). `render` is stamped after it runs, not at its entry, so an unknown job or a job with no version is not stamped.
+- **`patch_plan` is stamped on any successful call, dry run included**, because it amends and saves a program for that job; `execute_plan` only on a commit, as specified.
+- **`CONTRACT_VERSION` is unchanged.** Every change is additive: new optional inputs (`query`, `limit`) and new output fields.
+- **Matching is company and title only**, as the rescoped issue says. The pre-rescope comment's FTS over the posting text, URL and role family is not built; a recency boost for "last week" is the `last_touched_at` tiebreak.
 
 ---
 

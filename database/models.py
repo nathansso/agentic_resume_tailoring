@@ -236,6 +236,12 @@ class JobDescription(SQLModel, table=True):
     # the description is re-ingested.
     embedding: Optional[str] = None
     embedding_model: Optional[str] = None
+    # Which job? (issue #288). When the host last wrote to the job (open_job, execute_plan,
+    # patch_plan, checkout, render) or the user opened it in `artie ui`; and when the user last
+    # opened it there, alone, so the prompt hook can tell a switch in the editor from a host
+    # write. Both NULL on rows older than the columns, and on a job nobody has touched since.
+    last_touched_at: Optional[datetime] = None
+    last_opened_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 

@@ -6,7 +6,9 @@ Three things a host loses without them (docs/harness.md § 10, § 13):
   `.tex` save and drag commits an `editor` node (#196, #204); before each
   message this hook tells the host which jobs the user changed since the last
   message, and what changed, so the host builds on that HEAD instead of
-  overwriting it. The first prompt of a session only sets the cursor.
+  overwriting it. The first prompt of a session only sets the cursor. When the user
+  opened a different job in the editor since their last message, one line says which
+  (#288), so the host confirms the job before acting on it.
 - **The memory gate** (#202), also on `user-prompt`: `observe` runs on the
   message itself. A message that may state a standing preference adds one line
   asking the host to confirm it with the user and call `record_preference`; a
@@ -219,11 +221,47 @@ def _memory_note(user_id: UUID, payload: Dict[str, Any], session_id: str,
         return None
 
 
+def _opened_in_editor(user_id: UUID, session_id: str) -> Optional[str]:
+    """One line when the user opened a different job in `artie ui` since their last message
+    (#288), or None. "Different" is from the job this session is on (`state["job_id"]`: the
+    job of the last change it saw, or the last switch it reported), and a reported switch
+    becomes that job, so a later compaction names it. The cursor is `opened_at`, the newest
+    `last_opened_at` seen; the first prompt of a session (or of one from before #288) only
+    sets it. Never raises: the line must not cost the user their prompt."""
+    from database.clock import parse_utc
+    from harness import jobs
+
+    try:
+        state = load_state(session_id) or {}
+        latest = jobs.latest_open(user_id)
+        if "opened_at" not in state:
+            state["opened_at"] = latest[1].isoformat() if latest else None
+            save_state(session_id, state)
+            return None
+        seen = parse_utc(state.get("opened_at"))
+        if latest is None or (seen is not None and latest[1] <= seen):
+            return None
+        job_id, opened_at = latest
+        state["opened_at"] = opened_at.isoformat()
+        switched = job_id != state.get("job_id")
+        state["job_id"] = job_id
+        save_state(session_id, state)
+        if not switched:
+            return None
+        return (f"ART: since your last message the user opened {_job_label(user_id, job_id)} "
+                f"(job {job_id}) in artie ui. If they now mean that job, name it and confirm "
+                "before acting on it.")
+    except Exception as exc:                          # never break the prompt
+        log.warning("editor job switch check failed: %s", exc)
+        return None
+
+
 def user_prompt(user_id: UUID, payload: Dict[str, Any], allow_writes: bool = True) -> Optional[str]:
     session_id = str(payload.get("session_id") or "default")
     edits = _editor_edits(user_id, session_id)
+    opened = _opened_in_editor(user_id, session_id)
     memory = _memory_note(user_id, payload, session_id, allow_writes)
-    return "\n".join(part for part in (edits, memory) if part) or None
+    return "\n".join(part for part in (opened, edits, memory) if part) or None
 
 
 # ── session-start (after compaction) ─────────────────────────────────────────

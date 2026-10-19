@@ -44,6 +44,19 @@ class _Output(_Model):
     error: Optional[ToolError] = None
 
 
+class JobLabel(_Model):
+    """The job a job-scoped call acted on (#288), so the host can name it to the user."""
+    job_id: str
+    title: str = ""
+    company: str = ""
+
+
+def _job_field():
+    return Field(None, description="The job this call acted on (#288): its id, title and "
+                                   "company. Name it to the user (\"the <Company> <Title> "
+                                   "role\"). Absent on an error, or when no job was given.")
+
+
 # ── art_briefing ─────────────────────────────────────────────────────────────
 
 class BriefingInput(_Model):
@@ -105,6 +118,7 @@ class BriefingOutput(_Output):
         default_factory=list, description="Yes/no questions to answer for each posting in "
                                           "open_job's rule_answers.")
     counts: Dict[str, int] = Field(default_factory=dict)
+    job: Optional[JobLabel] = _job_field()
 
 
 class PinsInput(_Model):
@@ -129,6 +143,7 @@ class PinsOutput(_Output):
         description="Suppressions of something no knowledge-graph item holds yet (#299), every "
                     "strength, each with its text, scope and `hard`: a strength-5 one is also in "
                     "pins and is enforced as a page-wide term; a softer one is reported only.")
+    job: Optional[JobLabel] = _job_field()
 
 
 # ── the memory gate (#202) ───────────────────────────────────────────────────
@@ -409,6 +424,13 @@ ApplicationStatus = Literal["drafting", "applied", "interview", "closed"]
 class ListJobsInput(_Model):
     status: Optional[ApplicationStatus] = Field(
         None, description="Only jobs whose application status is this.")
+    query: Optional[str] = Field(
+        None, description="The user's words for the job they mean (\"the Zendar role\", \"that "
+                          "ML job at Stripe\"). Jobs whose company or title they name rank "
+                          "first (case and punctuation ignored; a company word outweighs a "
+                          "title word), then the most recently touched (#288). Without it, "
+                          "jobs come most recently touched first.")
+    limit: Optional[int] = Field(None, ge=1, le=200, description="At most this many jobs.")
 
 
 class JobRef(_Model):
@@ -420,10 +442,26 @@ class JobRef(_Model):
     url: Optional[str] = None
     head: Optional[str] = Field(None, description="Current node id, if the job has history.")
     created_at: Optional[str] = None
+    last_touched_at: Optional[str] = Field(
+        None, description="When a host last wrote to this job (open_job, an execute_plan "
+                          "commit, patch_plan, checkout, render) or the user last opened it in "
+                          "artie ui (#288). Null: never, or not since ART started recording it.")
+    score: Optional[float] = Field(
+        None, description="How well the query names this job: 2 per word naming the company, "
+                          "1 per word naming the title. Null without a query.")
+    matched_words: List[str] = Field(default_factory=list,
+                                     description="The query's words that named this job.")
+    reason: str = Field("", description="Why it ranked here, e.g. 'matched \"zendar\" "
+                                        "(company); touched 2 h ago'.")
 
 
 class ListJobsOutput(_Output):
     jobs: List[JobRef] = Field(default_factory=list)
+    query: Optional[str] = None
+    matched: Optional[int] = Field(
+        None, description="How many jobs the query named (score above 0). One: name it and go "
+                          "ahead. None, or several close: ask the user which, naming the top "
+                          "ones. Null without a query.")
 
 
 class NodeSummary(_Model):
@@ -523,6 +561,7 @@ class GetHeadInput(_Model):
 
 class GetHeadOutput(_Output):
     job_id: Optional[str] = None
+    job: Optional[JobLabel] = _job_field()
     head: Optional[Node] = None
     events: List[TreeEventOut] = Field(default_factory=list)
     editor_edits: List[EditorEdit] = Field(
@@ -538,6 +577,7 @@ class HistoryInput(_Model):
 
 class HistoryOutput(_Output):
     nodes: List[NodeSummary] = Field(default_factory=list)
+    job: Optional[JobLabel] = _job_field()
 
 
 class DiffInput(_Model):
@@ -566,6 +606,7 @@ class CheckoutInput(_Model):
 
 class CheckoutOutput(_Output):
     head: Optional[Node] = None
+    job: Optional[JobLabel] = _job_field()
 
 
 # ── host-filled ingestion and jobs (#192) ────────────────────────────────────
@@ -777,6 +818,7 @@ class RenderOutput(_Output):
         "The job's page limit from the user's document rules (1 when none sets it), the same "
         "one execute_plan's finalize enforces; line_budget is measured against it."))
     hint: Optional[str] = None
+    job: Optional[JobLabel] = _job_field()
     destination: Optional[Literal["save_to", "default", "ask_user"]] = Field(
         None, description="Where the user's copy went: save_to, the stored default, or "
                           "ask_user (none set: ask where to save, then render again with "
@@ -948,6 +990,7 @@ class ExecuteOutput(_Output):
                           "(the stuffing signature). Absent when Jev did not answer (no key, "
                           "mode off, an API error) or the job has no required or preferred "
                           "requirement.")
+    job: Optional[JobLabel] = _job_field()
 
 
 def _executor():
@@ -1064,6 +1107,7 @@ class SuggestActionsOutput(_Output):
     floor: Optional[float] = Field(None, description="The word-overlap fallback's floor; Jev's "
                                                      "choice has its own threshold.")
     items: List[ItemSuggestion] = Field(default_factory=list)
+    job: Optional[JobLabel] = _job_field()
 
 
 # ── document rules (#298) ────────────────────────────────────────────────────
@@ -1196,6 +1240,40 @@ def _memory():
     return memory
 
 
+def _jobs():
+    from harness import jobs
+    return jobs
+
+
+def _on_job(fn: Callable[..., Dict[str, Any]], job_of: Callable[..., Optional[str]], *,
+            touch: Optional[Callable[[Dict[str, Any]], bool]] = None,
+            echo: bool = True) -> Callable[..., Dict[str, Any]]:
+    """A job-scoped tool (#288). After `fn` succeeds, mark the job it acted on as touched (when
+    `touch(out)` says the call wrote to it) and add `job` (id, title, company) to the reply.
+    `job_of(uid, kwargs, out)` names the job. An error reply is returned as it is."""
+    def call(uid, **kwargs):
+        out = fn(uid, **kwargs)
+        if not isinstance(out, dict) or out.get("error"):
+            return out
+        job_id = job_of(uid, kwargs, out)
+        if not job_id:
+            return out
+        jobs = _jobs()
+        if touch is not None and touch(out):
+            jobs.touch(uid, job_id)
+        held = jobs.label(uid, job_id) if echo else None
+        return {**out, "job": held} if held else out
+    return call
+
+
+def _arg(name: str) -> Callable[..., Optional[str]]:
+    return lambda uid, kwargs, out: kwargs.get(name)
+
+
+def _always(out: Dict[str, Any]) -> bool:
+    return True
+
+
 _OBSERVE_FIELDS = ("action", "reason", "candidate", "negated", "p", "source", "guess",
                    "preference_id", "note", "version", "context")
 
@@ -1215,14 +1293,16 @@ TOOLS: List[ToolSpec] = [
         "Pinned preferences (verbatim), scoped preferences, persona traits and prior-job "
         "cards for this candidate. Call before planning any resume.",
         BriefingInput, BriefingOutput,
-        lambda uid, role_family=None, job_id=None: _tools().art_briefing(uid, role_family, job_id)),
+        _on_job(lambda uid, role_family=None, job_id=None:
+                _tools().art_briefing(uid, role_family, job_id), _arg("job_id"))),
     ToolSpec(
         "art_pins",
         "The candidate's pins word for word: strength-5 preferences, negative pins included. "
         "Call it to restore them after compaction or when the briefing is out of reach. Same "
         "set and scoping as art_briefing's pins; pass job_id to include a job's own.",
         PinsInput, PinsOutput,
-        lambda uid, role_family=None, job_id=None: _tools().art_pins(uid, role_family, job_id)),
+        _on_job(lambda uid, role_family=None, job_id=None:
+                _tools().art_pins(uid, role_family, job_id), _arg("job_id"))),
     ToolSpec(
         "observe",
         "Run ART's memory gate on one user message. Returns drop (nothing to remember), host "
@@ -1345,15 +1425,23 @@ TOOLS: List[ToolSpec] = [
         "Jev the track named after the role family is used (baseline.source says which). "
         "Re-opening updates the job. Writes.",
         OpenJobInput, OpenJobOutput,
-        lambda uid, jd_text="", requirements=(), metadata=None, rule_answers=(), job_id=None:
-            _ingest().open_job(uid, jd_text, requirements, metadata or {}, rule_answers, job_id),
+        _on_job(lambda uid, jd_text="", requirements=(), metadata=None, rule_answers=(),
+                       job_id=None:
+                _ingest().open_job(uid, jd_text, requirements, metadata or {}, rule_answers,
+                                   job_id),
+                lambda uid, kwargs, out: out.get("job_id"), touch=_always, echo=False),
         read_only=False),
     ToolSpec(
         "list_jobs",
         "The candidate's jobs with their application status and current tailoring node "
-        "(HEAD), optionally filtered by status.",
+        "(HEAD), optionally filtered by status. To find the job the user means, pass their "
+        "words as query: jobs whose company or title they name come first, then the most "
+        "recently touched (by a host write or the user opening it in artie ui), each with the "
+        "reason it ranked there. One clear match: name it to the user and go ahead. Otherwise "
+        "ask which job they mean. Never act on a guess silently.",
         ListJobsInput, ListJobsOutput,
-        lambda uid, status=None: {"jobs": _tree().list_jobs(uid, status)}),
+        lambda uid, status=None, query=None, limit=None:
+            _jobs().list_jobs(uid, status, query, limit)),
     ToolSpec(
         "get_head",
         "A job's current resume version, plus what changed after a cursor — including "
@@ -1361,12 +1449,14 @@ TOOLS: List[ToolSpec] = [
         "revised, added or removed (editor_edits[].changes.tex_edits, kept short; diff_nodes has "
         "all of it). Call before building on a version.",
         GetHeadInput, GetHeadOutput,
-        _tree_call(lambda t, uid, job_id, since_event=None: t.get_head(uid, job_id, since_event))),
+        _on_job(_tree_call(lambda t, uid, job_id, since_event=None:
+                           t.get_head(uid, job_id, since_event)), _arg("job_id"))),
     ToolSpec(
         "history",
         "Every version of a job's resume, oldest first.",
         HistoryInput, HistoryOutput,
-        _tree_call(lambda t, uid, job_id: {"nodes": t.history(uid, job_id)})),
+        _on_job(_tree_call(lambda t, uid, job_id: {"nodes": t.history(uid, job_id)}),
+                _arg("job_id"))),
     ToolSpec(
         "diff_nodes",
         "What changed between two versions, by item and bullet. When the user's hand-edited "
@@ -1383,7 +1473,9 @@ TOOLS: List[ToolSpec] = [
         "checkout",
         "Make an earlier version current again (revert or branch). Writes.",
         CheckoutInput, CheckoutOutput,
-        _tree_call(lambda t, uid, job_id, node_id: {"head": t.checkout(uid, job_id, node_id)}),
+        _on_job(_tree_call(lambda t, uid, job_id, node_id:
+                           {"head": t.checkout(uid, job_id, node_id)}),
+                _arg("job_id"), touch=_always),
         read_only=False),
     ToolSpec(
         "suggest_actions",
@@ -1394,7 +1486,8 @@ TOOLS: List[ToolSpec] = [
         "or on an error a word-overlap rule picks (source fallback). Start a revision from "
         "the variant (bullets[].from_variant); write from raw facts only on no_match.",
         SuggestActionsInput, SuggestActionsOutput,
-        lambda uid, job_id, node_id=None: _library().suggest_actions(uid, job_id, node_id)),
+        _on_job(lambda uid, job_id, node_id=None: _library().suggest_actions(uid, job_id, node_id),
+                _arg("job_id"))),
     ToolSpec(
         "promote_bullet",
         "Make a draft bullet variant from a bullet on a committed version of one of your "
@@ -1439,16 +1532,21 @@ TOOLS: List[ToolSpec] = [
         "upsert_items (or ask the user), cite it, and retry rather than rewording the user's "
         "text. Any other wording is a normal revise. Writes.",
         ExecuteInput, ExecuteOutput,
-        lambda uid, program, dry_run=False:
-            _executor().execute_plan(uid, program, dry_run=dry_run),
+        _on_job(lambda uid, program, dry_run=False:
+                _executor().execute_plan(uid, program, dry_run=dry_run),
+                lambda uid, kwargs, out: (kwargs.get("program") or {}).get("job_id"),
+                touch=lambda out: bool(out.get("committed"))),
         read_only=False),
     ToolSpec(
         "patch_plan",
         "Amend a saved program by JSON pointer and run it again (e.g. add the delete_bullet or "
         "delete node a cut hint names, or replace /parent to rebase on a new HEAD). Writes.",
         PatchInput, ExecuteOutput,
-        lambda uid, program_id, edits, dry_run=False:
-            _executor().patch_plan(uid, program_id, edits, dry_run=dry_run),
+        _on_job(lambda uid, program_id, edits, dry_run=False:
+                _executor().patch_plan(uid, program_id, edits, dry_run=dry_run),
+                lambda uid, kwargs, out: _jobs().program_job(
+                    uid, out.get("program_id") or kwargs["program_id"]),
+                touch=_always),
         read_only=False),
     ToolSpec(
         "render",
@@ -1462,10 +1560,12 @@ TOOLS: List[ToolSpec] = [
         "never replaced unless overwrite. Returns the paths, the page count and the "
         "line budget with cut hints. The user's own .tex edits win. Writes files.",
         RenderInput, RenderOutput,
-        lambda uid, job_id, node_id=None, format="pdf", save_to=None, remember=False,
-        overwrite=False, save_tex=False:
-            _render().render(uid, job_id, node_id, format, save_to=save_to, remember=remember,
-                             overwrite=overwrite, save_tex=save_tex),
+        _on_job(lambda uid, job_id, node_id=None, format="pdf", save_to=None,
+                remember=False, overwrite=False, save_tex=False:
+                _render().render(uid, job_id, node_id, format, save_to=save_to,
+                                 remember=remember, overwrite=overwrite,
+                                 save_tex=save_tex),
+                _arg("job_id"), touch=_always),
         read_only=False),
     ToolSpec(
         "update_profile",
