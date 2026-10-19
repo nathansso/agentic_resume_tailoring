@@ -704,7 +704,8 @@ def run_job(uid, job_id: str, task: Dict, host: str, tempt: Sequence[str] = (),
         program, block = naive_program(uid, job_id, task, tempt), None
     else:
         program, block = obedient_program(uid, job_id, task)
-    result = _call("execute_plan", uid, {"program": program})
+    from eval.scripted_host import commit_approved      # dry run, approval, commit (#393)
+    result = commit_approved(uid, program, _call)
     committed = bool(result.get("committed"))
     no_change = str(result.get("reason") or "").startswith("no_change")
     settled = committed or no_change

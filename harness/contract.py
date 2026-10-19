@@ -817,9 +817,33 @@ def _render():
 
 # ── plan programs (#197) ─────────────────────────────────────────────────────
 
+def _plan_token_field():
+    return Field(None, description="Required to commit (#393): the plan_token the dry run of this "
+                                   "exact program returned. A program changed since that dry run "
+                                   "needs a new dry run and a new approval.")
+
+
+def _approval_quote_field():
+    return Field(None, description="Required to commit (#393): the user's own approving words, "
+                                   "copied exactly from a message they sent after you showed "
+                                   "them plan_summary (\"looks good, go ahead\"). ART checks them "
+                                   "against the messages its prompt hook recorded; a quote from "
+                                   "before the plan was shown is refused.")
+
+
+def _session_field():
+    return Field(None, description="Optional, on a dry run: the host's session id, when you know "
+                                   "it. Then only that session's messages can approve the plan; "
+                                   "without it any session's messages after the dry run count.")
+
+
 class ExecuteInput(_Model):
     program: Program
-    dry_run: bool = Field(False, description="Evaluate everything, commit nothing.")
+    dry_run: bool = Field(False, description="Evaluate everything, commit nothing. Returns "
+                                             "plan_summary and plan_token.")
+    plan_token: Optional[str] = _plan_token_field()
+    approval_quote: Optional[str] = _approval_quote_field()
+    session_id: Optional[str] = _session_field()
 
 
 class PatchEdit(_Model):
@@ -832,6 +856,9 @@ class PatchInput(_Model):
     program_id: str = Field(description="From a previous execute_plan or patch_plan result.")
     edits: List[PatchEdit]
     dry_run: bool = False
+    plan_token: Optional[str] = _plan_token_field()
+    approval_quote: Optional[str] = _approval_quote_field()
+    session_id: Optional[str] = _session_field()
 
 
 class NodeResult(_Model):
@@ -939,6 +966,18 @@ class ExecuteOutput(_Output):
                           "reason from its because, and what the dry run made of it), then the "
                           "skills line; `text` is the same as lines to show the user verbatim. "
                           "Absent on a commit.")
+    plan_token: Optional[str] = Field(
+        None, description="Dry runs only (#393): the fingerprint of this exact program. Show the "
+                          "user plan_summary.text and end your turn; when they approve, commit "
+                          "the same program with this plan_token and approval_quote set to "
+                          "their approving words. Absent on a commit.")
+    approval: Optional[Literal["quoted", "token_only"]] = Field(
+        None, description="On a commit the gate let through (#393), whether or not it then "
+                          "landed: how it was approved. quoted: the user's words "
+                          "were found in a message they sent after the plan was shown. "
+                          "token_only: this ART has no prompt hook to record messages (a manual "
+                          "MCP setup), so only the token was checked; tell the user. Absent on a "
+                          "dry run and on a job's first, empty plan.")
     program_id: Optional[str] = None
     parent: Optional[str] = None
     dry_run: bool = False
@@ -1283,6 +1322,29 @@ def _on_job(fn: Callable[..., Dict[str, Any]], job_of: Callable[..., Optional[st
     return call
 
 
+def _approved(run: Callable[..., Dict[str, Any]]) -> Callable[..., Dict[str, Any]]:
+    """A tailoring commit through the quoted-approval gate (#393). `run(uid, dry_run=, gate=,
+    **kwargs)` is `execute_plan` or `patch_plan`. A dry run's token is recorded as shown (with
+    the session, when the host passed one); a commit must carry that token and the user's words
+    (`harness.approval.check`); a commit that lands clears what was kept for its job."""
+    def call(uid, *, dry_run=False, plan_token=None, approval_quote=None, session_id=None,
+             **kwargs):
+        from harness import approval
+
+        gate = None if dry_run else (
+            lambda prog: approval.check(uid, prog, plan_token, approval_quote))
+        out = run(uid, dry_run=dry_run, gate=gate, **kwargs)
+        if not isinstance(out, dict) or out.get("error"):
+            return out
+        job_id = _jobs().program_job(uid, out.get("program_id") or "")
+        if job_id and dry_run and out.get("plan_token"):
+            approval.record_shown(uid, job_id, out["plan_token"], session_id)
+        elif job_id and out.get("committed"):
+            approval.consume(uid, job_id)
+        return out
+    return call
+
+
 def _arg(name: str) -> Callable[..., Optional[str]]:
     return lambda uid, kwargs, out: kwargs.get(name)
 
@@ -1534,7 +1596,11 @@ TOOLS: List[ToolSpec] = [
         "be identical to its parent (committed false, reason no_change). Every node needs a "
         "short because (job:<what in the posting calls for it>, user:<what they asked> or "
         "pref:<preference_id>); a dry run returns plan_summary, the plan in plain words with "
-        "those reasons: show its text to the user and wait for approval before you commit. To "
+        "those reasons, and plan_token: show the summary's text to the user and end your turn. "
+        "A commit must carry that plan_token and approval_quote, the user's approving words "
+        "copied from their reply (\"just do it\" counts when they said it); without them, or "
+        "with a program changed since the dry run, it is refused as approval_required. A job's "
+        "first, empty plan (parent null, no nodes) needs neither. To "
         "remove whole bullets use op delete_bullet with cut_bullets (ids '<item key>#b<n>' on "
         "the parent version); to drop an item use op delete. A delete or delete_bullet whose "
         "because is user: or pref: faces the hard gates only: guard regressions are accepted "
@@ -1551,18 +1617,21 @@ TOOLS: List[ToolSpec] = [
         "upsert_items (or ask the user), cite it, and retry rather than rewording the user's "
         "text. Any other wording is a normal revise. Writes.",
         ExecuteInput, ExecuteOutput,
-        _on_job(lambda uid, program, dry_run=False:
-                _executor().execute_plan(uid, program, dry_run=dry_run),
+        _on_job(_approved(lambda uid, program, dry_run=False, gate=None:
+                          _executor().execute_plan(uid, program, dry_run=dry_run, gate=gate)),
                 lambda uid, kwargs, out: (kwargs.get("program") or {}).get("job_id"),
                 touch=lambda out: bool(out.get("committed"))),
         read_only=False),
     ToolSpec(
         "patch_plan",
         "Amend a saved program by JSON pointer and run it again (e.g. add the delete_bullet or "
-        "delete node a cut hint names, or replace /parent to rebase on a new HEAD). Writes.",
+        "delete node a cut hint names, or replace /parent to rebase on a new HEAD). A commit is "
+        "approved like execute_plan's: dry-run the patch, show its plan_summary, and commit with "
+        "its plan_token and the user's approving words as approval_quote. Writes.",
         PatchInput, ExecuteOutput,
-        _on_job(lambda uid, program_id, edits, dry_run=False:
-                _executor().patch_plan(uid, program_id, edits, dry_run=dry_run),
+        _on_job(_approved(lambda uid, program_id, edits, dry_run=False, gate=None:
+                          _executor().patch_plan(uid, program_id, edits, dry_run=dry_run,
+                                                 gate=gate)),
                 lambda uid, kwargs, out: _jobs().program_job(
                     uid, out.get("program_id") or kwargs["program_id"]),
                 touch=_always),

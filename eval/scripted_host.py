@@ -25,6 +25,8 @@ The policy, per task:
   `library_reuse`, the share of page bullets that are an approved variant or within the
   drift tolerance of one: report-only, never a target.
 - **Skills:** the knowledge graph's skills, posting terms first, capped.
+- **Approval (#393):** the plan is dry-run first, a scripted user approves it in words,
+  and the commit carries the dry run's `plan_token` and that quote (`commit_approved`).
 
 Every choice is a pure function of the store and the posting, so two runs over
 identical stores produce byte-identical results — the #197 acceptance test.
@@ -271,12 +273,33 @@ def page_library_reuse(user_id: UUID, job_id: str) -> Optional[Dict]:
     return library_reuse(content, approved)
 
 
+# The scripted user's reply to the plan, and the session it arrives in.
+APPROVAL = "Looks good, go ahead."
+SESSION = "scripted-host"
+
+
+def commit_approved(user_id: UUID, program: Dict, call=None) -> Dict:
+    """Commit a plan the way a host must (#393): a dry run shows it, the scripted user approves
+    it in words (recorded as the prompt hook records a message), and the commit carries the
+    dry run's `plan_token` and that quote. `call(name, user_id, args)` defaults to `invoke`. A
+    dry run that fails is returned as it is."""
+    from harness import approval
+
+    call = call or invoke
+    shown = call("execute_plan", user_id, {"program": program, "dry_run": True})
+    if shown.get("error") or not shown.get("plan_token"):
+        return shown
+    approval.note_message(user_id, SESSION, APPROVAL)
+    return call("execute_plan", user_id, {"program": program, "plan_token": shown["plan_token"],
+                                          "approval_quote": APPROVAL})
+
+
 def run_task(user_id: UUID, task: Dict) -> Dict:
     """Create the job, plan it, execute it. Returns `{job_id, program, result,
     library_reuse}`."""
     job_id = open_task_job(user_id, task)
     program = build_program(user_id, job_id, task["description"])
-    result = invoke("execute_plan", user_id, {"program": program})
+    result = commit_approved(user_id, program)
     reuse = page_library_reuse(user_id, job_id) if result.get("committed") else None
     return {"task": task["id"], "job_id": job_id, "program": program, "result": result,
             "library_reuse": reuse}

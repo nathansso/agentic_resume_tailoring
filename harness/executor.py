@@ -52,6 +52,7 @@ from agents.skill_matching import match_requirement_terms, priority_skills
 from agents.skill_scorer import MAX_SKILLS, rank_and_select_skills, score_skills
 from database.models import JDProfile, JobDescription, PlanProgram, UserJobResult
 from harness import ART_VERSION, constraints, library, plan_summary, texdiff, tree
+from harness import approval as approval_gate
 from harness import rules as rules_mod
 from harness.acceptance import (
     Context, accept, metric_vector, negative_pin_violations, preference_violations, rule_violations,
@@ -859,27 +860,43 @@ def _save_program(user_id: UUID, job_id: UUID, pid: str, program: Dict) -> None:
             session.commit()
 
 
-def execute_plan(user_id, program: Dict, *, dry_run: bool = False) -> Dict[str, Any]:
+# The approval gate a commit goes through (#393): given the validated program, it answers as
+# `harness.approval.check` does, `{"ok": ..., "approval" | "message": ...}`. The tool contract
+# passes one for every host commit; ART's own callers (tests, the benchmarks) call without one.
+Gate = Callable[[Dict[str, Any]], Dict[str, Any]]
+
+
+def execute_plan(user_id, program: Dict, *, dry_run: bool = False,
+                 gate: Optional[Gate] = None) -> Dict[str, Any]:
     """Run one program. Returns the result dict, or `{"error": ...}`."""
-    return _run(user_id, program, dry_run=dry_run, legacy_nodes=())
+    return _run(user_id, program, dry_run=dry_run, legacy_nodes=(), gate=gate)
 
 
-def _run(user_id, program: Dict, *, dry_run: bool, legacy_nodes: Sequence[str]) -> Dict[str, Any]:
+def _run(user_id, program: Dict, *, dry_run: bool, legacy_nodes: Sequence[str],
+         gate: Optional[Gate] = None) -> Dict[str, Any]:
     """`legacy_nodes`: ids of nodes `patch_plan` carried over unchanged from a saved program,
-    which are not held to the reason-on-every-node rule (#392)."""
+    which are not held to the reason-on-every-node rule (#392). `gate`: asked before a commit
+    runs; a refusal is `approval_required`, and nothing runs or is saved (#393)."""
     user_id = tree._uuid(user_id)
     try:
         prog = Program.model_validate(
             program, context={LEGACY_NODES: frozenset(legacy_nodes)}).model_dump(mode="json")
     except ValidationError as exc:
         return PlanError("invalid_program", str(exc)).as_dict()
+    approval = None
+    if gate is not None and not dry_run:
+        verdict = gate(prog)
+        if not verdict.get("ok"):
+            return PlanError("approval_required", verdict.get("message") or "").as_dict()
+        approval = verdict.get("approval")
     try:
-        return _execute(user_id, prog, dry_run=dry_run)
+        return _execute(user_id, prog, dry_run=dry_run, approval=approval)
     except PlanError as exc:
         return exc.as_dict()
 
 
-def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
+def _execute(user_id: UUID, prog: Dict, *, dry_run: bool,
+             approval: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     try:
         job_id = UUID(prog["job_id"])
     except ValueError:
@@ -1075,6 +1092,9 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
         "line_budget": budget or {"status": "unmeasured"},
         "violations": violations, "cut_hints": cut_hints, "rules_applied": rules_applied,
     }
+    if approval:
+        # How the gate approved this commit (#393), whether or not finalize then lets it land.
+        out["approval"] = approval["mode"]
     if page_rules or eff["soft"] or order_soft:
         out["rules"] = {
             "applied": eff["applied"], "overridden": resolved["overridden"],
@@ -1096,8 +1116,9 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
             pref_texts=pref_texts, skills_planned=prog.get("skills") is not None,
             has_parent=head is not None, skill_notes=skill_notes,
             job_title=job.title or "", job_company=job.company or "")
+        # Then the plan token (#393): what the commit must carry, with the user's own words.
         out = {"active_constraints": constraints.active_constraints(user_id, str(job_id)),
-               "plan_summary": summary, **out}
+               "plan_summary": summary, "plan_token": approval_gate.token(prog), **out}
     # Only when Jev (or its cache) answered for at least one bullet, or the deterministic
     # fallback (#351) has something to review: with no key and nothing to show, the result is what
     # it was before #193. `checked` counts Jev's answers; `fallback_checked` the bullets the
@@ -1156,7 +1177,9 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
                         "model": host.get("model"), "art_version": ART_VERSION,
                         "program_id": pid,
                         # The track baseline this job's first version was copied from (#229).
-                        **({"baseline": baseline} if baseline else {})},
+                        **({"baseline": baseline} if baseline else {}),
+                        # How the user approved it (#393): the mode, the token and their words.
+                        **({"approval": approval} if approval else {})},
             layout_overrides=(head or {}).get("layout_overrides"),
             note=f"plan {pid}", expected_parent=parent, materialize=True)
     except tree.StaleParent as exc:
@@ -1212,8 +1235,9 @@ def _apply_skills(content: Dict, names: Optional[List[str]], kg: _KG, ctx: Conte
 
 
 def patch_plan(user_id, program_id_: str, edits: List[Dict], *,
-               dry_run: bool = False) -> Dict[str, Any]:
-    """Apply JSON-pointer edits to a saved program and execute the result."""
+               dry_run: bool = False, gate: Optional[Gate] = None) -> Dict[str, Any]:
+    """Apply JSON-pointer edits to a saved program and execute the result. A commit is held to
+    `gate` like `execute_plan`'s: the token is the patched program's (#393)."""
     user_id = tree._uuid(user_id)
     with Session(_db.engine) as session:
         row = session.get(PlanProgram, program_id_)
@@ -1231,4 +1255,4 @@ def patch_plan(user_id, program_id_: str, edits: List[Dict], *,
     saved_nodes = saved.get("nodes") or []
     legacy = [n["id"] for n in patched.get("nodes") or []
               if isinstance(n, dict) and isinstance(n.get("id"), str) and n in saved_nodes]
-    return _run(user_id, patched, dry_run=dry_run, legacy_nodes=legacy)
+    return _run(user_id, patched, dry_run=dry_run, legacy_nodes=legacy, gate=gate)

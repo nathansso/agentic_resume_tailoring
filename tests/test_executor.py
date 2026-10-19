@@ -426,9 +426,11 @@ def test_contract_tools_are_writes():
 
 def _strip(result):
     """A result without the fields a fresh commit must differ in: a dry run leads with the
-    reminder block (#299) and the plan summary (#392), which a commit does not carry."""
+    reminder block (#299), the plan summary (#392) and the plan token (#393), which a commit
+    does not carry."""
     return {k: v for k, v in result.items()
-            if k not in ("node_id", "committed", "dry_run", "active_constraints", "plan_summary")}
+            if k not in ("node_id", "committed", "dry_run", "active_constraints", "plan_summary",
+                         "plan_token")}
 
 
 def test_replaying_a_program_is_byte_identical(env):
