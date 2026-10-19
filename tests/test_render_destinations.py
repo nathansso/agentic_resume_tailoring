@@ -218,7 +218,7 @@ def fake_pdf(monkeypatch):
     import harness.toolchain as tc
 
     monkeypatch.setattr(tc, "latex_engine", lambda: ("tectonic", None))
-    monkeypatch.setattr(rc, "page_budget", lambda content: {"over_by": 0})
+    monkeypatch.setattr(rc, "page_budget", lambda content, **kw: {"over_by": 0})
     monkeypatch.setattr(fmt, "_compile_tex_to_pdf", lambda tex: b"%PDF-1.5 fake")
     monkeypatch.setattr(fmt, "_pdf_page_count", lambda pdf: 1)
 
@@ -297,6 +297,80 @@ def test_a_copy_the_user_changed_or_one_art_never_wrote_is_not_overwritten(
     assert forced["saved"] == str(first) and first.read_bytes() == b"%PDF-1.5 fake"
 
 
+@pytest.fixture()
+def two_pages(fake_pdf, monkeypatch):
+    """A 90-line page that compiles to two pages, measured against whatever budget render
+    passes, as `render_cache.page_budget` does."""
+    import agents.formatter as fmt
+    import harness.render_cache as rc
+
+    seen = []
+
+    def budget(content, budget=60.0, **kw):
+        seen.append(budget)
+        return {"budget": budget, "lines_used": 90.0, "over_by": round(90.0 - budget, 2),
+                "cut_hints": [{"cut": "x"}] if budget < 90 else []}
+    monkeypatch.setattr(rc, "page_budget", budget)
+    monkeypatch.setattr(fmt, "_pdf_page_count", lambda pdf: 2)
+    return seen
+
+
+def _rule(uid, text, pages, strength=5, scope="global", value=None):
+    from harness import tools
+    out = tools.record_rule(uid, text, "limit", {"pages": pages}, strength, scope, value)
+    assert out["status"] in ("stored", "superseded"), out
+
+
+def test_a_two_page_rule_lets_a_two_page_pdf_be_saved(job, two_pages, folders):
+    uid, job_id = job
+    _rule(uid, "Two pages is fine", 2)
+    out = invoke("render", uid, {"job_id": job_id, "save_to": "downloads"})
+    assert two_pages == [120.0]                    # measured against finalize's budget
+    assert out["page_limit"] == 2 and out["line_budget"]["over_by"] < 0
+    assert out["not_saved"] is None and out["hint"] is None
+    assert Path(out["saved"]).name == "Test_User_Rippling_Data_Scientist.pdf"
+
+
+def test_a_soft_two_page_rule_widens_the_limit_too(job, two_pages, folders):
+    uid, job_id = job
+    _rule(uid, "Two pages is usually fine", 2, strength=3)
+    out = invoke("render", uid, {"job_id": job_id, "save_to": "downloads"})
+    assert out["page_limit"] == 2 and out["saved"]
+
+
+def test_with_no_rule_a_two_page_pdf_is_refused(job, two_pages, folders):
+    uid, job_id = job
+    out = invoke("render", uid, {"job_id": job_id, "save_to": "downloads"})
+    assert two_pages == [60.0] and out["page_limit"] == 1
+    assert out["saved"] is None and out["not_saved"] == "over_page_limit"
+    assert "over one page" in out["hint"]
+    assert not (folders / "Downloads").exists()
+
+
+@pytest.mark.parametrize("strength", [5, 3])
+def test_a_job_scoped_one_page_rule_over_a_global_two_page_rule_refuses(job, two_pages, folders,
+                                                                       strength):
+    uid, job_id = job
+    _rule(uid, "Two pages is fine", 2, strength=strength)
+    _rule(uid, "One page for this job", 1, strength=strength, scope="job", value=job_id)
+    out = invoke("render", uid, {"job_id": job_id, "save_to": "downloads"})
+    assert out["page_limit"] == 1 and out["not_saved"] == "over_page_limit"
+    assert not (folders / "Downloads").exists()
+
+
+def test_render_and_finalize_read_the_same_page_limit(job, kg):
+    """The budget render measures against is finalize's default line_budget for the job."""
+    from harness import render, rules as rules_mod
+    from harness.tools import rules_for
+
+    uid, job_id = job
+    _rule(uid, "Two pages is fine", 2)
+    page_rules, _ = rules_for(uid, job_id)
+    finalize = rules_mod.effective_finalize({}, rules_mod.resolve(page_rules))["values"]
+    from uuid import UUID
+    assert render._page_limit(uid, UUID(job_id)) == (finalize["line_budget"], 2)
+
+
 def test_a_deleted_copy_is_written_again_under_its_name(job, fake_pdf, folders):
     uid, job_id = job
     first = Path(invoke("render", uid, {"job_id": job_id, "save_to": "downloads"})["saved"])
@@ -312,7 +386,7 @@ def test_an_over_length_render_is_not_copied(job, fake_pdf, folders, monkeypatch
     import agents.formatter as fmt
     import harness.render_cache as rc
 
-    monkeypatch.setattr(rc, "page_budget", lambda content: budget)
+    monkeypatch.setattr(rc, "page_budget", lambda content, **kw: budget)
     monkeypatch.setattr(fmt, "_pdf_page_count", lambda pdf: pages)
     uid, job_id = job
     out = invoke("render", uid, {"job_id": job_id, "save_to": "downloads", "remember": True})

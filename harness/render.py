@@ -24,9 +24,10 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
 
 from sqlmodel import Session, select
@@ -114,7 +115,11 @@ def render(user_id: UUID, job_id: str, node_id: Optional[str] = None,
     if "error" in dest:
         return dest
 
+    # The job's effective page limit, read as execute_plan's finalize reads it (#298).
+    budget, page_limit = _page_limit(user_id, jid)
+
     def done(res: Dict[str, Any]) -> Dict[str, Any]:
+        res["page_limit"] = page_limit
         return _deliver(user_id, res, dest, company, title,
                         want_tex=format == "tex" or save_tex, overwrite=overwrite)
 
@@ -144,7 +149,7 @@ def render(user_id: UUID, job_id: str, node_id: Optional[str] = None,
     if not edited:
         try:
             from harness.render_cache import page_budget
-            result["line_budget"] = page_budget(content)
+            result["line_budget"] = page_budget(content, budget=budget)
         except Exception as exc:          # no engine to measure with, or a read-only store
             log.info("line budget unavailable: %s", exc)
 
@@ -161,8 +166,9 @@ def render(user_id: UUID, job_id: str, node_id: Optional[str] = None,
     pdf_path = out_dir / "resume.pdf"
     pdf_path.write_bytes(pdf)
     result.update(pdf_path=str(pdf_path), pages=_pdf_page_count(pdf))
-    if result["pages"] and result["pages"] > 1:
-        result["hint"] = ("The page runs over one page. Cut with patch_plan using "
+    if result["pages"] and result["pages"] > page_limit:
+        limit = "one page" if page_limit == 1 else f"{page_limit} pages"
+        result["hint"] = (f"The page runs over {limit}. Cut with patch_plan using "
                           "line_budget.cut_hints, then render again.")
     return done(result)
 
@@ -201,8 +207,8 @@ def _destination(user_id: UUID, save_to: Optional[str], remember: bool) -> Dict[
 
 
 OVER_LIMIT_NOTE = (
-    "Not saved: the page runs over the one-page limit, and drafts never go to the user's "
-    "folder. Cut with patch_plan using line_budget.cut_hints, then render again; the copy "
+    "Not saved: the page runs over its page limit (page_limit), and drafts never go to the "
+    "user's folder. Cut with patch_plan using line_budget.cut_hints, then render again; the copy "
     "is saved once it fits.")
 
 # Per job and folder, the copies ART last wrote for the user (path and SHA-256), kept next
@@ -210,11 +216,30 @@ OVER_LIMIT_NOTE = (
 COPIES_FILE = "saved_copies.json"
 
 
+def _page_limit(user_id: UUID, job_id: UUID) -> Tuple[float, int]:
+    """The job's effective line budget and page limit: the document rules in scope, resolved
+    by `harness.rules` (hard over soft, the tightest hard value, a narrower soft scope over a
+    wider one) into the same `line_budget` default `execute_plan`'s finalize enforces. One
+    page when no rule sets it."""
+    from harness import rules as rules_mod
+    from harness.tools import rules_for
+
+    try:
+        page_rules, _family = rules_for(user_id, str(job_id))
+        budget = float(rules_mod.effective_finalize(
+            {}, rules_mod.resolve(page_rules))["values"]["line_budget"])
+    except Exception as exc:              # an unreadable rule store: the built-in page
+        log.info("page rules unavailable: %s", exc)
+        budget = float(rules_mod.PAGE_LINE_BUDGET)
+    return budget, max(1, math.ceil(budget / rules_mod.PAGE_LINE_BUDGET - 1e-9))
+
+
 def _over_page_limit(result: Dict[str, Any]) -> bool:
-    """The check behind the over-a-page hint and `cut_hints`: the measured line budget, or
-    the compiled page count."""
+    """The check behind the over-the-limit hint and `cut_hints`: the line budget measured
+    against the job's effective budget, or the compiled page count against its page limit."""
     over_by = (result.get("line_budget") or {}).get("over_by")
-    return bool((over_by is not None and over_by > 0) or (result.get("pages") or 0) > 1)
+    limit = result.get("page_limit") or 1
+    return bool((over_by is not None and over_by > 0) or (result.get("pages") or 0) > limit)
 
 
 def _read_copies(path: Path) -> Dict[str, Any]:

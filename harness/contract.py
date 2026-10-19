@@ -773,6 +773,9 @@ class RenderOutput(_Output):
     pdf_path: Optional[str] = None
     pages: Optional[int] = None
     line_budget: Dict[str, Any] = Field(default_factory=dict)
+    page_limit: Optional[int] = Field(None, description=(
+        "The job's page limit from the user's document rules (1 when none sets it), the same "
+        "one execute_plan's finalize enforces; line_budget is measured against it."))
     hint: Optional[str] = None
     destination: Optional[Literal["save_to", "default", "ask_user"]] = Field(
         None, description="Where the user's copy went: save_to, the stored default, or "
