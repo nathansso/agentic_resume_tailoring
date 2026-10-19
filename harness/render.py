@@ -13,17 +13,20 @@ engine it still writes the `.tex` and says how to get a PDF.
 A copy goes where the user asked (#394): `save_to` (a folder path, or `downloads`,
 `desktop`, `documents`; `harness/destinations.py`), else the profile's
 `default_output_dir`. With neither, the reply says `destination: "ask_user"`, so
-the host asks once and passes `remember=true` with the answer.
+the host asks once and passes `remember=true` with the answer. A render over the
+page limit is never copied (drafts stay under the data dir), and a re-render of a
+job replaces ART's own earlier copy while it is unchanged (`saved_copies.json`).
 
 Model-free by rule (`tests/test_harness_boundary.py`).
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from sqlmodel import Session, select
@@ -197,6 +200,43 @@ def _destination(user_id: UUID, save_to: Optional[str], remember: bool) -> Dict[
     return {"origin": "ask_user", "name": name}
 
 
+OVER_LIMIT_NOTE = (
+    "Not saved: the page runs over the one-page limit, and drafts never go to the user's "
+    "folder. Cut with patch_plan using line_budget.cut_hints, then render again; the copy "
+    "is saved once it fits.")
+
+# Per job and folder, the copies ART last wrote for the user (path and SHA-256), kept next
+# to the render under the data dir, so a re-render replaces ART's own unchanged copy (#394).
+COPIES_FILE = "saved_copies.json"
+
+
+def _over_page_limit(result: Dict[str, Any]) -> bool:
+    """The check behind the over-a-page hint and `cut_hints`: the measured line budget, or
+    the compiled page count."""
+    over_by = (result.get("line_budget") or {}).get("over_by")
+    return bool((over_by is not None and over_by > 0) or (result.get("pages") or 0) > 1)
+
+
+def _read_copies(path: Path) -> Dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _record_copies(path: Path, job_id: str, directory: Path, written: List[Path]) -> None:
+    from harness import destinations
+
+    data = _read_copies(path)
+    try:
+        data.setdefault(job_id, {}).setdefault(str(directory), {}).update({
+            p.suffix: {"path": str(p), "sha256": destinations.file_sha256(p)} for p in written})
+        path.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+    except (OSError, AttributeError, TypeError) as exc:   # the copy stands; the next is numbered
+        log.info("could not record the saved copy: %s", exc)
+
+
 def _deliver(user_id: UUID, result: Dict[str, Any], dest: Dict[str, Any], company: str,
              title: str, want_tex: bool, overwrite: bool) -> Dict[str, Any]:
     """Copy the PDF (and the `.tex` when asked) to the destination, and say what happened.
@@ -204,10 +244,10 @@ def _deliver(user_id: UUID, result: Dict[str, Any], dest: Dict[str, Any], compan
     from database.models import User
     from harness import destinations
 
-    result.update(destination=dest["origin"], save_dir=None, saved_paths=[],
-                  remembered=False, destination_note=None)
+    result.update(destination=dest["origin"], save_dir=None, saved=None, saved_paths=[],
+                  not_saved=None, replaced=False, remembered=False, destination_note=None)
     if dest["origin"] == "ask_user":
-        result["destination_note"] = ASK_USER_NOTE
+        result.update(not_saved="ask_user", destination_note=ASK_USER_NOTE)
         return result
     if dest.get("remember"):
         with Session(_db.engine) as session:
@@ -220,26 +260,40 @@ def _deliver(user_id: UUID, result: Dict[str, Any], dest: Dict[str, Any], compan
     try:
         directory = destinations.resolve(dest["value"])
     except destinations.DestinationError as exc:      # a stored default edited by hand
-        result["destination_note"] = (
+        result.update(not_saved="bad_destination", destination_note=(
             f"The saved location is not usable: {exc} Ask the user where to save, then "
-            "render again with save_to and remember=true.")
+            "render again with save_to and remember=true."))
         return result
     result["save_dir"] = str(directory)
+    if _over_page_limit(result):
+        result.update(not_saved="over_page_limit", destination_note=OVER_LIMIT_NOTE)
+        return result
     sources = {}
     if result.get("pdf_path"):
         sources[".pdf"] = Path(result["pdf_path"])
     if want_tex and result.get("tex_path"):
         sources[".tex"] = Path(result["tex_path"])
     if not sources:
-        result["destination_note"] = (
+        result.update(not_saved="no_pdf", destination_note=(
             "Nothing was copied: no PDF was made (see hint). Pass save_tex=true to copy "
-            "the .tex instead.")
+            "the .tex instead."))
         return result
     stem = destinations.output_stem(dest.get("name"), company, title)
+    copies = Path(result["tex_path"]).parent / COPIES_FILE
+    record = _read_copies(copies).get(result["job_id"])
+    record = record.get(str(directory)) if isinstance(record, dict) else None
+    record = {k: v for k, v in record.items() if isinstance(v, dict)} \
+        if isinstance(record, dict) else {}
     try:
-        written = destinations.copy_files(sources, directory, stem, overwrite=overwrite)
+        in_place = None if overwrite else destinations.reusable_stem(
+            directory, stem, sources, record)
+        written = destinations.copy_files(sources, directory, stem, overwrite=overwrite,
+                                          in_place=in_place)
     except OSError as exc:
-        result["destination_note"] = f"Could not save to {directory}: {exc}"
+        result.update(not_saved="copy_failed",
+                      destination_note=f"Could not save to {directory}: {exc}")
         return result
-    result["saved_paths"] = [str(p) for p in written]
+    _record_copies(copies, result["job_id"], directory, written)
+    result.update(saved=str(written[0]), saved_paths=[str(p) for p in written],
+                  replaced=in_place is not None)
     return result

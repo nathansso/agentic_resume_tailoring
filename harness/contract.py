@@ -758,8 +758,9 @@ class RenderInput(_Model):
                           "is ask_user.")
     remember: bool = Field(False, description="Store save_to as the profile's "
                                               "default_output_dir for later renders.")
-    overwrite: bool = Field(False, description="Replace a file of the same name. Otherwise the "
-                                               "copy is named '... (2).pdf' and so on.")
+    overwrite: bool = Field(False, description=(
+        "Replace a file of the same name even if ART didn't write it. Otherwise ART replaces "
+        "only its own unchanged copy of this job, and names a new copy '... (2).pdf' and so on."))
     save_tex: bool = Field(False, description="Also copy the .tex (always copied with format tex).")
 
 
@@ -778,8 +779,16 @@ class RenderOutput(_Output):
                           "ask_user (none set: ask where to save, then render again with "
                           "save_to and remember=true; Downloads if they have no preference).")
     save_dir: Optional[str] = None
+    saved: Optional[str] = Field(None, description=(
+        "The user's copy, named <Name>_<Company>_<Role>.pdf; null when nothing was saved."))
     saved_paths: List[str] = Field(default_factory=list, description=(
-        "The copies saved for the user, named <Name>_<Company>_<Role>.pdf (and .tex)."))
+        "Every copy saved for the user: the PDF, and the .tex when asked."))
+    not_saved: Optional[Literal["ask_user", "over_page_limit", "no_pdf", "bad_destination",
+                                "copy_failed"]] = Field(None, description=(
+        "Why nothing was saved. over_page_limit: drafts are never copied; cut with the "
+        "cut_hints and render again."))
+    replaced: bool = Field(False, description=(
+        "The copy replaced ART's own earlier, unchanged copy of this job in place."))
     remembered: bool = Field(False, description="save_to is now the profile's default.")
     destination_note: Optional[str] = None
 
@@ -1444,8 +1453,10 @@ TOOLS: List[ToolSpec] = [
         "directory, and save the user's copy as <Name>_<Company>_<Role>.pdf where they asked: "
         "save_to (downloads, desktop, documents or a folder path), else their stored default. "
         "With neither, destination is ask_user: ask where to save, then render again with "
-        "save_to and remember=true (use downloads if they have no preference). An existing "
-        "file is never replaced unless overwrite. Returns the paths, the page count and the "
+        "save_to and remember=true (use downloads if they have no preference). A page over "
+        "the limit is not copied (not_saved over_page_limit: cut, then render again). A "
+        "re-render replaces ART's own unchanged copy of the job; any other existing file is "
+        "never replaced unless overwrite. Returns the paths, the page count and the "
         "line budget with cut hints. The user's own .tex edits win. Writes files.",
         RenderInput, RenderOutput,
         lambda uid, job_id, node_id=None, format="pdf", save_to=None, remember=False,

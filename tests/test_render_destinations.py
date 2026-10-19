@@ -172,6 +172,26 @@ def test_copies_never_overwrite_unless_asked(tmp_path):
     assert (out / "Ada_Acme_Engineer.pdf").read_bytes() == b"%PDF new"
 
 
+def test_only_arts_own_unchanged_copy_is_reusable(tmp_path):
+    (tmp_path / "a.pdf").write_bytes(b"%PDF one")
+    [mine] = destinations.copy_files({".pdf": tmp_path / "a.pdf"}, tmp_path / "out", "X")
+    record = {".pdf": {"path": str(mine), "sha256": destinations.file_sha256(mine)}}
+    out = tmp_path / "out"
+    assert destinations.reusable_stem(out, "X", [".pdf"], record) == "X"
+    # The .tex target is free, so the pair may still go under X.
+    assert destinations.reusable_stem(out, "X", [".pdf", ".tex"], record) == "X"
+    (out / "X.tex").write_text("the user's")                     # a file ART never wrote
+    assert destinations.reusable_stem(out, "X", [".pdf", ".tex"], record) is None
+    assert destinations.reusable_stem(out, "Y", [".pdf"], record) is None    # another name
+    mine.write_bytes(b"%PDF edited")
+    assert destinations.reusable_stem(out, "X", [".pdf"], record) is None
+    mine.unlink()
+    assert destinations.reusable_stem(out, "X", [".pdf"], record) is None
+    assert destinations.reusable_stem(out, "X", [".pdf"], {}) is None
+    [again] = destinations.copy_files({".pdf": tmp_path / "a.pdf"}, out, "X", in_place="X (2)")
+    assert again == out / "X (2).pdf" and again.read_bytes() == b"%PDF one"
+
+
 def test_a_missing_folder_is_created(tmp_path):
     (tmp_path / "a.pdf").write_bytes(b"%PDF")
     out = tmp_path / "new" / "deeper"
@@ -218,6 +238,7 @@ def test_no_save_to_and_no_default_tells_the_agent_to_ask(job, fake_pdf, folders
     out = invoke("render", uid, {"job_id": job_id})
     assert out["error"] is None and out["pdf_path"].startswith(str(tmp_path))
     assert out["destination"] == "ask_user" and out["saved_paths"] == []
+    assert out["saved"] is None and out["not_saved"] == "ask_user"
     note = out["destination_note"]
     assert "Ask the user" in note and "remember=true" in note and 'save_to="downloads"' in note
     assert not folders.exists()                    # nothing copied anywhere
@@ -228,16 +249,78 @@ def test_save_to_downloads_copies_the_pdf_with_the_users_name(job, fake_pdf, fol
     out = invoke("render", uid, {"job_id": job_id, "save_to": "my Downloads"})
     assert out["error"] is None and out["destination"] == "save_to"
     assert out["save_dir"] == str(folders / "Downloads")
-    assert out["saved_paths"] == [str(folders / "Downloads" / "Test_User_Rippling_Data_Scientist.pdf")]
-    assert Path(out["saved_paths"][0]).read_bytes() == b"%PDF-1.5 fake"
+    first = str(folders / "Downloads" / "Test_User_Rippling_Data_Scientist.pdf")
+    assert out["saved"] == first and out["saved_paths"] == [first]
+    assert Path(first).read_bytes() == b"%PDF-1.5 fake"
+    assert out["not_saved"] is None and out["replaced"] is False
     assert out["remembered"] is False
     assert invoke("get_profile", uid, {})["default_output_dir"] is None   # not remembered
 
+
+def test_a_second_render_of_the_job_replaces_arts_own_copy(job, fake_pdf, folders, monkeypatch):
+    import agents.formatter as fmt
+
+    uid, job_id = job
+    first = invoke("render", uid, {"job_id": job_id, "save_to": "downloads"})["saved"]
+    monkeypatch.setattr(fmt, "_compile_tex_to_pdf", lambda tex: b"%PDF-1.5 second")
     again = invoke("render", uid, {"job_id": job_id, "save_to": "downloads"})
-    assert again["saved_paths"] == [
-        str(folders / "Downloads" / "Test_User_Rippling_Data_Scientist (2).pdf")]
-    replaced = invoke("render", uid, {"job_id": job_id, "save_to": "downloads", "overwrite": True})
-    assert replaced["saved_paths"] == [str(folders / "Downloads" / "Test_User_Rippling_Data_Scientist.pdf")]
+    assert again["saved"] == first and again["replaced"] is True       # no " (2)"
+    assert Path(first).read_bytes() == b"%PDF-1.5 second"
+    assert sorted(p.name for p in (folders / "Downloads").iterdir()) == [
+        "Test_User_Rippling_Data_Scientist.pdf"]
+
+
+def test_a_copy_the_user_changed_or_one_art_never_wrote_is_not_overwritten(
+        job, fake_pdf, folders, kg, isolated_engine):
+    from harness import tree
+
+    uid, job_id = job
+    first = Path(invoke("render", uid, {"job_id": job_id, "save_to": "downloads"})["saved"])
+    first.write_bytes(b"%PDF the user's annotated copy")                 # the user edits it
+    again = invoke("render", uid, {"job_id": job_id, "save_to": "downloads"})
+    assert again["replaced"] is False
+    assert Path(again["saved"]).name == "Test_User_Rippling_Data_Scientist (2).pdf"
+    assert first.read_bytes() == b"%PDF the user's annotated copy"
+    # ART's (2) is now its own copy, and a third render replaces that one, not the user's.
+    third = invoke("render", uid, {"job_id": job_id, "save_to": "downloads"})
+    assert third["saved"] == again["saved"] and third["replaced"] is True
+
+    # Another job with the same company and role: the files are not its own.
+    other = invoke("open_job", uid, {"jd_text": "Data Scientist role", "metadata": {
+        "title": "Data Scientist", "company": "Rippling"}})["job_id"]
+    tree.commit_node(uid, other, content=CONTENT, source="host")
+    theirs = invoke("render", uid, {"job_id": other, "save_to": "downloads"})
+    assert Path(theirs["saved"]).name == "Test_User_Rippling_Data_Scientist (3).pdf"
+
+    # overwrite=true replaces a file ART did not write.
+    forced = invoke("render", uid, {"job_id": job_id, "save_to": "downloads", "overwrite": True})
+    assert forced["saved"] == str(first) and first.read_bytes() == b"%PDF-1.5 fake"
+
+
+def test_a_deleted_copy_is_written_again_under_its_name(job, fake_pdf, folders):
+    uid, job_id = job
+    first = Path(invoke("render", uid, {"job_id": job_id, "save_to": "downloads"})["saved"])
+    first.unlink()
+    again = invoke("render", uid, {"job_id": job_id, "save_to": "downloads"})
+    assert again["saved"] == str(first) and again["replaced"] is False and first.exists()
+
+
+@pytest.mark.parametrize("budget, pages", [({"over_by": 3.5, "cut_hints": [{"cut": "x"}]}, 1),
+                                           ({"over_by": -2}, 2)])
+def test_an_over_length_render_is_not_copied(job, fake_pdf, folders, monkeypatch, tmp_path,
+                                             budget, pages):
+    import agents.formatter as fmt
+    import harness.render_cache as rc
+
+    monkeypatch.setattr(rc, "page_budget", lambda content: budget)
+    monkeypatch.setattr(fmt, "_pdf_page_count", lambda pdf: pages)
+    uid, job_id = job
+    out = invoke("render", uid, {"job_id": job_id, "save_to": "downloads", "remember": True})
+    assert out["error"] is None and out["saved"] is None and out["saved_paths"] == []
+    assert out["not_saved"] == "over_page_limit" and "cut" in out["destination_note"]
+    assert not (folders / "Downloads").exists()
+    assert Path(out["pdf_path"]).is_file() and out["pdf_path"].startswith(str(tmp_path))
+    assert out["remembered"] is True                  # the user's answer still stands
 
 
 def test_remember_stores_the_default_and_later_renders_use_it(job, fake_pdf, folders):
@@ -251,7 +334,8 @@ def test_remember_stores_the_default_and_later_renders_use_it(job, fake_pdf, fol
 
     later = invoke("render", uid, {"job_id": job_id})
     assert later["destination"] == "default" and later["destination_note"] is None
-    assert later["saved_paths"] == [str(folders / "Desktop" / "Test_User_Rippling_Data_Scientist (2).pdf")]
+    assert later["saved_paths"] == [str(folders / "Desktop" / "Test_User_Rippling_Data_Scientist.pdf")]
+    assert later["replaced"] is True
     # An explicit save_to still wins over the default, without replacing it.
     once = invoke("render", uid, {"job_id": job_id, "save_to": "documents"})
     assert once["destination"] == "save_to" and once["save_dir"] == str(folders / "Documents")
@@ -298,6 +382,7 @@ def test_format_tex_copies_the_tex_and_no_pdf_copies_nothing(job, folders, monke
     assert [Path(p).name for p in tex["saved_paths"]] == ["Test_User_Rippling_Data_Scientist.tex"]
     no_pdf = invoke("render", uid, {"job_id": job_id, "save_to": "downloads"})
     assert no_pdf["pdf_path"] is None and no_pdf["saved_paths"] == []
+    assert no_pdf["not_saved"] == "no_pdf"
     assert "save_tex" in no_pdf["destination_note"] and "tectonic" in no_pdf["hint"]
 
 
@@ -309,7 +394,7 @@ def test_a_failed_copy_keeps_the_render(job, fake_pdf, monkeypatch, tmp_path):
     monkeypatch.setattr(destinations, "copy_files", refuse)
     out = invoke("render", uid, {"job_id": job_id, "save_to": str(tmp_path / "locked")})
     assert out["error"] is None and out["pdf_path"] and out["saved_paths"] == []
-    assert "read-only folder" in out["destination_note"]
+    assert "read-only folder" in out["destination_note"] and out["not_saved"] == "copy_failed"
 
 
 def test_a_hand_edited_default_that_no_longer_parses_says_to_ask(job, fake_pdf, folders,
@@ -323,6 +408,7 @@ def test_a_hand_edited_default_that_no_longer_parses_says_to_ask(job, fake_pdf, 
     out = invoke("render", uid, {"job_id": job_id})
     assert out["error"] is None and out["destination"] == "default"
     assert out["saved_paths"] == [] and "Ask the user" in out["destination_note"]
+    assert out["not_saved"] == "bad_destination"
 
 
 # ── the schema ───────────────────────────────────────────────────────────────

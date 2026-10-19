@@ -3,7 +3,8 @@
 `render` always writes under `$ART_DATA_DIR/applications/`. This module turns what
 the user said ("downloads", "My Desktop", an absolute path) into a folder on this
 machine, names the copy `<Name>_<Company>_<Role>.pdf` in a form every OS accepts,
-and never overwrites an existing file unless asked (` (2)`, ` (3)`, ... instead).
+and never overwrites a file it didn't write, unless asked (` (2)`, ` (3)`, ... instead).
+ART's own earlier copy, unchanged since, is replaced in place (`reusable_stem`).
 
 The three well-known names resolve per OS:
 
@@ -21,6 +22,7 @@ to another machine.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import shutil
@@ -29,7 +31,7 @@ import sys
 import unicodedata
 import uuid
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional
 
 WELL_KNOWN = ("downloads", "desktop", "documents")
 _ALIASES = {"download": "downloads", "document": "documents", "docs": "documents",
@@ -186,13 +188,66 @@ def output_stem(name: Optional[str], company: Optional[str], role: Optional[str]
     return stem
 
 
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 16), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def reusable_stem(directory: Path, base: str, exts: Iterable[str],
+                  record: Dict[str, Dict[str, str]]) -> Optional[str]:
+    """The stem of ART's own earlier copy in `directory`, when a re-render may replace it.
+
+    `record` is `{extension: {"path", "sha256"}}`: what ART last wrote there for this job.
+    The stem qualifies only if it is `base` or `base (N)`, at least one of its files is still
+    there with the recorded hash, and every other target is free or likewise ART's unchanged
+    copy. A file the user edited, or one ART never wrote, is never replaced: then None, and
+    the caller numbers a new copy."""
+    exts = list(exts)
+    pattern = re.compile(re.escape(base) + r"( \(\d+\))?")
+    stems = []
+    for ext, rec in record.items():
+        name = Path(rec.get("path") or "").name
+        if name.endswith(ext) and pattern.fullmatch(name[: -len(ext)]):
+            stems.append(name[: -len(ext)])
+    for stem in dict.fromkeys(stems):
+        own = 0
+        for ext in exts:
+            target = directory / f"{stem}{ext}"
+            if not target.exists():
+                continue
+            rec = record.get(ext) or {}
+            try:
+                same = (Path(rec.get("path") or "") == target
+                        and file_sha256(target) == rec.get("sha256"))
+            except OSError:
+                same = False
+            if not same:
+                break
+            own += 1
+        else:
+            if own:
+                return stem
+    return None
+
+
 def copy_files(sources: Dict[str, Path], directory: Path, stem: str,
-               overwrite: bool = False) -> List[Path]:
+               overwrite: bool = False, in_place: Optional[str] = None) -> List[Path]:
     """Copy each `{extension: source}` into `directory` as `<stem><extension>`, all under
     one stem. Without `overwrite`, the first of `stem`, `stem (2)`, `stem (3)`, ... that
     is free for every extension; files are created exclusively, so a file that appears
-    meanwhile is never clobbered."""
+    meanwhile is never clobbered. `in_place` is a stem `reusable_stem` cleared: its
+    files are written over."""
     directory.mkdir(parents=True, exist_ok=True)
+    if in_place is not None:
+        written = []
+        for ext, src in sources.items():
+            target = directory / f"{in_place}{ext}"
+            shutil.copyfile(src, target)
+            written.append(target)
+        return written
     n = 1
     while True:
         candidate = stem if n == 1 else f"{stem} ({n})"

@@ -257,7 +257,9 @@ Call `execute_plan({program})`. Read the result:
   `save_to: "downloads"`. Later renders save there on their own. If `render` rejects
   `save_to` as an unknown argument, the installed ART predates it: render without it.
 - If `pages` > 1, cut using `line_budget.cut_hints` through `patch_plan` (the same
-  `delete_bullet` and `delete` nodes as in step 5), then render again.
+  `delete_bullet` and `delete` nodes as in step 5), then render again. A page over the
+  limit is not saved for the user (`not_saved: "over_page_limit"`); the copy is saved once
+  it fits, replacing ART's own earlier copy of the job.
 - If `pdf_path` is null, give the user the `.tex` path and the `hint`.
 - Tell the user where the PDF is: `saved_paths` when it was saved for them, else
   `pdf_path`.

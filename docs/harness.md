@@ -130,8 +130,11 @@ role, or another?"
 `downloads`, `desktop` or `documents` (any case, "my downloads" too), resolved per OS by
 `harness/destinations.py`: the Known Folders API on Windows (Downloads is often
 redirected), the home folders on macOS, the XDG user dirs on Linux. The copy is
-`<Name>_<Company>_<Role>.pdf` (and `.tex` on request), and an existing file is never
-replaced unless `overwrite`; ` (2)`, ` (3)` and so on instead. The agent asks where to
+`<Name>_<Company>_<Role>.pdf` (and `.tex` on request). A render over the page limit is
+never copied (`not_saved: "over_page_limit"`), so the folder collects no drafts. A
+re-render of a job replaces ART's own earlier copy while it is unchanged (path and hash
+kept in `saved_copies.json` beside the render); a file the user changed, or one ART didn't
+write, is never replaced unless `overwrite`: ` (2)`, ` (3)` and so on instead. The agent asks where to
 save the first time: with no `save_to` and no stored default, the reply says
 `destination: "ask_user"`. The answer is remembered as the profile's `default_output_dir`
 (`remember: true`, or `update_profile`). With no preference given, it saves to Downloads.
@@ -623,7 +626,7 @@ construction.
 | | `get_head` | job, cursor → HEAD, events and editor edits since the cursor |
 | | `history` | job → every version, oldest first |
 | Check & render | `check_draft` | **Planned, not built (#252).** node → metric vector by role (`execute_plan` already returns each node's vector) |
-| | `render` | job, optional node (HEAD by default), `pdf` or `tex`, optional `save_to` (`downloads`, `desktop`, `documents` or an absolute path), `remember`, `overwrite`, `save_tex` → `.tex` and PDF paths, whether the user's own edited `.tex` was rendered, page count, line budget (#201); `destination` (`save_to`, `default` or `ask_user`), `save_dir`, `saved_paths` (`<Name>_<Company>_<Role>.pdf`, never overwriting unless asked), `remembered` and a `destination_note` (#394) |
+| | `render` | job, optional node (HEAD by default), `pdf` or `tex`, optional `save_to` (`downloads`, `desktop`, `documents` or an absolute path), `remember`, `overwrite`, `save_tex` → `.tex` and PDF paths, whether the user's own edited `.tex` was rendered, page count, line budget (#201); `destination` (`save_to`, `default` or `ask_user`), `save_dir`, `saved` and `saved_paths` (`<Name>_<Company>_<Role>.pdf`; a re-render replaces ART's own unchanged copy, anything else is never overwritten unless asked), `not_saved` (`over_page_limit`: drafts are not copied; `ask_user`, `no_pdf`, `bad_destination`, `copy_failed`), `replaced`, `remembered` and a `destination_note` (#394) |
 | Document rules (#298) | `record_rule` | text, kind (`limit`, `section_order`, `style_note`), params, strength, scope → the rule stored, superseded, already recorded, or refused (a bad shape, no plain limit in the words, or a narrower rule that would loosen a hard one, naming it) |
 | | `retract_rule` | rule id → retracted; the row stays |
 | Feedback & memory | `observe` | user text → gate decision: `drop`, `host` (confirm with the user, then `record_preference`) or `write` (#202) |
