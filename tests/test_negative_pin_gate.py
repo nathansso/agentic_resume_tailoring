@@ -233,7 +233,7 @@ def run_weave(env, **kw):
 
     uid, job_id, _ = env
     program = {"job_id": job_id, "nodes": [
-        {"id": "weave", "op": "revise", "item_key": EXP2, "strategy": "keyword_weave",
+        {"id": "weave", "because": "job:the posting asks for it", "op": "revise", "item_key": EXP2, "strategy": "keyword_weave",
          "keywords": ["integrate"], "bullets": _woven(_KG(uid).source_bullets[EXP2])}]}
     return uid, program, _run(uid, program, **kw)
 
@@ -510,7 +510,7 @@ def test_a_paraphrase_of_a_skill_keyed_pin_is_refused_through_a_recorded_answer(
     auto.use(t)
     bullets = _woven(_KG(uid).source_bullets[EXP2])
     bullets[3]["text"] = PARAPHRASE
-    program = {"job_id": job_id, "nodes": [{"id": "weave", "op": "revise", "item_key": EXP2,
+    program = {"job_id": job_id, "nodes": [{"id": "weave", "because": "job:the posting asks for it", "op": "revise", "item_key": EXP2,
                                             "strategy": "keyword_weave", "keywords": ["integrate"],
                                             "bullets": bullets}]}
     node = _run(uid, program, dry_run=True)["nodes"][0]

@@ -346,8 +346,8 @@ def test_no_projects_section_removes_it_and_refuses_nodes_in_it(env):
     uid, job_id, _ = env
     rule = _record(uid, "No projects section", params={"projects": 0})["rule"]
     out = _run(uid, {"job_id": job_id, "nodes": [
-        {"id": "p", "op": "keep", "item_key": PROJ},
-        {"id": "e", "op": "keep", "item_key": EXP}]})
+        {"id": "p", "because": "job:fits the posting", "op": "keep", "item_key": PROJ},
+        {"id": "e", "because": "job:fits the posting", "op": "keep", "item_key": EXP}]})
     status = {n["id"]: n for n in out["nodes"]}
     assert status["p"]["status"] == "refused" and status["p"]["reason"].startswith("page_rule:")
     assert "No projects section" in status["p"]["reason"]

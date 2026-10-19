@@ -873,6 +873,52 @@ class NodeResult(_Model):
                           "literal_only (see semantic_coverage). Absent when Jev did not answer.")
 
 
+class PlanSummaryCut(_Model):
+    bullet: str = Field(description="The cut bullet's id, '<item key>#b<n>'.")
+    text: Optional[str] = Field(None, description="Its text on the parent version; null when "
+                                                  "the item has no such bullet.")
+
+
+class PlanSummaryNode(_Model):
+    id: str
+    op: str
+    item_key: str
+    title: str = Field(description="The item as the user reads it: role, company, or the "
+                                   "project's name.")
+    change: str = Field(description="The change in plain words: kept as is, revised with N "
+                                    "bullets, replaced X with Y, dropped, cut N bullets #b...")
+    because: Optional[str] = Field(None, description="The node's reason as sent.")
+    reason: str = Field(description="The reason in plain words; a pref: reason is quoted from "
+                                    "the preference itself.")
+    status: Optional[str] = Field(None, description="What the dry run made of it (nodes[].status).")
+    not_applied: Optional[str] = Field(
+        None, description="For a reverted or refused node: why ART would not apply it.")
+    replacement_key: Optional[str] = None
+    replacement_title: Optional[str] = None
+    bullets: Optional[List[str]] = Field(None, description="revise / replace: the new bullets.")
+    cut: Optional[List[PlanSummaryCut]] = Field(None, description="delete_bullet: what is cut.")
+
+
+class PlanSummarySkills(_Model):
+    line: List[str] = Field(default_factory=list, description="The skills line, in order.")
+    source: Literal["plan", "current", "ranked"] = Field(
+        description="plan: the program's skills; current: the parent's, unchanged; ranked: ART's "
+                    "ranking for this posting (a job's first version).")
+    unknown: List[str] = Field(default_factory=list,
+                               description="Skills the plan named that the graph does not hold.")
+    suppressed: List[str] = Field(default_factory=list,
+                                  description="Skills a hard preference left off.")
+
+
+class PlanSummary(_Model):
+    title: str
+    nodes: List[PlanSummaryNode] = Field(default_factory=list,
+                                         description="One entry per node, in page order.")
+    skills: PlanSummarySkills
+    text: str = Field(description="The same as lines. Show it to the user verbatim and wait for "
+                                  "their approval before you commit.")
+
+
 class Violation(_Model):
     check: str
     detail: Any = None
@@ -887,6 +933,12 @@ class ExecuteOutput(_Output):
                           "that binds this job, as suggest_actions returns it. Read it before "
                           "you commit; a plan that breaks a hard pin or loosens a hard rule is "
                           "refused. Absent on a commit.")
+    plan_summary: Optional[PlanSummary] = Field(
+        None, description="Dry runs only (#392), after active_constraints: the plan in plain words "
+                          "for the user's approval. One entry per node (the item, the change, the "
+                          "reason from its because, and what the dry run made of it), then the "
+                          "skills line; `text` is the same as lines to show the user verbatim. "
+                          "Absent on a commit.")
     program_id: Optional[str] = None
     parent: Optional[str] = None
     dry_run: bool = False
@@ -1479,10 +1531,13 @@ TOOLS: List[ToolSpec] = [
         "Run a whole tailoring plan as one program: arbitration, each node under the "
         "per-metric acceptance rule, then finalize (preferences, sections, skills cap, line "
         "budget). Commits one version unless a check fails, dry_run is set, or the result would "
-        "be identical to its parent (committed false, reason no_change). To remove whole "
-        "bullets use op delete_bullet with cut_bullets (ids '<item key>#b<n>' on the parent "
-        "version) and a because; to drop an item use op delete with a because. A delete or "
-        "delete_bullet with a because faces the hard gates only: guard regressions are accepted "
+        "be identical to its parent (committed false, reason no_change). Every node needs a "
+        "short because (job:<what in the posting calls for it>, user:<what they asked> or "
+        "pref:<preference_id>); a dry run returns plan_summary, the plan in plain words with "
+        "those reasons: show its text to the user and wait for approval before you commit. To "
+        "remove whole bullets use op delete_bullet with cut_bullets (ids '<item key>#b<n>' on "
+        "the parent version); to drop an item use op delete. A delete or delete_bullet whose "
+        "because is user: or pref: faces the hard gates only: guard regressions are accepted "
         "and reported under waived. An ordinary revise never gets that. When the parent carries "
         "hand edits to its .tex that the plan does not hold, nothing commits: the violation "
         "discards_editor_edits lists the edited bullets. Carry them over as nodes (a revise "

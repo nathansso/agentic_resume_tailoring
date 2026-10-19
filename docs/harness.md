@@ -317,7 +317,8 @@ the `drop_item`s were before #279. A `revise` can also carry new text, so it can
 recognised as "only removes bullets" and waived. The regressions
 are never hidden: the node is `accepted` with `reason: "guard_waived: requested delete; ..."`,
 `guard_regressions` and a `waived` map in its result, so the host can tell the user what the cut
-cost. No tolerance changes; a delete with no `because` is judged as before.
+cost. No tolerance changes; a delete whose `because` is `job:` (or, in a program saved before
+#392, absent) is judged as before.
 
 **So is the `replace` that brings in a hard-emphasized project (#299).** `replace` is the only op
 that puts a project on a page (there is no `add`), so a guard or the target rule that vetoed the
@@ -411,12 +412,14 @@ code or a cached Jev decision.
   "nodes": [
     { "id": "exp1", "op": "revise", "item_key": "exp:data scientist|acme analytics",
       "strategy": "keyword_weave", "keywords": ["causal inference"],
+      "because": "job:the posting asks for causal inference",
       "bullets": [{ "text": "Designed a CUPED-adjusted A/B framework ...",
                     "from_variant": "3b9c1d2e-…",
                     "cites": ["exp:data scientist|acme analytics#b2", "skill:experimentation"] }],
       "accept": { "improves": ["coverage", "relevance_density"] } },
     { "id": "swap", "op": "replace", "item_key": "proj:todo app",
       "replacement_key": "proj:recsys gnn",
+      "because": "job:a recommender project fits the posting better",
       "accept": { "improves": ["relevance_density"] } },
     { "id": "drop", "op": "delete", "item_key": "proj:coursework db",
       "because": "pref:3f0a…" },
@@ -459,7 +462,25 @@ metric vector and the rule, and `harness/executor.py` runs it. The details:
 - **IDs.** Evidence IDs are `<item key>#b<n>`, the n-th source bullet (0-based) in the order the
   source gave them (#327): an experience's `bullets` list, a project's `ProjectBlurb.seq` (read
   through `database.db.ordered_blurbs`, the only place project bullets are ordered). A cite may
-  also be any item key. `because` is `pref:<preference id>` or `user:<what they asked>`.
+  also be any item key.
+- **Reasons (#392).** Every node carries `because`, a short phrase the user reads:
+  `job:<what in the posting calls for it>`, `user:<what they asked>` or `pref:<preference id>`
+  (under 240 characters). A new program with a node missing it, or with nothing after the
+  prefix, is refused (`invalid_program`), and the message names the node; the published schema
+  lists it as required. Only `user:` and `pref:` are requests: a `delete` or `delete_bullet`
+  with one is judged on the hard gates (§ 5, #279), and one with a `job:` reason is judged like
+  any edit. A program saved before the rule still replays: `patch_plan` holds only the nodes
+  its patch adds or changes to it, and a node carried over unchanged keeps its old meaning (a
+  reasonless delete is judged like any edit, as it was).
+- **Plan summary (#392).** A dry run returns `plan_summary` right after `active_constraints`:
+  one entry per node in page order, then the skills line, then `text`, the same as lines, which
+  the host shows the user verbatim and waits for approval before it commits. An entry has
+  `item_key`, `title`, `change` in plain words (`kept as is`, `revised with 2 bullets`,
+  `replaced X with Y`, `dropped`, `cut 1 bullet #b3`), the raw `because` and `reason` in words
+  (a `pref:` reason quoted from the preference), the dry run's `status` and, for a reverted or
+  refused node, `not_applied`, plus the new `bullets` or the `cut` bullets' text. `skills` has
+  `line`, `source` (`plan`, `current` or `ranked`), `unknown` and `suppressed`. Additive: no
+  other field changed, and a commit does not carry it.
 - **No parent yet.** A job with no history starts from its track baseline when one applies
   (§ 8), else from the whole KG with skills ranked (`kg_default_content`).
 - **Gates compare sets.** A node fails only if it *adds* a violation. Finalize is where
@@ -470,8 +491,8 @@ metric vector and the rule, and `harness/executor.py` runs it. The details:
   plan holds one node per item, so all of an item's cuts go in one node. The remaining bullets
   keep their text, order and cites. It is refused (`unknown_bullet`) when an id names a bullet the
   item does not have, and (`would_empty_item`) when it would remove the last one; dropping the
-  item is `delete`. With a `because` it is a requested delete (§ 5): hard gates in full, guard
-  regressions accepted and reported under `waived`. Without one it is judged like any edit.
+  item is `delete`. With a `user:` or `pref:` `because` it is a requested delete (§ 5): hard gates in full, guard
+  regressions accepted and reported under `waived`. With a `job:` one it is judged like any edit.
   `delete_bullet` is a plan op only: the planner's own action space (`keep`, `revise`,
   `replace`, `delete`) and `suggest_actions` are unchanged. `cut_hints` carry the op that
   performs each cut: `cut_bullet` is `delete_bullet`, `drop_item` is `delete`; if an item has

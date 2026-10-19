@@ -28,6 +28,7 @@ def _cited(key, texts):
 
 def _revise(key, bullets, **kw):
     return {"id": f"r:{key}", "op": "revise", "item_key": key, "strategy": "tighten",
+            "because": "job:the posting asks for it",
             "bullets": bullets, "accept": {"improves": ["relevance_density"]}, **kw}
 
 
@@ -61,13 +62,13 @@ def test_a_cite_to_a_deleted_item_is_refused_as_tombstoned(env, isolated_engine)
         {"text": "Built a real-time Kafka pipeline.", "cites": [f"{STREAM}#b0"]}]
     out = _run(uid, {"job_id": job_id, "nodes": [
         _revise(EXP2, bullets),
-        {"id": "k", "op": "keep", "item_key": STREAM}]}, dry_run=True)
+        {"id": "k", "because": "job:fits the posting", "op": "keep", "item_key": STREAM}]}, dry_run=True)
     reasons = {n["id"]: n["reason"] for n in out["nodes"]}
     assert reasons[f"r:{EXP2}"].startswith("tombstoned_cite: bullet 2 cites proj:streamboard#b0")
     assert reasons["k"] == "tombstoned: the user deleted proj:streamboard"
     # A key that never existed is still just unknown.
     other = _run(uid, {"job_id": job_id, "nodes": [
-        {"id": "x", "op": "keep", "item_key": "proj:no such thing"}]}, dry_run=True)
+        {"id": "x", "because": "job:fits the posting", "op": "keep", "item_key": "proj:no such thing"}]}, dry_run=True)
     assert other["nodes"][0]["reason"].startswith("unknown_key")
 
 
@@ -102,7 +103,7 @@ def test_verbatim_source_bullets_count_as_cited_and_editor_bullets_never_block(e
     exp.pop("cites", None)
     node = tree.commit_node(uid, job_id, content=content, source="editor")
     out = _run(uid, {"job_id": job_id, "parent": node["node_id"],
-                     "nodes": [{"id": "k", "op": "keep", "item_key": EXP},
+                     "nodes": [{"id": "k", "because": "job:fits the posting", "op": "keep", "item_key": EXP},
                                {"id": "d", "op": "delete", "item_key": PROJ,   # a real change (#257)
                                 "because": "user:less games"}]})
     assert out["committed"], out["violations"]

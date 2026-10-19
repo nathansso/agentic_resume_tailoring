@@ -71,14 +71,17 @@ async def _run(data_dir: str) -> None:
                 "metadata": {"title": "Data Analyst", "company": "Beta"}})
             run = await call("execute_plan", {"dry_run": True, "program": {
                 "job_id": job["job_id"], "nodes": [
-                    {"id": "k", "op": "keep", "item_key": "exp:data analyst|acme"}]}})
+                    {"id": "k", "op": "keep", "item_key": "exp:data analyst|acme",
+                     "because": "job:the posting asks for SQL"}]}})
             assert run["nodes"][0]["status"] == "kept", run
+            assert "the posting asks for SQL" in run["plan_summary"]["text"], run
             # The plugin's last steps (#201): the header, a committed version, a render.
             prof = await call("update_profile", {"fields": {"name": "Smoke Test"}})
             assert prof["name"] == "Smoke Test", prof
             done = await call("execute_plan", {"program": {
                 "job_id": job["job_id"], "nodes": [
-                    {"id": "k", "op": "keep", "item_key": "exp:data analyst|acme"}]}})
+                    {"id": "k", "op": "keep", "item_key": "exp:data analyst|acme",
+                     "because": "job:the posting asks for SQL"}]}})
             assert done["committed"], done
             page = await call("render", {"job_id": job["job_id"], "format": "tex"})
             assert Path(page["tex_path"]).is_file(), page

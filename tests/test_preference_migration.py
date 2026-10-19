@@ -341,7 +341,7 @@ def test_the_section_exclusion_now_removes_the_section(env, isolated_engine):
     uid, job_id, _ = env
     _add(isolated_engine, uid, "Never show the projects section", key="section:projects",
          term="section: projects", ttype="section")
-    plan = {"job_id": job_id, "nodes": [{"id": "p", "op": "keep", "item_key": PROJ}]}
+    plan = {"job_id": job_id, "nodes": [{"id": "p", "because": "job:fits the posting", "op": "keep", "item_key": PROJ}]}
     before = _run(uid, plan, dry_run=True)
     assert {n["id"]: n["status"] for n in before["nodes"]}["p"] == "kept"
 

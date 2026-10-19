@@ -301,7 +301,7 @@ def run_weave(env, probs=None, **kw):
 
     uid, job_id, _ = env
     program = {"job_id": job_id, "nodes": [
-        {"id": "weave", "op": "revise", "item_key": EXP2, "strategy": "keyword_weave",
+        {"id": "weave", "because": "job:the posting asks for it", "op": "revise", "item_key": EXP2, "strategy": "keyword_weave",
          "keywords": ["integrate"], "bullets": _woven(_KG(uid).source_bullets[EXP2])}]}
     return uid, program, _run(uid, program, **kw)
 
@@ -401,7 +401,7 @@ def test_a_recorded_scripted_host_run_replays_at_a_full_hit_rate(auto, env, monk
     program["nodes"] = [n for n in program["nodes"] if n["item_key"] != EXP2]
     from harness.executor import _KG
     program["nodes"].append(
-        {"id": "weave", "op": "revise", "item_key": EXP2, "strategy": "keyword_weave",
+        {"id": "weave", "because": "job:the posting asks for it", "op": "revise", "item_key": EXP2, "strategy": "keyword_weave",
          "keywords": ["integrate"], "bullets": _woven(_KG(uid).source_bullets[EXP2])})
 
     t = FakeTransport(answer_for=scripted({"supported": 0.95, "adds_unsupported": 0.04,
