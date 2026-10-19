@@ -48,6 +48,9 @@ class Variant:
     backend: str                  # the symbol-map backend
     budget: int                   # total tokens
     layers: tuple[str, ...] = ()  # "blame", "others", "by_file", "prs"
+    sym_share: float | None = None  # the symbol map's share of the budget (None: SHARES); 0 omits it
+    select: str = "rank"          # "rank": best-ranked first; "attrib": the user's own and contested only
+    max_defs: int | None = None   # at most this many definitions in the map
 
 
 VARIANTS: dict[str, Variant] = {
@@ -63,6 +66,11 @@ VARIANTS: dict[str, Variant] = {
     "prs-10k": Variant("regex", 10_000, ("prs",)),
     "blame-20k": Variant("regex", 20_000, ("blame", "others")),
     "blame-prs-10k": Variant("regex", 10_000, ("blame", "others", "prs")),
+    # the symbol-map share sweep on blame-20k (its default share is 0.25)
+    "blame-20k-s0": Variant("regex", 20_000, ("blame", "others"), sym_share=0.0),
+    "blame-20k-s10": Variant("regex", 20_000, ("blame", "others"), sym_share=0.10),
+    "blame-20k-s40": Variant("regex", 20_000, ("blame", "others"), sym_share=0.40),
+    "blame-20k-attrib": Variant("regex", 20_000, ("blame", "others"), select="attrib", max_defs=40),
     "own-10k": Variant("regex", 10_000, ("blame", "others", "by_file", "prs")),
     "own-20k": Variant("regex", 20_000, ("blame", "others", "by_file", "prs")),
 }
@@ -71,7 +79,10 @@ VARIANT_NAMES = {
     "ts-10k": "tree-sitter tags (Aider)", "ast-10k": "Python ast + regex", "ctags-10k": "Universal Ctags",
     "pyg-10k": "Pygments", "blame-10k": "5r + blame ownership", "commits-10k": "5r + commit subjects by file",
     "prs-10k": "5r + merged PRs", "blame-20k": "5r + blame ownership at 20K",
-    "blame-prs-10k": "5r + blame ownership + merged PRs", "own-10k": "5r + all attribution", "own-20k": "5r + all attribution at 20K",
+    "blame-prs-10k": "5r + blame ownership + merged PRs",
+    "blame-20k-s0": "blame-20k, no symbol map", "blame-20k-s10": "blame-20k, map share 10%",
+    "blame-20k-s40": "blame-20k, map share 40%",
+    "blame-20k-attrib": "blame-20k, map = the user's own and contested definitions (max 40)", "own-10k": "5r + all attribution", "own-20k": "5r + all attribution at 20K",
 }
 BASELINE = "5r-10k"
 
@@ -127,11 +138,13 @@ def _multi_author(ctx: RepoContext) -> bool:
 
 
 def fit(sections: list[tuple[str, str]], budget_tokens: int,
-        chars_per_token: float | None = None) -> tuple[dict[str, str], dict[str, int]]:
+        chars_per_token: float | None = None,
+        shares: dict[str, float] | None = None) -> tuple[dict[str, str], dict[str, int]]:
     """Fit sections into the budget by their shares (water-filling): a section needing less than
     its share keeps what it needs and the rest is shared among the others; a section needing more
     is cut at a line boundary. Returns the texts and each section's allotted characters."""
     total = int(budget_tokens * (chars_per_token or CHARS_PER_TOKEN) * 0.98)   # 2% for the title and separators
+    shares = shares or SHARES
     need = {k: len(t) for k, t in sections}
     alloc: dict[str, int] = {}
     left = dict.fromkeys(need)
@@ -139,18 +152,18 @@ def fit(sections: list[tuple[str, str]], budget_tokens: int,
     changed = True
     while left and changed:
         changed = False
-        share_sum = sum(SHARES[k] for k in left)
+        share_sum = sum(shares[k] for k in left)
         for k in sorted(left, key=lambda k: (need[k], k)):
-            fair = remaining * SHARES[k] / share_sum
+            fair = remaining * shares[k] / share_sum
             if need[k] <= fair:
                 alloc[k] = need[k]
                 remaining -= need[k]
                 del left[k]
                 changed = True
                 break
-    share_sum = sum(SHARES[k] for k in left) or 1
+    share_sum = sum(shares[k] for k in left) or 1
     for k in left:
-        alloc[k] = int(remaining * SHARES[k] / share_sum)
+        alloc[k] = int(remaining * shares[k] / share_sum)
     out = {}
     for k, text in sections:
         out[k] = text if len(text) <= alloc[k] else _cut(text, alloc[k])
@@ -193,20 +206,25 @@ def build_variant(ctx: RepoContext, vid: str) -> tuple[str, dict]:
     weights = {p: w for p, w in ctx.auth.weights().items() if p in sources}
 
     # The symbol map is sized to its allotment: first measure its demand at a generous budget.
-    sym_budget = int(v.budget * 0.45)
+    shares = dict(SHARES, **({"symbols": v.sym_share} if v.sym_share else {}))
+    sym_budget = int(v.budget * max(0.45, shares["symbols"] + 0.05))
     annotate = ctx.blame.annotate if (use_blame and "blame" in v.layers) else None
+    keep = _attrib_keep(ctx) if (v.select == "attrib" and use_blame) else None
     header = ("## Symbol map (definitions ranked by PageRank seeded with the user's files; "
-              f"line spans{'; ownership by git blame' if annotate else ''})\n")
+              f"line spans{'; ownership by git blame' if annotate else ''}"
+              f"{'; only the definitions the user owns or shares' if keep else ''})\n")
     smap = build_symbol_map_v2(sources, weights, sym_budget, v.backend, path, annotate,
-                               chars_per_token=CHARS_PER_TOKEN)
-    sections.append(("symbols", header + (smap.text or "(no definitions found)")))
+                               chars_per_token=CHARS_PER_TOKEN, keep=keep, max_defs=v.max_defs)
+    if v.sym_share != 0.0:
+        sections.append(("symbols", header + (smap.text or "(no definitions found)")))
     if "others" in v.layers:
         sections.append(("others", attr.others_section(smap.ranked, ctx.blame) if use_blame else
                          "## Built by other authors\n(single-author repository)"))
-    fitted, alloc = fit(sections, v.budget)
-    if len(dict(sections)["symbols"]) > alloc["symbols"]:
+    fitted, alloc = fit(sections, v.budget, shares=shares)
+    if "symbols" in alloc and len(dict(sections)["symbols"]) > alloc["symbols"]:
         smap = build_symbol_map_v2(sources, weights, int((alloc["symbols"] - len(header)) / CHARS_PER_TOKEN),
-                                   v.backend, path, annotate, chars_per_token=CHARS_PER_TOKEN)
+                                   v.backend, path, annotate, chars_per_token=CHARS_PER_TOKEN,
+                                   keep=keep, max_defs=v.max_defs)
         fitted["symbols"] = header + (smap.text or "(no definitions found)")
     title = f"# Repository dossier: {ctx.repo.name} at commit {ctx.head[:12]}"
     text = "\n\n".join([title] + [fitted[k] for k, _ in sections])
@@ -218,6 +236,25 @@ def build_variant(ctx: RepoContext, vid: str) -> tuple[str, dict]:
              "blamed_files": (len([x for x in ctx.blame.files.values() if x is not None])
                               if ctx.blame else 0)}
     return text, stats
+
+
+def _attrib_keep(ctx: RepoContext):
+    """The `attrib` selection: keep a definition if the user owns it (half its surviving lines,
+    or they introduced it) or it is contested (in a file the user changed, mostly someone
+    else's). Definitions the user never touched are left to "built by other authors"."""
+    touched = set(ctx.auth.files)
+
+    def keep(path: str, name: str, start: int, end: int) -> bool:
+        own = ctx.blame.ownership(path, start, end)
+        if own is None:                   # not blamed (bounds): keep only the user's files
+            return path in touched
+        if own.user_share >= 0.5:
+            return True
+        intro = ctx.blame.introducer(path, start, end)
+        if intro and intro[2]:
+            return True
+        return path in touched
+    return keep
 
 
 def judge_prs_section(prs: list[dict] | None, user_label: str) -> str:

@@ -628,11 +628,15 @@ def posix_dir(path: str) -> str:
 def build_symbol_map_v2(sources: dict[str, str], user_weights: dict[str, float] | None,
                         token_budget: int, backend: str, root: Path | None = None,
                         annotate: Callable[[str, str, int, int], str] | None = None,
-                        chars_per_token: float = 3.6, max_files: int = MAX_FILES) -> SymbolMap:
+                        chars_per_token: float = 3.6, max_files: int = MAX_FILES,
+                        keep: Callable[[str, str, int, int], bool] | None = None,
+                        max_defs: int | None = None) -> SymbolMap:
     """The variants' symbol map: the same ranking as `build_symbol_map`, over one of the variant
     backends (`regex`, `ts-tags`, `ast`, `ctags`, `pygments`), with each definition cited by its
     line span (`L12-40`) and, if `annotate` is given, a suffix from it (the ownership tag).
-    Bounded on large repos by `select_sources` and `MAX_DEFINERS`."""
+    Bounded on large repos by `select_sources` and `MAX_DEFINERS`. `keep` filters the ranked
+    definitions (asked lazily, best first, until `max_defs` are kept); `ranked` stays the full
+    ranking, for the "built by others" list."""
     sources = select_sources(sources, user_weights, max_files)
     spans, used = spans_for(backend, sources, root, compact=True)
     defines: dict[str, set] = defaultdict(set)
@@ -650,6 +654,14 @@ def build_symbol_map_v2(sources: dict[str, str], user_weights: dict[str, float] 
         for name, n in refs.items():
             references[name][path] += n
     ranked = _rank(sources, defines, references, def_info, user_weights, pure=True)
+    shown = ranked
+    if keep is not None or max_defs is not None:
+        shown = []
+        for key in ranked:
+            if max_defs is not None and len(shown) >= max_defs:
+                break
+            if keep is None or keep(key[0], key[1], def_info[key][0], def_info[key][1]):
+                shown.append(key)
     notes: dict[tuple, str] = {}
 
     def line_for(key):
@@ -672,10 +684,10 @@ def build_symbol_map_v2(sources: dict[str, str], user_weights: dict[str, float] 
             parts.extend(f"  {line}" for line in by_file[path])
         return "\n".join(parts)
 
-    lo, hi, best, n_best = 0, len(ranked), "", 0
+    lo, hi, best, n_best = 0, len(shown), "", 0
     while lo <= hi:
         mid = (lo + hi) // 2
-        text = render(ranked[:mid])
+        text = render(shown[:mid])
         if len(text) / chars_per_token <= token_budget:
             best, n_best, lo = text, mid, mid + 1
         else:

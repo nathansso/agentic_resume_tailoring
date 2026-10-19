@@ -240,7 +240,8 @@ def test_every_variant_builds_within_its_budget_and_names_the_commit(ctx, fixtur
         text, stats = build_variant(ctx, vid)
         assert text.startswith(f"# Repository dossier: ada/demo at commit {head[:12]}"), vid
         assert stats["est_tokens"] <= v.budget, vid
-        assert "## README" in text and "## Symbol map" in text, vid
+        assert "## README" in text, vid
+        assert ("## Symbol map" in text) == (v.sym_share != 0.0), vid
 
 
 def test_fit_keeps_short_sections_and_cuts_long_ones_at_a_line():
@@ -328,6 +329,25 @@ def test_attribution_variants_name_other_authors_work(ctx):
     assert stats["blamed_files"] >= 2
     plain, _ = build_variant(ctx, "5r-10k")
     assert "Charles Babbage" not in plain and "## Built by other authors" not in plain
+
+
+def test_the_attrib_map_keeps_only_the_users_own_and_contested_definitions(ctx):
+    text, stats = build_variant(ctx, "blame-20k-attrib")
+    smap = text.split("## Symbol map")[1].split("\n## ")[0]
+    assert "load_data" in smap and "score" in smap          # the user's own
+    assert "normalize" not in smap                           # another author's, in a file the user never touched
+    assert "normalize: Charles Babbage" in text.split("## Built by other authors")[1]
+    assert stats["symbol_rendered"] <= 40
+
+
+def test_the_symbol_share_sweep_resizes_or_drops_the_map(ctx):
+    none, _ = build_variant(ctx, "blame-20k-s0")
+    assert "## Symbol map" not in none and "## Built by other authors" in none
+    from eval.repo_dossier.variants import SHARES
+    long = [("readme", "## README\n" + "x\n" * 30_000), ("symbols", "## Symbol map\n" + "y\n" * 30_000)]
+    _, small = fit(long, 1000, shares=dict(SHARES, symbols=0.10))
+    _, large = fit(long, 1000, shares=dict(SHARES, symbols=0.40))
+    assert small["symbols"] < large["symbols"] and small["readme"] > large["readme"]
 
 
 def test_blame_is_skipped_for_a_single_author_repo(tmp_path):
