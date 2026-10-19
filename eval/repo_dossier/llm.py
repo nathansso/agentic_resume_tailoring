@@ -146,16 +146,59 @@ class Ledger:
             raise RuntimeError(f"spend ${self.usd:.2f} passed the ${self.limit:.2f} limit; stopping")
 
 
-class Client:
-    def __init__(self, cache_dir: Path, ledger: Ledger, env_file: Path | None = None):
-        import anthropic
-        key = load_api_key(env_file)
-        if not key:
-            raise RuntimeError("ANTHROPIC_API_KEY is not set (environment or .env)")
-        self._api = anthropic.Anthropic(api_key=key, max_retries=4)
+
+
+# ── the requests (one shape for both backends, so the cache key is the same) ──
+
+def write_params(repo_name: str, user_label: str, dossier: str, sample: int = 0) -> dict:
+    return {
+        "model": WRITER_MODEL, "max_tokens": 16000,
+        "output_config": {"effort": "medium", "format": {"type": "json_schema", "schema": WRITER_SCHEMA}},
+        "system": WRITER_SYSTEM,
+        "messages": [{"role": "user", "content":
+                      f"Repository: {repo_name}\nThe user: {user_label}\n\n{dossier}"}],
+        "metadata": {"user_id": f"eval397-s{sample}"},
+    }
+
+
+def judge_params(repo_name: str, user_label: str, evidence: str, output: dict) -> dict:
+    system = [
+        {"type": "text", "text": JUDGE_INSTRUCTIONS.format(user=user_label)},
+        {"type": "text", "text": f"<repository name=\"{repo_name}\">\n{evidence}\n</repository>",
+         "cache_control": {"type": "ephemeral"}},
+    ]
+    body = "Description: " + output["description"] + "\n" + "\n".join(
+        f"Bullet {i + 1}: {b}" for i, b in enumerate(output["bullets"]))
+    return {
+        "model": JUDGE_MODEL, "max_tokens": 32000,
+        "output_config": {"effort": "high", "format": {"type": "json_schema", "schema": JUDGE_SCHEMA}},
+        "system": system,
+        "messages": [{"role": "user", "content": body}],
+    }
+
+
+def coverage_params(facts: list[str], output: dict) -> dict:
+    listing = "\n".join(f"{i}. {f}" for i, f in enumerate(facts))
+    body = ("Reference facts:\n" + listing + "\n\nContent:\nDescription: " + output["description"]
+            + "\n" + "\n".join(f"Bullet {i + 1}: {b}" for i, b in enumerate(output["bullets"])))
+    return {
+        "model": JUDGE_MODEL, "max_tokens": 8000,
+        "output_config": {"effort": "medium", "format": {"type": "json_schema", "schema": COVERAGE_SCHEMA}},
+        "system": COVERAGE_SYSTEM,
+        "messages": [{"role": "user", "content": body}],
+    }
+
+
+class _Cached:
+    """The on-disk response cache both backends share: a request's hash names its file."""
+
+    def __init__(self, cache_dir: Path, ledger: Ledger):
         self.cache_dir = cache_dir
         cache_dir.mkdir(parents=True, exist_ok=True)
         self.ledger = ledger
+
+    def _send(self, params: dict) -> tuple[dict, dict, str]:
+        raise NotImplementedError
 
     def _call(self, tag: str, params: dict) -> tuple[dict, dict, bool]:
         """(parsed JSON, usage, cached?). Cached responses add nothing to the ledger."""
@@ -165,56 +208,111 @@ class Client:
             rec = json.loads(path.read_text(encoding="utf-8"))
             return rec["parsed"], rec["usage"], True
         self.ledger.check()
+        parsed, usage, stop = self._send(params)
+        self.ledger.add(params["model"], usage)
+        path.write_text(json.dumps({"tag": tag, "parsed": parsed, "usage": usage, "stop_reason": stop,
+                                    "backend": self.backend}, indent=1), encoding="utf-8")
+        return parsed, usage, False
+
+    def write(self, repo_name: str, user_label: str, dossier: str, sample: int = 0):
+        return self._call("write", write_params(repo_name, user_label, dossier, sample))
+
+    def judge(self, repo_name: str, user_label: str, evidence: str, output: dict):
+        return self._call("judge", judge_params(repo_name, user_label, evidence, output))
+
+    def coverage(self, facts: list[str], output: dict):
+        return self._call("coverage", coverage_params(facts, output))
+
+
+class Client(_Cached):
+    """The Anthropic API (billed to the key in `.env`). #397's spike used this."""
+    backend = "api"
+
+    def __init__(self, cache_dir: Path, ledger: Ledger, env_file: Path | None = None):
+        import anthropic
+        super().__init__(cache_dir, ledger)
+        key = load_api_key(env_file)
+        if not key:
+            raise RuntimeError("ANTHROPIC_API_KEY is not set (environment or .env)")
+        self._api = anthropic.Anthropic(api_key=key, max_retries=4)
+
+    def _send(self, params):
         with self._api.messages.stream(**params) as stream:
             msg = stream.get_final_message()
         if msg.stop_reason == "refusal":
-            raise RuntimeError(f"{tag}: refused")
+            raise RuntimeError("refused")
         text = "".join(b.text for b in msg.content if b.type == "text")
-        parsed = json.loads(text)
         u = msg.usage
         usage = {"input_tokens": u.input_tokens, "output_tokens": u.output_tokens,
                  "cache_creation_input_tokens": u.cache_creation_input_tokens or 0,
                  "cache_read_input_tokens": u.cache_read_input_tokens or 0}
-        self.ledger.add(params["model"], usage)
-        path.write_text(json.dumps({"tag": tag, "parsed": parsed, "usage": usage,
-                                    "stop_reason": msg.stop_reason}, indent=1), encoding="utf-8")
-        return parsed, usage, False
+        return json.loads(text), usage, msg.stop_reason
 
-    def write(self, repo_name: str, user_label: str, dossier: str, sample: int = 0):
-        params = {
-            "model": WRITER_MODEL, "max_tokens": 16000,
-            "output_config": {"effort": "medium", "format": {"type": "json_schema", "schema": WRITER_SCHEMA}},
-            "system": WRITER_SYSTEM,
-            "messages": [{"role": "user", "content":
-                          f"Repository: {repo_name}\nThe user: {user_label}\n\n{dossier}"}],
-            "metadata": {"user_id": f"eval397-s{sample}"},
-        }
-        return self._call("write", params)
 
-    def judge(self, repo_name: str, user_label: str, evidence: str, output: dict):
-        system = [
-            {"type": "text", "text": JUDGE_INSTRUCTIONS.format(user=user_label)},
-            {"type": "text", "text": f"<repository name=\"{repo_name}\">\n{evidence}\n</repository>",
-             "cache_control": {"type": "ephemeral"}},
-        ]
-        body = "Description: " + output["description"] + "\n" + "\n".join(
-            f"Bullet {i + 1}: {b}" for i, b in enumerate(output["bullets"]))
-        params = {
-            "model": JUDGE_MODEL, "max_tokens": 32000,
-            "output_config": {"effort": "high", "format": {"type": "json_schema", "schema": JUDGE_SCHEMA}},
-            "system": system,
-            "messages": [{"role": "user", "content": body}],
-        }
-        return self._call("judge", params)
+class CliClient(_Cached):
+    """Claude Code's print mode (`claude -p`) on the signed-in subscription: no API spend.
 
-    def coverage(self, facts: list[str], output: dict):
-        listing = "\n".join(f"{i}. {f}" for i, f in enumerate(facts))
-        body = ("Reference facts:\n" + listing + "\n\nContent:\nDescription: " + output["description"]
-                + "\n" + "\n".join(f"Bullet {i + 1}: {b}" for i, b in enumerate(output["bullets"])))
-        params = {
-            "model": JUDGE_MODEL, "max_tokens": 8000,
-            "output_config": {"effort": "medium", "format": {"type": "json_schema", "schema": COVERAGE_SCHEMA}},
-            "system": COVERAGE_SYSTEM,
-            "messages": [{"role": "user", "content": body}],
-        }
-        return self._call("coverage", params)
+    The request is the API one, mapped onto the CLI: the system blocks become one system-prompt
+    file (so the judge's repository evidence is a stable, cacheable prefix), the user message
+    goes on stdin, the schema to `--json-schema`, the effort to `--effort`. Tools, MCP servers,
+    settings (and so hooks) and session persistence are off, and it runs from an empty folder
+    outside any repository so no project CLAUDE.md is read (refused otherwise). Any ANTHROPIC_API_KEY is removed from the child's environment, so
+    the CLI cannot fall back to API billing. `total_cost_usd` is recorded as the list-price
+    equivalent, not a charge.
+    """
+    backend = "claude-cli"
+
+    def __init__(self, cache_dir: Path, ledger: Ledger, workdir: Path, exe: str | None = None,
+                 timeout_s: int = 1800):
+        import shutil
+        super().__init__(cache_dir, ledger)
+        self.exe = exe or shutil.which("claude")
+        if not self.exe:
+            raise RuntimeError("the claude CLI is not on PATH")
+        # Claude Code reads every CLAUDE.md from the working folder up: inside this repo that
+        # would hand the writer the repo's guidance and the owner's private personal/ notes
+        for d in [workdir.resolve(), *workdir.resolve().parents]:
+            if (d / "CLAUDE.md").exists() or (d / ".git").exists():
+                raise RuntimeError(f"the CLI working folder {workdir} is under {d}, which has a "
+                                   "CLAUDE.md or is a repository; use a folder outside it")
+        self.workdir = workdir
+        workdir.mkdir(parents=True, exist_ok=True)
+        self.timeout_s = timeout_s
+
+    def _send(self, params):
+        import subprocess
+        import tempfile
+        system = params["system"]
+        if isinstance(system, list):
+            system = "\n\n".join(b["text"] for b in system)
+        fmt = params["output_config"]["format"]["schema"]
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK",
+                            "CLAUDE_CODE_USE_VERTEX")}
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", dir=self.workdir, delete=False,
+                                         encoding="utf-8") as fh:
+            fh.write(system)
+            sys_path = fh.name
+        try:
+            done = subprocess.run(
+                [self.exe, "-p", "--model", params["model"], "--effort", params["output_config"]["effort"],
+                 "--output-format", "json", "--json-schema", json.dumps(fmt),
+                 "--system-prompt-file", sys_path, "--tools", "", "--no-session-persistence",
+                 "--strict-mcp-config", "--setting-sources", ""],
+                input=params["messages"][0]["content"], capture_output=True, text=True,
+                encoding="utf-8", errors="replace", cwd=self.workdir, env=env, timeout=self.timeout_s)
+        finally:
+            os.unlink(sys_path)
+        try:
+            out = json.loads(done.stdout)
+        except json.JSONDecodeError:
+            raise RuntimeError(f"claude -p failed ({done.returncode}): {(done.stderr or done.stdout)[-400:]}")
+        if out.get("is_error") or out.get("subtype") != "success" or out.get("structured_output") is None:
+            raise RuntimeError(f"claude -p: {out.get('subtype')} {out.get('api_error_status')} "
+                               f"{str(out.get('result'))[:300]}")
+        u = out.get("usage", {})
+        usage = {"input_tokens": u.get("input_tokens", 0), "output_tokens": u.get("output_tokens", 0),
+                 "cache_creation_input_tokens": u.get("cache_creation_input_tokens", 0),
+                 "cache_read_input_tokens": u.get("cache_read_input_tokens", 0),
+                 "list_usd": out.get("total_cost_usd", 0.0), "duration_ms": out.get("duration_ms")}
+        return out["structured_output"], usage, out.get("stop_reason")

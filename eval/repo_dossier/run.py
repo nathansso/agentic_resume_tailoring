@@ -39,7 +39,7 @@ CELL_NAMES = {**RUNG_NAMES, **VARIANT_NAMES}
 
 HERE = Path(__file__).resolve().parent
 PUBLIC_CONFIG = HERE / "repos.json"
-CHARS_PER_TOKEN = 3.6   # for estimates only; reported tokens come from the API's usage
+CHARS_PER_TOKEN = 2.3   # for estimates only (#397 measured 2.2-2.7); reported tokens come from usage
 
 
 def load_repos(args) -> list[dict]:
@@ -234,10 +234,15 @@ def _dossier(d: Path, cell: str) -> str:
 
 
 def cmd_run(args) -> None:
-    from eval.repo_dossier.llm import Client, Ledger
+    from eval.repo_dossier.llm import CliClient, Client, Ledger
     work = Path(args.work_dir)
-    ledger = Ledger(args.limit)
-    client = Client(work / "cache", ledger, ROOT / ".env" if not args.env else Path(args.env))
+    if args.backend == "api":  # billed to the key in .env: opt in explicitly
+        ledger = Ledger(args.limit)
+        client = Client(work / "cache", ledger, ROOT / ".env" if not args.env else Path(args.env))
+    else:  # the signed-in Claude Code subscription: no API spend
+        ledger = Ledger(float("inf"))
+        import tempfile
+        client = CliClient(work / "cache", ledger, Path(tempfile.gettempdir()) / "art_eval397_cli")
     repos = load_repos(args)
     results_path = work / "raw_results.json"
     results = json.loads(results_path.read_text(encoding="utf-8")) if results_path.exists() else {}
@@ -300,12 +305,14 @@ def cmd_run(args) -> None:
             break
         results[name] = res
         results_path.write_text(json.dumps(results, indent=1), encoding="utf-8")
-        print(f"{name}: done; spend so far ${ledger.usd:.2f} over {ledger.calls} new calls", flush=True)
+        what = "spend" if args.backend == "api" else "list-price equivalent (not billed)"
+        print(f"{name}: done; {what} so far ${ledger.usd:.2f} over {ledger.calls} new calls", flush=True)
     spend_path = work / "spend.json"
     prior = json.loads(spend_path.read_text(encoding="utf-8")) if spend_path.exists() else {"runs": []}
     prior["runs"].append({"usd": round(ledger.usd, 4), "calls": ledger.calls, "by_model": ledger.by_model})
     spend_path.write_text(json.dumps(prior, indent=1), encoding="utf-8")
-    print(f"this run spent ${ledger.usd:.2f}")
+    print(f"this run: {ledger.calls} new calls, " + (f"spent ${ledger.usd:.2f}" if args.backend == "api"
+          else f"${ledger.usd:.2f} at list price, not billed (subscription)"))
 
 
 # ── metrics ──────────────────────────────────────────────────────────────────
@@ -522,13 +529,24 @@ def spotcheck_summary(checked: list[dict], results: dict) -> dict:
 def spend_from_cache(cache: Path) -> dict:
     """Every cached response is one billed call, including calls from a run that stopped early."""
     from eval.repo_dossier.llm import JUDGE_MODEL, WRITER_MODEL, Ledger
-    ledger = Ledger(float("inf"))
+    api, cli = Ledger(float("inf")), Ledger(float("inf"))
+    list_usd = 0.0
     for f in sorted(cache.glob("*.json")):
         rec = json.loads(f.read_text(encoding="utf-8"))
-        ledger.add(WRITER_MODEL if rec["tag"] == "write" else JUDGE_MODEL, rec["usage"])
-    return {"usd": ledger.usd, "calls": ledger.calls,
-            "by_model": {m: {k: round(v, 2) if isinstance(v, float) else v for k, v in d.items()}
-                         for m, d in ledger.by_model.items()}}
+        model = WRITER_MODEL if rec["tag"] == "write" else JUDGE_MODEL
+        if rec.get("backend", "api") == "api":   # #397's calls predate the field
+            api.add(model, rec["usage"])
+        else:
+            cli.add(model, rec["usage"])
+            list_usd += rec["usage"].get("list_usd", 0.0)
+
+    def by_model(ledger):
+        return {m: {k: round(v, 2) if isinstance(v, float) else v for k, v in d.items()}
+                for m, d in ledger.by_model.items()}
+    # API calls are billed; subscription calls are not (their list-price equivalent is noted)
+    return {"usd": api.usd, "calls": api.calls, "by_model": by_model(api),
+            "subscription_calls": cli.calls, "subscription_list_usd_equivalent": round(list_usd, 2),
+            "subscription_by_model": by_model(cli)}
 
 
 def _example(results: dict, name: str, rung: str) -> dict | None:
@@ -579,6 +597,8 @@ def cmd_report(args) -> None:
         "judge_spotcheck": spotcheck_summary(checked, results) if checked else None,
         "spend_usd": round(spend["usd"], 2),
         "spend_by_model": spend["by_model"],
+        "subscription": {k: spend[k] for k in ("subscription_calls", "subscription_list_usd_equivalent",
+                                               "subscription_by_model")},
         # over the scored repos only, and as counts, so no private repo is named
         "symbol_backends": {vid: dict(Counter(vstats[d]["variants"][vid]["symbol_backend"]
                                               for d in scored_dirs if d in vstats))
@@ -761,7 +781,10 @@ def main(argv=None) -> None:
     p.add_argument("--only", default="", help="comma-separated owner/repo names")
     p.add_argument("--cells", default="", help="comma-separated rungs/variants (default: all)")
     p.add_argument("--samples", type=int, default=1)
-    p.add_argument("--limit", type=float, default=25.0, help="stop before spending past this (USD)")
+    p.add_argument("--backend", choices=["cli", "api"], default="cli",
+                   help="run: 'cli' = claude -p on the signed-in subscription (no spend, the default); "
+                        "'api' = the Anthropic API, billed to ANTHROPIC_API_KEY")
+    p.add_argument("--limit", type=float, default=25.0, help="--backend api: stop before spending past this (USD)")
     p.add_argument("--env", default="", help=".env file holding ANTHROPIC_API_KEY (default: repo .env)")
     p.add_argument("--date", default=date.today().isoformat())
     p.add_argument("--n", type=int, default=60, help="spotcheck: claims to draw")

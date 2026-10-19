@@ -2,7 +2,8 @@
 
 #397's ladder grows its input rung by rung, so rungs differ in size as well as content. To
 compare methods fairly, every variant here is fitted to the same total budget (5K, 10K or 20K
-tokens, estimated at 3.6 characters a token) by one rule, `fit`: each section gets a share of the
+tokens, estimated at 2.3 characters a token, the rate #397's writer calls measured on its
+dossiers: 2.2 to 2.7, median 2.4) by one rule, `fit`: each section gets a share of the
 budget, a section that needs less gives the rest back to the others, and a section that needs
 more is cut at a line boundary with a marker saying so.
 
@@ -36,7 +37,7 @@ from eval.repo_dossier.ladder import (CODE_EXT, NOT_SOURCE, Authorship, Budgets,
                                       list_files, metadata_section, readme_section, tree_section)
 from eval.repo_dossier.symbols import build_symbol_map_v2, language_of
 
-CHARS_PER_TOKEN = 3.6
+CHARS_PER_TOKEN = 2.3   # measured: #397's dossiers ran 2.16-2.68 chars per writer input token
 MARKUP = {".html", ".css", ".scss"}
 
 
@@ -119,11 +120,11 @@ def _multi_author(ctx: RepoContext) -> bool:
 
 
 def fit(sections: list[tuple[str, str]], budget_tokens: int,
-        chars_per_token: float = CHARS_PER_TOKEN) -> tuple[dict[str, str], dict[str, int]]:
+        chars_per_token: float | None = None) -> tuple[dict[str, str], dict[str, int]]:
     """Fit sections into the budget by their shares (water-filling): a section needing less than
     its share keeps what it needs and the rest is shared among the others; a section needing more
     is cut at a line boundary. Returns the texts and each section's allotted characters."""
-    total = int(budget_tokens * chars_per_token * 0.98)   # 2% for the title and separators
+    total = int(budget_tokens * (chars_per_token or CHARS_PER_TOKEN) * 0.98)   # 2% for the title and separators
     need = {k: len(t) for k, t in sections}
     alloc: dict[str, int] = {}
     left = dict.fromkeys(need)
@@ -189,7 +190,8 @@ def build_variant(ctx: RepoContext, vid: str) -> tuple[str, dict]:
     annotate = ctx.blame.annotate if (use_blame and "blame" in v.layers) else None
     header = ("## Symbol map (definitions ranked by PageRank seeded with the user's files; "
               f"line spans{'; ownership by git blame' if annotate else ''})\n")
-    smap = build_symbol_map_v2(sources, weights, sym_budget, v.backend, path, annotate)
+    smap = build_symbol_map_v2(sources, weights, sym_budget, v.backend, path, annotate,
+                               chars_per_token=CHARS_PER_TOKEN)
     sections.append(("symbols", header + (smap.text or "(no definitions found)")))
     if "others" in v.layers:
         sections.append(("others", attr.others_section(smap.ranked, ctx.blame) if use_blame else
@@ -197,7 +199,7 @@ def build_variant(ctx: RepoContext, vid: str) -> tuple[str, dict]:
     fitted, alloc = fit(sections, v.budget)
     if len(dict(sections)["symbols"]) > alloc["symbols"]:
         smap = build_symbol_map_v2(sources, weights, int((alloc["symbols"] - len(header)) / CHARS_PER_TOKEN),
-                                   v.backend, path, annotate)
+                                   v.backend, path, annotate, chars_per_token=CHARS_PER_TOKEN)
         fitted["symbols"] = header + (smap.text or "(no definitions found)")
     title = f"# Repository dossier: {ctx.repo.name} at commit {ctx.head[:12]}"
     text = "\n\n".join([title] + [fitted[k] for k, _ in sections])

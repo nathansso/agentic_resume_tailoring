@@ -251,8 +251,8 @@ def test_fit_keeps_short_sections_and_cuts_long_ones_at_a_line():
     assert out["readme"].endswith("…[section cut to fit the dossier's token budget]")
     assert len(out["readme"]) <= alloc["readme"]
     # what the short sections left is handed to the long one
-    assert alloc["readme"] > 1000 * 3.6 * 0.30
-    assert sum(len(t) for t in out.values()) <= 1000 * 3.6
+    assert alloc["readme"] > 1000 * 2.3 * 0.30
+    assert sum(len(t) for t in out.values()) <= 1000 * 2.3
 
 
 def test_symbol_lines_cite_their_span(ctx):
@@ -380,6 +380,51 @@ def test_the_variants_are_the_same_under_any_hash_seed(fixture_repo):
         assert done.returncode == 0, done.stderr
         outs.append(done.stdout)
     assert outs[0] == outs[1] == outs[2]
+
+
+def test_the_tree_sitter_map_takes_the_earliest_of_a_repeated_name():
+    code = "class A:\n    def __init__(self, a):\n        pass\n\n\nclass B:\n    def __init__(self, b):\n        pass\n"
+    smap = build_symbol_map({"m.py": code}, None, token_budget=500, backend="auto")
+    assert "def __init__(self, a):" in smap.text and "self, b" not in smap.text
+
+
+def test_the_cli_backend_runs_claude_on_the_subscription_and_caches(tmp_path, monkeypatch):
+    from eval.repo_dossier import llm
+    seen = []
+
+    def fake_run(cmd, input, env, cwd, **kw):
+        seen.append({"cmd": cmd, "input": input, "env": env, "cwd": cwd,
+                     "system": Path(cmd[cmd.index("--system-prompt-file") + 1]).read_text(encoding="utf-8")})
+        out = {"type": "result", "subtype": "success", "is_error": False, "stop_reason": "end_turn",
+               "structured_output": {"description": "d", "bullets": ["b"]}, "total_cost_usd": 0.01,
+               "usage": {"input_tokens": 5, "output_tokens": 7, "cache_creation_input_tokens": 0,
+                         "cache_read_input_tokens": 0}}
+        return subprocess.CompletedProcess(cmd, 0, json.dumps(out), "")
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-real")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    client = llm.CliClient(tmp_path / "cache", llm.Ledger(float("inf")), tmp_path / "wd", exe="claude")
+    parsed, usage, cached = client.write("ada/demo", "Ada", "## README\nx")
+    assert parsed == {"description": "d", "bullets": ["b"]} and not cached and usage["list_usd"] == 0.01
+    call = seen[0]
+    assert "ANTHROPIC_API_KEY" not in call["env"]           # never falls back to API billing
+    cmd = call["cmd"]
+    assert cmd[cmd.index("--tools") + 1] == "" and "--strict-mcp-config" in cmd
+    assert cmd[cmd.index("--model") + 1] == llm.WRITER_MODEL and cmd[cmd.index("--effort") + 1] == "medium"
+    assert json.loads(cmd[cmd.index("--json-schema") + 1]) == llm.WRITER_SCHEMA
+    assert call["system"] == llm.WRITER_SYSTEM and "## README" in call["input"]
+    assert call["cwd"] == tmp_path / "wd"
+    # the same request is answered from the cache, without a second process
+    assert client.write("ada/demo", "Ada", "## README\nx")[2] is True and len(seen) == 1
+    rec = json.loads(next((tmp_path / "cache").glob("write-*.json")).read_text(encoding="utf-8"))
+    assert rec["backend"] == "claude-cli"
+
+
+def test_the_cli_backend_refuses_a_folder_under_a_claude_md(tmp_path):
+    from eval.repo_dossier import llm
+    (tmp_path / "CLAUDE.md").write_text("private guidance", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="CLAUDE.md"):
+        llm.CliClient(tmp_path / "cache", llm.Ledger(1.0), tmp_path / "wd", exe="claude")
 
 
 def _claims(n_ok, n_role_bad):

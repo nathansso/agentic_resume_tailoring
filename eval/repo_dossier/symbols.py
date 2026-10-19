@@ -151,7 +151,9 @@ def _ts_tags(lang: str, code: str):
             for nodes in QueryCursor(q).captures(tree.root_node).values():
                 for node in nodes:
                     out.append((node.text.decode("utf-8", errors="replace"), node.start_point[0]))
-    return defs, refs
+    # capture order is not stable across processes; the first definition of a repeated name
+    # (several __init__ in one file) must be the earliest one
+    return sorted(defs, key=lambda d: (d[1], d[0])), sorted(refs, key=lambda r: (r[1], r[0]))
 
 
 # ── the regex fallback ───────────────────────────────────────────────────────
