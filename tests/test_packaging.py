@@ -104,7 +104,7 @@ def test_bare_artie_prints_the_help_led_by_what_to_ask_the_agent(argv, capsys, m
     # The Downloads example is real: render takes save_to and resolves the name (#394).
     from harness.contract import RenderInput
     assert "save_to" in RenderInput.model_fields
-    for command in ("artie ui", "artie github login|status|logout", "artie export",
+    for command in ("artie ui", "artie connect", "artie github login|status|logout", "artie export",
                     "artie import", "artie --list"):
         assert command in out, command
     words = set(re.findall(r"artie ([a-z]+)", out))
