@@ -621,9 +621,13 @@ def cmd_report(args) -> None:
         "full_code_truncated": sum(1 for d in scored_dirs if d in stats and stats[d]["ladder"]["full_code"]["truncated"]),
         "judge_evidence_truncated": sum(1 for d in scored_dirs if d in stats and stats[d]["judge"]["truncated"]),
     }
-    for f in ("determinism.json", "bench.json"):
-        if (work / f).exists():
-            out[f.removesuffix(".json")] = json.loads((work / f).read_text(encoding="utf-8"))
+    # counts only: the per-repo hashes would name the owner's private repos
+    if (work / "determinism.json").exists():
+        out["determinism"] = json.loads((work / "determinism.json").read_text(encoding="utf-8"))["summary"]
+    if (work / "bench.json").exists():   # a public repo
+        out["bench"] = json.loads((work / "bench.json").read_text(encoding="utf-8"))
+        if (work / "bench_unbounded.json").exists():
+            out["bench_unbounded"] = json.loads((work / "bench_unbounded.json").read_text(encoding="utf-8"))
     res_dir = ROOT / "eval" / "results"
     res_dir.mkdir(exist_ok=True)
     (res_dir / f"repo_dossier_{args.date}.json").write_text(json.dumps(out, indent=1), encoding="utf-8")

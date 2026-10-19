@@ -104,8 +104,14 @@ python -m eval.repo_dossier.run build --clones C:/r397
 python -m eval.repo_dossier.run build --clones C:/r397 --cells 5r-10k,own-10k   # a subset
 
 # 3. Writer, judge and coverage. Responses are cached under the work dir, so a rerun of a
-#    finished cell costs nothing; --limit stops before new spend passes it (USD).
-python -m eval.repo_dossier.run run --clones C:/r397 --limit 25
+#    finished cell costs nothing. By default the calls run through `claude -p` on the signed-in
+#    Claude Code subscription (no API spend; tools, MCP and settings off, run from a temp folder
+#    outside any repo). --samples 3 adds samples to the cells named in --cells.
+python -m eval.repo_dossier.run run --clones C:/r397
+python -m eval.repo_dossier.run run --clones C:/r397 --samples 3 --cells 5r-10k,blame-20k
+#    --backend api uses the Anthropic API instead (billed); --limit stops before new spend
+#    passes it (USD). #397's first run used it, and its cached calls are reused either way.
+python -m eval.repo_dossier.run run --clones C:/r397 --backend api --limit 25
 
 # 4. Draw 60 claims for a hand check, stratified over method families (ladder, structural,
 #    attribution), role and other claims, supported and not; fill in my_label / my_note in
@@ -124,7 +130,7 @@ python -m eval.repo_dossier.run bench --clones C:/r397big/kubernetes__kubernetes
 python -m eval.repo_dossier.run report
 ```
 
-`ANTHROPIC_API_KEY` comes from the environment or the repo's `.env` (`--env` to point
+With `--backend api`, `ANTHROPIC_API_KEY` comes from the environment or the repo's `.env` (`--env` to point
 elsewhere). It is never printed or logged.
 
 **Privacy.** No email address is committed. `repos.json` names each public repo's user by
