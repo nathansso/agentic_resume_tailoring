@@ -5,10 +5,13 @@ argument-hint: [company or role]
 
 I want to edit a tailored resume by hand in ART's local editor.
 
-1. Find the job: call `list_jobs` with `query` set to "$ARGUMENTS". If that is empty, call
-   it with no query and take the job I most recently worked on. One clear match: name it
+1. Find the job: call `list_jobs` with `query` set to "$ARGUMENTS". One clear match: name it
    and go on. Several or none: ask me, "Is this the <Company> <Role> role, or another?"
    Never guess.
+   With no argument, call `list_jobs` with no query. If I have exactly one job, name it and
+   go on. Otherwise name the most recently touched one, list the next one or two, and ask
+   "Is this the <Company> <Role> role, or another?" Never take the most recent job just
+   because it is the most recent.
 2. The editor is a local server I run myself. Give me this command to run in a
    terminal, with the job id filled in, and don't run it yourself:
 

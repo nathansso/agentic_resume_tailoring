@@ -98,6 +98,11 @@ def test_the_navigation_commands_find_the_job_with_the_ranked_lookup():
         text = (PLUGIN / "commands" / f"{name}.md").read_text(encoding="utf-8")
         assert "`list_jobs`" in text and "`query`" in text and "$ARGUMENTS" in text, name
         assert "or another?" in text and "Never guess" in text, name
+        # No argument is not permission to take the latest job (the skill's "Which job").
+        flat = " ".join(text.split())
+        assert "I most recently worked on" not in flat, name
+        assert "exactly one job" in flat and "most recently touched" in flat, name
+    assert "exactly one job" in " ".join(_tailor_skill().split())
 
 
 # Everything a doc or a skill may say about a slash command that no longer exists (#401).
