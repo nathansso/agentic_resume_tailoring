@@ -1083,7 +1083,7 @@ document per call; `tests/test_harness_contract.py` holds both to identical resu
 console script (`harness/entry.py`) adds what is not a tool: `artie mcp` (the server, the
 command the plugin runs), `artie hook` (the plugin hooks),
 `artie hooks codex` (installs them in Codex's `hooks.json`, the fallback for a Codex without plugin hooks), `artie jev` (§8.3), `artie export` and `artie import`
-(§8.9), `artie migrate preferences` (§8.14), `artie github login|status|logout` (§8.15), and `artie ui`. A write tool returns `read_only` on a remote or Postgres store unless the
+(§8.9), `artie migrate preferences` (§8.14), `artie connect` and `artie github login|status|logout` (§8.15), and `artie ui`. A write tool returns `read_only` on a remote or Postgres store unless the
 process was started with `--allow-writes`; local SQLite is writable. `record_feedback` and
 `check_draft` are named in `harness.md` and are **not built** (#252).
 
@@ -1631,7 +1631,8 @@ gate's (§8.6).
 ### 8.15 Ingest identity and GitHub login (issues #334, #353, #365)
 
 - **GitHub login (#353).** `harness/github.py` signs the user in with GitHub's device flow
-  (`artie github login [--private]`, `status`, `logout`, in `harness/github_cli.py`); the scope is
+  (`artie github login [--private]`, `status`, `logout`, in `harness/github_cli.py`; `artie connect`,
+  `harness/connect.py` (#400), runs the same `sign_in` and then saves the LinkedIn URL to the profile); the scope is
   `read:user`, plus `repo` with `--private`. The token is read only through `resolve_token()`
   (`ART_GITHUB_TOKEN`, else the OS keychain, service `art-mcp`, user `github-token`) and never reaches
   the database, an export, a log or a tool result. The package ships the ARTie OAuth App's client ID,
