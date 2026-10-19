@@ -73,7 +73,7 @@ class Config:
             ip_per_minute=_int(env, "ART_GATEWAY_IP_PER_MINUTE", "10"),
             auth_cache_seconds=_int(env, "ART_GATEWAY_AUTH_CACHE_SECONDS", "300"),
             github_timeout=float(_decimal(env, "ART_GATEWAY_GITHUB_TIMEOUT", "8", "1")),
-            upstream_timeout=float(_decimal(env, "ART_GATEWAY_UPSTREAM_TIMEOUT", "100", "1")),
+            upstream_timeout=float(_decimal(env, "ART_GATEWAY_UPSTREAM_TIMEOUT", "280", "1")),
         )
 
     @property

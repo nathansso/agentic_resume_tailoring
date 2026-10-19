@@ -284,7 +284,7 @@ LEAK = b'{"error": "internal stack UPSTREAM-LEAK key=abc"}'
         (HttpResult(200, b"[]"), 502),
         (HttpResult(200, b"{}"), 502),
         (HttpResult(200, b'"a string"'), 502),
-        (HttpResult(202, b'{"snapshot_id": "s_123"}'), 504),
+        (HttpResult(202, b'{"status": "running"}'), 504),          # 202 with no snapshot id
     ],
 )
 def test_bright_data_failures_map_to_502_or_504_with_a_fixed_message(gateway, network, response, status):
@@ -357,3 +357,57 @@ def test_a_bright_data_failure_logs_why_without_its_body(gateway, network, caplo
     line = [r.getMessage() for r in caplog.records if r.name == "artie_gateway"][-1]
     assert line.endswith(f"reason={reason}")
     assert "Invalid token" not in line and "not active" not in line and "Dead page" not in line
+
+
+# -- a scrape that outlives Bright Data's synchronous window (202 + snapshot) ---------
+
+ACCEPTED = HttpResult(202, b'{"snapshot_id": "s_abc123", "message": "still running"}')
+
+
+def test_a_202_is_polled_until_ready_and_the_snapshot_is_returned(gateway, network, clock):
+    network.brightdata_response = ACCEPTED
+    network.progress = ["running", "running", "ready"]
+    network.snapshot_building = 1
+    started = clock.now
+    result = gateway.handle(post())
+    assert result.status == 200 and result.body == RECORD
+    urls = [c[1] for c in network.calls_to("api.brightdata.com")]
+    assert sum("/progress/s_abc123" in u for u in urls) == 3
+    assert sum("/snapshot/s_abc123?format=json" in u for u in urls) == 2       # one "building", then the file
+    assert all(c[3] is None for c in network.calls_to("api.brightdata.com")[1:])  # polls send no body
+    assert clock.now - started == 20                       # three progress waits and one "building" wait
+
+
+def test_a_failed_snapshot_is_a_502_and_refunds_the_quota(gateway, network, store, caplog):
+    caplog.set_level(logging.INFO)
+    network.brightdata_response = ACCEPTED
+    network.progress = ["running", "failed"]
+    result = gateway.handle(post())
+    assert result.status == 502 and result.body["error"]["code"] == "upstream_error"
+    assert caplog.records[-1].getMessage().endswith("reason=snapshot_failed")
+    for _ in range(3):                                     # the quota was refunded each time
+        network.brightdata_response = None
+        assert gateway.handle(post()).status == 200
+
+
+def test_a_snapshot_that_never_finishes_times_out_within_the_budget(network, store, clock, caplog):
+    caplog.set_level(logging.INFO)
+    gateway = Gateway(make_config(ART_GATEWAY_UPSTREAM_TIMEOUT="60"), store, network, clock, sleep=clock.advance)
+    network.brightdata_response = ACCEPTED
+    network.progress = ["running"]
+    started = clock.now
+    result = gateway.handle(post())
+    assert result.status == 504 and result.body["error"]["code"] == "upstream_timeout"
+    assert caplog.records[-1].getMessage().endswith("reason=snapshot_timeout")
+    assert clock.now - started <= 60                       # never waits past the budget
+    assert len([c for c in network.calls if "/progress/" in c[1]]) <= 12
+
+
+def test_a_202_without_a_usable_snapshot_id_is_a_504(gateway, network, caplog):
+    caplog.set_level(logging.INFO)
+    for body in (b'{"status": "running"}', b'{"snapshot_id": "../../etc"}', b"not json"):
+        network.calls.clear()
+        network.brightdata_response = HttpResult(202, body)
+        assert gateway.handle(post()).status == 504
+        assert caplog.records[-1].getMessage().endswith("reason=snapshot_no_id")
+        assert not [c for c in network.calls if "/progress/" in c[1]]     # nothing is polled

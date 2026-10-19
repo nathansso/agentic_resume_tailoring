@@ -66,6 +66,7 @@ class Gateway:
         store: Optional[Store],
         transport: Transport,
         clock: Callable[[], float] = time.time,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self.config = config
         self.store = store
@@ -82,6 +83,8 @@ class Gateway:
                 config.brightdata_dataset_id,
                 transport,
                 config.upstream_timeout,
+                clock=clock,
+                sleep=sleep,
             )
 
     # -- entry point ---------------------------------------------------------

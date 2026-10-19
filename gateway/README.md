@@ -48,7 +48,7 @@ Privacy: no request body, response body, token or URL is logged (one fixed line 
 | `ART_GATEWAY_COST_PER_RECORD_USD` | no | `0.0015` | What one record costs. Calls times this is the spend. **Check Bright Data's current price and set this.** |
 | `ART_GATEWAY_IP_PER_MINUTE` | no | `10` | Requests per IP per minute. |
 | `ART_GATEWAY_AUTH_CACHE_SECONDS` | no | `300` | How long a GitHub token check is remembered. |
-| `ART_GATEWAY_UPSTREAM_TIMEOUT` | no | `100` | Seconds to wait for Bright Data. Keep it under the function's `maxDuration` (120, in `vercel.json`). |
+| `ART_GATEWAY_UPSTREAM_TIMEOUT` | no | `280` | Seconds the whole Bright Data fetch may take: the synchronous scrape, then polling the snapshot when Bright Data answers `202`. Keep it under the function's `maxDuration` (300, in `vercel.json`). |
 | `ART_GATEWAY_GITHUB_TIMEOUT` | no | `8` | Seconds to wait for GitHub. |
 | `ART_GATEWAY_ALLOW_MEMORY_STORE` | no | | `1` uses in-process counters when no KV is set. Local development only; never set it on Vercel. |
 
@@ -84,7 +84,7 @@ Vercel Hobby is non-commercial. If ARTie ever charges, move this project to Pro.
    - `ART_GATEWAY_COST_PER_RECORD_USD` (from Bright Data's price list)
    - `ART_GATEWAY_MONTHLY_CAP_USD` and `ART_GATEWAY_DAILY_QUOTA` (optional)
    - **Do not** set `ART_GATEWAY_ALLOW_MEMORY_STORE`.
-5. **Function duration.** Bright Data's synchronous scrape can take over a minute. `vercel.json` sets `maxDuration` to 120 seconds, which needs Fluid Compute (on by default for new projects; Settings, Functions to confirm).
+5. **Function duration.** Bright Data's synchronous scrape gives up after about a minute and answers `202` with a snapshot id; the gateway then polls `/progress/{id}` every 5 seconds and downloads `/snapshot/{id}` when it is ready, so one request can take a few minutes. `vercel.json` sets `maxDuration` to 300 seconds, which needs Fluid Compute (on by default for new projects; Settings, Functions to confirm).
 6. **Deploy.** Push to `main` (Git integration) or press Deploy.
 7. **Check it** (use your own profile and a real GitHub token):
    ```bash
