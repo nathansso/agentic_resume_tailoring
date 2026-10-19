@@ -340,6 +340,18 @@ def _coverage(facts: list[dict], n_facts: int) -> float:
     return sum(score[f["recovered"]] for f in facts) / max(1, n_facts)
 
 
+CLI_OVERHEAD_TOKENS = 1_395  # Claude Code's own prompt under `claude -p` (measured: 1,404 tokens
+                             # for a 9-token request), left out so CLI and API rows compare
+
+
+def writer_input_tokens(usage: dict) -> float:
+    """The writer's input, cached or not. API rows (#397) have no cache; `claude -p` rows report
+    most of the prompt as cache writes and reads, plus the CLI's own prompt, taken off here."""
+    total = (usage.get("input_tokens", 0) + usage.get("cache_creation_input_tokens", 0)
+             + usage.get("cache_read_input_tokens", 0))
+    return total - CLI_OVERHEAD_TOKENS if "list_usd" in usage else total
+
+
 def per_repo_metrics(results: dict) -> dict:
     """repo -> rung -> metrics averaged over samples."""
     out = {}
@@ -351,7 +363,7 @@ def per_repo_metrics(results: dict) -> dict:
                 continue
             ms = [_rates(x["claims"]) for x in rows]
             m = {k: statistics.mean(v[k] for v in ms) for k in ms[0]}
-            m["input_tokens"] = statistics.mean(x["writer_usage"]["input_tokens"] for x in rows)
+            m["input_tokens"] = statistics.mean(writer_input_tokens(x["writer_usage"]) for x in rows)
             if res.get("n_facts") and all("coverage" in x for x in rows):
                 m["coverage"] = statistics.mean(_coverage(x["coverage"], res["n_facts"]) for x in rows)
             by_rung[rung] = m
