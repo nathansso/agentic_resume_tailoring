@@ -252,11 +252,19 @@ Call `execute_plan({program})`. Read the result:
 ## 6. Render
 
 - Call `render(job_id)`. It writes `resume.tex` and `resume.pdf` and returns their
-  paths, `pages` and `line_budget`.
+  paths, `pages` and `line_budget`. If the user named a place ("save it to my Downloads"),
+  pass `save_to`: `downloads`, `desktop`, `documents` or a folder path.
+- If the reply says `destination: "ask_user"`, ask the user once where to save their
+  resumes, then render again with `save_to` and `remember: true`. With no preference, use
+  `save_to: "downloads"`. Later renders save there on their own. If `render` rejects
+  `save_to` as an unknown argument, the installed ART predates it: render without it.
 - If `pages` > 1, cut using `line_budget.cut_hints` through `patch_plan` (the same
-  `delete_bullet` and `delete` nodes as in step 5), then render again.
+  `delete_bullet` and `delete` nodes as in step 5), then render again. A page over the
+  limit is not saved for the user (`not_saved: "over_page_limit"`); the copy is saved once
+  it fits, replacing ART's own earlier copy of the job.
 - If `pdf_path` is null, give the user the `.tex` path and the `hint`.
-- Tell the user where the PDF is.
+- Tell the user where the PDF is: `saved_paths` when it was saved for them, else
+  `pdf_path`.
 - If they want to edit by hand, give them the editor command to run in a terminal,
   with the job id filled in:
 

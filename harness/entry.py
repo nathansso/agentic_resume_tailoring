@@ -29,7 +29,7 @@ import sys
 from typing import Optional, Sequence
 
 # Every example request must work with today's tools (root CLAUDE.md: don't teach a capability
-# the code doesn't expose). "Save the PDF to my Downloads" comes back with #394 (`save_to`).
+# the code doesn't expose). "Save the PDF to my Downloads" is `render`'s `save_to` (#394).
 HELP = """\
 artie tailors your resume to a job posting from your own knowledge graph.
 Your coding agent (Claude Code, Codex) does the work; just ask it.
@@ -40,6 +40,7 @@ Things to ask your agent:
   "What's in my knowledge graph about Python?"
   "Show my jobs"
   "Go back to the previous version of my resume for <company>"
+  "Save the PDF to my Downloads"
 
 First time? In Claude Code run /artie:setup (in Codex, $artie-setup) to build your graph.
 

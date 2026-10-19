@@ -142,9 +142,18 @@ role, or another?"
   `art_briefing` and `art_pins` when given a job, `get_head`, `history`, `checkout`,
   `suggest_actions`, `execute_plan`, `patch_plan` and `render`. `open_job` already returns them.
 
-**Destinations (#394).** `render` takes `save_to`: a path, or `downloads`, `desktop` or
-`documents`, resolved per OS. The agent asks where to save the first time and remembers
-the answer. With no preference given, it saves to Downloads.
+**Destinations (#394, shipped).** `render` takes `save_to`: an absolute path, or
+`downloads`, `desktop` or `documents` (any case, "my downloads" too), resolved per OS by
+`harness/destinations.py`: the Known Folders API on Windows (Downloads is often
+redirected), the home folders on macOS, the XDG user dirs on Linux. The copy is
+`<Name>_<Company>_<Role>.pdf` (and `.tex` on request). A render over the job's page limit (its
+`limit` rules resolved as finalize resolves them, one page by default) is never copied (`not_saved: "over_page_limit"`), so the folder collects no drafts. A
+re-render of a job replaces ART's own earlier copy while it is unchanged (path and hash
+kept in `saved_copies.json` beside the render); a file the user changed, or one ART didn't
+write, is never replaced unless `overwrite`: ` (2)`, ` (3)` and so on instead. The agent asks where to
+save the first time: with no `save_to` and no stored default, the reply says
+`destination: "ask_user"`. The answer is remembered as the profile's `default_output_dir`
+(`remember: true`, or `update_profile`). With no preference given, it saves to Downloads.
 
 **Ingestion (#398, #399, #397, #396, #355).** Ingestion covers LinkedIn, GitHub repos
 (README, metadata and code), repos the user contributes to but doesn't own, and any
@@ -639,7 +648,7 @@ carries `job`: the job's id, title and company, so the host names the job it act
 | Retrieval | `kg_search` | query, kinds → items with keys and evidence IDs |
 | | `list_items` | kind → every key and title, no query needed (#191); each item also carries its `preferences` and `job_rules` (#297) |
 | | `get_item` | key → record, evidence; an experience or project also lists its approved variants (id, text, tags, cites) (#229); its `preferences` (active, keyed to it, any scope) and `job_rules` (#297) |
-| | `get_profile` | → name and contact details for the header (#191) |
+| | `get_profile` | → name and contact details for the header (#191), and `default_output_dir`, where `render` saves the user's copy (#394) |
 | | `list_github_repos` | page, per_page, include_private, include_readme → the signed-in user's own repos with languages, topics, stars, last push, fork and archived flags, clone command and README excerpt; needs `artie github login`, and no profile (#353) |
 | Ingest & library | `ingest_schema` | kind → JSON schema the host fills |
 | | `upsert_items` | records with evidence → keys, merges, conflicts; kind `variant` imports the user's curated bullets, approved (#229) |
@@ -649,7 +658,7 @@ carries `job`: the job's id, title and company, so the host names the job it act
 | | `suggest_project_contexts` | optional include-reviewed flag → where each unreviewed project was probably done (a role or a degree), from employer names in repo names and course codes; proposes, never writes (#230) |
 | | `set_project_context` | project, `exp:` / `edu:` key or `personal` → stored, on the user's confirmation only (#230) |
 | | `link_achievement` | award, optional project → the award tied to the project it was won for, or untied (#230) |
-| | `update_profile` | header fields (name, email, phone, location, links) → the profile row `get_profile` returns (#201) |
+| | `update_profile` | header fields (name, email, phone, location, links), or `default_output_dir` (`downloads`, `desktop`, `documents` or an absolute path; empty clears it, #394) → the profile row `get_profile` returns (#201) |
 | Jobs | `open_job` | JD text, requirements, optional `role_family` → job id, role family and how it was found, baseline `{track, node_id, applies, source, p}`, rules, schema errors |
 | | `list_jobs` | status filter, optional `query` (the user's words for the job) and `limit` → jobs ranked by a company (2 per word) or title (1 per word) match, then `last_touched_at`, newest first; each with status, HEAD, `last_touched_at`, `score`, `matched_words` and a `reason` ("matched "zendar" (company); touched 2 h ago"), and `matched`, how many jobs the query named (#288) |
 | | `suggest_actions` | job, optional node (HEAD by default) → per item: the best approved variant with its score (Jev's probability, or the overlap on the fallback) or `no_match`, `source` (`jev`, `cache` or `fallback`), `propensity` (Jev's distribution over the variants and `no_match`; only with Jev) and the valid actions with uniform propensities (#229, #199; Jev ranking of actions is #193); leads with `active_constraints`, everything the user has stated that binds this job, by scope (#299) |
@@ -660,7 +669,7 @@ carries `job`: the job's id, title and company, so the host names the job it act
 | | `get_head` | job, cursor → HEAD, events and editor edits since the cursor |
 | | `history` | job → every version, oldest first |
 | Check & render | `check_draft` | **Planned, not built (#252).** node → metric vector by role (`execute_plan` already returns each node's vector) |
-| | `render` | job, optional node (HEAD by default), `pdf` or `tex` → `.tex` and PDF paths, whether the user's own edited `.tex` was rendered, page count, line budget (#201) |
+| | `render` | job, optional node (HEAD by default), `pdf` or `tex`, optional `save_to` (`downloads`, `desktop`, `documents` or an absolute path), `remember`, `overwrite`, `save_tex` → `.tex` and PDF paths, whether the user's own edited `.tex` was rendered, page count, line budget (#201); `destination` (`save_to`, `default` or `ask_user`), `save_dir`, `saved` and `saved_paths` (`<Name>_<Company>_<Role>.pdf`; a re-render replaces ART's own unchanged copy, anything else is never overwritten unless asked), `page_limit` (the job's, from its rules as finalize reads them; `line_budget` is measured against it), `not_saved` (`over_page_limit`: drafts are not copied; `ask_user`, `no_pdf`, `bad_destination`, `copy_failed`), `replaced`, `remembered` and a `destination_note` (#394) |
 | Document rules (#298) | `record_rule` | text, kind (`limit`, `section_order`, `style_note`), params, strength, scope → the rule stored, superseded, already recorded, or refused (a bad shape, no plain limit in the words, or a narrower rule that would loosen a hard one, naming it) |
 | | `retract_rule` | rule id → retracted; the row stays |
 | Feedback & memory | `observe` | user text → gate decision: `drop`, `host` (confirm with the user, then `record_preference`) or `write` (#202) |
@@ -864,7 +873,7 @@ migrate as a linear chain.
 | JD profiles, term weights, eligibility answers | SQLite, `JDProfile` |
 | Every tailored version: program, snapshot, metric vector, provenance | SQLite, `TailorNode` |
 | Layout overrides (#118), JobCards, decision log | SQLite, existing |
-| Rendered `.tex` and PDF per job | `applications/<Company>_<Role>/` |
+| Rendered `.tex` and PDF per job | `applications/<Company>_<Role>/`; the user's copy goes where they asked (`save_to` or the profile's `default_output_dir`, #394), outside the store |
 | Jev decision cache, block render cache | SQLite (clearable) |
 | Chat transcripts | The host's storage; ART keeps extracted preferences, feedback and the session ID |
 | Keys (TypeSafe; optionally Anthropic for the chat panel, planned in #205) | `TYPESAFE_API_KEY` in the environment, else the OS keychain through the optional `keyring` package (service `art-mcp`); never in the DB |

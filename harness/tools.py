@@ -507,28 +507,43 @@ def link_achievement(user_id: UUID, achievement: str,
 # scrape records never leave the store through a tool.
 _PROFILE_FIELDS = ("name", "email", "phone", "location", "linkedin_url",
                    "github_username", "portfolio_url")
+# A profile setting beside the header: where `render` saves the user's copy (#394).
+_SETTING_FIELDS = ("default_output_dir",)
 
 
 def get_profile(user_id: UUID) -> Dict[str, Any]:
-    """Name and contact details for the resume header (#191; missing in #189)."""
+    """Name and contact details for the resume header (#191; missing in #189), and
+    where `render` saves the user's copy (#394)."""
     with Session(services.engine) as session:
         user = session.get(User, user_id)
         if user is None:
             return {"error": {"code": "not_found", "message": f"No user {user_id}."}}
-        return {f: getattr(user, f, None) or None for f in _PROFILE_FIELDS}
+        return {f: getattr(user, f, None) or None for f in _PROFILE_FIELDS + _SETTING_FIELDS}
 
 
 def update_profile(user_id: UUID, fields: Dict[str, Any]) -> Dict[str, Any]:
     """Set header fields (#201): a fresh install's profile is "Default User".
     Only the fields `get_profile` returns; an empty string clears one, and a
-    blank name is refused. Returns the profile as `get_profile` does."""
-    unknown = sorted(set(fields) - set(_PROFILE_FIELDS))
+    blank name is refused. `default_output_dir` must be downloads, desktop,
+    documents or an absolute path, and is stored normalised (#394). Returns the
+    profile as `get_profile` does."""
+    from harness import destinations
+
+    allowed = _PROFILE_FIELDS + _SETTING_FIELDS
+    unknown = sorted(set(fields) - set(allowed))
     if unknown:
         return {"error": {"code": "invalid_arguments",
                           "message": f"Not a profile field: {', '.join(unknown)}.",
-                          "suggestions": list(_PROFILE_FIELDS)}}
+                          "suggestions": list(allowed)}}
     if "name" in fields and not str(fields["name"] or "").strip():
         return {"error": {"code": "invalid_arguments", "message": "name cannot be blank."}}
+    if str(fields.get("default_output_dir") or "").strip():
+        try:
+            fields = dict(fields, default_output_dir=destinations.parse(
+                fields["default_output_dir"]))
+        except destinations.DestinationError as exc:
+            return {"error": {"code": "invalid_arguments", "message": str(exc),
+                              "suggestions": list(destinations.WELL_KNOWN)}}
     with Session(services.engine) as session:
         user = session.get(User, user_id)
         if user is None:
