@@ -351,7 +351,7 @@ def _revise(uid, job_id, replace_at, text, item=HL, **kw):
     src = _KG(uid).source_bullets[item]
     bullets = [{"text": b, "cites": [f"{item}#b{i}"]} for i, b in enumerate(src)]
     bullets[replace_at] = {"text": text, "cites": [f"{item}#b{replace_at}"]}
-    program = {"job_id": job_id, "nodes": [{"id": "n", "op": "revise", "item_key": item, "strategy": "keyword_weave",
+    program = {"job_id": job_id, "nodes": [{"id": "n", "because": "job:the posting asks for it", "op": "revise", "item_key": item, "strategy": "keyword_weave",
                                             "keywords": ["integrate"], "bullets": bullets}]}
     return program, _run(uid, program, **kw)
 

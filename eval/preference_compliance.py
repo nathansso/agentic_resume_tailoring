@@ -160,6 +160,7 @@ def naive_program(uid, job_id: str, task: Dict, tempt: Sequence[str] = ()) -> Di
             record = _call("get_item", uid, {"key": node["item_key"]})["record"]
             node = {"id": f"weave:{node['item_key']}", "op": "revise", "item_key": node["item_key"],
                     "strategy": "keyword_weave",
+                    "because": "job:weave in a term the posting uses",
                     "bullets": [{"text": b, "cites": [f"{node['item_key']}#b{j}"]}
                                 for j, b in enumerate(record.get("bullets") or [])],
                     "accept": {"improves": ["relevance_density"]}}
@@ -285,6 +286,7 @@ def obedient_program(uid, job_id: str, task: Dict) -> Tuple[Dict, Dict]:
         if not own_policy:
             return None
         return {"id": f"tighten:{key}", "op": "revise", "item_key": key, "strategy": "tighten",
+                "because": "job:keep the bullets most relevant to the posting",
                 "bullets": [{"text": bullets[j], "cites": [f"{key}#b{j}"]} for j in final],
                 "accept": {"improves": ["relevance_density"]}}
 
@@ -300,7 +302,8 @@ def obedient_program(uid, job_id: str, task: Dict) -> Tuple[Dict, Dict]:
             bullets = record(key).get("bullets") or []
             limit = min(KEEP_EXP_BULLETS, per_item) if per_item else KEEP_EXP_BULLETS
             node = trim(key, bullets, limit, own_policy=True)
-            nodes.append(node or {"id": f"keep:{key}", "op": "keep", "item_key": key})
+            nodes.append(node or {"id": f"keep:{key}", "op": "keep", "item_key": key,
+                                  "because": "job:already fits the page"})
 
     def proj_nodes() -> None:
         pool = [i["key"] for i in items if i["kind"] == "project"]
@@ -326,7 +329,8 @@ def obedient_program(uid, job_id: str, task: Dict) -> Tuple[Dict, Dict]:
         free += spare[:max(0, len(incoming) - len(free))]
         for old, new in zip(free, incoming):
             nodes.append({"id": f"swap:{new}", "op": "replace", "item_key": old,
-                          "replacement_key": new})
+                          "replacement_key": new,
+                          "because": "user:bring back a project they asked to keep"})
         gone = len(present)
         for key in free[len(incoming):] + [k for k in out if k in suppress]:
             if gone <= 1:

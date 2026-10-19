@@ -325,6 +325,10 @@ def capture(art: Art, tex_dir: Path) -> tuple[list[dict], dict]:
             n["bullets"] = bullets(target, bullet_pairs)
         if nid in S.NODE_KEYWORDS:
             n["keywords"] = S.NODE_KEYWORDS[nid]
+        if "because" not in n:
+            # Every node carries a reason (#392): the posting terms it is aimed at.
+            n["because"] = ("job:the posting asks for " + ", ".join(n["keywords"])
+                            if n.get("keywords") else "job:fits the posting as it stands")
         return n
 
     def plan_nodes(ab_pairs):

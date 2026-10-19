@@ -186,6 +186,7 @@ def _variant_node(key: str, variant: Dict, sources: List[str], jd_terms: set) ->
     bullets = [{"text": variant["text"], "cites": [], "from_variant": variant["variant_id"]}]
     bullets += [{"text": sources[i], "cites": [f"{key}#b{i}"]} for i in keep]
     return {"id": f"variant:{key}", "op": "revise", "item_key": key, "bullets": bullets,
+            "because": "job:lead with the approved wording that best fits the posting",
             "accept": {"improves": ["relevance_density"]}}
 
 
@@ -214,13 +215,15 @@ def build_program(user_id: UUID, job_id: str, jd_text: str) -> Dict:
             nodes.append(_variant_node(it["key"], variant, bullets, jd_terms))
             continue
         if len(bullets) <= KEEP_EXP_BULLETS:
-            nodes.append({"id": f"keep:{it['key']}", "op": "keep", "item_key": it["key"]})
+            nodes.append({"id": f"keep:{it['key']}", "op": "keep", "item_key": it["key"],
+                          "because": "job:already short enough for the page"})
             continue
         ranked = sorted(range(len(bullets)), key=lambda i: (-_overlap(bullets[i], jd_terms), i))
         keep = sorted(ranked[:KEEP_EXP_BULLETS])
         nodes.append({
             "id": f"tighten:{it['key']}", "op": "revise", "item_key": it["key"],
             "strategy": "tighten",
+            "because": f"job:keep the {KEEP_EXP_BULLETS} bullets most relevant to the posting",
             "bullets": [{"text": bullets[i], "cites": [f"{it['key']}#b{i}"]} for i in keep],
             "accept": {"improves": ["relevance_density"]}})
 

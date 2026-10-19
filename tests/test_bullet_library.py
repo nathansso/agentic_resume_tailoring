@@ -57,7 +57,7 @@ def _source(uid, key):
 
 def _revise(key, bullets, **node):
     return {"id": f"revise:{key}", "op": "revise", "item_key": key, "bullets": bullets,
-            "accept": {"improves": ["coverage"]}, **node}
+            "because": "job:the posting asks for it", "accept": {"improves": ["coverage"]}, **node}
 
 
 def _weave_bullets(uid, variant_id=None, text=WOVEN):
@@ -433,23 +433,23 @@ def test_from_variant_names_one_variant_per_bullet_and_the_node_form_needs_one_b
 
     bullet = {"text": "x", "cites": ["exp:a|b"]}
     ok = Program.model_validate({"job_id": "j", "nodes": [
-        {"id": "a", "op": "revise", "item_key": EXP, "from_variant": "v1", "bullets": [bullet]}]})
+        {"id": "a", "because": "job:the posting asks for it", "op": "revise", "item_key": EXP, "from_variant": "v1", "bullets": [bullet]}]})
     assert ok.nodes[0].bullets[0].from_variant == "v1"        # the shorthand lands on the bullet
     per_bullet = Program.model_validate({"job_id": "j", "nodes": [
-        {"id": "a", "op": "revise", "item_key": EXP,
+        {"id": "a", "because": "job:the posting asks for it", "op": "revise", "item_key": EXP,
          "bullets": [{**bullet, "from_variant": "v1"}, bullet, {**bullet, "from_variant": "v2"}]}]})
     assert [b.from_variant for b in per_bullet.nodes[0].bullets] == ["v1", None, "v2"]
 
     with pytest.raises(ValidationError, match="exactly one bullet"):
         Program.model_validate({"job_id": "j", "nodes": [
-            {"id": "a", "op": "revise", "item_key": EXP, "from_variant": "v1",
+            {"id": "a", "because": "job:the posting asks for it", "op": "revise", "item_key": EXP, "from_variant": "v1",
              "bullets": [bullet, bullet]}]})
     with pytest.raises(ValidationError, match="revise needs bullets|exactly one bullet"):
         Program.model_validate({"job_id": "j", "nodes": [
-            {"id": "a", "op": "keep", "item_key": EXP, "from_variant": "v1"}]})
+            {"id": "a", "because": "job:fits the posting", "op": "keep", "item_key": EXP, "from_variant": "v1"}]})
     with pytest.raises(ValidationError, match="name different variants"):
         Program.model_validate({"job_id": "j", "nodes": [
-            {"id": "a", "op": "revise", "item_key": EXP, "from_variant": "v1",
+            {"id": "a", "because": "job:the posting asks for it", "op": "revise", "item_key": EXP, "from_variant": "v1",
              "bullets": [{**bullet, "from_variant": "v2"}]}]})
 
 

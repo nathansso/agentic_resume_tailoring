@@ -9,6 +9,11 @@ it never parses display text. See docs/harness.md § 7.
 Validation here is structural only. Whether a key exists, a cite resolves or a
 preference forbids a node is arbitration, which needs the store and lives in
 `harness/executor.py`.
+
+Every node of a new program carries a short `because` (#392), which the dry run's
+`plan_summary` shows the user. A program saved before that rule still replays: `patch_plan`
+validates with `LEGACY_NODES` in the validation context, naming the nodes it carried over
+unchanged from the saved program, and those are not held to it.
 """
 
 from __future__ import annotations
@@ -17,7 +22,7 @@ import hashlib
 import json
 from typing import Dict, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, model_validator
 
 from agents.checks import PAGE_LINE_BUDGET
 from agents.tailor_planner import OPS, REVISION_STRATEGIES
@@ -32,6 +37,21 @@ Strategy = Literal[REVISION_STRATEGIES]  # type: ignore[valid-type]
 Target = Literal[TARGETS]  # type: ignore[valid-type]
 Guard = Literal[GUARDS]  # type: ignore[valid-type]
 Section = Literal["education", "experience", "projects", "skills", "achievements"]
+
+# What a node's `because` may say (#392): what in the posting calls for it, what the user asked,
+# or a stored preference. Only the last two are requests: a `delete` or `delete_bullet` with one
+# is judged on the hard gates alone (#279); a `job:` reason is the host's own reading.
+REASON_PREFIXES = ("job:", "user:", "pref:")
+REQUEST_PREFIXES = ("user:", "pref:")
+MAX_REASON_CHARS = 240
+# Validation-context key: ids of nodes carried over unchanged from a saved program (`patch_plan`),
+# which are not held to the #392 rule, so a program saved before it still replays.
+LEGACY_NODES = "legacy_nodes"
+
+
+def is_request(because: Optional[str]) -> bool:
+    """Whether a node's reason is the user's or a preference's (a requested delete, #279)."""
+    return (because or "").strip().startswith(REQUEST_PREFIXES)
 
 
 class _M(BaseModel):
@@ -62,7 +82,17 @@ class Accept(_M):
         description="Tighter guard tolerances for this node. Loosening one is rejected.")
 
 
+def _because_required(schema: Dict) -> None:
+    """The published schema lists `because` as required (#392); the model leaves it optional
+    so that a program saved before the rule still loads (see `LEGACY_NODES`)."""
+    required = schema.setdefault("required", [])
+    if "because" not in required:
+        required.append("because")
+
+
 class ProgramNode(_M):
+    model_config = ConfigDict(extra="forbid", json_schema_extra=_because_required)
+
     id: str = Field(min_length=1)
     op: Op
     item_key: str = Field(min_length=1, description="exp:... or proj:... from list_items.")
@@ -84,13 +114,17 @@ class ProgramNode(_M):
     replacement_key: Optional[str] = None
     use_variant: Optional[str] = None
     because: Optional[str] = Field(
-        None, description="Why a delete is wanted: 'pref:<preference_id>' or 'user:<what they "
-                          "asked>'. A delete with a reason needs no target to improve, and no guard "
-                          "vetoes it (hard gates still do; #279).")
+        None, description="Required on every node (#392): why, in a short phrase the user reads in "
+                          "the dry run's plan_summary. 'job:<what in the posting calls for it>', "
+                          "'user:<what they asked>' or 'pref:<preference_id>'. A delete or "
+                          "delete_bullet whose reason is user: or pref: is a requested delete: it "
+                          "needs no target to improve, and no guard vetoes it (hard gates still do; "
+                          "#279). A job: reason is your own reading, so such a delete is judged "
+                          "like any edit.")
     accept: Accept = Field(default_factory=Accept)
 
     @model_validator(mode="after")
-    def _shape(self):
+    def _shape(self, info: ValidationInfo):
         op = self.op
         if op == "revise" and not self.bullets:
             raise ValueError(f"node {self.id}: revise needs bullets")
@@ -129,8 +163,8 @@ class ProgramNode(_M):
             bullet.from_variant = self.from_variant
         if self.strategy and op != "revise":
             raise ValueError(f"node {self.id}: strategy is for revise")
-        if self.because and not self.because.startswith(("pref:", "user:")):
-            raise ValueError(f"node {self.id}: because must start with pref: or user:")
+        if (self.because or "").strip() and not self.because.startswith(REASON_PREFIXES):
+            raise ValueError(f"node {self.id}: because must start with job:, user: or pref:")
         for guard, value in self.accept.tolerances.items():
             if value < 0 or value > DEFAULT_TOLERANCES[guard]:
                 raise ValueError(
@@ -138,7 +172,24 @@ class ProgramNode(_M):
                     f"{DEFAULT_TOLERANCES[guard]}; a node may only tighten")
         if not self.item_key.startswith(("exp:", "proj:")):
             raise ValueError(f"node {self.id}: item_key must be an exp: or proj: key")
+        if self.id not in ((info.context or {}).get(LEGACY_NODES) or ()):
+            self._check_reason()
         return self
+
+    def _check_reason(self) -> None:
+        """The #392 rule: a short reason on every node of a new program."""
+        where = f"node {self.id} ({self.op} {self.item_key})"
+        because = (self.because or "").strip()
+        if not because:
+            raise ValueError(
+                f"{where}: because is required on every node. Say why in a short phrase the "
+                "user will read: 'job:<what in the posting calls for it>', 'user:<what they "
+                "asked>' or 'pref:<preference_id>'")
+        if not because.partition(":")[2].strip():
+            raise ValueError(f"{where}: because {because!r} gives no reason after the prefix")
+        if len(because) > MAX_REASON_CHARS:
+            raise ValueError(f"{where}: because is {len(because)} characters; keep it under "
+                             f"{MAX_REASON_CHARS}, a short phrase")
 
 
 class Finalize(_M):

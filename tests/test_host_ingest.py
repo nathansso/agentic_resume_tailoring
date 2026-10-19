@@ -537,7 +537,7 @@ def test_an_editor_save_of_one_bullet_reports_that_bullet_and_nothing_for_educat
     bullets = [{"text": USER_TEXT, "cites": [f"{ML_EXP}#b0"]}] + [
         {"text": t, "cites": [f"{ML_EXP}#b{i}"]} for i, t in enumerate(src) if i]
     done = executor.execute_plan(uid, {"job_id": job_id, "parent": edit["node_id"], "nodes": [{
-        "id": "user-edit", "op": "revise", "item_key": ML_EXP, "accept": {"improves": []},
+        "id": "user-edit", "because": "job:the posting asks for it", "op": "revise", "item_key": ML_EXP, "accept": {"improves": []},
         "bullets": bullets}]})
     assert done["nodes"][0]["status"] == "accepted", done["nodes"][0]["reason"]
     assert done["violations"] == [] and done["committed"]
