@@ -377,13 +377,18 @@ def _pygments_spans(path: str, code: str):
     return sorted(set(defs), key=lambda d: (d[1], d[0])), refs
 
 
-def spans_for(backend: str, sources: dict[str, str], root: Path | None = None) -> tuple[dict, set]:
-    """path -> (defs, refs) for one of the variant backends, and the backends actually used."""
+def spans_for(backend: str, sources: dict[str, str], root: Path | None = None,
+              compact: bool = False) -> tuple[dict, set]:
+    """path -> (defs, refs) for one of the variant backends, and the backends actually used.
+    With `compact`, refs are a Counter of names per file, made as each file is read, so a large
+    repo never holds every word occurrence at once."""
     used: set[str] = set()
     out: dict[str, tuple] = {}
     if backend == "ctags":
         got = _ctags_spans_for(sources, root)
         if got is not None:
+            if compact:
+                got = {p: (d, Counter(n for n, _ in r)) for p, (d, r) in got.items()}
             return got, {"ctags"}
         backend = "regex"
     for path, code in sources.items():
@@ -405,7 +410,7 @@ def spans_for(backend: str, sources: dict[str, str], root: Path | None = None) -
                 continue
             tags = _regex_spans(lang, code)
             used.add("regex")
-        out[path] = tags
+        out[path] = (tags[0], Counter(n for n, _ in tags[1])) if compact else tags
     return out, used
 
 
@@ -494,13 +499,17 @@ def _rank(sources, defines: dict, references: dict, def_keys, user_weights,
     """(path, name) definition keys, best first: personalized PageRank over the file graph,
     each file's rank shared out over the definitions it references. `pure` (the variants) uses
     `pagerank` above and rounds scores to 10 significant digits before ordering, so float noise
-    can't reorder near-ties across platforms; #397's rungs keep networkx's."""
+    can't reorder near-ties across platforms, and skips names defined in more than
+    `MAX_DEFINERS` files (`String`, `New`, `init`: they add edges by the million on a big repo
+    and almost no signal); #397's rungs keep networkx's ranking unchanged."""
     def_lines = def_keys
     user_weights = {p: w for p, w in (user_weights or {}).items() if p in sources and w > 0}
     graph = nx.MultiDiGraph()
     graph.add_nodes_from(sources)
     for name in sorted(set(defines) & set(references)):  # sorted: the ranking is reproducible
         definers = sorted(defines[name])
+        if pure and len(definers) > MAX_DEFINERS:
+            continue
         mul = 1.0
         if len(name) >= 8 and ("_" in name or re.search(r"[a-z][A-Z]", name)):
             mul *= 10
@@ -592,14 +601,40 @@ def build_symbol_map(sources: dict[str, str], user_weights: dict[str, float] | N
                      len(def_lines), rendered)
 
 
+MAX_DEFINERS = 20
+MAX_FILES = 3_000
+
+
+def select_sources(sources: dict[str, str], user_weights: dict[str, float] | None,
+                   max_files: int = MAX_FILES) -> dict[str, str]:
+    """On a repo with more source files than `max_files`, the files the map is built from: the
+    user's changed files (most lines first), then the other files in their directories, then
+    the rest by path, up to the cap. Below the cap, every file."""
+    if len(sources) <= max_files:
+        return sources
+    weights = user_weights or {}
+    mine = sorted((p for p in sources if weights.get(p, 0) > 0), key=lambda p: (-weights[p], p))
+    dirs = {posix_dir(p) for p in mine}
+    near = sorted(p for p in sources if posix_dir(p) in dirs and p not in set(mine))
+    rest = sorted(p for p in sources if posix_dir(p) not in dirs)
+    keep = (mine + near + rest)[:max_files]
+    return {p: sources[p] for p in sorted(keep)}
+
+
+def posix_dir(path: str) -> str:
+    return path.rsplit("/", 1)[0] if "/" in path else ""
+
+
 def build_symbol_map_v2(sources: dict[str, str], user_weights: dict[str, float] | None,
                         token_budget: int, backend: str, root: Path | None = None,
                         annotate: Callable[[str, str, int, int], str] | None = None,
-                        chars_per_token: float = 3.6) -> SymbolMap:
+                        chars_per_token: float = 3.6, max_files: int = MAX_FILES) -> SymbolMap:
     """The variants' symbol map: the same ranking as `build_symbol_map`, over one of the variant
     backends (`regex`, `ts-tags`, `ast`, `ctags`, `pygments`), with each definition cited by its
-    line span (`L12-40`) and, if `annotate` is given, a suffix from it (the ownership tag)."""
-    spans, used = spans_for(backend, sources, root)
+    line span (`L12-40`) and, if `annotate` is given, a suffix from it (the ownership tag).
+    Bounded on large repos by `select_sources` and `MAX_DEFINERS`."""
+    sources = select_sources(sources, user_weights, max_files)
+    spans, used = spans_for(backend, sources, root, compact=True)
     defines: dict[str, set] = defaultdict(set)
     references: dict[str, Counter] = defaultdict(Counter)
     def_info: dict[tuple, tuple] = {}     # (path, name) -> (start, end, signature)
@@ -612,8 +647,8 @@ def build_symbol_map_v2(sources: dict[str, str], user_weights: dict[str, float] 
                 sig = (ast_signature(lines, start, end) if backend == "ast" and path.endswith(".py")
                        else lines[start].strip())
                 def_info[(path, name)] = (start, end, sig[:140])
-        for name, _ in refs:
-            references[name][path] += 1
+        for name, n in refs.items():
+            references[name][path] += n
     ranked = _rank(sources, defines, references, def_info, user_weights, pure=True)
     notes: dict[tuple, str] = {}
 
