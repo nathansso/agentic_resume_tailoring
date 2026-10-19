@@ -221,6 +221,13 @@ def capture(art: Art, tex_dir: Path) -> tuple[list[dict], dict]:
                        "args": sanitize(sa, art.data_dir), "result": sanitize(sr, art.data_dir)})
         return result
 
+    def token_of(program):
+        """A commit carries the plan token of its dry run (#393). The scratch store has no prompt
+        hook, so the token alone approves it (`approval: token_only`); the dry run is not shown."""
+        shown = art("execute_plan", {"program": program, "dry_run": True})
+        assert shown.get("plan_token"), shown
+        return shown["plan_token"]
+
     def skill_records(skills):
         return [{"kind": "skill", "data": {"name": n, "category": c, "proficiency": 3}}
                 for n, c in skills]
@@ -274,8 +281,8 @@ def capture(art: Art, tex_dir: Path) -> tuple[list[dict], dict]:
              "nodes": [{"id": f"d{i}", "op": "delete", "item_key": key, "because": S.LEAVE_OFF_REASON}
                        for i, key in enumerate((S.ABTEST, S.CHURN, S.RETAIL), 1)],
              "skills": S.GENERIC_SKILLS}
-    base = tool("posting", "execute_plan", {"program": usual},
-                show_result=lambda r: {"committed": r["committed"], "node_id": r["node_id"],
+    base = tool("posting", "execute_plan", {"program": usual, "plan_token": token_of(usual)},
+                show_args={"program": usual}, show_result=lambda r: {"committed": r["committed"], "node_id": r["node_id"],
                                        "line_budget": r["line_budget"], "violations": r["violations"],
                                        "metrics": {"final": {"gates": r["metrics"]["final"]["gates"]},
                                                    "…": "guards, targets and the ATS-style report left out"}})
@@ -346,7 +353,7 @@ def capture(art: Art, tex_dir: Path) -> tuple[list[dict], dict]:
                "skills": S.SKILL_ORDER, "section_order": S.SECTION_ORDER,
                "host": {"name": "claude-code"}}
     say("gates", "agent", S.AGENT_GATES_1)
-    first = art("execute_plan", {"program": program})
+    first = art("execute_plan", {"program": program, "plan_token": token_of(program)})
     assert not first.get("error"), first
     status = {n["id"]: n for n in first["nodes"]}
     assert status["n3"]["status"] == "reverted", status["n3"]
@@ -365,8 +372,9 @@ def capture(art: Art, tex_dir: Path) -> tuple[list[dict], dict]:
     v2 = first["node_id"]
     fixed = [n for n in plan_nodes(S.AB_BULLETS) if n["id"] == "n3"]
     assert S.SLIP_FIGURE not in json.dumps(fixed)
-    second = tool("gates", "execute_plan",
-                  {"program": {"job_id": job_id, "parent": v2, "nodes": fixed}},
+    fix = {"job_id": job_id, "parent": v2, "nodes": fixed}
+    second = tool("gates", "execute_plan", {"program": fix, "plan_token": token_of(fix)},
+                  show_args={"program": fix},
                   show_result=lambda r: slim_plan_result(r, ["committed", "node_id", "parent", "nodes", "violations"]),
                   items=8, chars=230)
     assert second["committed"], second

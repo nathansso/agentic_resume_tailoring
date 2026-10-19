@@ -75,7 +75,7 @@ def final_pages() -> List[Dict[str, Any]]:
     """Run each task through the scripted host with Jev off and return its page, literal score
     and eligible requirements. Seeds the profile into the (private) store once."""
     from eval.profile_fixture import load_profile
-    from eval.scripted_host import build_program, open_task_job, seed_profile
+    from eval.scripted_host import build_program, commit_approved, open_task_job, seed_profile
     from eval.tailoring_benchmark import DEFAULT_PROFILE, load_tasks
     from harness import executor, tree
     from harness.contract import invoke
@@ -89,7 +89,7 @@ def final_pages() -> List[Dict[str, Any]]:
     for tid in TASK_IDS:
         task = tasks[tid]
         job_id = open_task_job(uid, task)
-        out = invoke("execute_plan", uid, {"program": build_program(uid, job_id, task["description"])})
+        out = commit_approved(uid, build_program(uid, job_id, task["description"]))   # #393
         if not out.get("committed"):
             raise RuntimeError(f"{tid}: the plan did not commit: {out.get('violations') or out.get('error')}")
         head = tree.get_head(uid, UUID(job_id))["head"]

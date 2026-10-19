@@ -113,12 +113,17 @@ role", "go back to the last version", "never mention Kafka".
 5. **The commit is gated by quoted approval (#393).** It must carry the `plan_token` and
    an `approval_quote`, the user's own approving words. The `UserPromptSubmit` hook,
    which already sees every user message, keeps the messages sent after each dry run,
-   locally and only until commit. ART accepts the commit only if the quote appears in one
-   of them. A changed program needs a new dry run and a new approval.
+   locally and only until commit. ART accepts the commit only if the quote is one of them
+   whole, or a span of 20 characters or more of one, so "ok" cannot be lifted out of "ok, but
+   change X". A changed program needs a new dry run and a new approval.
    - "Just do it" counts as approval in the user's own words.
    - Without hooks, the gate is token-only and says so.
-   - MCP elicitation, a host Yes/No prompt, is an optional strict mode.
+   - MCP elicitation, a host Yes/No prompt, is an optional strict mode (not built yet; see
+     § 7, "Approval").
 6. Then the agent commits and renders.
+
+Shipped (#393): § 7 ("Approval") has how the token, the quote and the stored messages work,
+and § 10 the hook's part.
 
 **Which job (#288, rescoped).** There is no hidden shared pointer. Each job carries a
 `last_touched_at`, updated by host writes and by opening the job in `artie ui`. A ranked
@@ -490,6 +495,37 @@ metric vector and the rule, and `harness/executor.py` runs it. The details:
   refused node, `not_applied`, plus the new `bullets` or the `cut` bullets' text. `skills` has
   `line`, `source` (`plan`, `current` or `ranked`), `unknown` and `suppressed`. Additive: no
   other field changed, and a commit does not carry it.
+- **Approval (#393, `harness/approval.py`).** A dry run also returns `plan_token`, a
+  fingerprint of the exact program after validation (job, parent, nodes, skills, section
+  order, finalize, `discard_editor_edits`; not `host`), so key order, JSON whitespace and
+  defaults left out do not change it. A commit through the tool contract (`execute_plan`
+  without `dry_run`, and `patch_plan`) must carry that token and `approval_quote`, the user's
+  reply. ART accepts it when a dry run of this exact program was shown in the last 24 hours and
+  the quote is the **whole** of a user message the prompt hook recorded after that dry run
+  (§ 10), compared after normalising case, whitespace, and the punctuation, quotation marks and
+  emoji around it ("Looks good, go!" approves as "looks good, go"), or a contiguous span of at
+  least 20 characters of one, on word boundaries, so a long reply that mixes approval with
+  other requests ("looks good, go ahead, and save it to Downloads") still counts. A shorter
+  span ("ok" out of "ok, but change the second bullet") is refused, and the message tells the
+  agent to pass the user's whole reply. Otherwise nothing runs and the reply is `error.code:
+  approval_required`, whose message says which is missing: no `plan_token`; no dry run of this
+  plan was shown (an unknown or expired token); the program changed since the dry run that
+  returned the token (a new dry run and a new approval); `approval_quote` missing; only part of
+  a message; or not found in the user's messages since the plan was shown (including words they
+  sent before it). When no message at all was recorded since the dry run on a data directory
+  whose hook has run, the refusal adds that the calling host may run without ART's hook, and
+  how to fix it (`artie hooks codex --write`, or update the artie plugin). "Just do it, don't ask" is checked the same way. The reply's `approval` is
+  `quoted`, or `token_only` when no prompt hook has ever run in this data directory (a manual
+  MCP registration, Codex without hooks: the `hooks_seen` heartbeat is absent), where the token
+  alone approves. The committed node's provenance records `approval: {mode, plan_token,
+  quote}`. Only these two tools are gated; ART's own callers of `harness.executor` (tests, the
+  benchmarks) pass no gate. A job's first, empty plan (`parent` null; no nodes,
+  skills, section order or finalize) commits ART's own starting content and is not gated. An
+  MCP tool call carries no host session id, so a plan is tied to its job and the time it was
+  shown and any session's messages count; a host that knows its session id may pass
+  `session_id` on the dry run to narrow it to that session. Strict mode (MCP elicitation) is
+  not built: the contract runs every tool the same way on every adapter, and an in-host prompt
+  exists only on MCP.
 - **No parent yet.** A job with no history starts from its track baseline when one applies
   (§ 8), else from the whole KG with skills ranked (`kg_default_content`).
 - **Gates compare sets.** A node fails only if it *adds* a violation. Finalize is where
@@ -662,7 +698,7 @@ carries `job`: the job's id, title and company, so the host names the job it act
 | Jobs | `open_job` | JD text, requirements, optional `role_family` → job id, role family and how it was found, baseline `{track, node_id, applies, source, p}`, rules, schema errors |
 | | `list_jobs` | status filter, optional `query` (the user's words for the job) and `limit` → jobs ranked by a company (2 per word) or title (1 per word) match, then `last_touched_at`, newest first; each with status, HEAD, `last_touched_at`, `score`, `matched_words` and a `reason` ("matched "zendar" (company); touched 2 h ago"), and `matched`, how many jobs the query named (#288) |
 | | `suggest_actions` | job, optional node (HEAD by default) → per item: the best approved variant with its score (Jev's probability, or the overlap on the fallback) or `no_match`, `source` (`jev`, `cache` or `fallback`), `propensity` (Jev's distribution over the variants and `no_match`; only with Jev) and the valid actions with uniform propensities (#229, #199; Jev ranking of actions is #193); leads with `active_constraints`, everything the user has stated that binds this job, by scope (#299) |
-| Execute & history | `execute_plan` | program → node results, metric vectors, refusals, violations; a dry run leads with `active_constraints` (#299) |
+| Execute & history | `execute_plan` | program → node results, metric vectors, refusals, violations; a dry run leads with `active_constraints` (#299) and returns `plan_summary` (#392) and `plan_token`; a commit needs that token and the user's `approval_quote` (#393) |
 | | `patch_plan` | saved program id, pointer edits → same |
 | | `checkout` | node → moves HEAD |
 | | `diff_nodes` | two nodes → bullet-level diff with rationale |
@@ -766,6 +802,16 @@ preferences disappear (#129: 14.8% F1 on opposed-case retrieval), so pins come b
 ART word for word. Jev is documented as weak on exactly this negation workload, so #202
 measured it against heuristics alone on 111 user-confirmed synthetic messages and reports the
 negation cases separately (`eval/memory_gate_labels/REPORT.md`).
+
+**The hook also keeps the approval gate's messages (#393).** On every prompt it writes a
+heartbeat (`$ART_DATA_DIR/approvals/hooks_seen`, which turns token-only commits off for that
+data directory) and, only while a dry-run plan of this user is waiting for approval, the
+message itself (`approvals/messages/`, with the session and the time). A message is deleted
+when the plan it could approve commits, when that plan expires 24 hours after its dry run, or
+once no waiting plan was shown before it; a message with no plan waiting is never written. The
+text stays in the data directory: it is not in the database, so not in an export, and it is
+never logged or added to the context. A store failure is swallowed, so the prompt is never
+blocked. § 7, "Approval", has the commit check.
 
 **Three pushes of the same set (#299).** The briefing is read once, at the start; a hook restores
 pins after compaction; and the reminder comes at the moment of writing. PrefEval (ICLR 2025)
@@ -874,6 +920,7 @@ migrate as a linear chain.
 | Every tailored version: program, snapshot, metric vector, provenance | SQLite, `TailorNode` |
 | Layout overrides (#118), JobCards, decision log | SQLite, existing |
 | Rendered `.tex` and PDF per job | `applications/<Company>_<Role>/`; the user's copy goes where they asked (`save_to` or the profile's `default_output_dir`, #394), outside the store |
+| Plans waiting for approval and the user's messages since (#393), the hook heartbeat | `approvals/` in the data directory, at most 24 h, never exported |
 | Jev decision cache, block render cache | SQLite (clearable) |
 | Chat transcripts | The host's storage; ART keeps extracted preferences, feedback and the session ID |
 | Keys (TypeSafe; optionally Anthropic for the chat panel, planned in #205) | `TYPESAFE_API_KEY` in the environment, else the OS keychain through the optional `keyring` package (service `art-mcp`); never in the DB |
@@ -1262,6 +1309,7 @@ agents/  database/  services.py      # unchanged homes; pure checks in agents/ch
 harness/
   contract.py  mcp_server.py  cli.py  entry.py          # the contract and its adapters
   executor.py  acceptance.py  program.py                # plan programs and the metric rule
+  plan_summary.py  approval.py         # the plan shown for approval, the quoted-approval gate (#392, #393)
   tree.py  library.py  memory.py  ingest.py  tools.py   # history, bullets, preferences, ingestion
   render.py  render_cache.py  hooks.py  transcript.py  runtime.py
   export_import.py                   # artie export / artie import (#195)

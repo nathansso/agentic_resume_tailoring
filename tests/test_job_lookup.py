@@ -89,7 +89,8 @@ def test_execute_plan_touches_on_a_commit_only_and_the_other_writes_always(isola
         {"id": "d", "op": "delete", "item_key": PROJ, "because": "user:too junior"}]}
     saved = invoke("execute_plan", uid, {"program": plan, "dry_run": True})
     assert _stamps(isolated_engine, job_id)[0] is None
-    patched = invoke("patch_plan", uid, {"program_id": saved["program_id"], "edits": []})
+    patched = invoke("patch_plan", uid, {"program_id": saved["program_id"], "edits": [],
+                                         "plan_token": saved["plan_token"]})   # token-only (#393)
     assert patched["error"] is None and patched["committed"]
     assert _stamps(isolated_engine, job_id)[0] is not None
 

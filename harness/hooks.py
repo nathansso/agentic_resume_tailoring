@@ -17,6 +17,10 @@ Three things a host loses without them (docs/harness.md § 10, § 13):
   again") is read together with the assistant's last reply, taken from the
   `transcript_path` the host passes (#244, `harness/transcript.py`); no readable
   transcript means the gate reads the message alone.
+- **The approval gate** (#393), also on `user-prompt`: the hook marks that it runs
+  (`approval.hook_seen`) and keeps the user's message while a plan shown by a dry run waits
+  for approval, so a commit can prove its `approval_quote` came from the user
+  (`harness/approval.py`). It adds nothing to the context.
 - **`session-start`** (`SessionStart`, matcher `compact`): pinned preferences
   after compaction. A model-written summary is where negated preferences get
   lost (#129), so the pins come back from ART word for word, with the job the
@@ -256,8 +260,21 @@ def _opened_in_editor(user_id: UUID, session_id: str) -> Optional[str]:
         return None
 
 
+def _approval_message(user_id: UUID, payload: Dict[str, Any], session_id: str) -> None:
+    """The quoted-approval gate (#393): mark that this host runs ART's hooks, and keep the
+    user's message while a shown plan waits for approval (`harness.approval`). Adds nothing to
+    the context and never raises; the text is never logged."""
+    try:
+        from harness import approval
+        approval.hook_seen()
+        approval.note_message(user_id, session_id, payload.get("prompt"))
+    except Exception as exc:                          # never break the prompt
+        log.warning("approval gate: could not record the message (%s)", type(exc).__name__)
+
+
 def user_prompt(user_id: UUID, payload: Dict[str, Any], allow_writes: bool = True) -> Optional[str]:
     session_id = str(payload.get("session_id") or "default")
+    _approval_message(user_id, payload, session_id)
     edits = _editor_edits(user_id, session_id)
     opened = _opened_in_editor(user_id, session_id)
     memory = _memory_note(user_id, payload, session_id, allow_writes)

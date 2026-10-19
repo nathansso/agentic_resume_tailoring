@@ -150,17 +150,20 @@ def test_a_dry_run_leads_with_the_block_and_a_commit_does_not_carry_it(env):
     assert block["counts"]["hard_pins"] == 2 and block["counts"]["rules_hard"] == 1
 
     # additive: every field a dry run had is still there with the same value
-    plain = {k: v for k, v in dry.items() if k not in ("active_constraints", "plan_summary")}
+    plain = {k: v for k, v in dry.items()
+             if k not in ("active_constraints", "plan_summary", "plan_token", "approval")}
     assert {"program_id", "parent", "dry_run", "committed", "nodes", "violations", "line_budget",
             "metrics", "cut_hints"} <= set(plain)
     assert dry["dry_run"] is True and dry["committed"] is False
 
-    committed = invoke("execute_plan", uid, {"program": plan})
+    # No prompt hook has run in this store, so the token alone approves it (#393).
+    committed = invoke("execute_plan", uid, {"program": plan, "plan_token": dry["plan_token"]})
     assert "active_constraints" not in committed or committed["active_constraints"] is None
-    assert committed.get("plan_summary") is None
+    assert committed.get("plan_summary") is None and committed.get("plan_token") is None
+    assert committed["approval"] == "token_only"
     assert {k: v for k, v in committed.items()
-            if k not in ("active_constraints", "plan_summary", "dry_run", "committed",
-                         "node_id")} == \
+            if k not in ("active_constraints", "plan_summary", "plan_token", "approval",
+                         "dry_run", "committed", "node_id")} == \
         {k: v for k, v in plain.items() if k not in ("dry_run", "committed", "node_id")}
 
 

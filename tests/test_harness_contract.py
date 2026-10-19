@@ -70,7 +70,11 @@ CALLS = {
             {"id": "k", "because": "job:fits the posting", "op": "keep", "item_key": "exp:data scientist|rippling"},
             {"id": "gone", "because": "job:the posting does not need it", "op": "delete", "item_key": "proj:no such project"}]},
          "dry_run": True},
-        {"program": {"job_id": "$JOB", "parent": None}, "dry_run": True}],   # stale parent
+        {"program": {"job_id": "$JOB", "parent": None}, "dry_run": True},    # stale parent
+        # A commit with no plan token: approval_required on every adapter (#393).
+        {"program": {"job_id": "$JOB", "parent": "$N1", "nodes": [
+            {"id": "k", "because": "job:fits the posting", "op": "keep",
+             "item_key": "exp:data scientist|rippling"}]}}],
     "patch_plan": [{"program_id": "prog_missing", "edits": [
         {"op": "replace", "path": "/parent", "value": "$N1"}]}],
     # Bullet library and track baselines (#229). The writes are errors or idempotent, so all

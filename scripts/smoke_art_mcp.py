@@ -78,11 +78,13 @@ async def _run(data_dir: str) -> None:
             # The plugin's last steps (#201): the header, a committed version, a render.
             prof = await call("update_profile", {"fields": {"name": "Smoke Test"}})
             assert prof["name"] == "Smoke Test", prof
-            done = await call("execute_plan", {"program": {
+            # The commit carries the dry run's token (#393); no prompt hook has run in this
+            # store, so the token alone approves it, and the reply says so.
+            done = await call("execute_plan", {"plan_token": run["plan_token"], "program": {
                 "job_id": job["job_id"], "nodes": [
                     {"id": "k", "op": "keep", "item_key": "exp:data analyst|acme",
                      "because": "job:the posting asks for SQL"}]}})
-            assert done["committed"], done
+            assert done["committed"] and done["approval"] == "token_only", done
             page = await call("render", {"job_id": job["job_id"], "format": "tex"})
             assert Path(page["tex_path"]).is_file(), page
             assert "Smoke Test" in Path(page["tex_path"]).read_text(encoding="utf-8")
