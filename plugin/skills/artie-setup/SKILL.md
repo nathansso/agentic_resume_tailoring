@@ -210,6 +210,10 @@ looks duplicated or thin, and ask the user whether to fix it.
 
 End setup with one `render` of the user's baseline (a job with a saved track or committed version; skip it when there is none), so the LaTeX engine and its TeX files are fetched now rather than on the first tailoring.
 
+Then tell the user what to do next, in plain words: paste a job posting or link and ask you
+to tailor their resume. There is no command for it; the `artie-tailor` skill takes it from
+there.
+
 ## 10. Back up, or bring a web-app profile over
 
 ART's data is local, with no server copy. These are shell commands, not tools, and you run

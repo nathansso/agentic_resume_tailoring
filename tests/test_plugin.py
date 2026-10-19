@@ -76,12 +76,110 @@ def test_the_plugin_teaches_only_tools_that_exist():
     assert not tools & NOT_YET, tools & NOT_YET
     assert {"art_briefing", "open_job", "execute_plan", "patch_plan", "render",
             "upsert_items", "update_profile", "checkout", "history", "suggest_actions",
-            "promote_bullet", "approve_variant", "save_baseline"} <= tools
+            "promote_bullet", "approve_variant", "save_baseline",
+            "list_jobs", "kg_search", "get_item", "list_items", "diff_nodes", "get_head",
+            "observe", "record_preference", "record_rule", "art_pins"} <= tools
 
 
-def test_the_commands_are_the_issues_set_less_the_deferred_library():
+def test_the_commands_are_navigation_only():
+    """#401: tailoring, reverting and preferences are plain language to the agent. Only the
+    commands a user types by name remain."""
     names = {p.stem for p in PLUGIN.glob("commands/*.md")}
-    assert names == {"tailor", "setup", "open", "history", "revert", "prefs"}
+    assert names == {"setup", "open", "history"}
+
+
+def test_the_navigation_commands_find_the_job_with_the_ranked_lookup():
+    """`/artie:history` and `/artie:open` name no job id: they look the job up from the user's
+    words (#288) and ask when it is ambiguous, never guess."""
+    from harness.contract import ListJobsInput
+
+    assert "query" in ListJobsInput.model_fields
+    for name in ("history", "open"):
+        text = (PLUGIN / "commands" / f"{name}.md").read_text(encoding="utf-8")
+        assert "`list_jobs`" in text and "`query`" in text and "$ARGUMENTS" in text, name
+        assert "or another?" in text and "Never guess" in text, name
+
+
+# Everything a doc or a skill may say about a slash command that no longer exists (#401).
+REMOVED_COMMANDS = ("tailor", "revert", "prefs")
+_REMOVED = re.compile(r"/(?:artie|art):(?:%s)" % "|".join(REMOVED_COMMANDS))
+
+
+def _doc_files():
+    """Every file a user or an agent reads about the commands. CHANGELOG.md is history: it
+    records what was shipped and removed, so it is the one place that may name them."""
+    files = [ROOT / n for n in ("README.md", "INSTALL.md", "AGENTS.md", "CLAUDE.md")]
+    for pattern in ("docs/**/*.md", "plugin/**/*.md", "integrations/**/*.md", "site/README.md",
+                    "site/src/**/*.astro", "site/src/**/*.ts", "site/src/**/*.json",
+                    "scripts/site_demo/*.py", "scripts/build_site_demo.py", "harness/*.py"):
+        files += ROOT.glob(pattern)
+    return sorted({f for f in files if f.is_file()})
+
+
+def test_no_doc_names_a_removed_command():
+    files = _doc_files()
+    assert ROOT / "plugin" / "README.md" in files and ROOT / "site" / "src" / "pages" / "usage.astro" in files
+    for path in files:
+        hit = _REMOVED.search(path.read_text(encoding="utf-8"))
+        assert not hit, f"{path.relative_to(ROOT)} names {hit.group(0)}, which #401 removed"
+
+
+def test_the_removed_commands_have_no_file():
+    for name in REMOVED_COMMANDS:
+        assert not (PLUGIN / "commands" / f"{name}.md").exists(), name
+
+
+def _tailor_skill():
+    return (PLUGIN / "skills" / "artie-tailor" / "SKILL.md").read_text(encoding="utf-8")
+
+
+def test_the_tailor_skill_has_a_section_for_each_of_the_five_journeys():
+    """#401: tailor and approve, revise from feedback, which job, questions about the user's
+    data, and save. #402 checks them against a live agent; this holds the text to the code."""
+    text = _tailor_skill()
+    for heading in ("## Which job", "## Tailor and approve", "## Revise from feedback",
+                    "## Questions about their data", "## Save"):
+        assert re.search(rf"(?m)^{re.escape(heading)}$", text), heading
+
+
+def test_the_tailor_skill_names_the_inputs_it_teaches_and_the_contract_has_them():
+    from harness.contract import ExecuteInput, ListJobsInput, PatchInput, RenderInput
+
+    for model, fields in ((ExecuteInput, ("plan_token", "approval_quote", "dry_run")),
+                          (PatchInput, ("plan_token", "approval_quote")),
+                          (ListJobsInput, ("query",)),
+                          (RenderInput, ("save_to", "remember"))):
+        assert set(fields) <= set(model.model_fields), (model.__name__, fields)
+    text = _tailor_skill()
+    text = " ".join(text.split())          # the skill wraps its lines
+    # Tailor and approve: the dry run is shown whole, then the turn ends, then the commit
+    # carries the token and the user's whole reply (#392, #393).
+    for phrase in ("plan_summary.text", "verbatim", "end your turn", "plan_token", "approval_quote",
+                   "the user's whole reply", "token_only", "because"):
+        assert phrase in text, phrase
+    # Which job: ask, never guess (#288).
+    for phrase in ("list_jobs(query=", "matched", "or another?", "Never guess silently"):
+        assert phrase in text, phrase
+    # Feedback: a new dry run and approval; a standing rule through the memory gate (#202).
+    for phrase in ("new dry run and a new approval", "observe", "record_preference", "record_rule",
+                   "new plan on HEAD", "history(job_id)", "checkout(job_id, node_id)"):
+        assert phrase in text, phrase
+    # Questions are answered from the tools, never from memory.
+    for tool in ("kg_search", "get_item", "list_items", "list_jobs", "history", "diff_nodes"):
+        assert f"`{tool}" in text, tool
+    assert "never from memory" in text
+    # Save (#394).
+    for phrase in ('destination: "ask_user"', "remember: true", "downloads", "over_page_limit"):
+        assert phrase in text, phrase
+
+
+def test_the_tailor_skill_never_lets_a_commit_skip_the_shown_plan():
+    text = _tailor_skill()
+    text = " ".join(text.split())          # the skill wraps its lines
+    assert "Never commit a plan the user has not seen" in text
+    assert "Never write a quote yourself" in text
+    # The only commit without approval is the first, empty plan (nothing to show yet).
+    assert "that first empty plan needs no approval" in text
 
 
 # ── hooks ────────────────────────────────────────────────────────────────────

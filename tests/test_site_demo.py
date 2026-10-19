@@ -96,7 +96,8 @@ def test_transcript_is_well_formed():
 def test_the_run_follows_setup_then_posting_then_tailor_then_render():
     names = [e["name"] for e in T["events"] if e["type"] == "tool"]
     user = [e["text"] for e in T["events"] if e["type"] == "user"]
-    assert user[0].startswith("/artie:setup") and user[1].startswith("/artie:tailor")
+    # Tailoring is plain language, not a command (#401).
+    assert user[0].startswith("/artie:setup") and user[1].startswith("Tailor my resume")
     for needed in ("upsert_items", "update_profile", "open_job", "execute_plan", "render"):
         assert needed in names, needed
     assert names.index("upsert_items") < names.index("open_job") < names.index("render")

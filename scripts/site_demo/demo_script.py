@@ -255,7 +255,7 @@ CUT_REASONS = {
 # --- What is said -----------------------------------------------------------------------
 
 USER_SETUP = "/artie:setup resume.md, plus the READMEs of three repos that aren't on my resume"
-USER_TAILOR_TEMPLATE = ("/artie:tailor {company}, {title} (sample posting, {lines} lines pasted). "
+USER_TAILOR_TEMPLATE = ("Tailor my resume to this posting: {company}, {title} (sample posting, {lines} lines pasted). "
                         "Compare it with my usual resume: resume.md alone.")
 USER_APPROVE = "Looks good. Go ahead, and yes, drop the coffee shop job."
 

@@ -1,12 +1,14 @@
 ---
 description: Open a tailored resume in ART's local LaTeX editor
-argument-hint: [job id, or company/role]
+argument-hint: [company or role]
 ---
 
 I want to edit a tailored resume by hand in ART's local editor.
 
-1. Find the job: $ARGUMENTS. If that's empty or ambiguous, call the ART tool `list_jobs`
-   and pick the job I most recently worked on, or ask me.
+1. Find the job: call `list_jobs` with `query` set to "$ARGUMENTS". If that is empty, call
+   it with no query and take the job I most recently worked on. One clear match: name it
+   and go on. Several or none: ask me, "Is this the <Company> <Role> role, or another?"
+   Never guess.
 2. The editor is a local server I run myself. Give me this command to run in a
    terminal, with the job id filled in, and don't run it yourself:
 

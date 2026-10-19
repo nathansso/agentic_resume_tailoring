@@ -37,6 +37,7 @@ Your coding agent (Claude Code, Codex) does the work; just ask it.
 Things to ask your agent:
   "Tailor my resume to this posting: <paste the posting or a link>"
   "Revise the second bullet under my latest job to lead with what I built"
+  "Never mention Kafka on my resumes"
   "What's in my knowledge graph about Python?"
   "Show my jobs"
   "Go back to the previous version of my resume for <company>"

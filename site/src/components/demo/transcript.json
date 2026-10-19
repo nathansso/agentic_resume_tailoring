@@ -11,7 +11,7 @@
   "authored": "Lines from the user and the agent, the records the agent extracted, the requirements it read from the posting and its plan were written by hand. Tool calls and what ART returned were captured.",
   "elision": "Long tool answers are shortened for display: lists are cut, strings shortened and fields left out, each marked with an ellipsis.",
   "pacing": "Playback runs at a fixed rate; it is not the real duration of any call.",
-  "total_ms": 88412
+  "total_ms": 89012
  },
  "phases": [
   {
@@ -245,8 +245,8 @@
   {
    "phase": "posting",
    "type": "user",
-   "text": "/artie:tailor Brightwell Market, Data Science Intern, Growth Analytics, Summer 2027 (sample posting, 22 lines pasted). Compare it with my usual resume: resume.md alone.",
-   "ms": 5640
+   "text": "Tailor my resume to this posting: Brightwell Market, Data Science Intern, Growth Analytics, Summer 2027 (sample posting, 22 lines pasted). Compare it with my usual resume: resume.md alone.",
+   "ms": 6240
   },
   {
    "phase": "posting",

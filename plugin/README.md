@@ -28,17 +28,30 @@ Your data lives in `~/.art/art.db`, or `$ART_DATA_DIR`. Rendered resumes go to
 
 ## Use
 
+Three commands, for navigation you want by name:
+
 | Command | What it does |
 |---|---|
 | `/artie:setup [files]` | Build your knowledge graph from your resume, LinkedIn export and project folders, and set your header |
-| `/artie:tailor <posting or URL>` | Plan a tailored resume, wait for your approval, commit it and render the PDF |
-| `/artie:open [job]` | Print the command that opens the local LaTeX editor (`artie ui`, from the release wheel: no build step) |
-| `/artie:history [job]` | List every version and what changed |
-| `/artie:revert <job> [version]` | Make an earlier version current again |
-| `/artie:prefs` | Show your pinned rules, preferences and job-scoped rules |
+| `/artie:open [job]` | Find the job, then print the command that opens the local LaTeX editor (`artie ui`, from the release wheel: no build step) |
+| `/artie:history [job]` | Find the job, then list every version and what changed |
 
-The two skills behind these, `artie-tailor` and `artie-setup`, also trigger on their own
-when you ask Claude to tailor a resume or update your experience.
+Everything else is plain language to Claude, and the `artie-tailor` skill does the work (the
+`artie-setup` skill is behind `/artie:setup`):
+
+- **Tailor:** "Tailor my resume to this posting: <paste it or a link>." Claude shows you a plan
+  with a reason for every change and stops. Nothing is saved until you approve it.
+- **Revise:** "Make the second bullet shorter", "lead with the recommender project". You get a
+  new plan to approve. "Never mention Kafka" is a lasting rule; Claude confirms how it read it
+  before recording it.
+- **Go back:** "Go back to the last version." Nothing is deleted, so you can undo it.
+- **Ask:** "What do I have about Python?", "Which jobs have I tailored?" Claude answers from
+  ART's records, not from memory. When your words could mean more than one job, it asks which.
+- **Save:** "Save it to my Downloads." The first time you don't say, Claude asks once and ART
+  remembers.
+
+Both skills also trigger on their own when you ask Claude to tailor a resume or update your
+experience. In Codex they are `$artie-setup` and `$artie-tailor`.
 
 ## GitHub repos (optional)
 
