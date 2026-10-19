@@ -451,6 +451,26 @@ def test_a_crlf_checkout_gives_the_same_dossier(ctx, fixture_repo):
     assert {v: build_variant(again, v)[0] for v in before} == before
 
 
+def test_a_symlinked_readme_is_read_through_git(tmp_path):
+    """A Windows checkout without core.symlinks writes a symlink as a file holding its target;
+    the reader follows the link through git, as a Linux checkout would."""
+    from eval.repo_dossier import ladder as lad
+    repo = tmp_path / "linked"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    _write(repo, "docs/index.rst", "Linked\n======\nThe real readme text.\n")
+    _git(repo, "add", "-A")
+    blob = subprocess.run(["git", "-C", str(repo), "hash-object", "-w", "--stdin"], input="docs/index.rst",
+                          capture_output=True, text=True).stdout.strip()
+    _git(repo, "update-index", "--add", "--cacheinfo", f"120000,{blob},README.rst")
+    _git(repo, "commit", "-q", "-m", "link the readme", author=USER)
+    _write(repo, "README.rst", "docs/index.rst")   # what a Windows checkout leaves on disk
+    files = lad.list_files(repo)
+    assert "README.rst" in files
+    section = lad.readme_section(repo, files, Budgets())
+    assert "The real readme text." in section and "## README (README.rst)" in section
+
+
 def test_the_cli_backend_refuses_a_folder_under_a_claude_md(tmp_path):
     from eval.repo_dossier import llm
     (tmp_path / "CLAUDE.md").write_text("private guidance", encoding="utf-8")

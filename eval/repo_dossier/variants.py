@@ -34,7 +34,8 @@ from pathlib import Path
 from eval.repo_dossier import attribution as attr
 from eval.repo_dossier.ladder import (CODE_EXT, NOT_SOURCE, Authorship, Budgets, RepoInput,
                                       _ext, _git, authorship, authorship_section, file_as_text,
-                                      list_files, metadata_section, readme_section, tree_section)
+                                      list_files, metadata_section, readme_section, symlinks,
+                                      tree_section)
 from eval.repo_dossier.symbols import build_symbol_map_v2, language_of
 
 CHARS_PER_TOKEN = 2.3   # measured: #397's dossiers ran 2.16-2.68 chars per writer input token
@@ -99,8 +100,10 @@ def make_context(repo: RepoInput, prs: list[dict] | None = None) -> RepoContext:
     big = Budgets(readme_chars=40_000, manifest_chars=3_000, manifests_max=12, tree_lines=600,
                   author_files=120, author_messages=200)
     srcs = {}
+    links = symlinks(path)
     for f in files:
-        if _ext(f) in CODE_EXT and _ext(f) not in MARKUP and not NOT_SOURCE.search(f):
+        # a symlink's target is tracked too, so its code is mapped once, under the real path
+        if f not in links and _ext(f) in CODE_EXT and _ext(f) not in MARKUP and not NOT_SOURCE.search(f):
             srcs[f] = file_as_text(path, f, big, code_only=True)
     ctx = RepoContext(repo, files, auth,
                       {f: c for f, c in srcs.items() if language_of(f)}, srcs,

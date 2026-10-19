@@ -20,6 +20,7 @@ list and Python import parser are reused.
 from __future__ import annotations
 
 import json
+import posixpath
 import re
 import subprocess
 from collections import Counter, defaultdict
@@ -105,14 +106,40 @@ def _git(repo: Path, *args: str) -> str:
     return done.stdout
 
 
+_LINKS: dict[str, dict[str, str | None]] = {}
+
+
+def symlinks(repo: Path) -> dict[str, str | None]:
+    """Tracked symlinks -> the tracked file each points at (None if outside the repo or not a
+    file). Read through git, because a Windows checkout without core.symlinks writes a symlink
+    as a one-line file holding its target, where Linux follows it."""
+    key = str(Path(repo).resolve())
+    if key not in _LINKS:
+        links: dict[str, str | None] = {}
+        entries = [ln.split(maxsplit=3) for ln in _git(Path(repo), "ls-files", "-s").splitlines()]
+        tracked = {e[3] for e in entries if len(e) == 4}
+        for e in entries:
+            if len(e) == 4 and e[0] == "120000":
+                target = _git(Path(repo), "cat-file", "-p", e[1]).strip()
+                resolved = posixpath.normpath(posixpath.join(posixpath.dirname(e[3]), target))
+                links[e[3]] = resolved if resolved in tracked and not resolved.startswith("..") else None
+        _LINKS[key] = links
+    return _LINKS[key]
+
+
 def list_files(repo: Path) -> list[str]:
-    """Tracked files, minus vendored, generated and lock files."""
+    """Tracked files, minus vendored, generated and lock files, and symlinks that don't point at
+    a tracked file."""
     out = []
+    links = symlinks(repo)
     for f in _git(repo, "ls-files").splitlines():
         parts = f.split("/")
         if any(p in SKIP_DIRS for p in parts[:-1]) or parts[-1] in SKIP_NAMES:
             continue
-        if (repo / f).is_file():
+        if f in links:
+            if links[f] is not None:
+                out.append(f)
+        elif (repo / f).is_file():
             out.append(f)
     return sorted(out)
 
@@ -132,6 +159,7 @@ def file_size(repo: Path, path: str) -> int:
             if len(parts) == 4 and parts[3].isdigit():
                 sizes[name] = int(parts[3])
         _SIZES[key] = sizes
+    path = symlinks(repo).get(path) or path
     got = _SIZES[key].get(path)
     return got if got is not None else (Path(repo) / path).stat().st_size
 
@@ -145,6 +173,7 @@ def is_text(path: str) -> bool:
 
 
 def read_text(repo: Path, path: str) -> str:
+    path = symlinks(repo).get(path) or path
     data = (repo / path).read_bytes()
     if b"\x00" in data[:4096]:
         return ""
@@ -186,7 +215,7 @@ def notebook_text(raw: str, output_chars: int, code_only: bool = False) -> str:
 def data_summary(repo: Path, path: str) -> str:
     """A data file shown by its shape, not its rows."""
     try:
-        with open(repo / path, encoding="utf-8", errors="replace") as fh:
+        with open(repo / (symlinks(repo).get(path) or path), encoding="utf-8", errors="replace") as fh:
             head = [next(fh, "") for _ in range(3)]
             rows = 3 + sum(1 for _ in fh)
     except OSError:
