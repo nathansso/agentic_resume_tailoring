@@ -1,14 +1,55 @@
 {
- "_comment": "Public repos for the #397 spike. 'The user' is each repo's main author, standing in for a user describing their own repo, named by GitHub login. The runner resolves a login to its git author emails at run time (the GitHub commits API, then a match on the account's display name in git log) and keeps that mapping only in the gitignored work dir. The owner's repos and reference facts are in the gitignored work dir (personal/eval_397/repos_private.json), never here.",
+ "_comment": "Public repos for the #397 spike. 'The user' is each repo's main author, standing in for a user describing their own repo, named by GitHub login. The runner resolves a login to its git author emails at run time (the GitHub commits API, then a match on the account's display name in git log) and keeps that mapping only in the gitignored work dir. The owner's repos and reference facts are in the gitignored work dir (personal/eval_397/repos_private.json), never here. 'commit' pins the clone (git checkout it after cloning). The 'multi' group (#397 follow-up) are many-author repos where the user is a contributor, not the creator, so crediting them with others' features is easy; their merged PRs name what they did.",
  "repos": [
-  {"name": "kennethreitz/records", "dir": "kennethreitz__records", "group": "public",
+  {
+   "name": "kennethreitz/records",
+   "dir": "kennethreitz__records",
+   "group": "public",
    "user_label": "Kenneth Reitz (GitHub kennethreitz), the repository's creator",
-   "user_logins": ["kennethreitz"]},
-  {"name": "sindresorhus/p-queue", "dir": "sindresorhus__p-queue", "group": "public",
+   "user_logins": [
+    "kennethreitz"
+   ],
+   "commit": "ea4273695cee6da42edf1cb294d1f2a4505470fc"
+  },
+  {
+   "name": "sindresorhus/p-queue",
+   "dir": "sindresorhus__p-queue",
+   "group": "public",
    "user_label": "Sindre Sorhus (GitHub sindresorhus), the repository's creator",
-   "user_logins": ["sindresorhus"]},
-  {"name": "rakyll/hey", "dir": "rakyll__hey", "group": "public",
+   "user_logins": [
+    "sindresorhus"
+   ],
+   "commit": "7f272ab5ff2254c0dc2537b7977e88ede1cd55e8"
+  },
+  {
+   "name": "rakyll/hey",
+   "dir": "rakyll__hey",
+   "group": "public",
    "user_label": "Jaana Dogan (GitHub rakyll), the repository's creator",
-   "user_logins": ["rakyll"]}
+   "user_logins": [
+    "rakyll"
+   ],
+   "commit": "5626f79b8698df6daf9b25799c9805c6acc96740"
+  },
+  {
+   "name": "jpadilla/pyjwt",
+   "dir": "jpadilla__pyjwt",
+   "group": "multi",
+   "user_label": "Mark Adams (GitHub mark-adams), a contributor to the repository; not its creator",
+   "user_logins": [
+    "mark-adams"
+   ],
+   "commit": "16231abfd1d8eab4953e8779b3017b859c88565e"
+  },
+  {
+   "name": "jd/tenacity",
+   "dir": "jd__tenacity",
+   "group": "multi",
+   "user_label": "immerrr (GitHub immerrr), a contributor to the repository; not its creator",
+   "user_logins": [
+    "immerrr"
+   ],
+   "commit": "32ac68f0941319c0d2f4fb927f96e4ee29bb46c6"
+  }
  ]
 }

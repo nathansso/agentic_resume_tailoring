@@ -214,3 +214,205 @@ def test_the_symbol_map_is_seeded_by_the_users_files():
             assert smap.text.startswith(first), (backend, smap.text)
     tiny = build_symbol_map(sources, None, token_budget=5, backend="regex")
     assert tiny.rendered < 2   # the budget binds
+
+
+# ── the #397 follow-up: variants at matched budgets, more backends, attribution ──
+
+from eval.repo_dossier import attribution as attr  # noqa: E402
+from eval.repo_dossier import run as runner  # noqa: E402
+from eval.repo_dossier.symbols import build_symbol_map_v2, ctags_binary, spans_for  # noqa: E402
+from eval.repo_dossier.variants import VARIANTS, build_variant, fit, make_context  # noqa: E402
+
+PRS = [{"number": 7, "title": "feat: score the model", "merged_at": "2026-01-02T00:00:00Z",
+        "additions": 3, "deletions": 0, "merge_commit_sha": "abcdef1234567",
+        "body": "Adds <!-- template --> a score() helper.", "files": ["pkg/core.py"]}]
+
+
+@pytest.fixture
+def ctx(fixture_repo):
+    return make_context(RepoInput(fixture_repo, "ada/demo", "Ada Lovelace", [USER[1]]), PRS)
+
+
+def test_every_variant_builds_within_its_budget_and_names_the_commit(ctx, fixture_repo):
+    head = subprocess.run(["git", "-C", str(fixture_repo), "rev-parse", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
+    for vid, v in VARIANTS.items():
+        text, stats = build_variant(ctx, vid)
+        assert text.startswith(f"# Repository dossier: ada/demo at commit {head[:12]}"), vid
+        assert stats["est_tokens"] <= v.budget, vid
+        assert "## README" in text and "## Symbol map" in text, vid
+
+
+def test_fit_keeps_short_sections_and_cuts_long_ones_at_a_line():
+    long = "## README\n" + "\n".join(f"line {i} " + "x" * 50 for i in range(2000))
+    out, alloc = fit([("readme", long), ("metadata", "## Metadata\nshort"), ("tree", "## File tree\na.py")],
+                     budget_tokens=1000)
+    assert out["metadata"] == "## Metadata\nshort" and out["tree"] == "## File tree\na.py"
+    assert out["readme"].endswith("…[section cut to fit the dossier's token budget]")
+    assert len(out["readme"]) <= alloc["readme"]
+    # what the short sections left is handed to the long one
+    assert alloc["readme"] > 1000 * 3.6 * 0.30
+    assert sum(len(t) for t in out.values()) <= 1000 * 3.6
+
+
+def test_symbol_lines_cite_their_span(ctx):
+    text, _ = build_variant(ctx, "5r-10k")
+    assert "pkg/core.py:" in text
+    assert "L5-6: def load_data(path):" in text
+
+
+def test_the_ast_backend_has_exact_spans_and_full_signatures():
+    code = ("@app.get('/x')\ndef handler(\n    a: int,\n    b=2,\n) -> str:\n    return 'x'\n\n\n"
+            "class K:\n    def m(self):\n        pass\n")
+    spans, used = spans_for("ast", {"m.py": code})
+    defs = {n: (s, e) for n, s, e in spans["m.py"][0]}
+    assert defs["handler"] == (0, 5)       # from the decorator to the last body line
+    assert defs["K"] == (8, 10) and used == {"ast"}
+    smap = build_symbol_map_v2({"m.py": code}, None, 500, "ast")
+    assert "@app.get('/x') def handler( a: int, b=2, ) -> str:" in smap.text
+
+
+def test_regex_spans_close_python_definitions_by_indent():
+    code = ("class A:\n    def one(self):\n        return 1\n\n    def two(self):\n        return 2\n\n\n"
+            "def top():\n    pass\n")
+    smap = build_symbol_map_v2({"a.py": code}, None, 500, "regex")
+    spans = {name: (s, e) for _, name, s, e in smap.ranked}
+    assert spans["A"] == (0, 5) and spans["one"] == (1, 2) and spans["top"] == (8, 9)
+
+
+@pytest.mark.skipif(not tree_sitter_available(), reason="needs tree-sitter")
+def test_the_tree_sitter_tags_backend_reads_each_grammars_tags_query():
+    spans, used = spans_for("ts-tags", {"pkg/core.py": CORE, "app.ts": APP})
+    names = {n for n, _, _ in spans["pkg/core.py"][0]}
+    assert {"load_data", "Model", "fit"} <= names and "ts-tags" in used
+    assert "normalize" in {n for n, _ in spans["pkg/core.py"][1]}   # a call is a reference
+    assert "renderChart" in {n for n, _, _ in spans["app.ts"][0]}
+
+
+def test_the_pygments_backend_finds_definitions():
+    pytest.importorskip("pygments")
+    spans, used = spans_for("pygments", {"pkg/core.py": CORE})
+    assert {"load_data", "Model"} <= {n for n, _, _ in spans["pkg/core.py"][0]} and used == {"pygments"}
+
+
+@pytest.mark.skipif(ctags_binary() is None, reason="needs Universal Ctags (ART_CTAGS or PATH)")
+def test_the_ctags_backend_reads_files_on_disk(fixture_repo):
+    spans, used = spans_for("ctags", {"pkg/core.py": CORE}, fixture_repo)
+    assert {"load_data", "Model"} <= {n for n, _, _ in spans["pkg/core.py"][0]} and used == {"ctags"}
+
+
+def test_a_missing_ctags_falls_back_to_regex(monkeypatch, fixture_repo):
+    monkeypatch.setenv("ART_CTAGS", "")
+    monkeypatch.setattr("shutil.which", lambda name: None)
+    spans, used = spans_for("ctags", {"pkg/core.py": CORE}, fixture_repo)
+    assert used == {"regex"} and spans["pkg/core.py"][0]
+
+
+def test_blame_tags_each_definition_with_who_wrote_it(fixture_repo):
+    index = attr.BlameIndex(fixture_repo, {USER[1]})
+    mine = index.ownership("pkg/core.py", 4, 5)          # load_data, the user's
+    theirs = index.ownership("pkg/util.py", 0, 2)        # normalize, the other author's
+    assert mine.user_share == 1.0 and theirs.user_share == 0.0
+    assert theirs.top_author == "Charles Babbage" and len(theirs.top_sha) == 40
+    assert index.annotate("pkg/util.py", "normalize", 0, 2).startswith("[mostly Charles Babbage 100%")
+    assert "introduced by Charles Babbage" in index.annotate("pkg/util.py", "normalize", 0, 2)
+    assert "introduced by you" in index.annotate("pkg/core.py", "load_data", 4, 5)
+
+
+def test_attribution_variants_name_other_authors_work(ctx):
+    text, stats = build_variant(ctx, "own-10k")
+    assert "[mostly Charles Babbage" in text
+    others = text.split("## Built by other authors")[1]
+    assert "pkg/util.py:L1-3 normalize: Charles Babbage 100%" in others
+    assert "load_data" not in others
+    assert stats["blamed_files"] >= 2
+    plain, _ = build_variant(ctx, "5r-10k")
+    assert "Charles Babbage" not in plain and "## Built by other authors" not in plain
+
+
+def test_blame_is_skipped_for_a_single_author_repo(tmp_path):
+    repo = tmp_path / "solo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    _write(repo, "a.py", "def solo_fn():\n    return 1\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "solo", author=USER)
+    c = make_context(RepoInput(repo, "ada/solo", "Ada", [USER[1]]), None)
+    text, stats = build_variant(c, "own-10k")
+    assert stats["blamed_files"] == 0 and "[you" not in text
+    assert "(single-author repository)" in text and "(not fetched)" in text
+
+
+def test_commit_subjects_sit_under_each_file(ctx):
+    text, _ = build_variant(ctx, "commits-10k")
+    section = text.split("## Authorship by file")[1].split("\n## ")[0]
+    core = section.split("pkg/core.py")[1]
+    assert "Score the model" in core and "Build the model and the chart" in core
+    assert "Add the normalize helper" not in section
+
+
+def test_conventional_commit_types_are_parsed():
+    assert attr.conventional_type("feat(api): add x") == "feat"
+    assert attr.conventional_type("fix!: break y") == "fix"
+    assert attr.conventional_type("Merge branch 'main'") is None
+
+
+def test_the_prs_section_cites_number_merge_commit_and_files():
+    text = attr.prs_section(PRS, "Ada")
+    assert "#7 (2026-01-02, +3 -0, abcdef1) feat: score the model" in text
+    assert "template" not in text and "files: pkg/core.py" in text
+    assert "(none found)" in attr.prs_section([], "Ada")
+
+
+def test_the_variants_are_the_same_under_any_hash_seed(fixture_repo):
+    root = Path(__file__).resolve().parent.parent
+    code = (
+        "import json, sys\n"
+        f"sys.path.insert(0, {str(root)!r})\n"
+        "from eval.repo_dossier.ladder import RepoInput\n"
+        "from eval.repo_dossier.variants import VARIANTS, build_variant, make_context\n"
+        f"ctx = make_context(RepoInput({str(fixture_repo)!r}, 'ada/demo', 'Ada', [{USER[1]!r}]), [])\n"
+        "sys.stdout.write(json.dumps({v: build_variant(ctx, v)[0] for v in VARIANTS}))\n")
+    outs = []
+    for seed in ("1", "2", "3"):
+        env = dict(os.environ, PYTHONHASHSEED=seed, PYTHONDOTENV_DISABLED="1", PYTHON_DOTENV_DISABLED="1")
+        done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, cwd=root)
+        assert done.returncode == 0, done.stderr
+        outs.append(done.stdout)
+    assert outs[0] == outs[1] == outs[2]
+
+
+def _claims(n_ok, n_role_bad):
+    return ([{"label": "supported", "about_user_role": True}] * n_ok
+            + [{"label": "contradicted", "about_user_role": True}] * n_role_bad)
+
+
+def test_aggregate_reports_misattribution_against_the_baseline():
+    results = {}
+    for i, (base_bad, own_bad) in enumerate([(3, 0), (2, 1), (4, 0)]):
+        rows = [{"rung": "5r-10k", "sample": 0, "claims": _claims(7, base_bad),
+                 "writer_usage": {"input_tokens": 9000}},
+                {"rung": "own-10k", "sample": 0, "claims": _claims(10 - own_bad, own_bad),
+                 "writer_usage": {"input_tokens": 9500}},
+                {"rung": "7", "sample": 0, "claims": _claims(10, 0), "writer_usage": {"input_tokens": 90000}}]
+        results[f"r/{i}"] = {"group": "multi", "rows": rows, "n_facts": 0}
+    agg = runner.aggregate(runner.per_repo_metrics(results))
+    assert agg["5r-10k"]["misattribution"] == pytest.approx((0.3 + 2 / 9 + 4 / 11) / 3)
+    vs = agg["own-10k"]["vs_baseline"]["contradicted_role"]
+    assert vs["mean"] < 0 and vs["ci"][1] < 0 and vs["repos"] == 3
+    assert "vs_baseline" not in agg["5r-10k"]
+
+
+def test_the_spotcheck_summary_gives_wilson_intervals():
+    checked = ([{"rung": "own-10k", "label": "supported", "my_label": "supported", "about_user_role": True}] * 9
+               + [{"rung": "1", "label": "contradicted", "my_label": "unsupported", "about_user_role": True}])
+    results = {"r/x": {"rows": [
+        {"rung": "own-10k", "claims": [{"label": "supported", "about_user_role": True}] * 30},
+        {"rung": "1", "claims": [{"label": "contradicted", "about_user_role": True}] * 10}]}}
+    s = runner.spotcheck_summary(checked, results)
+    assert s["agree"] == 9 and s["rate"] == 0.9
+    lo, hi = s["rate_ci"]
+    assert 0.55 < lo < 0.9 < hi <= 1.0
+    assert s["agree_supported_vs_not"] == 10
+    assert s["reweighted_to_population"]["exact"] == pytest.approx(0.75)
+    assert s["confusion"] == {"contradicted->unsupported": 1}
