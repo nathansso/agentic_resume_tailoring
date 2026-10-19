@@ -372,7 +372,7 @@ def test_private_repos_need_the_repo_scope(fake_github):
     fake_github.repos = [_repo(1), _repo(2, private=True), _repo(3)]
     out = invoke("list_github_repos", None, {})
     assert [r["name"] for r in out["repos"]] == ["repo1", "repo3"]
-    assert out["private_included"] is False and "artie github login --private" in out["note"]
+    assert out["private_included"] is False and "artie connect --private" in out["note"]
     assert {parse_qs(urlsplit(c[1]).query)["visibility"][0]
             for c in fake_github.calls if urlsplit(c[1]).path == "/user/repos"} == {"public"}
 
@@ -402,7 +402,7 @@ def test_a_private_repo_the_server_returns_anyway_is_dropped_without_the_scope(
 
 def test_signed_out_the_tool_says_to_log_in_and_names_no_token(capsys):
     out = invoke("list_github_repos", None, {})
-    assert out["error"]["code"] == "not_logged_in" and "artie github login" in out["error"]["message"]
+    assert out["error"]["code"] == "not_logged_in" and "artie connect" in out["error"]["message"]
     assert out["repos"] == []
 
 
@@ -491,38 +491,44 @@ def test_the_stub_keyring_is_what_the_suite_sees_by_default():
     assert gh.resolve_token() is None and gh.keychain_available() is False
 
 
-def test_login_hints_say_art_github_login_and_fall_back_to_the_pinned_uvx_form():
-    """`/artie:setup` puts `artie` on PATH (#385), so every login hint says `artie github login`,
-    and keeps the pinned uvx form (#369) for a machine where `artie` is not on PATH: the tool's
-    errors and note, the plugin's own docs, and INSTALL.md."""
+def test_login_hints_say_artie_connect_and_fall_back_to_the_pinned_uvx_form():
+    """`/artie:setup` puts `artie` on PATH (#385), and `artie connect` (#400) is the sign-in a
+    user is told to run, so every login hint says `artie connect`, and keeps the pinned uvx
+    form (#369) for a machine where `artie` is not on PATH: the tool's errors and note, the
+    plugin's own docs, and INSTALL.md. `artie github login` stays, documented as the GitHub
+    sign-in on its own."""
     from pathlib import Path
     from harness.github import login_command, login_fallback, login_hint
     from harness.hooks import SOURCE
-    assert login_command() == "artie github login"
-    assert login_command(private=True) == "artie github login --private"
-    assert login_fallback() == f'uvx --python 3.12 --from "{SOURCE}" artie github login'
+    assert login_command() == "artie connect"
+    assert login_command(private=True) == "artie connect --private"
+    assert login_fallback() == f'uvx --python 3.12 --from "{SOURCE}" artie connect'
     assert login_fallback(private=True) == \
-        f'uvx --python 3.12 --from "{SOURCE}" artie github login --private'
+        f'uvx --python 3.12 --from "{SOURCE}" artie connect --private'
     hint = login_hint()
-    assert hint.startswith("artie github login ") and hint.index(login_fallback()) > 0
+    assert hint.startswith("artie connect ") and hint.index(login_fallback()) > 0
 
     root = Path(__file__).resolve().parent.parent
     plugin = root / "plugin"
+    # `artie-tailor` is rewritten by #401 and left out; its text names the same sign-in.
     for doc in [plugin / "README.md", plugin / "commands" / "setup.md",
-                plugin / "skills" / "artie-setup" / "SKILL.md",
-                plugin / "skills" / "artie-tailor" / "SKILL.md", root / "INSTALL.md"]:
+                plugin / "skills" / "artie-setup" / "SKILL.md", root / "INSTALL.md",
+                root / "README.md"]:
         text = doc.read_text(encoding="utf-8")
-        short = text.find("`artie github login`") if "`artie github login`" in text \
-            else text.find("\nartie github login")
-        assert short != -1, f"{doc.name} does not give the short `artie github login`"
-        assert login_fallback() in text, f"{doc.name} lost the uvx fallback"
-        assert short < text.index(login_fallback()), f"{doc.name}: the short form comes first"
+        short = text.find("`artie connect`") if "`artie connect`" in text \
+            else text.find("\nartie connect")
+        assert short != -1, f"{doc.name} does not give the short `artie connect`"
+        if doc.name != "README.md":
+            assert login_fallback() in text, f"{doc.name} lost the uvx fallback"
+            assert short < text.index(login_fallback()), f"{doc.name}: the short form comes first"
+    install = (root / "INSTALL.md").read_text(encoding="utf-8")
+    assert "artie github login" in install, "INSTALL.md lost the lower-level subcommand"
 
 
 def test_signed_out_error_gives_the_short_command_then_the_fallback():
     out = invoke("list_github_repos", None, {})
     msg = out["error"]["message"]
     from harness.github import login_fallback
-    assert msg.index("artie github login") < msg.index("artie github login --private") \
+    assert msg.index("artie connect") < msg.index("artie connect --private") \
         < msg.index(login_fallback())
     assert "not on their PATH" in msg

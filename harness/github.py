@@ -1,6 +1,7 @@
 """The GitHub client (#353): device-flow login, the token store, and the repo list.
 
-`artie github login` signs the user in with GitHub's **device flow**, which needs
+`artie connect` (#400; `artie github login` is the same sign-in alone) signs the user in with
+GitHub's **device flow**, which needs
 only a public client ID: no secret, no server, no redirect. The token it returns
 is kept in one place, `resolve_token()`, which the repo list uses today and the
 LinkedIn gateway client (#355) uses to identify the user to #354.
@@ -362,9 +363,11 @@ class GitHubClient:
 # ── the tool ─────────────────────────────────────────────────────────────────
 
 def login_command(private: bool = False) -> str:
-    """The command a user runs to sign in. `/artie:setup` puts `artie` on PATH with
-    `uv tool install` (#385), so this is the short form; `login_fallback` is the rest."""
-    return "artie github login" + (" --private" if private else "")
+    """The command a user runs to sign in: `artie connect` (#400), which signs in to GitHub
+    and asks for the LinkedIn URL; `artie github login` is the same sign-in alone.
+    `/artie:setup` puts `artie` on PATH with `uv tool install` (#385), so this is the short
+    form; `login_fallback` is the rest."""
+    return "artie connect" + (" --private" if private else "")
 
 
 def login_fallback(private: bool = False) -> str:

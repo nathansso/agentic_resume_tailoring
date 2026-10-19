@@ -111,10 +111,10 @@ company). **Name the job in your own reply** whenever you act on it.
   record lists its `projects`; an achievement's `project` is what it was won for.
 - `get_item` also lists the item's `variants`: wording the user approved for that
   experience or project. Approved wording beats regenerated wording (see step 4).
-- If the user wants their GitHub repos considered, have them run `artie github login` in their
+- If the user wants their GitHub repos considered, have them run `artie connect` in their
   own terminal (`--private` for private repos; the tool's `not_logged_in` error repeats it).
   If `artie` is not on their PATH, the same command is
-  `uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie github login`.
+  `uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie connect`.
   Then call `list_github_repos`. Read the repos
   worth reading, clone one only after they agree, and store what you learn with
   `upsert_items` (`source: github:<repo>`) before you cite it; a repo is not evidence until

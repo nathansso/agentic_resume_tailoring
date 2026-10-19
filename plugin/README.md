@@ -53,19 +53,20 @@ Everything else is plain language to Claude, and the `artie-tailor` skill does t
 Both skills also trigger on their own when you ask Claude to tailor a resume or update your
 experience. In Codex they are `$artie-setup` and `$artie-tailor`.
 
-## GitHub repos (optional)
+## GitHub repos and LinkedIn (optional)
 
-To bring in your GitHub repos, sign in once in your own terminal (add `--private` for private
-repos):
+To connect your GitHub repos and save your LinkedIn URL, run this once in your own terminal
+(add `--private` for private repos). It is safe to run again; `artie github login` is the
+GitHub sign-in on its own:
 
 ```bash
-artie github login
+artie connect
 ```
 
 If `artie` is not on your PATH (you have not run `/artie:setup`'s install step), the same command is:
 
 ```bash
-uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie github login
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie connect
 ```
 
 Claude can then call `list_github_repos`, pick the repos

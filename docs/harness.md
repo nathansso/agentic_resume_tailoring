@@ -87,7 +87,13 @@ the tailoring plan.
 
 **The shell (#395, #400, #398).**
 
-- `artie connect` signs in to GitHub (device flow, #353) and records the LinkedIn URL.
+- `artie connect` (shipped, #400) signs in to GitHub (device flow, #353; `--private` for private
+  and organisation repos) and saves the LinkedIn profile URL to the active profile's
+  `linkedin_url`. The URL is checked with the gateway's rule (`linkedin.com/in/<slug>`,
+  `harness/linkedin_url.py`) and saved through `update_profile`, so a remote store stays
+  read-only without `--allow-writes`. It makes no LinkedIn request. Run again it shows the
+  state and changes nothing unless asked (`--reauth`, `--linkedin-url`). `artie github login`
+  remains as the GitHub sign-in alone.
 - `artie ingest` refreshes the connected sources with no agent.
 - `artie ui` opens the editor.
 - Bare `artie` prints example requests to give the agent, and the plumbing commands are
@@ -685,7 +691,7 @@ carries `job`: the job's id, title and company, so the host names the job it act
 | | `list_items` | kind → every key and title, no query needed (#191); each item also carries its `preferences` and `job_rules` (#297) |
 | | `get_item` | key → record, evidence; an experience or project also lists its approved variants (id, text, tags, cites) (#229); its `preferences` (active, keyed to it, any scope) and `job_rules` (#297) |
 | | `get_profile` | → name and contact details for the header (#191), and `default_output_dir`, where `render` saves the user's copy (#394) |
-| | `list_github_repos` | page, per_page, include_private, include_readme → the signed-in user's own repos with languages, topics, stars, last push, fork and archived flags, clone command and README excerpt; needs `artie github login`, and no profile (#353) |
+| | `list_github_repos` | page, per_page, include_private, include_readme → the signed-in user's own repos with languages, topics, stars, last push, fork and archived flags, clone command and README excerpt; needs `artie connect` (or `artie github login`), and no profile (#353) |
 | Ingest & library | `ingest_schema` | kind → JSON schema the host fills |
 | | `upsert_items` | records with evidence → keys, merges, conflicts; kind `variant` imports the user's curated bullets, approved (#229) |
 | | `promote_bullet` | node, bullet, optional item key and track → a **draft** variant, or the existing one (#229) |
@@ -1243,7 +1249,8 @@ graduation date that depends on post-internship enrollment). Rules are recorded 
 Each job has an application status (drafting, applied, interview, closed) that
 `list_jobs(status)` filters on.
 
-**GitHub (#353).** `artie github login|logout|status` signs the user in with GitHub's device
+**GitHub (#353, #400).** `artie github login|logout|status` (and `artie connect`, which runs the
+same sign-in and then asks for the LinkedIn URL) signs the user in with GitHub's device
 flow, which needs only a public client ID (`ART_GITHUB_CLIENT_ID`, else the one the package
 ships once the owner has registered the OAuth App: no secret, no server, no redirect). It asks
 for `read:user`; `--private` adds `repo`. The token is kept as the Keys row above says, and

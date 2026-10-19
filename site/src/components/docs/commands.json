@@ -52,18 +52,18 @@
         "uvx --python 3.12 --from \"{SOURCE}\" artie ui --job <job_id>"
       ]
     },
-    "github-login": {
+    "connect": {
       "source": "INSTALL.md",
       "lines": [
-        "artie github login",
-        "artie github login --private"
+        "artie connect",
+        "artie connect --private"
       ]
     },
-    "github-login-uvx": {
+    "connect-uvx": {
       "source": "INSTALL.md",
       "lines": [
-        "uvx --python 3.12 --from \"{SOURCE}\" artie github login",
-        "uvx --python 3.12 --from \"{SOURCE}\" artie github login --private"
+        "uvx --python 3.12 --from \"{SOURCE}\" artie connect",
+        "uvx --python 3.12 --from \"{SOURCE}\" artie connect --private"
       ]
     },
     "uv-install-unix": {
@@ -132,6 +132,7 @@
   "inline": {
     "_comment": "Short commands and names the pages mention in running text. Each must appear verbatim in its source.",
     "artie jev status": "INSTALL.md",
+    "artie github login": "INSTALL.md",
     "ART_JEV_MODE=off": "INSTALL.md",
     "TYPESAFE_API_KEY": "INSTALL.md",
     "ART_GITHUB_TOKEN": "INSTALL.md",
