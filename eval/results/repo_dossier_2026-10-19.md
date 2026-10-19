@@ -143,6 +143,34 @@ README and authorship; on Kubernetes it found 4 definitions in 26K Go files), so
 adopted; the same budget effect shows directly in `5r-20k` and `blame-20k`. The regex map stays:
 no dependency, and no backend earns one.
 
+## How much of the budget the symbol map should get
+
+The owner asked how to balance the number of functions kept. A sweep on `blame-20k` (map share
+25% by default) ran with three samples each:
+- `s0`: no map;
+- `s10` and `s40`: map shares of 10% and 40%;
+- `attrib`: only the user's own and contested definitions, at most 40, with the rest left to
+  "built by other authors" and unused room handed back.
+
+| vs `blame-20k`, paired | Misattribution | Accuracy | Unsupported | Coverage |
+|---|---|---|---|---|
+| `blame-20k-s0` (no map; 12 repos change) | +1.9 (−0.5, +4.6) | −1.5 (−4.2, +1.1) | −0.1 (−1.8, +1.2) | −0.5 (−3.7, +2.4) |
+| `blame-20k-s10` (4 repos change) | −0.4 (−2.3, +1.8) | −0.3 (−1.8, +1.2) | +1.0 (+0.0, +3.0) | −4.6 (−12.1, +0.0) |
+| `blame-20k-s40` (4 repos change) | +0.4 (−0.7, +1.5) | −3.0 (−7.5, +0.4) | +2.6 (+0.3, +6.1) | −11.1 (−14.6, −7.6) |
+| `blame-20k-attrib` (10 repos change) | −0.2 (−1.4, +0.8) | −0.5 (−1.9, +0.6) | +0.8 (−0.5, +2.0) | −4.4 (−8.7, +2.9) |
+
+Paired over the repos where the dossier actually changes. The share only matters for repos
+that fill 20K, so the other repos' dossiers are byte-identical to `blame-20k`'s.
+
+**The 25% default holds; nothing beats it.**
+- Dropping the map loses the ownership tags: misattribution rises by about 2 points and
+  accuracy falls, though neither interval clears zero.
+- A larger map crowds out the README and authorship: coverage −11, unsupported +2.6.
+- A smaller or own-only map gains nothing.
+
+The map earns its quarter as the carrier of "who wrote what"; filling it by PageRank is as good
+as filtering it by ownership.
+
 ## Budget
 
 Coverage rises with budget (5K 0.65, 10K 0.64, 20K 0.71, full code 0.76); misattribution and
@@ -165,10 +193,10 @@ ladder 33/40, structural 16/20, attribution 14/20.
 
 ## Determinism
 
-Every one of the 14 variants is **byte-identical across 3 hash seeds on Windows (Python 3.11.9,
+Every one of the 18 variants is **byte-identical across 3 hash seeds on Windows (Python 3.11.9,
 git 2.52) and on Linux (WSL Ubuntu, Python 3.12.12, git 2.53, native LF clones) for all 12 repos**
-(168 dossiers). The only cells that differ across the two OSes are #397's rungs 5, 5r and 6
-(30 of 264 cells), which keep networkx's PageRank: it needs SciPy, `art-mcp` doesn't ship
+(216 dossiers). The only cells that differ across the two OSes are #397's rungs 5, 5r and 6
+(30 of 312 cells), which keep networkx's PageRank: it needs SciPy, `art-mcp` doesn't ship
 it, and without it the ranking silently fell back to uniform scores. Four defects found and fixed
 on the way are in `docs/research/repo-map.md` § 5.
 
@@ -194,7 +222,7 @@ table: `docs/research/repo-map.md` § 4.
 - **Repos.** 12, all scored: 5 owner repos with approved bullets, 2 contributed-to repos, 3
   public creator repos, 2 public contributor repos. Public repos are pinned by commit in
   `eval/repo_dossier/repos.json`.
-- **Cells.** #397's ladder (rungs 1–7 and 5r) and 14 variants at matched budgets
+- **Cells.** #397's ladder (rungs 1–7 and 5r) and 18 variants at matched budgets
   (`eval/repo_dossier/variants.py`). One sample per cell, three for the nine attribution and
   budget cells listed above.
 - **Writer** `claude-sonnet-5-5` (effort medium) and **judge** `claude-opus-5-5` (effort high),
@@ -205,5 +233,5 @@ table: `docs/research/repo-map.md` § 4.
   no project CLAUDE.md in reach. Requests keep the API shape, so the API cells stay cached.
 - **Statistics.** Per-repo means, paired differences against `5r-10k` (and full code for #397's
   rule), 4,000-sample bootstrap over repos.
-- **Spend.** **$0 new.** 1,086 calls on the subscription (writer and judge), $106 at list price
+- **Spend.** **$0 new.** 1,311 calls on the subscription (writer and judge), $137 at list price
   and not billed. The API total stays at #397's $11.55.

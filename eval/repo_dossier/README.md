@@ -58,6 +58,8 @@ the API.
 | `pyg-10k` | Pygments lexers (`Name.Function`/`Name.Class` as definitions) | none | `pygments` |
 | `blame-10k`, `blame-20k` | regex, each definition tagged with its `git blame -w -M -C` ownership and introducing commit (`git log -L`) | + "built by other authors" | none |
 | `blame-prs-10k` | regex, ownership-tagged | + "built by other authors" + merged PRs | none (GitHub client) |
+| `blame-20k-s0`, `-s10`, `-s40` | as `blame-20k`, with the map's share of the budget at 0% (no map), 10% or 40% instead of 25% | as `blame-20k` | none |
+| `blame-20k-attrib` | as `blame-20k`, but the map keeps only the user's own definitions (≥50% of lines, or introduced by them) and contested ones (in files the user changed), at most 40 | as `blame-20k` | none |
 | `commits-10k` | regex | per-file commit subjects, Conventional Commits types | none |
 | `prs-10k` | regex | + the user's merged PRs (title, number, merge SHA, size, body, files) | none (GitHub client) |
 | `own-10k`, `own-20k` | regex, ownership-tagged | all three layers | none |

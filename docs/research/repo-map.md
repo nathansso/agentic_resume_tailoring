@@ -99,7 +99,7 @@ eval measures it directly.
 
 ## 3. The head-to-head eval
 
-`eval/repo_dossier/` (see its README) now builds **14 variants at matched budgets** next to
+`eval/repo_dossier/` (see its README) now builds **18 variants at matched budgets** next to
 #397's ladder, on **12 repos** (5 of the owner's with approved bullets, 2 the owner contributed
 to, 3 public repos where "the user" is the creator, 2 public 100+-author repos where the user is
 a contributor), with #397's writer (`claude-sonnet-5-5`), judge (`claude-opus-5-5`), cache and
@@ -179,7 +179,7 @@ Measuring this ran tree-sitter-language-pack 1.22.1 once, which left its 22 MB p
 ## 5. Determinism, scale and the bugs found on the way
 
 **Determinism: every variant is byte-identical across 3 hash seeds × Windows (Python 3.11.9,
-git 2.52) and Linux (WSL Ubuntu, Python 3.12.12, git 2.53, native LF clones): 168 of 168
+git 2.52) and Linux (WSL Ubuntu, Python 3.12.12, git 2.53, native LF clones): 216 of 216
 variant dossiers.** The check (`run.py determinism`) rebuilds every rung and variant in fresh
 processes. Getting there found four real defects, each of which #398 would have shipped:
 
@@ -187,7 +187,7 @@ processes. Getting there found four real defects, each of which #398 would have 
    call raises and the map silently fell back to uniform ranks, a different map with no error.
    The variants use their own power iteration (`symbols.pagerank`, tested against networkx to
    1e-6) and round scores to 10 significant digits before ordering. #397's own rungs 5, 5r and 6
-   still use networkx, which is why they are the only cells that differ across OSes (30 of 264).
+   still use networkx, which is why they are the only cells that differ across OSes (30 of 312).
 2. **Line endings.** A Windows clone (`core.autocrlf`) has CRLF where Linux has LF, so README
    text, tree sizes and language shares differed. Files are now read with CRLF normalised, and
    sizes come from `git ls-tree -l` (committed size), not the disk.
@@ -273,7 +273,9 @@ evidence gate, and a re-run at a new commit is incremental: rebuild only when HE
   links to the login. #397's resolver found 91 of a user's 143 commits.
 - Leave out tests when listing "built by others": they crowd out features.
 - **Prompt side (#401's skill text, not the dossier).** When a definition is tagged
-  `mostly <other>` with `you N%`, write "extended" or "reworked", not "built".
+  `mostly <other>` with `you N%`, prefer "reworked" or "extended" to "built". The owner
+  counts substantial rework as the user's work (section 8), so this is wording, not
+  correctness.
 
 ## 7. Contributed-to repos (#399)
 
@@ -295,18 +297,28 @@ The same dossier, restricted to the user's part:
   dossier #399 specifies was not built or scored here. Score it on these two repos and the two
   public contributor repos when #399 lands.
 
-## 8. Open questions for the owner
+## 8. The owner's decisions (2026-10-19)
 
-1. **The judge is strict on extended work.** 10 of the 17 hand-check disagreements were features
-   another author introduced and the user substantially reworked. Should a resume claim "built
-   X" for such work count as wrong (the judge's view) or right (the hand checks')? The answer
-   sets the skill's wording rule in section 6.
-2. **The Pygments coverage gain** meets the letter of the pre-set rule, but its cause is a
-   smaller symbol map. This report does not adopt it. Confirm.
-3. **Universal Ctags as an optional enhancer** found on PATH: worth supporting in #398, given
-   it measured no better than regex? This report says no.
-4. **Budget in real tokens.** Is a 20K cap that ran to 22.8K once acceptable, or should the
-   character rate be 2.1 so the cap holds strictly?
+1. **Reworked work counts as the user's.** If another author introduced a feature and the user
+   substantially reworked it, crediting the user is not misattribution. The hand checks were
+   right and the judge is strict, so the absolute misattribution rates here are overstated. The
+   skill rule in section 6 is a wording preference ("reworked", "extended"), not an error fix.
+2. **Pygments is not adopted.** Its coverage gain came from a smaller symbol map. How much of
+   the budget the map should get was then measured directly (next item).
+3. **No Universal Ctags in #398.**
+4. **The 20K cap at 2.3 characters a token is fine**, even though one dossier ran to 22.8K real
+   tokens.
+
+**The symbol map's share, measured.** A sweep on `blame-20k` tried four alternatives to the
+default 25%, all with three samples: no map, 10%, 40%, and a map of only the user's own and
+contested definitions (`eval/results/repo_dossier_2026-10-19.md`, "How much of the budget the
+symbol map should get").
+- **No map** loses the ownership tags: misattribution +1.9 points, accuracy −1.5.
+- **A 40% map** crowds out the README and authorship: coverage −11 points, unsupported +2.6, on
+  the repos it changes.
+- **A 10% map, or an own-only map**, gains nothing.
+
+**Keep 25%, filled by PageRank.**
 
 ## 9. Sources
 
