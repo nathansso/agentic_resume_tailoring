@@ -397,6 +397,8 @@ class ProfileOutput(_Output):
     linkedin_url: Optional[str] = None
     github_username: Optional[str] = None
     portfolio_url: Optional[str] = None
+    default_output_dir: Optional[str] = Field(
+        None, description="Where render saves the user's copy (#394); null until they say.")
 
 
 # ── tailoring tree (#196) ────────────────────────────────────────────────────
@@ -749,6 +751,16 @@ class RenderInput(_Model):
     job_id: str
     node_id: Optional[str] = Field(None, description="A version from history; HEAD if omitted.")
     format: Literal["pdf", "tex"] = "pdf"
+    save_to: Optional[str] = Field(
+        None, description="Where to save the user's copy: downloads, desktop, documents (any "
+                          "case, 'my downloads' too) or an absolute folder path. Omitted: the "
+                          "profile's default_output_dir, else nothing is copied and destination "
+                          "is ask_user.")
+    remember: bool = Field(False, description="Store save_to as the profile's "
+                                              "default_output_dir for later renders.")
+    overwrite: bool = Field(False, description="Replace a file of the same name. Otherwise the "
+                                               "copy is named '... (2).pdf' and so on.")
+    save_tex: bool = Field(False, description="Also copy the .tex (always copied with format tex).")
 
 
 class RenderOutput(_Output):
@@ -761,11 +773,22 @@ class RenderOutput(_Output):
     pages: Optional[int] = None
     line_budget: Dict[str, Any] = Field(default_factory=dict)
     hint: Optional[str] = None
+    destination: Optional[Literal["save_to", "default", "ask_user"]] = Field(
+        None, description="Where the user's copy went: save_to, the stored default, or "
+                          "ask_user (none set: ask where to save, then render again with "
+                          "save_to and remember=true; Downloads if they have no preference).")
+    save_dir: Optional[str] = None
+    saved_paths: List[str] = Field(default_factory=list, description=(
+        "The copies saved for the user, named <Name>_<Company>_<Role>.pdf (and .tex)."))
+    remembered: bool = Field(False, description="save_to is now the profile's default.")
+    destination_note: Optional[str] = None
 
 
 class UpdateProfileInput(_Model):
     fields: Dict[str, Optional[str]] = Field(
-        description="Header fields to set, e.g. {\"name\": \"Ada Lovelace\", \"email\": ...}.")
+        description="Header fields to set, e.g. {\"name\": \"Ada Lovelace\", \"email\": ...}, "
+                    "or default_output_dir: where render saves the user's copy (downloads, "
+                    "desktop, documents or an absolute path).")
 
 
 def _render():
@@ -1281,7 +1304,8 @@ TOOLS: List[ToolSpec] = [
         read_only=False),
     ToolSpec(
         "get_profile",
-        "The candidate's name and contact details for the resume header.",
+        "The candidate's name and contact details for the resume header, and "
+        "default_output_dir: where render saves their copy (null until they say).",
         ProfileInput, ProfileOutput,
         lambda uid: _tools().get_profile(uid)),
     ToolSpec(
@@ -1417,16 +1441,23 @@ TOOLS: List[ToolSpec] = [
     ToolSpec(
         "render",
         "Write a job's version (HEAD by default) as .tex and PDF under the ART data "
-        "directory. Returns the paths, the page count and the line budget with cut hints. "
-        "The user's own .tex edits win. Writes files.",
+        "directory, and save the user's copy as <Name>_<Company>_<Role>.pdf where they asked: "
+        "save_to (downloads, desktop, documents or a folder path), else their stored default. "
+        "With neither, destination is ask_user: ask where to save, then render again with "
+        "save_to and remember=true (use downloads if they have no preference). An existing "
+        "file is never replaced unless overwrite. Returns the paths, the page count and the "
+        "line budget with cut hints. The user's own .tex edits win. Writes files.",
         RenderInput, RenderOutput,
-        lambda uid, job_id, node_id=None, format="pdf":
-            _render().render(uid, job_id, node_id, format),
+        lambda uid, job_id, node_id=None, format="pdf", save_to=None, remember=False,
+        overwrite=False, save_tex=False:
+            _render().render(uid, job_id, node_id, format, save_to=save_to, remember=remember,
+                             overwrite=overwrite, save_tex=save_tex),
         read_only=False),
     ToolSpec(
         "update_profile",
         "Set the resume header: name, email, phone, location, linkedin_url, "
-        "github_username, portfolio_url. Only what the user gave you. Writes.",
+        "github_username, portfolio_url; or default_output_dir, where render saves the "
+        "user's copy. Only what the user gave you. Writes.",
         UpdateProfileInput, ProfileOutput,
         lambda uid, fields: _tools().update_profile(uid, fields),
         read_only=False),

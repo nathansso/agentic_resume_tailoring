@@ -10,6 +10,11 @@ The reply carries the page count and the #200 line budget, so a host that sees
 two pages knows which bullets to cut without compiling again. With no LaTeX
 engine it still writes the `.tex` and says how to get a PDF.
 
+A copy goes where the user asked (#394): `save_to` (a folder path, or `downloads`,
+`desktop`, `documents`; `harness/destinations.py`), else the profile's
+`default_output_dir`. With neither, the reply says `destination: "ask_user"`, so
+the host asks once and passes `remember=true` with the answer.
+
 Model-free by rule (`tests/test_harness_boundary.py`).
 """
 
@@ -75,7 +80,8 @@ def generated_tex(user_id: UUID, content: Dict) -> str:
 
 
 def render(user_id: UUID, job_id: str, node_id: Optional[str] = None,
-           format: str = "pdf") -> Dict[str, Any]:
+           format: str = "pdf", save_to: Optional[str] = None, remember: bool = False,
+           overwrite: bool = False, save_tex: bool = False) -> Dict[str, Any]:
     from agents.formatter import _compile_tex_to_pdf, _pdf_page_count
     from harness.toolchain import latex_engine
 
@@ -99,6 +105,15 @@ def render(user_id: UUID, job_id: str, node_id: Optional[str] = None,
         if node is None:
             return {"error": {"code": "no_version", "message": (
                 "This job has no committed version yet; run execute_plan first.")}}
+
+    # Where the user's copy goes (#394), settled before anything is written.
+    dest = _destination(user_id, save_to, remember)
+    if "error" in dest:
+        return dest
+
+    def done(res: Dict[str, Any]) -> Dict[str, Any]:
+        return _deliver(user_id, res, dest, company, title,
+                        want_tex=format == "tex" or save_tex, overwrite=overwrite)
 
     content = node.get("content") or {}
     edited = node.get("edited_tex")
@@ -131,19 +146,100 @@ def render(user_id: UUID, job_id: str, node_id: Optional[str] = None,
             log.info("line budget unavailable: %s", exc)
 
     if format == "tex":
-        return result
+        return done(result)
     if engine is None:
         result["hint"] = f"{ENGINE_HINT} Automatic setup: {no_engine}." if no_engine else ENGINE_HINT
-        return result
+        return done(result)
     try:
         pdf = _compile_tex_to_pdf(tex)
     except RuntimeError as exc:
         result["hint"] = f"The .tex did not compile: {str(exc)[:500]}"
-        return result
+        return done(result)
     pdf_path = out_dir / "resume.pdf"
     pdf_path.write_bytes(pdf)
     result.update(pdf_path=str(pdf_path), pages=_pdf_page_count(pdf))
     if result["pages"] and result["pages"] > 1:
         result["hint"] = ("The page runs over one page. Cut with patch_plan using "
                           "line_budget.cut_hints, then render again.")
+    return done(result)
+
+
+# ── the user's copy (#394) ───────────────────────────────────────────────────
+
+ASK_USER_NOTE = (
+    "No save location is set for this user, so the files are only under the ART data "
+    "directory. Ask the user where to save their resumes: Downloads, Desktop, Documents or "
+    "a folder path. Then call render again with save_to and remember=true, so you never ask "
+    "again. If they have no preference, use save_to=\"downloads\".")
+
+
+def _destination(user_id: UUID, save_to: Optional[str], remember: bool) -> Dict[str, Any]:
+    """Where the copy goes: `save_to`, else the stored default, else ask the user."""
+    from database.models import User
+    from harness import destinations
+
+    if remember and not (save_to or "").strip():
+        return {"error": {"code": "invalid_arguments", "message": (
+            "remember=true needs save_to: the folder to remember.")}}
+    with Session(_db.engine) as session:
+        user = session.get(User, user_id)
+        name = user.name if user else None
+        stored = (user.default_output_dir or "").strip() if user else ""
+    if (save_to or "").strip():
+        try:
+            value = destinations.parse(save_to)
+        except destinations.DestinationError as exc:
+            return {"error": {"code": "invalid_arguments", "message": str(exc),
+                              "suggestions": list(destinations.WELL_KNOWN)}}
+        return {"origin": "save_to", "value": value, "remember": remember, "name": name}
+    if stored:
+        return {"origin": "default", "value": stored, "remember": False, "name": name}
+    return {"origin": "ask_user", "name": name}
+
+
+def _deliver(user_id: UUID, result: Dict[str, Any], dest: Dict[str, Any], company: str,
+             title: str, want_tex: bool, overwrite: bool) -> Dict[str, Any]:
+    """Copy the PDF (and the `.tex` when asked) to the destination, and say what happened.
+    A failed copy never fails the render: the files under the data dir stand."""
+    from database.models import User
+    from harness import destinations
+
+    result.update(destination=dest["origin"], save_dir=None, saved_paths=[],
+                  remembered=False, destination_note=None)
+    if dest["origin"] == "ask_user":
+        result["destination_note"] = ASK_USER_NOTE
+        return result
+    if dest.get("remember"):
+        with Session(_db.engine) as session:
+            user = session.get(User, user_id)
+            if user is not None:
+                user.default_output_dir = dest["value"]
+                session.add(user)
+                session.commit()
+                result["remembered"] = True
+    try:
+        directory = destinations.resolve(dest["value"])
+    except destinations.DestinationError as exc:      # a stored default edited by hand
+        result["destination_note"] = (
+            f"The saved location is not usable: {exc} Ask the user where to save, then "
+            "render again with save_to and remember=true.")
+        return result
+    result["save_dir"] = str(directory)
+    sources = {}
+    if result.get("pdf_path"):
+        sources[".pdf"] = Path(result["pdf_path"])
+    if want_tex and result.get("tex_path"):
+        sources[".tex"] = Path(result["tex_path"])
+    if not sources:
+        result["destination_note"] = (
+            "Nothing was copied: no PDF was made (see hint). Pass save_tex=true to copy "
+            "the .tex instead.")
+        return result
+    stem = destinations.output_stem(dest.get("name"), company, title)
+    try:
+        written = destinations.copy_files(sources, directory, stem, overwrite=overwrite)
+    except OSError as exc:
+        result["destination_note"] = f"Could not save to {directory}: {exc}"
+        return result
+    result["saved_paths"] = [str(p) for p in written]
     return result

@@ -187,6 +187,9 @@ def _migrate_db() -> None:
         "ALTER TABLE project ADD COLUMN education_id UUID",
         "ALTER TABLE project ADD COLUMN context_status TEXT DEFAULT 'unreviewed'",
         "ALTER TABLE achievement ADD COLUMN project_id UUID",
+        # issue 394: where render saves the user's copy. Nullable: NULL means "ask
+        # the user", so existing rows load and the agent asks on the next render.
+        'ALTER TABLE "user" ADD COLUMN default_output_dir TEXT',
     ]
     with engine.connect() as conn:
         for stmt in migrations:

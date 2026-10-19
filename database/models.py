@@ -37,6 +37,9 @@ class User(SQLModel, table=True):
     resume_path: Optional[str] = None
     resume_markdown: Optional[str] = None
     resume_style: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
+    # Where `render` saves the user's copy (#394): `downloads`, `desktop`, `documents`
+    # or an absolute path. NULL until the user answers, so the agent asks once.
+    default_output_dir: Optional[str] = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 
