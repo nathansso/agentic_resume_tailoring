@@ -133,7 +133,10 @@ def test_a_quote_must_come_from_a_message_sent_after_the_dry_run(hooked):
     _refused(_commit(uid, plan, plan_token=token, approval_quote="just do it, don't ask"),
              "not found in the user's messages since the plan was shown")
     _refused(_commit(uid, plan, plan_token=token), "approval_quote is missing")
-    _refused(_commit(uid, plan, plan_token=token, approval_quote="k"), "too short")
+    # No message at all since the dry run, on a host that has hooks: the refusal says how to
+    # install them, in case this client runs without them.
+    _refused(_commit(uid, plan, plan_token=token, approval_quote="just do it"),
+             "artie hooks codex --write")
     _say(uid, "Can you look at the skills line first?")
     _refused(_commit(uid, plan, plan_token=token, approval_quote="ok"),   # not inside "look"
              "not found")
@@ -280,9 +283,48 @@ def test_the_hook_never_raises_when_the_store_is_broken(hooked, tmp_path, monkey
     assert hook_main(["user-prompt"]) == 0
 
 
-def test_quote_matching_is_case_whitespace_and_boundary_aware():
-    assert approval.quote_in("Looks  GOOD", "ok,\nlooks good to me")
-    assert approval.quote_in("“ship it.”", "Ship it.")
-    assert not approval.quote_in("ok", "look at this")
-    assert not approval.quote_in("go", "good")
-    assert not approval.quote_in(" ", "anything")
+def test_a_short_quote_must_be_the_users_whole_reply(hooked):
+    uid, job_id, parent = hooked
+    plan = _plan(job_id, parent)
+    token = _dry(uid, plan)["plan_token"]
+    _say(uid, "ok but change the second bullet")
+    out = _commit(uid, plan, plan_token=token, approval_quote="ok")
+    _refused(out, "only part of the user's message")
+    assert "Pass the user's whole reply" in out["error"]["message"]
+    assert "artie hooks" not in out["error"]["message"]          # a message was recorded
+    _refused(_commit(uid, plan, plan_token=token, approval_quote="change the second"),
+             "only part")                                         # 17 characters: too short
+    assert _head(uid, job_id) == parent
+    _say(uid, "OK! 👍")
+    out = _commit(uid, plan, plan_token=token, approval_quote="ok")
+    assert out["error"] is None and out["committed"] and out["approval"] == "quoted", out
+
+
+def test_a_long_span_of_a_mixed_reply_approves(hooked):
+    uid, job_id, parent = hooked
+    plan = _plan(job_id, parent)
+    token = _dry(uid, plan)["plan_token"]
+    _say(uid, "Looks good, go ahead and save it to my Downloads folder please.")
+    _refused(_commit(uid, plan, plan_token=token, approval_quote="Looks good"), "only part")
+    out = _commit(uid, plan, plan_token=token, approval_quote="looks good, go ahead")   # 20
+    assert out["error"] is None and out["committed"] and out["approval"] == "quoted", out
+
+
+def test_quote_matching_normalises_and_compares_whole_messages():
+    from harness.approval import MIN_SPAN_CHARS, core, match
+
+    assert core("“Looks  GOOD, go!” 👍") == "looks good, go"
+    assert match("Looks good, go", "looks good,\n  GO!") == "whole"
+    assert match('"ship it."', "Ship it.") == "whole"
+    assert match("‘just do it, don’t ask’", "Just do it, don't ask!!") == "whole"
+    assert match("ok", "ok but change X") == "short"
+    assert match("ok", "OK.") == "whole"
+    assert match("ok", "look at this") is None
+    assert match("go", "good") is None
+    assert match(" ", "anything") is None and match("!!", "!!") is None
+    span = "and save it to my Downloads"
+    assert len(core(span)) >= MIN_SPAN_CHARS
+    assert match(span, "Looks good, and save it to my Downloads.") == "span"
+    assert match("save it to my Down", "Looks good, and save it to my Downloads.") is None
+    assert approval.quote_in("looks good, go", "Looks good, go!")
+    assert not approval.quote_in("ok", "ok, but change the second bullet")

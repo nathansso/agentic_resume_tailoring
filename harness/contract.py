@@ -859,11 +859,14 @@ def _plan_token_field():
 
 
 def _approval_quote_field():
-    return Field(None, description="Required to commit (#393): the user's own approving words, "
-                                   "copied exactly from a message they sent after you showed "
-                                   "them plan_summary (\"looks good, go ahead\"). ART checks them "
-                                   "against the messages its prompt hook recorded; a quote from "
-                                   "before the plan was shown is refused.")
+    return Field(None, description="Required to commit (#393): the user's whole reply approving "
+                                   "the plan, copied exactly from a message they sent after you "
+                                   "showed them plan_summary (\"looks good, go ahead\"). ART "
+                                   "checks it against the messages its prompt hook recorded. A "
+                                   "short quote must be the whole message (\"ok\" from \"ok, but "
+                                   "change X\" is refused); only a span of 20 characters or more "
+                                   "may be part of one. A quote from before the plan was shown "
+                                   "is refused.")
 
 
 def _session_field():
@@ -1633,8 +1636,8 @@ TOOLS: List[ToolSpec] = [
         "short because (job:<what in the posting calls for it>, user:<what they asked> or "
         "pref:<preference_id>); a dry run returns plan_summary, the plan in plain words with "
         "those reasons, and plan_token: show the summary's text to the user and end your turn. "
-        "A commit must carry that plan_token and approval_quote, the user's approving words "
-        "copied from their reply (\"just do it\" counts when they said it); without them, or "
+        "A commit must carry that plan_token and approval_quote, the user's whole reply "
+        "approving it, copied exactly (\"just do it\" counts when they said it); without them, or "
         "with a program changed since the dry run, it is refused as approval_required. A job's "
         "first, empty plan (parent null, no nodes) needs neither. To "
         "remove whole bullets use op delete_bullet with cut_bullets (ids '<item key>#b<n>' on "
@@ -1663,7 +1666,7 @@ TOOLS: List[ToolSpec] = [
         "Amend a saved program by JSON pointer and run it again (e.g. add the delete_bullet or "
         "delete node a cut hint names, or replace /parent to rebase on a new HEAD). A commit is "
         "approved like execute_plan's: dry-run the patch, show its plan_summary, and commit with "
-        "its plan_token and the user's approving words as approval_quote. Writes.",
+        "its plan_token and the user's whole reply as approval_quote. Writes.",
         PatchInput, ExecuteOutput,
         _on_job(_approved(lambda uid, program_id, edits, dry_run=False, gate=None:
                           _executor().patch_plan(uid, program_id, edits, dry_run=dry_run,

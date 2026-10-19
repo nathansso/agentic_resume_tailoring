@@ -173,10 +173,12 @@ skills line. Keep the result's `plan_token`. Then **end your turn** and wait for
 ## 5. Execute
 
 When the user approves, call `execute_plan({program, plan_token, approval_quote})` with the
-same program, the dry run's `plan_token`, and `approval_quote` set to their approving words
-copied exactly from their reply ("looks good, go ahead"). If they said to skip approval ("just
-do it, don't ask"), those words are the quote. ART checks the quote against the messages the
-user sent after the dry run, so never write one yourself. If they asked for changes, change the
+same program, the dry run's `plan_token`, and `approval_quote` set to **the user's whole reply**,
+copied exactly ("looks good, go ahead"). If they said to skip approval ("just do it, don't
+ask"), that reply is the quote. ART checks the quote against the messages the user sent after
+the dry run: a short quote must be the whole message, so "ok" taken from "ok, but change the
+second bullet" is refused; only a long reply may be quoted in part, by its approving sentence of
+20 characters or more. Never write a quote yourself. If they asked for changes, change the
 program, dry-run it again and show the new summary: a changed program needs a new token and a
 new approval. A refusal with `approval_required` says what is missing. `approval: "token_only"`
 means this ART has no prompt hook to check the words: tell the user only the token was checked.

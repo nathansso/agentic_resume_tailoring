@@ -13,10 +13,14 @@ used to be a skill instruction; this makes it structural:
   shown plan of that user is waiting for approval, and only until that plan commits or
   expires (`TTL`, 24 h).
 - **The commit check** (`check`). A commit through the tool contract must carry the token
-  of the program it commits and `approval_quote`, the user's words; the quote, whitespace-
-  and case-normalised and at least `MIN_QUOTE_CHARS` long, must appear, on word boundaries,
-  in a message recorded after that plan was shown. Otherwise `approval_required`, saying what
-  is missing. "Just do it, don't ask" is itself a quote and is checked the same way.
+  of the program it commits and `approval_quote`, the user's reply; compared after
+  normalising case, whitespace and the punctuation, quotes and emoji around it (`core`), the
+  quote must be the **whole** of a message recorded after that plan was shown ("Looks good,
+  go!" approves), or a contiguous span of at least `MIN_SPAN_CHARS` (20) characters of one,
+  so a long reply that mixes approval with other requests still counts. A short span inside a
+  longer message ("ok" out of "ok, but change the second bullet") is refused: the agent must
+  pass the whole reply. Otherwise `approval_required`, saying what is missing. "Just do it,
+  don't ask" is itself a quote and is checked the same way.
 - **Without hooks** (a manual MCP registration, or a Codex without its hooks), nothing could
   ever be quoted, so a store whose hook has never run (`hooks_present`: no heartbeat file)
   accepts the token alone and the reply says `approval: "token_only"`.
@@ -53,7 +57,9 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple
 log = logging.getLogger(__name__)
 
 TTL_SECONDS = 24 * 3600
-MIN_QUOTE_CHARS = 2
+# A quote that is not a whole message must be a span of one at least this long (#393 review):
+# "looks good, and save it to Downloads" may be quoted in part, "ok" from "ok, but ..." not.
+MIN_SPAN_CHARS = 20
 # A message longer than this is pasted material; only its first part is kept.
 MAX_MESSAGE_CHARS = 20_000
 
@@ -72,8 +78,20 @@ _CHANGED = (
     "The user approved that plan, not this one: run this one with dry_run true, show them the "
     "new plan_summary.text, and ask again.")
 _NO_QUOTE = (
-    "approval_required: approval_quote is missing or too short. Set it to the user's own "
-    "approving words (at least {n} characters), copied from their message.")
+    "approval_required: approval_quote is missing. Set it to the user's whole reply approving "
+    "the plan, copied exactly from their message.")
+_PARTIAL = (
+    "approval_required: approval_quote is only part of the user's message. A quote shorter "
+    "than {n} characters must be their whole reply, so that \"ok\" cannot be taken from \"ok, "
+    "but change the second bullet\". Pass the user's whole reply as approval_quote; if it asks "
+    "for changes, make them, dry-run the plan again and show it.")
+# When this data directory has hooks but the plan got no message at all since it was shown, the
+# host making the call may be one that runs without ART's hooks.
+_NO_HOOK_HINT = (
+    " No message at all was recorded since this plan was shown. If the user did reply, this "
+    "host may run without ART's prompt hook: for Codex run `artie hooks codex --write` (or "
+    "install the artie plugin), for Claude Code update the artie plugin, then show the plan "
+    "again.")
 _NOT_FOUND = (
     "approval_required: approval_quote was not found in the user's messages since the plan was "
     "shown (only messages sent after this plan's dry run count). Show the user "
@@ -112,18 +130,33 @@ def normalise(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def _strip_edges(quote: str) -> str:
-    """A quote with the quotation marks and trailing punctuation an agent may wrap it in."""
-    return quote.strip(" \"'`.,;:!?")
+_EDGE = re.compile(r"^[\W_]+|[\W_]+$")
+
+
+def core(text: str) -> str:
+    """The normalised text without the punctuation, quotation marks, symbols and emoji around
+    it: what a quote and a message are compared on ("“Looks good, go!” 👍" is
+    "looks good, go")."""
+    return _EDGE.sub("", normalise(text))
+
+
+def match(quote: str, message: str) -> Optional[str]:
+    """How a quote stands to one message: `whole` (it is the whole message), `span` (a
+    contiguous span of at least `MIN_SPAN_CHARS` characters of it, on word boundaries),
+    `short` (a shorter span: refused), or None."""
+    q, m = core(quote), core(message)
+    if not q:
+        return None
+    if q == m:
+        return "whole"
+    if re.search(r"(?<!\w)" + re.escape(q) + r"(?!\w)", m) is None:
+        return None
+    return "span" if len(q) >= MIN_SPAN_CHARS else "short"
 
 
 def quote_in(quote: str, message: str) -> bool:
-    """Whether the normalised quote appears in the normalised message on word boundaries, so
-    "ok" is not found inside "look"."""
-    q = _strip_edges(normalise(quote))
-    if len(q) < MIN_QUOTE_CHARS:
-        return False
-    return re.search(r"(?<!\w)" + re.escape(q) + r"(?!\w)", normalise(message)) is not None
+    """Whether the quote approves on this message: the whole of it, or a long enough span."""
+    return match(quote, message) in ("whole", "span")
 
 
 # ── the local store ──────────────────────────────────────────────────────────
@@ -301,16 +334,19 @@ def check(user_id, prog: Dict[str, Any], plan_token: Optional[str],
     if not hooks_present():
         return {"ok": True, "approval": {"mode": "token_only", "plan_token": plan_token,
                                          "quote": quote or None}}
-    if quote is None or len(_strip_edges(normalise(quote))) < MIN_QUOTE_CHARS:
-        return {"ok": False, "message": _NO_QUOTE.format(n=MIN_QUOTE_CHARS)}
-    for _, msg in _messages():
-        if (_waits_on(plan, msg.get("user_id"), msg.get("session_id"))
-                and int(msg.get("at_ns") or 0) > int(plan.get("shown_ns") or 0)
-                and not _expired(msg.get("at_ns") or 0, now)
-                and quote_in(quote, str(msg.get("text") or ""))):
-            return {"ok": True, "approval": {"mode": "quoted", "plan_token": plan_token,
-                                             "quote": quote}}
-    return {"ok": False, "message": _NOT_FOUND}
+    if quote is None or not core(quote):
+        return {"ok": False, "message": _NO_QUOTE}
+    since = [msg for _, msg in _messages()
+             if _waits_on(plan, msg.get("user_id"), msg.get("session_id"))
+             and int(msg.get("at_ns") or 0) > int(plan.get("shown_ns") or 0)
+             and not _expired(msg.get("at_ns") or 0, now)]
+    found = {match(quote, str(msg.get("text") or "")) for msg in since}
+    if found & {"whole", "span"}:
+        return {"ok": True, "approval": {"mode": "quoted", "plan_token": plan_token,
+                                         "quote": quote}}
+    if "short" in found:
+        return {"ok": False, "message": _PARTIAL.format(n=MIN_SPAN_CHARS)}
+    return {"ok": False, "message": _NOT_FOUND + ("" if since else _NO_HOOK_HINT)}
 
 
 def consume(user_id, job_id: str) -> None:

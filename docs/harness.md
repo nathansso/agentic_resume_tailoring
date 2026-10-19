@@ -113,8 +113,9 @@ role", "go back to the last version", "never mention Kafka".
 5. **The commit is gated by quoted approval (#393).** It must carry the `plan_token` and
    an `approval_quote`, the user's own approving words. The `UserPromptSubmit` hook,
    which already sees every user message, keeps the messages sent after each dry run,
-   locally and only until commit. ART accepts the commit only if the quote appears in one
-   of them. A changed program needs a new dry run and a new approval.
+   locally and only until commit. ART accepts the commit only if the quote is one of them
+   whole, or a span of 20 characters or more of one, so "ok" cannot be lifted out of "ok, but
+   change X". A changed program needs a new dry run and a new approval.
    - "Just do it" counts as approval in the user's own words.
    - Without hooks, the gate is token-only and says so.
    - MCP elicitation, a host Yes/No prompt, is an optional strict mode (not built yet; see
@@ -499,15 +500,21 @@ metric vector and the rule, and `harness/executor.py` runs it. The details:
   order, finalize, `discard_editor_edits`; not `host`), so key order, JSON whitespace and
   defaults left out do not change it. A commit through the tool contract (`execute_plan`
   without `dry_run`, and `patch_plan`) must carry that token and `approval_quote`, the user's
-  approving words. ART accepts it when a dry run of this exact program was shown in the last
-  24 hours and the quote, case- and whitespace-normalised, at least 2 characters and matched on
-  word boundaries ("ok" is not found in "look"), appears in a user message the prompt hook
-  recorded after that dry run (§ 10). Otherwise nothing runs and the reply is `error.code:
+  reply. ART accepts it when a dry run of this exact program was shown in the last 24 hours and
+  the quote is the **whole** of a user message the prompt hook recorded after that dry run
+  (§ 10), compared after normalising case, whitespace, and the punctuation, quotation marks and
+  emoji around it ("Looks good, go!" approves as "looks good, go"), or a contiguous span of at
+  least 20 characters of one, on word boundaries, so a long reply that mixes approval with
+  other requests ("looks good, go ahead, and save it to Downloads") still counts. A shorter
+  span ("ok" out of "ok, but change the second bullet") is refused, and the message tells the
+  agent to pass the user's whole reply. Otherwise nothing runs and the reply is `error.code:
   approval_required`, whose message says which is missing: no `plan_token`; no dry run of this
   plan was shown (an unknown or expired token); the program changed since the dry run that
-  returned the token (a new dry run and a new approval); `approval_quote` missing or too short;
-  or the quote not found in the user's messages since the plan was shown (including words they
-  sent before it). "Just do it, don't ask" is checked the same way. The reply's `approval` is
+  returned the token (a new dry run and a new approval); `approval_quote` missing; only part of
+  a message; or not found in the user's messages since the plan was shown (including words they
+  sent before it). When no message at all was recorded since the dry run on a data directory
+  whose hook has run, the refusal adds that the calling host may run without ART's hook, and
+  how to fix it (`artie hooks codex --write`, or update the artie plugin). "Just do it, don't ask" is checked the same way. The reply's `approval` is
   `quoted`, or `token_only` when no prompt hook has ever run in this data directory (a manual
   MCP registration, Codex without hooks: the `hooks_seen` heartbeat is absent), where the token
   alone approves. The committed node's provenance records `approval: {mode, plan_token,
