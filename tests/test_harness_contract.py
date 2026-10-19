@@ -47,7 +47,7 @@ CALLS = {
                           "project": "proj:next-item recommendation"},
                          {"achievement": "ach:nope"}],
     # Tailoring tree (#196). $JOB/$N0/$N1 are filled from the `tree_kg` fixture.
-    "list_jobs": [{}, {"status": "applied"}],
+    "list_jobs": [{}, {"status": "applied"}, {"query": "the IDX data science role", "limit": 5}],
     # Host-filled ingestion (#192). Writes that change nothing on a second call, so
     # all three adapters see the same store.
     "ingest_schema": [{"kind": "education"}, {"kind": "rule"}, {"kind": "variant"}],

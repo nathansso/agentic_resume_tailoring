@@ -126,6 +126,22 @@ lookup matches company and title from the user's words, then recency. The agent 
 on one clear match and names the job. Otherwise it asks: "Is this the <Company> <Role>
 role, or another?"
 
+- Shipped (#288). The host writes are `open_job`, an `execute_plan` commit (not a dry run),
+  `patch_plan`, `checkout` and `render`. The contract stamps them (`harness/jobs.py::touch`),
+  so the MCP server and `--json` mode agree.
+- Opening a job in `artie ui` posts `POST /api/jobs/{id}/open`, a local-mode write behind the
+  same-origin guard. It also sets `last_opened_at`, so the prompt hook can tell a switch in
+  the editor from a host write. When the user opened a different job there since their last
+  message, the hook adds one line naming it.
+- The lookup is `list_jobs(query=...)`. The user's words are folded to case- and
+  punctuation-free tokens, and role words ("role", "job", "resume") are dropped. A word naming
+  the company scores 2, one naming the title 1. Ties go to the most recently touched, then the
+  newest. Each job carries `score`, `matched_words` and a `reason`, e.g. `matched "zendar"
+  (company); touched 2 h ago`. The output's `matched` counts the jobs the query named.
+- Tools that take a `job_id` still require it. Their replies carry `job` (id, title, company):
+  `art_briefing` and `art_pins` when given a job, `get_head`, `history`, `checkout`,
+  `suggest_actions`, `execute_plan`, `patch_plan` and `render`. `open_job` already returns them.
+
 **Destinations (#394).** `render` takes `save_to`: a path, or `downloads`, `desktop` or
 `documents`, resolved per OS. The agent asks where to save the first time and remembers
 the answer. With no preference given, it saves to Downloads.
@@ -610,6 +626,12 @@ construction.
 
 ## 9. Tool surface
 
+Every reply from a tool that acts on one job (`art_briefing` and `art_pins` given a job,
+`get_head`, `history`, `checkout`, `suggest_actions`, `execute_plan`, `patch_plan`, `render`)
+carries `job`: the job's id, title and company, so the host names the job it acted on (#288).
+`open_job`, `execute_plan` commits, `patch_plan`, `checkout` and `render` also stamp the job's
+`last_touched_at`.
+
 | Group | Tool | Takes → returns |
 |---|---|---|
 | Context | `art_briefing` | role family → pins, negative pins, persona traits, JobCards with rejections |
@@ -629,7 +651,7 @@ construction.
 | | `link_achievement` | award, optional project → the award tied to the project it was won for, or untied (#230) |
 | | `update_profile` | header fields (name, email, phone, location, links) → the profile row `get_profile` returns (#201) |
 | Jobs | `open_job` | JD text, requirements, optional `role_family` → job id, role family and how it was found, baseline `{track, node_id, applies, source, p}`, rules, schema errors |
-| | `list_jobs` | filter → jobs with status, HEAD, last score |
+| | `list_jobs` | status filter, optional `query` (the user's words for the job) and `limit` → jobs ranked by a company (2 per word) or title (1 per word) match, then `last_touched_at`, newest first; each with status, HEAD, `last_touched_at`, `score`, `matched_words` and a `reason` ("matched "zendar" (company); touched 2 h ago"), and `matched`, how many jobs the query named (#288) |
 | | `suggest_actions` | job, optional node (HEAD by default) → per item: the best approved variant with its score (Jev's probability, or the overlap on the fallback) or `no_match`, `source` (`jev`, `cache` or `fallback`), `propensity` (Jev's distribution over the variants and `no_match`; only with Jev) and the valid actions with uniform propensities (#229, #199; Jev ranking of actions is #193); leads with `active_constraints`, everything the user has stated that binds this job, by scope (#299) |
 | Execute & history | `execute_plan` | program → node results, metric vectors, refusals, violations; a dry run leads with `active_constraints` (#299) |
 | | `patch_plan` | saved program id, pointer edits → same |
@@ -927,7 +949,8 @@ There are three ways to chat-edit:
 
 1. **Side by side (default).** `/artie:open` opens the editor, in the Claude desktop browser
    pane where available. The prompt hook injects the user's editor edits from `get_head`,
-   so the host never overwrites manual work.
+   so the host never overwrites manual work. It also says when the user opened a different
+   job in the editor since their last message (#288).
 2. **The chat panel.** It drives a Claude Agent SDK session with `artie-mcp` attached.
    Anthropic's help center currently lets third-party apps authenticate users' own
    subscriptions through the Agent SDK, against a per-user monthly credit. Re-verify this
