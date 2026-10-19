@@ -16,7 +16,8 @@ Variants:
 | `ast-10k` | Python `ast`, regex for other languages | none |
 | `ctags-10k` | Universal Ctags | none |
 | `pyg-10k` | Pygments lexers | none |
-| `blame-10k` | regex, each definition tagged with its blame ownership | + "built by others" |
+| `blame-10k`, `blame-20k` | regex, each definition tagged with its blame ownership | + "built by others" |
+| `blame-prs-10k` | regex, ownership-tagged | + "built by others" + merged PRs |
 | `commits-10k` | regex | per-file commit subjects, Conventional Commits types |
 | `prs-10k` | regex | + the user's merged PRs |
 | `own-10k`, `own-20k` | regex, ownership-tagged | all three: by-file subjects, PRs, built by others |
@@ -60,6 +61,8 @@ VARIANTS: dict[str, Variant] = {
     "blame-10k": Variant("regex", 10_000, ("blame", "others")),
     "commits-10k": Variant("regex", 10_000, ("by_file",)),
     "prs-10k": Variant("regex", 10_000, ("prs",)),
+    "blame-20k": Variant("regex", 20_000, ("blame", "others")),
+    "blame-prs-10k": Variant("regex", 10_000, ("blame", "others", "prs")),
     "own-10k": Variant("regex", 10_000, ("blame", "others", "by_file", "prs")),
     "own-20k": Variant("regex", 20_000, ("blame", "others", "by_file", "prs")),
 }
@@ -67,7 +70,8 @@ VARIANT_NAMES = {
     "5r-5k": "5r at 5K", "5r-10k": "5r at 10K", "5r-20k": "5r at 20K",
     "ts-10k": "tree-sitter tags (Aider)", "ast-10k": "Python ast + regex", "ctags-10k": "Universal Ctags",
     "pyg-10k": "Pygments", "blame-10k": "5r + blame ownership", "commits-10k": "5r + commit subjects by file",
-    "prs-10k": "5r + merged PRs", "own-10k": "5r + all attribution", "own-20k": "5r + all attribution at 20K",
+    "prs-10k": "5r + merged PRs", "blame-20k": "5r + blame ownership at 20K",
+    "blame-prs-10k": "5r + blame ownership + merged PRs", "own-10k": "5r + all attribution", "own-20k": "5r + all attribution at 20K",
 }
 BASELINE = "5r-10k"
 

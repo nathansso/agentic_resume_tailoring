@@ -56,7 +56,8 @@ the API.
 | `ast-10k` | Python's stdlib `ast` (exact spans, full signatures, decorators), regex elsewhere | none | none |
 | `ctags-10k` | Universal Ctags JSON (`--fields=+neS`), every language it knows | none | a `ctags` binary (`ART_CTAGS` or PATH) |
 | `pyg-10k` | Pygments lexers (`Name.Function`/`Name.Class` as definitions) | none | `pygments` |
-| `blame-10k` | regex, each definition tagged with its `git blame -w -M -C` ownership and introducing commit (`git log -L`) | + "built by other authors" | none |
+| `blame-10k`, `blame-20k` | regex, each definition tagged with its `git blame -w -M -C` ownership and introducing commit (`git log -L`) | + "built by other authors" | none |
+| `blame-prs-10k` | regex, ownership-tagged | + "built by other authors" + merged PRs | none (GitHub client) |
 | `commits-10k` | regex | per-file commit subjects, Conventional Commits types | none |
 | `prs-10k` | regex | + the user's merged PRs (title, number, merge SHA, size, body, files) | none (GitHub client) |
 | `own-10k`, `own-20k` | regex, ownership-tagged | all three layers | none |
