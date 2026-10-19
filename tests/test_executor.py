@@ -59,20 +59,21 @@ PROJ = "proj:pixel adventure"
 # ── program schema ───────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("node,msg", [
-    ({"id": "a", "op": "revise", "item_key": EXP}, "revise needs bullets"),
-    ({"id": "a", "op": "replace", "item_key": PROJ}, "needs replacement_key"),
-    ({"id": "a", "op": "replace", "item_key": EXP, "replacement_key": PROJ}, "swaps one project"),
-    ({"id": "a", "op": "delete", "item_key": PROJ, "because": "felt like it"}, "pref: or user:"),
-    ({"id": "a", "op": "keep", "item_key": "skill:python"}, "exp: or proj:"),
-    ({"id": "a", "op": "delete", "item_key": PROJ,
+    ({"id": "a", "because": "job:the posting asks for it", "op": "revise", "item_key": EXP}, "revise needs bullets"),
+    ({"id": "a", "because": "job:a better fit for the posting", "op": "replace", "item_key": PROJ}, "needs replacement_key"),
+    ({"id": "a", "because": "job:a better fit for the posting", "op": "replace", "item_key": EXP, "replacement_key": PROJ}, "swaps one project"),
+    ({"id": "a", "op": "delete", "item_key": PROJ, "because": "felt like it"},
+     "job:, user: or pref:"),
+    ({"id": "a", "because": "job:fits the posting", "op": "keep", "item_key": "skill:python"}, "exp: or proj:"),
+    ({"id": "a", "because": "job:the posting does not need it", "op": "delete", "item_key": PROJ,
       "accept": {"tolerances": {"duplication": 0.9}}}, "only tighten"),
-    ({"id": "a", "op": "delete_bullet", "item_key": EXP}, "delete_bullet needs cut_bullets"),
-    ({"id": "a", "op": "delete_bullet", "item_key": EXP, "cut_bullets": [f"{EXP2}#b1"]},
+    ({"id": "a", "because": "job:the posting does not need it", "op": "delete_bullet", "item_key": EXP}, "delete_bullet needs cut_bullets"),
+    ({"id": "a", "because": "job:the posting does not need it", "op": "delete_bullet", "item_key": EXP, "cut_bullets": [f"{EXP2}#b1"]},
      "must be 'exp:machine learning engineer"),
-    ({"id": "a", "op": "delete_bullet", "item_key": EXP, "cut_bullets": [f"{EXP}#bx"]}, "#b<n>"),
-    ({"id": "a", "op": "delete_bullet", "item_key": EXP, "cut_bullets": [f"{EXP}#b1"],
+    ({"id": "a", "because": "job:the posting does not need it", "op": "delete_bullet", "item_key": EXP, "cut_bullets": [f"{EXP}#bx"]}, "#b<n>"),
+    ({"id": "a", "because": "job:the posting does not need it", "op": "delete_bullet", "item_key": EXP, "cut_bullets": [f"{EXP}#b1"],
       "bullets": [{"text": "x", "cites": [EXP]}]}, "takes no bullets"),
-    ({"id": "a", "op": "delete", "item_key": EXP, "cut_bullets": [f"{EXP}#b1"]},
+    ({"id": "a", "because": "job:the posting does not need it", "op": "delete", "item_key": EXP, "cut_bullets": [f"{EXP}#b1"]},
      "cut_bullets is for delete_bullet"),
 ])
 def test_the_schema_rejects_malformed_nodes(node, msg):
@@ -85,7 +86,7 @@ def test_the_schema_rejects_malformed_nodes(node, msg):
 def test_node_ids_and_item_keys_are_unique():
     from harness.program import Program
 
-    keep = {"op": "keep", "item_key": EXP}
+    keep = {"because": "job:fits the posting", "op": "keep", "item_key": EXP}
     with pytest.raises(ValidationError, match="unique"):
         Program.model_validate({"job_id": "j", "nodes": [{"id": "a", **keep}, {"id": "a", **keep}]})
     with pytest.raises(ValidationError, match="one node per item_key"):
@@ -171,7 +172,7 @@ def test_a_first_plan_builds_on_the_kg_and_commits_a_host_node(isolated_engine, 
     from harness import tree
 
     uid, job_id, _ = env
-    out = _run(uid, {"job_id": job_id, "nodes": [{"id": "k", "op": "keep", "item_key": EXP}],
+    out = _run(uid, {"job_id": job_id, "nodes": [{"id": "k", "because": "job:fits the posting", "op": "keep", "item_key": EXP}],
                      "host": {"name": "claude-code", "version": "2.1"}})
     assert out.get("error") is None and out["committed"]
     assert _head(isolated_engine, job_id) == out["node_id"]
@@ -226,13 +227,13 @@ def test_refused_nodes_never_execute_and_say_why(isolated_engine, env):
         s.commit()
         pref_id = pref.preference_id
     out = _run(uid, {"job_id": job_id, "nodes": [
-        {"id": "ghost", "op": "revise", "item_key": "exp:astronaut|nasa",
+        {"id": "ghost", "because": "job:the posting asks for it", "op": "revise", "item_key": "exp:astronaut|nasa",
          "bullets": [{"text": "Flew", "cites": ["exp:astronaut|nasa"]}]},
-        {"id": "badcite", "op": "revise", "item_key": EXP,
+        {"id": "badcite", "because": "job:the posting asks for it", "op": "revise", "item_key": EXP,
          "bullets": [{"text": src[0], "cites": [f"{EXP}#b99"]}]},
-        {"id": "nocite", "op": "revise", "item_key": EXP2,
+        {"id": "nocite", "because": "job:the posting asks for it", "op": "revise", "item_key": EXP2,
          "bullets": [{"text": "Did things", "cites": []}]},
-        {"id": "pinned", "op": "keep", "item_key": PROJ},
+        {"id": "pinned", "because": "job:fits the posting", "op": "keep", "item_key": PROJ},
     ]})
     status = {n["id"]: (n["status"], n["reason"].split(":")[0]) for n in out["nodes"]}
     assert status == {"ghost": ("refused", "unknown_key"), "badcite": ("refused", "unresolved_cite"),
@@ -391,7 +392,7 @@ def test_a_clean_revise_adding_a_supported_keyword_is_kept(env):
 
     uid, job_id, _ = env
     out = _run(uid, {"job_id": job_id, "nodes": [
-        {"id": "weave", "op": "revise", "item_key": EXP2, "strategy": "keyword_weave",
+        {"id": "weave", "because": "job:the posting asks for it", "op": "revise", "item_key": EXP2, "strategy": "keyword_weave",
          "keywords": ["integrate"], "bullets": _woven(_KG(uid).source_bullets[EXP2])}]})
     node = out["nodes"][0]
     assert node["status"] == "accepted", node
@@ -403,10 +404,10 @@ def test_permuting_independent_nodes_does_not_change_the_outcome(env):
 
     uid, job_id, _ = env
     nodes = [
-        {"id": "weave", "op": "revise", "item_key": EXP2, "strategy": "keyword_weave",
+        {"id": "weave", "because": "job:the posting asks for it", "op": "revise", "item_key": EXP2, "strategy": "keyword_weave",
          "bullets": _woven(_KG(uid).source_bullets[EXP2])},
         {"id": "drop", "op": "delete", "item_key": PROJ, "because": "user:less games"},
-        {"id": "keep", "op": "keep", "item_key": EXP},
+        {"id": "keep", "because": "job:fits the posting", "op": "keep", "item_key": EXP},
     ]
     a = _run(uid, {"job_id": job_id, "nodes": nodes}, dry_run=True)
     b = _run(uid, {"job_id": job_id, "nodes": nodes[::-1]}, dry_run=True)
@@ -425,9 +426,9 @@ def test_contract_tools_are_writes():
 
 def _strip(result):
     """A result without the fields a fresh commit must differ in: a dry run leads with the
-    reminder block (#299), which a commit does not carry."""
+    reminder block (#299) and the plan summary (#392), which a commit does not carry."""
     return {k: v for k, v in result.items()
-            if k not in ("node_id", "committed", "dry_run", "active_constraints")}
+            if k not in ("node_id", "committed", "dry_run", "active_constraints", "plan_summary")}
 
 
 def test_replaying_a_program_is_byte_identical(env):
@@ -507,11 +508,11 @@ def test_a_plan_whose_nodes_are_all_reverted_or_refused_commits_nothing(isolated
     nodes_before, events_before = _nodes(isolated_engine), _events(isolated_engine)
     src = executor._KG(uid).source_bullets[EXP]
     out = _run(uid, {"job_id": job_id, "parent": first["node_id"], "nodes": [
-        {"id": "same", "op": "revise", "item_key": EXP,           # no target can improve
+        {"id": "same", "because": "job:the posting asks for it", "op": "revise", "item_key": EXP,           # no target can improve
          "bullets": [{"text": t, "cites": [f"{EXP}#b{i}"]} for i, t in enumerate(src)]},
-        {"id": "ghost", "op": "revise", "item_key": "exp:astronaut|nasa",
+        {"id": "ghost", "because": "job:the posting asks for it", "op": "revise", "item_key": "exp:astronaut|nasa",
          "bullets": [{"text": "Flew", "cites": ["exp:astronaut|nasa"]}]},
-        {"id": "keep", "op": "keep", "item_key": EXP2},
+        {"id": "keep", "because": "job:fits the posting", "op": "keep", "item_key": EXP2},
     ]})
     assert out.get("error") is None and out["committed"] is False and out["node_id"] is None
     assert out["reason"] == executor.NO_CHANGE and out["reason"].startswith("no_change")
@@ -737,7 +738,7 @@ def test_carrying_the_edit_over_as_a_node_lets_the_commit_through(isolated_engin
     bullets = [{"text": USER_TEXT, "cites": [f"{EXP}#b0"]}] + [
         {"text": t, "cites": [f"{EXP}#b{i}"]} for i, t in enumerate(src) if i]
     out = _run(uid, {"job_id": job_id, "parent": edit["node_id"], "nodes": [
-        {"id": "user-edit", "op": "revise", "item_key": EXP, "bullets": bullets,
+        {"id": "user-edit", "because": "job:the posting asks for it", "op": "revise", "item_key": EXP, "bullets": bullets,
          "accept": {"improves": []}}]})
 
     assert out["nodes"][0]["status"] == "accepted", out["nodes"]
@@ -761,7 +762,7 @@ def test_a_partly_carried_edit_is_still_refused_for_the_rest(isolated_engine, en
         tex = tex.replace(r"\resumeItem{" + esc(src[0]) + "}", r"\resumeItem{" + esc(USER_TEXT) + "}")
         return tex.replace("        \\resumeItem{" + esc(src[1]) + "}\n", "")
     edit = _hand_edit(isolated_engine, uid, job_id, change)
-    revise = {"id": "r", "op": "revise", "item_key": EXP, "accept": {"improves": []},
+    revise = {"id": "r", "because": "job:the posting asks for it", "op": "revise", "item_key": EXP, "accept": {"improves": []},
               "bullets": [{"text": USER_TEXT, "cites": [f"{EXP}#b0"]}] + [
                   {"text": t, "cites": [f"{EXP}#b{i}"]} for i, t in enumerate(src) if i]}
     out = _run(uid, {"job_id": job_id, "parent": edit["node_id"], "nodes": [revise]})
@@ -792,7 +793,7 @@ def test_an_explicit_discard_commits_and_says_what_was_dropped(isolated_engine, 
         assert s.exec(select(UserJobResult)).one().edited_tex is None
     # With nothing to discard the flag changes nothing and reports nothing.
     plain = _run(uid, {"job_id": job_id, "parent": out["node_id"], "discard_editor_edits": True,
-                       "nodes": [{"id": "k", "op": "keep", "item_key": EXP2}]})
+                       "nodes": [{"id": "k", "because": "job:fits the posting", "op": "keep", "item_key": EXP2}]})
     assert "discarded_editor_edits" not in plain
 
 
@@ -874,7 +875,7 @@ USER_UNSUPPORTED = "Cut ranking latency by 47% across 9 regions."
 def _carry_nodes(src, text, cites=None, drop_first=True):
     """A revise of EXP that puts `text` first and keeps the other source bullets, citing them."""
     first = {"text": text, "cites": cites or [f"{EXP}#b0"]}
-    return [{"id": "user-edit", "op": "revise", "item_key": EXP, "accept": {"improves": []},
+    return [{"id": "user-edit", "because": "job:the posting asks for it", "op": "revise", "item_key": EXP, "accept": {"improves": []},
              "bullets": [first] + [{"text": t, "cites": [f"{EXP}#b{i}"]}
                                    for i, t in enumerate(src) if i or not drop_first]}]
 
@@ -1015,7 +1016,7 @@ def test_the_edit_loop_runs_end_to_end_from_diff_nodes_to_a_commit(isolated_engi
     n = int(e["bullet"].rpartition("#b")[2])
     bullets = [{"text": e["after"] if i == n else t, "cites": [f"{EXP}#b{i}"]}
                for i, t in enumerate(src)]
-    out = _run(uid, _plan(job_id, edit, [{"id": "user-edit", "op": "revise", "item_key": EXP,
+    out = _run(uid, _plan(job_id, edit, [{"id": "user-edit", "because": "job:the posting asks for it", "op": "revise", "item_key": EXP,
                                           "bullets": bullets, "accept": {"improves": []}}]))
     assert out["committed"] and out["violations"] == [] and "discarded_editor_edits" not in out
     assert out["nodes"][0]["carried_edit"][0]["bullet"] == e["bullet"]
@@ -1088,7 +1089,7 @@ def test_an_added_bullet_in_the_tex_is_carried_the_same_way(isolated_engine, env
         "        \\resumeItem{" + esc(src[-1]) + "}\n        \\resumeItem{" + esc(USER_PLAIN) + "}\n"))
     bullets = [{"text": t, "cites": [f"{EXP}#b{i}"]} for i, t in enumerate(src)] + [
         {"text": USER_PLAIN, "cites": [f"{EXP}#b0"]}]
-    out = _run(uid, _plan(job_id, edit, [{"id": "u", "op": "revise", "item_key": EXP,
+    out = _run(uid, _plan(job_id, edit, [{"id": "u", "because": "job:the posting asks for it", "op": "revise", "item_key": EXP,
                                           "bullets": bullets, "accept": {"improves": []}}]))
     [node] = out["nodes"]
     assert node["status"] == "accepted", node
@@ -1353,11 +1354,12 @@ def test_delete_bullet_is_refused_when_it_names_nothing_or_leaves_nothing(env, c
     assert node["status"] == "refused" and node["reason"].startswith(expect), node
 
 
-def test_a_delete_bullet_with_no_reason_is_judged_like_any_edit(env):
-    """No `because`, no waiver: the node must improve a target and no guard may regress."""
+def test_a_delete_bullet_for_the_posting_is_judged_like_any_edit(env):
+    """A `job:` reason is the host's own reading, not a request (#392): no waiver, so the node
+    must improve a target and no guard may regress, as a reasonless one was before."""
     uid, job_id, _ = env
     out = _run(uid, {"job_id": job_id, "nodes": [
-        {"id": "c", "op": "delete_bullet", "item_key": EXP, "cut_bullets": [f"{EXP}#b3"]}]},
+        {"id": "c", "because": "job:the posting does not need it", "op": "delete_bullet", "item_key": EXP, "cut_bullets": [f"{EXP}#b3"]}]},
         dry_run=True)
     node = out["nodes"][0]
     assert "waived" not in node and not (node["reason"] or "").startswith("guard_waived"), node
@@ -1394,7 +1396,7 @@ def test_a_role_family_pin_binds_only_on_jobs_of_that_family(isolated_engine, en
     uid, job_id, _ = env
     _family(uid, job_id, "machine_learning")
     _scoped_pin(isolated_engine, uid, EXP, "role_family", pin_family)
-    out = _run(uid, {"job_id": job_id, "nodes": [{"id": "k", "op": "keep", "item_key": EXP}]},
+    out = _run(uid, {"job_id": job_id, "nodes": [{"id": "k", "because": "job:fits the posting", "op": "keep", "item_key": EXP}]},
                dry_run=True)
     status = out["nodes"][0]["status"]
     assert (status == "refused") is refused, out["nodes"][0]
@@ -1497,7 +1499,7 @@ def test_a_revised_bullet_that_adds_kafka_to_a_cited_source_never_reaches_the_pa
         isolated_engine, kafkaless, text):
     uid, job_id = kafkaless
     out = _run(uid, {"job_id": job_id, "nodes": [
-        {"id": "k", "op": "revise", "item_key": ML_EXP, "bullets": _reword(uid, ML_EXP, text)}]})
+        {"id": "k", "because": "job:the posting asks for it", "op": "revise", "item_key": ML_EXP, "bullets": _reword(uid, ML_EXP, text)}]})
     _refused(out, "hard_gate: consistency")
     assert "kafka" in out["nodes"][0]["reason"].lower()
     assert "kafka" not in _on_the_page(out, uid, job_id, isolated_engine)
@@ -1518,7 +1520,7 @@ def test_an_uncited_bullet_with_kafka_is_refused_by_the_citation_gate(isolated_e
     bullets = _reword(uid, ML_EXP, "Built a Kafka pipeline to stream patient events.")
     bullets[0]["cites"] = []
     out = _run(uid, {"job_id": job_id, "nodes": [
-        {"id": "k", "op": "revise", "item_key": ML_EXP, "bullets": bullets}]})
+        {"id": "k", "because": "job:the posting asks for it", "op": "revise", "item_key": ML_EXP, "bullets": bullets}]})
     _refused(out, "uncited_bullet")
     assert "kafka" not in _on_the_page(out, uid, job_id, isolated_engine)
 
@@ -1528,7 +1530,7 @@ def test_a_bullet_citing_evidence_that_does_not_exist_is_refused(isolated_engine
     uid, job_id = kafkaless
     bullets = _reword(uid, ML_EXP, "Built a Kafka pipeline to stream patient events.", cite=cite)
     out = _run(uid, {"job_id": job_id, "nodes": [
-        {"id": "k", "op": "revise", "item_key": ML_EXP, "bullets": bullets}]})
+        {"id": "k", "because": "job:the posting asks for it", "op": "revise", "item_key": ML_EXP, "bullets": bullets}]})
     _refused(out, "unresolved_cite")
     assert "kafka" not in _on_the_page(out, uid, job_id, isolated_engine)
 
@@ -1537,7 +1539,7 @@ def test_a_project_bullet_with_kafka_never_reaches_the_page(isolated_engine, kaf
     """A project's text on the page is its bullets (the plan has no description field)."""
     uid, job_id = kafkaless
     out = _run(uid, {"job_id": job_id, "nodes": [
-        {"id": "k", "op": "revise", "item_key": ML_PROJ,
+        {"id": "k", "because": "job:the posting asks for it", "op": "revise", "item_key": ML_PROJ,
          "bullets": _reword(uid, ML_PROJ, "Streams camera frames through Kafka into the detector.")}]})
     _refused(out, "hard_gate: consistency")
     assert "kafka" not in _on_the_page(out, uid, job_id, isolated_engine)
@@ -1547,7 +1549,7 @@ def test_a_project_bullet_with_kafka_never_reaches_the_page(isolated_engine, kaf
 def test_a_skills_list_naming_kafka_comes_back_unknown_and_is_not_rendered(
         isolated_engine, kafkaless, names):
     uid, job_id = kafkaless
-    out = _run(uid, {"job_id": job_id, "nodes": [{"id": "k", "op": "keep", "item_key": ML_EXP}],
+    out = _run(uid, {"job_id": job_id, "nodes": [{"id": "k", "because": "job:fits the posting", "op": "keep", "item_key": ML_EXP}],
                      "skills": names})
     assert any("kafka" in u.lower() for u in out["skills"]["unknown"]), out["skills"]
     assert "kafka" not in _on_the_page(out, uid, job_id, isolated_engine)
@@ -1558,7 +1560,7 @@ def test_kafka_among_the_real_skills_is_dropped_and_the_rest_commit(isolated_eng
 
     uid, job_id = kafkaless
     real = [r["record"]["name"] for r in _KG(uid).of("skill")]
-    out = _run(uid, {"job_id": job_id, "nodes": [{"id": "k", "op": "keep", "item_key": ML_EXP}],
+    out = _run(uid, {"job_id": job_id, "nodes": [{"id": "k", "because": "job:fits the posting", "op": "keep", "item_key": ML_EXP}],
                      "skills": [*real[:3], "Kafka", *real[3:]]})
     assert out["committed"] and out["skills"]["unknown"] == ["Kafka"]
     assert "kafka" not in _on_the_page(out, uid, job_id, isolated_engine)
@@ -1578,7 +1580,7 @@ def test_keywords_and_reasons_on_a_node_are_not_page_text(isolated_engine, kafka
 
 def test_a_section_order_cannot_carry_text_onto_the_page(isolated_engine, kafkaless):
     uid, job_id = kafkaless
-    out = _run(uid, {"job_id": job_id, "nodes": [{"id": "k", "op": "keep", "item_key": ML_EXP}],
+    out = _run(uid, {"job_id": job_id, "nodes": [{"id": "k", "because": "job:fits the posting", "op": "keep", "item_key": ML_EXP}],
                      "section_order": ["kafka", "experience", "projects", "skills"]})
     assert not out["committed"]
     assert {v["check"] for v in out["violations"]} >= {"section_order"}
@@ -1655,7 +1657,7 @@ def test_a_replace_that_brings_in_a_hard_emphasized_project_is_not_vetoed_by_a_g
     parent = first["node_id"]
 
     _veto_every_unrequested_node(monkeypatch)
-    swap = {"id": "s", "op": "replace", "item_key": keys[0], "replacement_key": PROJ}
+    swap = {"id": "s", "because": "job:a better fit for the posting", "op": "replace", "item_key": keys[0], "replacement_key": PROJ}
 
     # Without the pin, the guard's veto stands: the project is not brought in.
     plain = _run(uid, {"job_id": job_id, "parent": parent, "nodes": [swap]}, dry_run=True)
@@ -1686,8 +1688,215 @@ def test_the_override_for_a_hard_emphasize_is_not_a_way_around_a_hard_gate(env, 
         "target": "Pixel Adventure", "strength": 5})
     _veto_every_unrequested_node(monkeypatch)
     out = _run(uid, {"job_id": job_id, "parent": first["node_id"], "nodes": [
-        {"id": "s", "op": "replace", "item_key": keys[0], "replacement_key": PROJ,
+        {"id": "s", "because": "job:a better fit for the posting", "op": "replace", "item_key": keys[0], "replacement_key": PROJ,
          "bullets": [{"text": "Built it with Kafka and Spark on a 40-node cluster.",
                       "cites": [PROJ]}]}]}, dry_run=True)
     node = out["nodes"][0]
     assert node["status"] in ("refused", "reverted") and "override" not in (node["reason"] or "")
+
+
+# ── a reason on every node, and the plan summary (#392) ──────────────────────
+
+EXP3 = "exp:software engineer|harbor labs"
+
+
+@pytest.mark.parametrize("node", [
+    {"id": "k", "op": "keep", "item_key": EXP},
+    {"id": "r", "op": "revise", "item_key": EXP, "bullets": [{"text": "x", "cites": [EXP]}]},
+    {"id": "s", "op": "replace", "item_key": PROJ, "replacement_key": "proj:streamboard"},
+    {"id": "d", "op": "delete", "item_key": PROJ},
+    {"id": "c", "op": "delete_bullet", "item_key": EXP, "cut_bullets": [f"{EXP}#b1"]},
+])
+def test_a_new_node_without_a_reason_is_refused_by_name(node):
+    from harness.program import Program
+
+    with pytest.raises(ValidationError) as exc:
+        Program.model_validate({"job_id": "j", "nodes": [node]})
+    msg = str(exc.value)
+    assert f"node {node['id']} ({node['op']} {node['item_key']}): because is required" in msg
+    assert "job:" in msg and "user:" in msg and "pref:" in msg      # says what to send
+    Program.model_validate({"job_id": "j", "nodes": [{**node, "because": "job:asks for SQL"}]})
+
+
+@pytest.mark.parametrize("because, msg", [
+    ("", "because is required"),
+    ("   ", "because is required"),
+    ("user:", "gives no reason after the prefix"),
+    ("job:  ", "gives no reason after the prefix"),
+    ("job:" + "x" * 300, "keep it under 240"),
+    ("posting:asks for SQL", "must start with job:, user: or pref:"),
+])
+def test_a_reason_must_say_something_short(because, msg):
+    from harness.program import Program
+
+    with pytest.raises(ValidationError, match=msg):
+        Program.model_validate({"job_id": "j", "nodes": [
+            {"id": "k", "op": "keep", "item_key": EXP, "because": because}]})
+
+
+def test_the_contract_refuses_a_reasonless_node_and_publishes_because_as_required(env):
+    from harness.contract import describe, invoke
+
+    uid, job_id, _ = env
+    with pytest.raises(ValidationError, match=r"node k \(keep .*\): because is required"):
+        invoke("execute_plan", uid, {"program": {"job_id": job_id, "nodes": [
+            {"id": "k", "op": "keep", "item_key": EXP}]}, "dry_run": True})
+    schema = next(t for t in describe() if t["name"] == "execute_plan")["input_schema"]
+    assert "because" in schema["$defs"]["ProgramNode"]["required"]
+
+
+def test_only_a_user_or_preference_reason_makes_a_delete_requested():
+    from harness.program import is_request
+
+    assert is_request("user:fit the page") and is_request("pref:3f0a")
+    assert not is_request("job:the posting does not ask for it")
+    assert not is_request(None) and not is_request("")
+
+
+def _legacy_program(isolated_engine, uid, job_id, nodes):
+    """A program saved before #392, as it was stored: nodes with `because` null."""
+    from database.models import PlanProgram
+    from harness.program import LEGACY_NODES, Program, program_id
+
+    prog = Program.model_validate(
+        {"job_id": job_id, "nodes": nodes},
+        context={LEGACY_NODES: {n["id"] for n in nodes}}).model_dump(mode="json")
+    assert all(n["because"] is None for n in prog["nodes"])
+    pid = program_id(prog)
+    with Session(isolated_engine) as s:
+        s.add(PlanProgram(program_id=pid, user_id=uid, job_id=UUID(job_id), program=prog))
+        s.commit()
+    return pid, prog
+
+
+def test_a_program_saved_before_reasons_were_required_still_replays(isolated_engine, env):
+    from harness.executor import patch_plan
+
+    uid, job_id, _ = env
+    pid, prog = _legacy_program(isolated_engine, uid, job_id, [
+        {"id": "k", "op": "keep", "item_key": EXP},
+        {"id": "d", "op": "delete", "item_key": PROJ}])
+    # As a fresh submission it is held to the rule...
+    assert _run(uid, prog, dry_run=True)["error"]["code"] == "invalid_program"
+    # ...but replaying the saved one, unchanged, runs, and its summary says no reason was given.
+    dry = patch_plan(uid, pid, [], dry_run=True)
+    assert dry.get("error") is None, dry
+    assert [n["reason"] for n in dry["plan_summary"]["nodes"]] == [
+        "no reason given (a program saved before reasons were required)"] * 2
+    # A reasonless delete is still judged like any edit, as before: never a requested delete.
+    drop = next(n for n in dry["nodes"] if n["id"] == "d")
+    assert "waived" not in drop and not (drop["reason"] or "").startswith("guard_waived")
+    done = patch_plan(uid, pid, [])
+    assert done.get("error") is None and done["committed"], done
+
+
+def test_a_patch_to_an_old_program_needs_a_reason_on_what_it_adds_or_changes(isolated_engine, env):
+    from harness.executor import patch_plan
+
+    uid, job_id, _ = env
+    pid, _ = _legacy_program(isolated_engine, uid, job_id, [
+        {"id": "k", "op": "keep", "item_key": EXP}])
+    added = patch_plan(uid, pid, [{"op": "add", "path": "/nodes/-", "value": {
+        "id": "d", "op": "delete", "item_key": PROJ}}], dry_run=True)
+    assert added["error"]["code"] == "invalid_program"
+    assert f"node d (delete {PROJ}): because is required" in added["error"]["message"]
+    changed = patch_plan(uid, pid, [{"op": "replace", "path": "/nodes/0/item_key",
+                                     "value": EXP2}], dry_run=True)
+    assert "node k (keep" in changed["error"]["message"]
+    fixed = patch_plan(uid, pid, [
+        {"op": "replace", "path": "/nodes/0/item_key", "value": EXP2},
+        {"op": "replace", "path": "/nodes/0/because", "value": "job:backend APIs"},
+        {"op": "add", "path": "/nodes/-", "value": {
+            "id": "d", "op": "delete", "item_key": PROJ, "because": "user:no games"}}],
+        dry_run=True)
+    assert fixed.get("error") is None, fixed
+    assert [n["reason"] for n in fixed["plan_summary"]["nodes"]] == [
+        "the posting: backend APIs", "you asked: no games"]
+
+
+def test_a_dry_run_summarizes_every_node_with_its_reason(isolated_engine, env):
+    from harness.executor import _KG
+
+    uid, job_id, _ = env
+    with Session(isolated_engine) as s:
+        pref = UserPreference(user_id=uid, text="Leave the game project off", polarity="suppress",
+                              target_key=PROJ, scope_type="global", strength=3)
+        s.add(pref)
+        s.commit()
+        pref_id = pref.preference_id
+    src = _KG(uid).source_bullets
+    program = {"job_id": job_id, "skills": ["Python", "PyTorch", "COBOL"], "nodes": [
+        {"id": "keep", "op": "keep", "item_key": EXP2, "because": "job:backend APIs match"},
+        {"id": "rev", "op": "revise", "item_key": EXP, "strategy": "keyword_weave",
+         "keywords": ["PyTorch"], "because": "job:lead with the ranking models",
+         "bullets": [{"text": src[EXP][0], "cites": [f"{EXP}#b0"]},
+                     {"text": src[EXP][3], "cites": [f"{EXP}#b3"]}]},
+        {"id": "cut", "op": "delete_bullet", "item_key": EXP3, "cut_bullets": [f"{EXP3}#b0"],
+         "because": "user:fit the one-page budget"},
+        {"id": "drop", "op": "delete", "item_key": PROJ, "because": f"pref:{pref_id}"}]}
+    dry = _run(uid, program, dry_run=True)
+    assert dry.get("error") is None, dry
+    assert list(dry)[:2] == ["active_constraints", "plan_summary"]
+    summary = dry["plan_summary"]
+    by_id = {n["id"]: n for n in summary["nodes"]}
+    # One entry per node, in the order the executor ran them (page order), with its outcome.
+    assert [n["id"] for n in summary["nodes"]] == [n["id"] for n in dry["nodes"]]
+    assert {i: by_id[i]["status"] for i in by_id} == {n["id"]: n["status"] for n in dry["nodes"]}
+    assert by_id["keep"]["title"] == "Backend Software Engineer, Bluefin Software"
+    assert by_id["keep"]["change"] == "kept as is"
+    assert by_id["keep"]["reason"] == "the posting: backend APIs match"
+    assert by_id["rev"]["change"] == "revised with 2 bullets, weaving in PyTorch"
+    assert by_id["rev"]["bullets"] == [src[EXP][0], src[EXP][3]]
+    assert by_id["cut"]["change"] == "cut 1 bullet #b0"
+    assert by_id["cut"]["cut"] == [{"bullet": f"{EXP3}#b0", "text": src[EXP3][0]}]
+    assert by_id["cut"]["reason"] == "you asked: fit the one-page budget"
+    assert by_id["drop"]["title"] == "Pixel Adventure" and by_id["drop"]["change"] == "dropped"
+    assert by_id["drop"]["reason"] == 'your preference "Leave the game project off"'
+    assert by_id["drop"]["because"] == f"pref:{pref_id}"
+    # The skills line is what the page would show: an unknown skill is named, not rendered.
+    assert summary["skills"]["source"] == "plan"
+    assert summary["skills"]["line"] == ["Python", "PyTorch"]
+    assert summary["skills"]["unknown"] == ["COBOL"]
+    text = summary["text"]
+    assert text.startswith(summary["title"] + " (dry run: nothing is saved until you approve)")
+    for line in ("Backend Software Engineer, Bluefin Software: kept as is",
+                 "   Why: the posting: backend APIs match",
+                 f"   - {src[EXP][3]}",
+                 f'   - cut #b0: "{src[EXP3][0]}"',
+                 "Pixel Adventure: dropped",
+                 '   Why: your preference "Leave the game project off"',
+                 "Skills: Python, PyTorch",
+                 "   Not in your profile, left off: COBOL"):
+        assert line in text, (line, text)
+    # Additive: the commit of the same plan carries no summary.
+    committed = _run(uid, program)
+    assert committed.get("plan_summary") is None
+
+
+def test_the_summary_says_when_art_would_not_apply_a_node_and_names_a_swap():
+    from harness.plan_summary import build
+
+    base = {"experiences": [], "projects": [{"name": "Todo App", "bullets": ["Built a todo app."]}],
+            "skills_ranked": [{"name": "SQL"}]}
+    kg = {"proj:recsys gnn": {"name": "RecSys GNN"}}
+    summary = build(
+        nodes=[{"id": "swap", "op": "replace", "item_key": "proj:todo app",
+                "replacement_key": "proj:recsys gnn", "because": "job:recommender systems"},
+               {"id": "x", "op": "keep", "item_key": "proj:ghost", "because": "job:fits"}],
+        results=[{"status": "accepted"},
+                 {"status": "refused", "reason": "unknown_key: proj:ghost"}],
+        base=base, final=base, kg_item=kg.get, pref_texts={}, skills_planned=False,
+        has_parent=True, skill_notes={"unknown": [], "suppressed": []},
+        job_title="Data Scientist", job_company="Acme")
+    swap, ghost = summary["nodes"]
+    assert swap["change"] == "replaced Todo App with RecSys GNN"
+    assert swap["replacement_title"] == "RecSys GNN" and "not_applied" not in swap
+    assert ghost["title"] == "proj:ghost" and ghost["not_applied"] == "unknown_key: proj:ghost"
+    assert summary["text"] == "\n".join([
+        "Plan for Data Scientist at Acme (dry run: nothing is saved until you approve)",
+        "1. Todo App: replaced Todo App with RecSys GNN",
+        "   Why: the posting: recommender systems",
+        "2. proj:ghost: kept as is",
+        "   Why: the posting: fits",
+        "   ART would not apply this (refused): unknown_key: proj:ghost",
+        "Skills (unchanged): SQL"])

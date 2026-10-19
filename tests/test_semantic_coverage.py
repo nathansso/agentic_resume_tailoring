@@ -435,7 +435,7 @@ def _reword(uid, job_id, text=ORCH):
 
     bullets = [{"text": b, "cites": [f"{EXP}#b{i}"]} for i, b in enumerate(_KG(uid).source_bullets[EXP])]
     bullets[1]["text"] = text
-    return {"job_id": job_id, "nodes": [{"id": "reword", "op": "revise", "item_key": EXP, "strategy": "reframe",
+    return {"job_id": job_id, "nodes": [{"id": "reword", "because": "job:the posting asks for it", "op": "revise", "item_key": EXP, "strategy": "reframe",
                                           "bullets": bullets}]}
 
 
@@ -513,7 +513,7 @@ def test_the_pages_education_entry_covers_a_degree_requirement_through_the_execu
 def test_a_program_may_name_semantic_coverage_as_a_target():
     from harness.program import Program
 
-    node = {"id": "a", "op": "keep", "item_key": EXP, "accept": {"improves": ["semantic_coverage"]}}
+    node = {"id": "a", "because": "job:fits the posting", "op": "keep", "item_key": EXP, "accept": {"improves": ["semantic_coverage"]}}
     assert Program.model_validate({"job_id": "j", "nodes": [node]}).nodes[0].accept.improves == ["semantic_coverage"]
 
 

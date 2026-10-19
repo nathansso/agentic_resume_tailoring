@@ -51,7 +51,7 @@ from agents.layout import resolve_bullets, resolve_section_order, resolve_skills
 from agents.skill_matching import match_requirement_terms, priority_skills
 from agents.skill_scorer import MAX_SKILLS, rank_and_select_skills, score_skills
 from database.models import JDProfile, JobDescription, PlanProgram, UserJobResult
-from harness import ART_VERSION, constraints, library, texdiff, tree
+from harness import ART_VERSION, constraints, library, plan_summary, texdiff, tree
 from harness import rules as rules_mod
 from harness.acceptance import (
     Context, accept, metric_vector, negative_pin_violations, preference_violations, rule_violations,
@@ -65,7 +65,7 @@ from harness.decisions.negative_pins import (
 )
 from harness.decisions.support import make_support_checker, reviews as support_reviews
 from harness.ingest import apply_job_rules, list_rules, resolve_rules
-from harness.program import Program, apply_patch, program_id
+from harness.program import LEGACY_NODES, Program, apply_patch, is_request, program_id
 from harness.tools import (
     _records, edu_key, preferences_for, project_source_bullets, rules_for, skill_key,
 )
@@ -861,9 +861,16 @@ def _save_program(user_id: UUID, job_id: UUID, pid: str, program: Dict) -> None:
 
 def execute_plan(user_id, program: Dict, *, dry_run: bool = False) -> Dict[str, Any]:
     """Run one program. Returns the result dict, or `{"error": ...}`."""
+    return _run(user_id, program, dry_run=dry_run, legacy_nodes=())
+
+
+def _run(user_id, program: Dict, *, dry_run: bool, legacy_nodes: Sequence[str]) -> Dict[str, Any]:
+    """`legacy_nodes`: ids of nodes `patch_plan` carried over unchanged from a saved program,
+    which are not held to the reason-on-every-node rule (#392)."""
     user_id = tree._uuid(user_id)
     try:
-        prog = Program.model_validate(program).model_dump(mode="json")
+        prog = Program.model_validate(
+            program, context={LEGACY_NODES: frozenset(legacy_nodes)}).model_dump(mode="json")
     except ValidationError as exc:
         return PlanError("invalid_program", str(exc)).as_dict()
     try:
@@ -919,8 +926,9 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     excluded = set(eff["excluded"])
     ctx, prefs = _context(user_id, job, kg, eff["values"]["max_bullet_lines"])
     prefs["excluded"] = eff["excluded"]
-    pref_ids = {str(p.get("preference_id")).lower()
-                for p in services.load_preferences(user_id)}
+    pref_texts = {str(p.get("preference_id")).lower(): str(p.get("text") or "")
+                  for p in services.load_preferences(user_id)}
+    pref_ids = set(pref_texts)
     requirements = job_requirements(user_id, job_id)
     # No history: the job's track baseline when one applies (#229), else the whole KG.
     baseline = None
@@ -955,11 +963,13 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
     current = base_vector
 
     results = []
+    ran: List[Dict] = []         # the nodes in the order they ran, beside `results` (#392)
     accepted_origin: Dict[Tuple[str, str], str] = {}
     order = sorted(prog["nodes"], key=lambda n: (_section_rank(base, n["item_key"].strip().lower()),
                                                  prog["nodes"].index(n)))
     for node in order:
         row = {"id": node["id"], "op": node["op"], "item_key": node["item_key"]}
+        ran.append(node)
         node = _with_variant_cites(node, kg)
         reason = _refusal(node, working, kg, prefs, pref_ids)
         if reason:
@@ -980,7 +990,7 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
         verdict = accept(current, vector, improves=node["accept"]["improves"],
                          tolerances=node["accept"]["tolerances"],
                          requested=node["op"] in ("delete", "delete_bullet")
-                         and bool(node.get("because")),
+                         and is_request(node.get("because")),
                          carried=carried is not None)
         if carried is not None and not verdict["accepted"] and verdict["gate_violations"]:
             verdict = {**verdict, "reason": _carried_refusal(verdict["reason"],
@@ -1077,8 +1087,17 @@ def _execute(user_id: UUID, prog: Dict, *, dry_run: bool) -> Dict[str, Any]:
         out["baseline"] = baseline
     if dry_run:
         # The reminder (#299), first in the result: a dry run is the host's last look before it
-        # commits, so what the user has said for this job leads. Not on a commit: additive only.
-        out = {"active_constraints": constraints.active_constraints(user_id, str(job_id)), **out}
+        # commits, so what the user has said for this job leads. Then the plan in plain words,
+        # with each node's reason, for the host to show the user for approval (#392). Neither is
+        # on a commit: additive only.
+        summary = plan_summary.build(
+            nodes=ran, results=results, base=base, final=working,
+            kg_item=lambda key: kg.item(key) if key in kg.by_key else None,
+            pref_texts=pref_texts, skills_planned=prog.get("skills") is not None,
+            has_parent=head is not None, skill_notes=skill_notes,
+            job_title=job.title or "", job_company=job.company or "")
+        out = {"active_constraints": constraints.active_constraints(user_id, str(job_id)),
+               "plan_summary": summary, **out}
     # Only when Jev (or its cache) answered for at least one bullet, or the deterministic
     # fallback (#351) has something to review: with no key and nothing to show, the result is what
     # it was before #193. `checked` counts Jev's answers; `fallback_checked` the bullets the
@@ -1206,4 +1225,10 @@ def patch_plan(user_id, program_id_: str, edits: List[Dict], *,
                                       for e in edits])
     except (ValueError, KeyError, IndexError, TypeError) as exc:
         return PlanError("invalid_patch", str(exc)).as_dict()
-    return execute_plan(user_id, patched, dry_run=dry_run)
+    # A node the patch left exactly as saved keeps the rules it was submitted under, so a
+    # program saved before every node needed a `because` still replays (#392). A node the patch
+    # adds or changes is new, and needs one.
+    saved_nodes = saved.get("nodes") or []
+    legacy = [n["id"] for n in patched.get("nodes") or []
+              if isinstance(n, dict) and isinstance(n.get("id"), str) and n in saved_nodes]
+    return _run(user_id, patched, dry_run=dry_run, legacy_nodes=legacy)

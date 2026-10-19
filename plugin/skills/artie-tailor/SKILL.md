@@ -138,21 +138,23 @@ from the posting. **Start from the approved text, not from the raw facts:**
 
 Draft a plan program for `execute_plan`. Its input schema is published with the tool.
 
-- **nodes**, one per experience or project you touch:
+- **nodes**, one per experience or project you touch. **Every node needs a short `because`**,
+  the reason the user will read: `job:<what in the posting calls for it>`, `user:<what they
+  asked>` or `pref:<preference_id>`. A node without one is refused.
   - `keep`: include the item unchanged.
   - `revise`: rewrite its bullets. Give the full new `bullets` list; each bullet
     `cites` the evidence ids it rests on (or names a `from_variant`). Set `strategy` to one of `keyword_weave`,
     `quantify`, `tighten` or `reframe`, and `keywords` to the posting terms you are
     weaving in. Only weave terms the cited evidence supports.
   - `replace`: swap one project for another (`replacement_key`).
-  - `delete`: drop the item. Set `because` to `user:<what they asked>` or
-    `pref:<preference_id>`.
+  - `delete`: drop the item. A `because` of `user:<what they asked>` or
+    `pref:<preference_id>` makes it a requested delete; a `job:` reason is judged like any edit.
   - `delete_bullet`: remove whole bullets from the item and change nothing else. Give
     `cut_bullets` (ids like `exp:...#b3`, the index in the item's list on the version you build
-    on) and a `because`. Never send a cut as a `revise` with one bullet fewer: a `revise` faces
-    every guard and MTLD reverts it. A `delete` or `delete_bullet` with a `because` is judged on
-    the hard gates; a guard regression it causes is accepted and listed under `waived`, which
-    you should tell the user.
+    on). Never send a cut as a `revise` with one bullet fewer: a `revise` faces
+    every guard and MTLD reverts it. A `delete` or `delete_bullet` with a `user:` or `pref:`
+    `because` is judged on the hard gates; a guard regression it causes is accepted and listed
+    under `waived`, which you should tell the user.
   - `accept.improves`: the targets a node should raise (`coverage`,
     `relevance_density`, `semantic_coverage`). `semantic_coverage` counts a requirement as
     met when some bullet shows it, in any words; a node that only makes a requirement
@@ -164,9 +166,9 @@ Draft a plan program for `execute_plan`. Its input schema is published with the 
   plus the skills cap and floor, or the user's page rules when they set any. Don't invent a
   smaller budget; cut content instead when finalize reports `line_budget`.
 
-**Show the user the plan before you execute it.** Show which items lead, what each
-revision says, what is cut and why, and the skills line. Then wait for approval.
-Execute directly only if the user said to skip approval.
+**Show the user the plan before you execute it.** Run it with `dry_run: true` and show the
+user `plan_summary.text` from the result, verbatim: each item, the change, its reason, and the
+skills line. Then wait for approval. Execute directly only if the user said to skip approval.
 
 ## 5. Execute
 

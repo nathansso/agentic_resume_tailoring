@@ -15,7 +15,7 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 ---
 
 ## Issue 394 — `render` saves where the user asks: "save it to my Downloads"
-**Status:** complete | **Tests:** 3576 pass on SQLite after merging main (47 new, in `tests/test_render_destinations.py`; the help test in `tests/test_packaging.py` updated), 25 skipped, 2 xfailed, 0 fail; the Postgres leg was not run locally (Docker was not running), CI's required leg covers it
+**Status:** complete | **Tests:** 3593 pass on SQLite after merging main (47 new, in `tests/test_render_destinations.py`; the help test in `tests/test_packaging.py` updated), 25 skipped, 2 xfailed, 0 fail; the Postgres leg was not run locally (Docker was not running), CI's required leg covers it
 
 Part of the MCP revision (#391, `docs/harness.md` § 2.1 "Destinations"). The user names a place in plain words and never types a path: `render` copies the PDF there, and the first time the agent asks and ART remembers the answer.
 
@@ -39,6 +39,30 @@ Part of the MCP revision (#391, `docs/harness.md` § 2.1 "Destinations"). The us
 - **Nothing is copied when no PDF was made** (no engine, or a compile error) unless the `.tex` was asked for; the note says so rather than copying the `.tex` unasked.
 - **Extra arguments** beyond the spec: `save_tex` names "the `.tex` when asked"; a few extra spellings of the names ("the Desktop folder", "download", "docs") are accepted.
 - **Not verified here:** macOS and Linux on real machines (both are covered by fakes), and the Postgres leg.
+
+---
+
+## Issue 392 — Reasons on every plan node, and a plan summary the agent shows for approval
+**Status:** complete | **Tests:** 3546 pass on SQLite after merging main (17 new), 25 skipped, 2 xfailed, 0 fail; the Postgres leg was not run locally (nothing here touches storage)
+
+The tailoring plan is the one point where the user approves (#391), and it must say what will change and why. Before, a plan node carried a reason only on `delete` / `delete_bullet`, so the agent could not show "I intend to change X because Y" for a revision or a swap, and it described the plan in its own words. Every node now carries a short `because`, and a dry run renders the plan, with those reasons, as text the agent shows the user word for word.
+
+### What shipped
+- **`because` on every node** (`harness/program.py`). `keep`, `revise`, `replace`, `delete` and `delete_bullet` all need one, in one of three forms: `job:<what in the posting calls for it>` (new), `user:<what they asked>` or `pref:<preference id>`. A new program with a node missing it, with nothing after the prefix, or over 240 characters is refused as `invalid_program`, and the message names the node and op and says what to send (`node d (delete proj:pixel adventure): because is required on every node. ...`). The published JSON schema lists `because` as required on `ProgramNode`; the contract's `execute_plan` input refuses the same program before it reaches the executor.
+- **What counts as a request is unchanged.** `is_request`: only `user:` and `pref:` reasons make a `delete` or `delete_bullet` a requested delete (hard gates only, guard regressions under `waived`, #279/#289). A `job:` reason is the host's own reading, so such a delete is judged like any edit, as a reasonless one was before.
+- **Old saved programs still replay.** The rule is checked at submission, not on load: `patch_plan` validates with the ids of the nodes its patch left exactly as saved (`LEGACY_NODES` in the pydantic validation context), and those are not held to it. A node the patch adds or changes needs a reason. `execute_plan` itself has no such context, so resubmitting an old program as new is held to the rule. Stored rows are never rewritten.
+- **`plan_summary` on dry runs** (`harness/plan_summary.py`, new; wired in `harness/executor.py`; typed as `PlanSummary` in `harness/contract.py`). Right after `active_constraints`: one entry per node in page order (`item_key`, `title`, `change` in plain words: kept as is / revised with N bullets, weaving in ... / replaced X with Y / dropped / cut N bullets #b...; the raw `because` and `reason` in words, a `pref:` reason quoted from the preference's own text; the dry run's `status`, and `not_applied` with the executor's reason for a reverted or refused node; the new `bullets`, or the `cut` bullets' text), then `skills` (`line` as the page would show it, `source` plan / current / ranked, `unknown`, `suppressed`), then `text`, the same as lines. Additive: no other field changed, and a commit does not carry it.
+- **The `artie-tailor` skill** (step 4, minimal, since #401 rewrites it): set `because` on every node, run a dry run, show `plan_summary.text` verbatim and wait.
+- **Docs.** `docs/harness.md` § 7 (the example program, reasons, the summary, `delete_bullet`'s request rule) and § 5 (a `job:` delete is judged as before); the `execute_plan` tool text.
+- **Callers updated.** The scripted host (`eval/scripted_host.py`), the preference-compliance hosts (`eval/preference_compliance.py`), `scripts/smoke_art_mcp.py` (also checks the summary) and `scripts/build_site_demo.py` send a reason on every node; existing test programs gained one (`job:`, which keeps their meaning), and two tests that compare a dry run with a commit (`tests/test_executor.py::_strip`, `tests/test_constraints_reminder.py`) leave `plan_summary` out as they already left out `active_constraints`. `test_a_delete_bullet_with_no_reason_is_judged_like_any_edit` became `..._for_the_posting_...`: a `job:` reason now plays the part no reason did.
+- **Tests** (`tests/test_executor.py`, 17 new): each of the five ops without a reason is refused by name; empty, prefix-only, too-long and unknown-prefix reasons are refused; the contract refuses the same and publishes `because` as required; only `user:` and `pref:` are requests; an old saved program refuses as a fresh submission but replays unchanged through `patch_plan` (dry run and commit), its reasonless delete still not waived; a patch to an old program needs a reason on what it adds or changes; a dry run's summary covers every node with its reason, title, change, outcome, cut text, the preference quoted and the skills line, and a commit of the same plan has none; the rendered text, a swap and a refused node, exactly.
+
+### Deviations from spec
+- **A third reason form, `job:`.** The issue says the reason is tied to the posting, a preference or the user's request; `because` only accepted `pref:` and `user:`. Requiring a `user:` reason for a revision the posting motivates would have made every delete a requested one, so `job:` was added and kept out of the requested-delete rule.
+- **"Short" is enforced as 240 characters.** A reason over that is refused rather than truncated.
+- **The summary carries the dry run's outcome**, which the issue did not ask for: a node ART would revert or refuse says so in `text`, so the user does not approve a change that will not happen.
+- **Grandfathering is by node content, not by program age.** A saved node carried over byte-for-byte keeps its old meaning; changing anything about it through `patch_plan` makes it a new node that needs a reason.
+- `ExecuteOutput` dumps `plan_summary: null` on a commit, as it does `active_constraints`.
 
 ---
 

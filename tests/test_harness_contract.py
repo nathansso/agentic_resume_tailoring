@@ -67,8 +67,8 @@ CALLS = {
     # Plan programs (#197). Dry runs, so all three adapters see the same HEAD.
     "execute_plan": [
         {"program": {"job_id": "$JOB", "parent": "$N1", "nodes": [
-            {"id": "k", "op": "keep", "item_key": "exp:data scientist|rippling"},
-            {"id": "gone", "op": "delete", "item_key": "proj:no such project"}]},
+            {"id": "k", "because": "job:fits the posting", "op": "keep", "item_key": "exp:data scientist|rippling"},
+            {"id": "gone", "because": "job:the posting does not need it", "op": "delete", "item_key": "proj:no such project"}]},
          "dry_run": True},
         {"program": {"job_id": "$JOB", "parent": None}, "dry_run": True}],   # stale parent
     "patch_plan": [{"program_id": "prog_missing", "edits": [
