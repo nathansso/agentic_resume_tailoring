@@ -14,6 +14,84 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 397 — How ART should map a repo: the candidates researched, measured head to head, and a recommendation for #398 and #399
+**Status:** complete (all 12 configured repos scored; finishes the provisional spike of PR #405) | **Tests:** 3634 pass on SQLite (26 new, in `tests/test_repo_dossier.py`), 26 skipped, 2 xfailed, 0 fail; the Postgres leg was not run locally (nothing here touches storage)
+
+**Recommendation for #398: `blame-20k`.** It is #397's 5r dossier (README, metadata with manifests and imports, filtered tree, the user's authorship, a regex symbol map ranked by PageRank seeded with the user's files). On top, every mapped definition is tagged with who wrote its surviving lines (`git blame -w -M -C`) and who introduced it (`git log -L`), and a "built by other authors" list follows.
+- **Budget:** 20K tokens as a hard cap (46K characters); measured writer input 14.5K mean, 22.8K max.
+- **Dependencies:** none new.
+- **Against the 10K baseline**, paired over 12 repos: misattribution −2.8 points (5.8% → 3.0%, 95% CI −5.4 to −0.5), accuracy +3.4 (+0.6 to +6.3), coverage of the owner's approved facts +8.2 (+0.8 to +16.1), with no rise in unsupported claims. It is the only variant within 95% of full code's coverage. In the many-author repos misattribution falls from 12.3% to 6.5%; full code, at 6.7× the tokens, sits at 12.2%.
+- **What doesn't earn its place:** no symbol backend beats the line regexes (tree-sitter with Aider's queries, stdlib `ast`, Universal Ctags and Pygments all within noise), and commit subjects add nothing measurable. Merged PRs make claims more grounded (unsupported −1.5 points) but not better attributed; they are the unit for #399.
+- **Symbol-map share:** a sweep on `blame-20k` (no map, 10%, 40%, or only the user's own and contested definitions) found nothing better than the default 25% filled by PageRank. No map loses the ownership tags (misattribution +1.9); 40% crowds out the README (coverage −11 on the repos it changes).
+- **Spend:** $0 new. 1,311 calls ran on the owner's Claude Code subscription, worth $137 at list price but not billed.
+
+The research report, with the candidates table, sizes, attribution findings and sources, is `docs/research/repo-map.md`. The results are in `eval/results/repo_dossier_2026-10-19.{md,json}`.
+
+### What shipped
+- **The research report** (`docs/research/repo-map.md`).
+  - Covers 17 candidates (Aider's repo map, grammar wheels, tree-sitter-language-pack 0.x/1.x, grep-ast, Universal Ctags, LSP/Serena, SCIP, stdlib `ast`, the regex map, Pygments, Repomix, Gitingest, code2prompt, files-to-prompt, RepoGraph, Codebase-Memory, the LLM-wiki ceilings) and 8 attribution methods.
+  - Each is marked viable, viable with adaptation, or out, against ART's constraints, with sources.
+  - Includes measured wheel and installed sizes on Windows, Linux and macOS, and the recommendation: method, sections, budget, dependencies, citations, #399.
+- **Variants at matched budgets** (`eval/repo_dossier/variants.py`). 18 variants, each fitted to one total budget by one water-filling rule (`fit`), with line-span citations and the build commit in the header:
+  - `5r` at 5K, 10K and 20K;
+  - `ts-10k`, `ast-10k`, `ctags-10k` and `pyg-10k`;
+  - `blame-10k`, `blame-20k`, `commits-10k`, `prs-10k`, `blame-prs-10k`, `own-10k` and `own-20k`;
+  - the symbol-map share sweep `blame-20k-s0`, `-s10`, `-s40` and `blame-20k-attrib` (own and contested definitions only).
+- **Four symbol backends** (`eval/repo_dossier/symbols.py`). `ts-tags` uses each grammar wheel's own `queries/tags.scm` (Aider's method). `ast` uses stdlib `ast`, with exact spans and full signatures, and regex elsewhere. `ctags` runs Universal Ctags JSON, found through `ART_CTAGS` or PATH, and falls back to regex. `pygments` uses the Pygments lexers. All four share #397's ranking.
+- **Bounding and determinism in the variants' map.**
+  - A plain-Python personalised PageRank (`pagerank`, tested against networkx), with scores rounded before ordering.
+  - On large repos: at most 3,000 source files (the user's first), per-file reference counts, and no edges for names with more than 20 definers.
+- **Attribution** (`eval/repo_dossier/attribution.py`), deterministic and bounded:
+  - per-definition blame ownership and the introducing commit;
+  - a "built by other authors" list;
+  - commit subjects by file, with Conventional Commits types;
+  - a merged-PR section.
+- **The runner** (`eval/repo_dossier/run.py`) gains:
+  - `--backend cli`, now the default. It runs writer, judge and coverage through `claude -p` on the signed-in subscription: tools, MCP, settings and session persistence off, no API key in the child's environment, and a working folder outside any repository (a CLAUDE.md above it is refused). Requests keep #397's shape, so cached API calls are reused.
+  - `--cells`, `--samples` (adds samples to named cells) and `--rebuild`.
+  - PR fetching through `gh`, cached in the work dir.
+  - Misattribution as a headline metric, supported claims about the user, and paired bootstrap intervals against the `5r-10k` baseline.
+  - A stratified, blind 60-claim spot check with Wilson intervals and re-weighting to the label mix.
+  - `determinism`, which rebuilds every cell in fresh processes under 3 hash seeds per OS and compares bytes, and `bench`, which measures time and peak memory per variant on one large clone.
+- **The eval README** (`eval/repo_dossier/README.md`) covers the variants table, the decision rule (fixed before the run), and how to run every step. `eval/repo_dossier/requirements.txt` gains `tree-sitter-go`, `pygments` and `psutil`. `repos.json` pins every public repo's commit and adds `jpadilla/pyjwt` and `jd/tenacity`.
+- **Results** (`eval/results/repo_dossier_2026-10-19.{md,json}`) hold aggregates, group splits, public-repo examples, judge agreement, determinism counts, the Kubernetes bench and spend. No private repo is named and no email is included.
+- **Tests** (`tests/test_repo_dossier.py`, 26 new, offline). They cover:
+  - every variant within its budget and naming its commit;
+  - `fit`;
+  - line-span citations;
+  - each backend, with ctags falling back without a binary;
+  - blame ownership and introducing commits on a two-author fixture;
+  - attribution sections, and blame skipped for a single author;
+  - commit subjects, Conventional Commits types and the PR section;
+  - hash-seed identity of every variant;
+  - PageRank against networkx;
+  - CRLF and symlink checkouts giving the same dossier;
+  - the earliest of a repeated name;
+  - the CLI backend's flags, environment, cache and folder guard;
+  - the misattribution aggregate and the spot-check summary;
+  - the share sweep (no map, resized map) and the own-plus-contested selection.
+
+### Deviations from spec
+- **The writer and judge ran on the Claude Code subscription, not the API.** The owner set the budget at $0 and asked for the coding plan. The 2026-10-18 cells (5 repos' ladder rungs) stay as the API produced them. All new cells ran through `claude -p` with Claude Code's own ~1.4K-token prompt (taken off the reported writer tokens) and the user's global CLAUDE.md, which cannot be switched off without API-key auth. So the ladder mixes the two harnesses across repos; the variants all used the CLI.
+- **One sample per cell, three for nine cells.** With one sample the noise dominated (5r at 5K "beat" 5r at 10K on misattribution). So the attribution and budget cells (`5r-5k`, `5r-10k`, `5r-20k`, `blame-10k`, `blame-20k`, `blame-prs-10k`, `commits-10k`, `prs-10k`, `own-10k`) got three samples. The structural backends and `own-20k` have one.
+- **Six variants were added after the first results.** `blame-20k` and `blame-prs-10k` measure the recommended shape directly, under the decision rule fixed before the run. Four more answer the owner's question of how much of the budget the symbol map should get: `blame-20k-s0`, `-s10`, `-s40` and `-attrib`.
+- **Pygments meets the letter of rule 1 but is not adopted**, with the owner's agreement. Its coverage gain (+4.8, CI +1.1 to +9.1, one sample) comes from a smaller symbol map, not better symbols; it found 4 definitions in Kubernetes' Go code. The share sweep then measured the map's size directly.
+- **The owner's decisions** (report § 8): substantially reworked work counts as the user's, so the judge's strictness overstates misattribution; no Universal Ctags in #398; the 20K cap at 2.3 characters a token stands.
+- **Budgets are calibrated to 2.3 characters a token, not 3.6.** #397's estimate (3.6) undercounted by about a third, measured against its own API usage (2.2–2.7). So "10K" variants are about 10K real tokens, and #397's "10K typical" for rung 5r was 9.6K real at about 22K characters.
+- **Universal Ctags was measured on prerelease and nightly binaries.** Stable releases are source-only: Windows p6.2.20261011.0, Linux nightly 2026.10.08. The two versions differ, yet gave byte-identical `ctags-10k` dossiers on every repo.
+- **The contributed-to repos were scored as full-repo dossiers.** The PR-only dossier #399 specifies is not built or scored. The two repos are small and noisy (unsupported 7–15% at every cell).
+- **The spot check was blind, by four separate model sessions with read-only git access.** The judge's label and evidence were hidden. One label (a pandas claim drawn only from table formatting) was adjudicated from supported to unsupported. All 17 disagreements have the judge stricter, so absolute misattribution is overstated; paired comparisons share the bias.
+- **Fixed in the eval code on the way, each found by the cross-OS check or the bench.**
+  - networkx's `pagerank` needs SciPy and fell back silently without it.
+  - CRLF checkouts and git symlinks changed dossier bytes.
+  - #397's tree-sitter capture order varied across processes (now sorted).
+  - The unbounded map peaked at 7.5 GB on Kubernetes.
+  - #397's stored rungs are kept as built, so their cached cells stay valid. #397's rungs 5, 5r and 6 still use networkx and are the only cells that differ across OSes.
+- **Identity resolution undercounts.** Resolving a GitHub login to its git emails found 91 of `rakyll/hey`'s user's 143 commits. The dossier's count is the source of several judged role errors there. Left for #398, which must resolve every email, `.mailmap` and display name.
+- **Measuring tree-sitter-language-pack 1.x downloaded its 22 MB parser bundle** into `%LOCALAPPDATA%\tree-sitter-language-pack\` on the measuring machine.
+
+---
+
 ## Issue 401 — Slash commands trimmed to setup, history and open; the skills rewritten for the user/agent split
 **Status:** complete | **Tests:** `python run_tests.py` passes in full on SQLite (3642 tests collected, 6 new in `tests/test_plugin.py`, 1 rewritten there and 1 line in `tests/test_site_demo.py`); the Postgres leg was not run locally (nothing here touches storage), CI runs it
 

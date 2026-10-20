@@ -9,14 +9,34 @@ points at, and the best definitions are rendered, one signature line each, up to
 
 `backend="regex"` forces the light fallback for every language, so the eval can price
 tree-sitter against it (rung `5r`).
+
+The variants added to finish #397 (`variants.py`) bring four more backends, all producing the
+same (name, start line, end line) definitions so the ranking and rendering stay shared:
+
+- `ts-tags`: Aider's method proper — each grammar's own `queries/tags.scm` (shipped inside the
+  `tree-sitter-<lang>` wheels), `@definition.*` and `@reference.*` captures, for Python,
+  JavaScript, TypeScript/TSX and Go;
+- `ast`: Python's standard-library `ast` (exact spans, signatures with arguments, decorators),
+  with the regex fallback for every other language;
+- `ctags`: Universal Ctags' JSON output (`--fields=+neS`), definitions only, for every language
+  it knows, with word references; needs a `ctags` binary (`ART_CTAGS` or PATH);
+- `pygments`: Pygments' lexers (pure Python, ~600 languages): `Name.Function` / `Name.Class`
+  tokens as definitions, `Name` tokens as references.
 """
 
 from __future__ import annotations
 
+import ast as pyast
+import json
 import math
+import os
 import re
+import shutil
+import subprocess
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Callable
 
 import networkx as nx
 
@@ -131,7 +151,9 @@ def _ts_tags(lang: str, code: str):
             for nodes in QueryCursor(q).captures(tree.root_node).values():
                 for node in nodes:
                     out.append((node.text.decode("utf-8", errors="replace"), node.start_point[0]))
-    return defs, refs
+    # capture order is not stable across processes; the first definition of a repeated name
+    # (several __init__ in one file) must be the earliest one
+    return sorted(defs, key=lambda d: (d[1], d[0])), sorted(refs, key=lambda r: (r[1], r[0]))
 
 
 # ── the regex fallback ───────────────────────────────────────────────────────
@@ -164,6 +186,257 @@ def _regex_tags(lang: str, code: str):
     return defs, refs
 
 
+# ── the variant backends (#397 follow-up) ────────────────────────────────────
+# Each returns (defs, refs): defs as (name, start line, end line), 0-based, end inclusive;
+# refs as (name, line). An end of -1 means unknown and is estimated from the next definition.
+
+def _regex_spans(lang: str, code: str):
+    defs, refs = _regex_tags(lang, code)
+    return [(n, line, -1) for n, line in defs], refs
+
+
+_TAGS_MODULES = {"python": ("tree_sitter_python", "language"),
+                 "javascript": ("tree_sitter_javascript", "language"),
+                 "typescript": ("tree_sitter_typescript", "language_typescript"),
+                 "tsx": ("tree_sitter_typescript", "language_tsx"),
+                 "go": ("tree_sitter_go", "language")}
+_tags_cache: dict = {}
+
+
+def _grammar_tags_query(module) -> str:
+    path = Path(module.__file__).parent / "queries" / "tags.scm"
+    return path.read_text(encoding="utf-8") if path.exists() else ""
+
+
+def _tags_language(lang: str):
+    """(Language, Query) from the grammar wheel's own tags.scm, as Aider uses it; None if absent.
+    TypeScript's tags.scm only adds to JavaScript's, so the two are joined for TS and TSX."""
+    if lang in _tags_cache:
+        return _tags_cache[lang]
+    result = None
+    try:
+        import importlib
+
+        from tree_sitter import Language, Query
+        mod_name, fn = _TAGS_MODULES[lang]
+        mod = importlib.import_module(mod_name)
+        language = Language(getattr(mod, fn)())
+        source = _grammar_tags_query(mod)
+        if lang in ("typescript", "tsx"):
+            source = _grammar_tags_query(importlib.import_module("tree_sitter_javascript")) + "\n" + source
+        # compile pattern by pattern: drop any a grammar version rejects
+        patterns, depth, cur = [], 0, []
+        for line in source.splitlines():
+            if not cur and (not line.strip() or line.lstrip().startswith(";")):
+                continue
+            cur.append(line)
+            depth += line.count("(") - line.count(")") + line.count("[") - line.count("]")
+            if depth <= 0:
+                patterns.append("\n".join(cur))
+                cur, depth = [], 0
+        good = []
+        for p in patterns:
+            try:
+                Query(language, p)
+                good.append(p)
+            except Exception:
+                pass
+        result = (language, Query(language, "\n".join(good))) if good else None
+    except (ImportError, KeyError, AttributeError):
+        result = None
+    _tags_cache[lang] = result
+    return result
+
+
+def _ts_tags_spans(lang: str, code: str):
+    loaded = _tags_language(lang)
+    if loaded is None:
+        return None
+    from tree_sitter import Parser, QueryCursor
+    language, query = loaded
+    tree = Parser(language).parse(code.encode("utf-8", errors="replace"))
+    defs, refs = [], []
+    for _, caps in QueryCursor(query).matches(tree.root_node):
+        names = caps.get("name") or []
+        kinds = [k for k in caps if k.startswith(("definition.", "reference."))]
+        for name_node in names:
+            text = name_node.text.decode("utf-8", errors="replace")
+            for k in kinds:
+                outer = caps[k][0]
+                if k.startswith("definition."):
+                    defs.append((text, outer.start_point[0], outer.end_point[0]))
+                else:
+                    refs.append((text, name_node.start_point[0]))
+    defs = sorted(set(defs), key=lambda d: (d[1], d[0]))
+    return defs, sorted(refs, key=lambda r: (r[1], r[0]))
+
+
+def _ast_spans(lang: str, code: str):
+    """Python by the standard library's parser; every other language by the regex fallback.
+    Definitions keep their exact span and a signature with arguments and decorators."""
+    if lang != "python":
+        return _regex_spans(lang, code)
+    try:
+        tree = pyast.parse(code)
+    except (SyntaxError, ValueError):
+        return _regex_spans(lang, code)
+    defs, refs = [], []
+    for node in pyast.walk(tree):
+        if isinstance(node, (pyast.FunctionDef, pyast.AsyncFunctionDef, pyast.ClassDef)):
+            start = min([node.lineno] + [d.lineno for d in node.decorator_list]) - 1
+            defs.append((node.name, start, (node.end_lineno or node.lineno) - 1))
+        elif isinstance(node, pyast.Call):
+            f = node.func
+            name = f.id if isinstance(f, pyast.Name) else f.attr if isinstance(f, pyast.Attribute) else None
+            if name:
+                refs.append((name, node.lineno - 1))
+        elif isinstance(node, pyast.Name) and isinstance(node.ctx, pyast.Load):
+            refs.append((node.id, node.lineno - 1))
+        elif isinstance(node, pyast.ImportFrom):
+            for alias in node.names:
+                refs.append((alias.name, node.lineno - 1))
+    defs.sort(key=lambda d: (d[1], d[0]))
+    refs.sort(key=lambda r: (r[1], r[0]))
+    return defs, refs
+
+
+def ast_signature(code_lines: list[str], start: int, end: int) -> str:
+    """A Python definition's header as one line: decorators, then `def name(args) -> ret`."""
+    out, i = [], start
+    while i <= end and i < len(code_lines):
+        line = code_lines[i].strip()
+        out.append(line)
+        if re.match(r"(async\s+)?(def|class)\b", line):
+            depth = line.count("(") - line.count(")")
+            while depth > 0 and i + 1 <= end and i + 1 < len(code_lines):
+                i += 1
+                nxt = code_lines[i].strip()
+                out.append(nxt)
+                depth += nxt.count("(") - nxt.count(")")
+            break
+        i += 1
+    return re.sub(r"\s+", " ", " ".join(out))
+
+
+def ctags_binary() -> str | None:
+    return os.environ.get("ART_CTAGS") or shutil.which("ctags") or shutil.which("uctags")
+
+
+def _ctags_spans_for(sources: dict[str, str], root: Path | None):
+    """Universal Ctags over the files on disk (it reads paths, not strings); one process for
+    all files. Returns path -> (defs, refs), or None if no ctags binary."""
+    exe = ctags_binary()
+    if exe is None or root is None:
+        return None
+    paths = sorted(p for p in sources if not p.lower().endswith(".ipynb"))
+    out: dict[str, tuple] = {p: ([], []) for p in sources}
+    if paths:
+        done = subprocess.run([exe, "--output-format=json", "--fields=+neS", "--sort=no",
+                               "--extras=-F", "-L", "-", "-f", "-"],
+                              input="\n".join(paths), cwd=root, capture_output=True,
+                              text=True, encoding="utf-8", errors="replace")
+        kinds = {"function", "method", "class", "member", "struct", "interface", "type", "func",
+                 "enum", "trait", "module", "constructor", "typedef", "alias"}
+        for line in done.stdout.splitlines():
+            try:
+                tag = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            p = tag.get("path", "").replace("\\", "/")
+            if p in out and tag.get("kind") in kinds and tag.get("line"):
+                start = int(tag["line"]) - 1
+                end = int(tag.get("end", tag["line"])) - 1
+                out[p][0].append((tag["name"], start, end))
+    for p, code in sources.items():
+        defs = sorted(set(out[p][0]), key=lambda d: (d[1], d[0]))
+        if p.lower().endswith(".ipynb"):
+            defs = _ast_spans("python", code)[0]  # ctags can't read notebook JSON
+        out[p] = (defs, [(m.group(0), -1) for m in _WORD.finditer(code)])
+    return out
+
+
+def _pygments_spans(path: str, code: str):
+    try:
+        from pygments.lexers import get_lexer_for_filename
+        from pygments.token import Name
+        from pygments.util import ClassNotFound
+    except ImportError:
+        return None
+    try:
+        lexer = get_lexer_for_filename(path, stripnl=False, ensurenl=False)
+    except ClassNotFound:
+        return [], []
+    defs, refs, line = [], [], 0
+    for tok, val in lexer.get_tokens(code):
+        if tok in Name.Function or tok in Name.Class:
+            if tok not in Name.Function.Magic:
+                defs.append((val, line, -1))
+        elif tok in Name:
+            refs.append((val, line))
+        line += val.count("\n")
+    return sorted(set(defs), key=lambda d: (d[1], d[0])), refs
+
+
+def spans_for(backend: str, sources: dict[str, str], root: Path | None = None,
+              compact: bool = False) -> tuple[dict, set]:
+    """path -> (defs, refs) for one of the variant backends, and the backends actually used.
+    With `compact`, refs are a Counter of names per file, made as each file is read, so a large
+    repo never holds every word occurrence at once."""
+    used: set[str] = set()
+    out: dict[str, tuple] = {}
+    if backend == "ctags":
+        got = _ctags_spans_for(sources, root)
+        if got is not None:
+            if compact:
+                got = {p: (d, Counter(n for n, _ in r)) for p, (d, r) in got.items()}
+            return got, {"ctags"}
+        backend = "regex"
+    for path, code in sources.items():
+        lang = language_of(path)
+        tags = None
+        if backend == "ts-tags" and lang:
+            tags = _ts_tags_spans(lang, code)
+            if tags is not None:
+                used.add("ts-tags")
+        elif backend == "ast" and lang:
+            tags = _ast_spans(lang, code)
+            used.add("ast" if lang == "python" else "regex")
+        elif backend == "pygments":
+            tags = _pygments_spans(path, code)
+            if tags is not None:
+                used.add("pygments")
+        if tags is None:
+            if not lang:
+                continue
+            tags = _regex_spans(lang, code)
+            used.add("regex")
+        out[path] = (tags[0], Counter(n for n, _ in tags[1])) if compact else tags
+    return out, used
+
+
+def _close_spans(defs: list[tuple], lines: list[str], indented: bool = False) -> list[tuple]:
+    """Fill unknown ends. In an indentation language a definition runs to the line before the
+    next definition at the same or a shallower indent; otherwise to the line before the next
+    definition. Trailing blank lines are left out."""
+    defs = sorted(defs, key=lambda d: (d[1], d[0]))
+
+    def indent(i):
+        text = lines[i] if 0 <= i < len(lines) else ""
+        return len(text) - len(text.lstrip())
+
+    out = []
+    for i, (name, start, end) in enumerate(defs):
+        if end < 0:
+            later = [d[1] for d in defs[i + 1:] if d[1] > start]
+            if indented:
+                later = [ln for ln in later if indent(ln) <= indent(start)]
+            end = max(start, (later[0] if later else len(lines)) - 1)
+            while end > start and not lines[end].strip():
+                end -= 1
+        out.append((name, start, end))
+    return out
+
+
 # ── the map ──────────────────────────────────────────────────────────────────
 
 @dataclass
@@ -173,6 +446,7 @@ class SymbolMap:
     files_parsed: int
     definitions: int
     rendered: int
+    ranked: list = field(default_factory=list)   # [(path, name, start, end)] best first
 
 
 def language_of(path: str) -> str | None:
@@ -180,6 +454,93 @@ def language_of(path: str) -> str | None:
         if path.lower().endswith(ext):
             return lang
     return None
+
+
+def pagerank(graph, personalization: dict | None, alpha: float = 0.85, max_iter: int = 100,
+             tol: float = 1.0e-6) -> dict:
+    """Weighted personalized PageRank in plain Python, with networkx's semantics (parallel edges
+    summed, dangling mass sent by the personalization vector). networkx's own `pagerank` needs
+    SciPy, which art-mcp does not ship, and silently falls back otherwise; this needs nothing,
+    and visits nodes and edges in a fixed order, so it gives the same floats on every platform."""
+    nodes = list(graph.nodes)
+    n = len(nodes)
+    if n == 0:
+        return {}
+    out_w: dict = defaultdict(float)
+    links: dict = defaultdict(lambda: defaultdict(float))
+    for u, v, d in graph.edges(data=True):
+        links[u][v] += d.get("weight", 1.0)
+        out_w[u] += d.get("weight", 1.0)
+    if personalization:
+        total = sum(personalization.get(v, 0.0) for v in nodes)
+        p = {v: personalization.get(v, 0.0) / total for v in nodes}
+    else:
+        p = {v: 1.0 / n for v in nodes}
+    x = {v: 1.0 / n for v in nodes}
+    dangling = [v for v in nodes if out_w[v] == 0]
+    for _ in range(max_iter):
+        last = x
+        x = dict.fromkeys(nodes, 0.0)
+        dsum = alpha * sum(last[v] for v in dangling)
+        for u in nodes:
+            if out_w[u]:
+                share = alpha * last[u] / out_w[u]
+                for v, w in links[u].items():
+                    x[v] += share * w
+        for v in nodes:
+            x[v] += dsum * p[v] + (1.0 - alpha) * p[v]
+        if sum(abs(x[v] - last[v]) for v in nodes) < n * tol:
+            return x
+    raise RuntimeError("pagerank did not converge")
+
+
+def _rank(sources, defines: dict, references: dict, def_keys, user_weights,
+          pure: bool = False) -> list[tuple]:
+    """(path, name) definition keys, best first: personalized PageRank over the file graph,
+    each file's rank shared out over the definitions it references. `pure` (the variants) uses
+    `pagerank` above and rounds scores to 10 significant digits before ordering, so float noise
+    can't reorder near-ties across platforms, and skips names defined in more than
+    `MAX_DEFINERS` files (`String`, `New`, `init`: they add edges by the million on a big repo
+    and almost no signal); #397's rungs keep networkx's ranking unchanged."""
+    def_lines = def_keys
+    user_weights = {p: w for p, w in (user_weights or {}).items() if p in sources and w > 0}
+    graph = nx.MultiDiGraph()
+    graph.add_nodes_from(sources)
+    for name in sorted(set(defines) & set(references)):  # sorted: the ranking is reproducible
+        definers = sorted(defines[name])
+        if pure and len(definers) > MAX_DEFINERS:
+            continue
+        mul = 1.0
+        if len(name) >= 8 and ("_" in name or re.search(r"[a-z][A-Z]", name)):
+            mul *= 10
+        if name.startswith("_"):
+            mul *= 0.1
+        if len(definers) > 5:
+            mul *= 0.1
+        for referencer, n in sorted(references[name].items()):
+            w = mul * math.sqrt(n) * (5 if referencer in user_weights else 1)
+            for definer in definers:
+                graph.add_edge(referencer, definer, weight=w, ident=name)
+
+    total = sum(user_weights.values())
+    pers = {node: user_weights.get(node, 0.0) / total for node in graph.nodes} if total else None
+    try:
+        rank = (pagerank(graph, pers) if pure else
+                nx.pagerank(graph, weight="weight", personalization=pers, dangling=pers))
+    except Exception:  # e.g. no convergence on a degenerate graph
+        rank = {node: 1.0 / max(1, len(graph)) for node in graph.nodes}
+
+    scores: dict[tuple, float] = defaultdict(float)
+    for src in graph.nodes:
+        out = list(graph.out_edges(src, data=True))
+        weight = sum(d["weight"] for _, _, d in out)
+        for _, dst, d in out:
+            scores[(dst, d["ident"])] += rank[src] * d["weight"] / weight
+    for key in def_lines:  # unreferenced definitions still rank, below any referenced one
+        scores.setdefault(key, rank.get(key[0], 0.0) * 0.01)
+    if pure:
+        scores = {k: float(f"{v:.10g}") for k, v in scores.items()}
+    return sorted((k for k in scores if k in def_lines), key=lambda k: (-scores[k], k))
 
 
 def build_symbol_map(sources: dict[str, str], user_weights: dict[str, float] | None,
@@ -211,39 +572,7 @@ def build_symbol_map(sources: dict[str, str], user_weights: dict[str, float] | N
         for name, _ in refs:
             references[name][path] += 1
 
-    user_weights = {p: w for p, w in (user_weights or {}).items() if p in sources and w > 0}
-    graph = nx.MultiDiGraph()
-    graph.add_nodes_from(sources)
-    for name in sorted(set(defines) & set(references)):  # sorted: the ranking is reproducible
-        definers = sorted(defines[name])
-        mul = 1.0
-        if len(name) >= 8 and ("_" in name or re.search(r"[a-z][A-Z]", name)):
-            mul *= 10
-        if name.startswith("_"):
-            mul *= 0.1
-        if len(definers) > 5:
-            mul *= 0.1
-        for referencer, n in sorted(references[name].items()):
-            w = mul * math.sqrt(n) * (5 if referencer in user_weights else 1)
-            for definer in definers:
-                graph.add_edge(referencer, definer, weight=w, ident=name)
-
-    total = sum(user_weights.values())
-    pers = {node: user_weights.get(node, 0.0) / total for node in graph.nodes} if total else None
-    try:
-        rank = nx.pagerank(graph, weight="weight", personalization=pers, dangling=pers)
-    except Exception:  # e.g. no convergence on a degenerate graph
-        rank = {node: 1.0 / max(1, len(graph)) for node in graph.nodes}
-
-    scores: dict[tuple, float] = defaultdict(float)
-    for src in graph.nodes:
-        out = list(graph.out_edges(src, data=True))
-        weight = sum(d["weight"] for _, _, d in out)
-        for _, dst, d in out:
-            scores[(dst, d["ident"])] += rank[src] * d["weight"] / weight
-    for key in def_lines:  # unreferenced definitions still rank, below any referenced one
-        scores.setdefault(key, rank.get(key[0], 0.0) * 0.01)
-    ranked = sorted((k for k in scores if k in def_lines), key=lambda k: (-scores[k], k))
+    ranked = _rank(sources, defines, references, def_lines, user_weights)
 
     def render(keys):
         by_file: dict[str, list] = defaultdict(list)
@@ -270,3 +599,99 @@ def build_symbol_map(sources: dict[str, str], user_weights: dict[str, float] | N
     backend_used = "mixed" if len(used) > 1 else (used.pop() if used else "none")
     return SymbolMap(best, backend_used, len({p for p in sources if language_of(p)}),
                      len(def_lines), rendered)
+
+
+MAX_DEFINERS = 20
+MAX_FILES = 3_000
+
+
+def select_sources(sources: dict[str, str], user_weights: dict[str, float] | None,
+                   max_files: int = MAX_FILES) -> dict[str, str]:
+    """On a repo with more source files than `max_files`, the files the map is built from: the
+    user's changed files (most lines first), then the other files in their directories, then
+    the rest by path, up to the cap. Below the cap, every file."""
+    if len(sources) <= max_files:
+        return sources
+    weights = user_weights or {}
+    mine = sorted((p for p in sources if weights.get(p, 0) > 0), key=lambda p: (-weights[p], p))
+    dirs = {posix_dir(p) for p in mine}
+    near = sorted(p for p in sources if posix_dir(p) in dirs and p not in set(mine))
+    rest = sorted(p for p in sources if posix_dir(p) not in dirs)
+    keep = (mine + near + rest)[:max_files]
+    return {p: sources[p] for p in sorted(keep)}
+
+
+def posix_dir(path: str) -> str:
+    return path.rsplit("/", 1)[0] if "/" in path else ""
+
+
+def build_symbol_map_v2(sources: dict[str, str], user_weights: dict[str, float] | None,
+                        token_budget: int, backend: str, root: Path | None = None,
+                        annotate: Callable[[str, str, int, int], str] | None = None,
+                        chars_per_token: float = 3.6, max_files: int = MAX_FILES,
+                        keep: Callable[[str, str, int, int], bool] | None = None,
+                        max_defs: int | None = None) -> SymbolMap:
+    """The variants' symbol map: the same ranking as `build_symbol_map`, over one of the variant
+    backends (`regex`, `ts-tags`, `ast`, `ctags`, `pygments`), with each definition cited by its
+    line span (`L12-40`) and, if `annotate` is given, a suffix from it (the ownership tag).
+    Bounded on large repos by `select_sources` and `MAX_DEFINERS`. `keep` filters the ranked
+    definitions (asked lazily, best first, until `max_defs` are kept); `ranked` stays the full
+    ranking, for the "built by others" list."""
+    sources = select_sources(sources, user_weights, max_files)
+    spans, used = spans_for(backend, sources, root, compact=True)
+    defines: dict[str, set] = defaultdict(set)
+    references: dict[str, Counter] = defaultdict(Counter)
+    def_info: dict[tuple, tuple] = {}     # (path, name) -> (start, end, signature)
+    for path in sorted(spans):
+        defs, refs = spans[path]
+        lines = sources[path].splitlines()
+        for name, start, end in _close_spans(defs, lines, language_of(path) == "python"):
+            defines[name].add(path)
+            if 0 <= start < len(lines) and (path, name) not in def_info:
+                sig = (ast_signature(lines, start, end) if backend == "ast" and path.endswith(".py")
+                       else lines[start].strip())
+                def_info[(path, name)] = (start, end, sig[:140])
+        for name, n in refs.items():
+            references[name][path] += n
+    ranked = _rank(sources, defines, references, def_info, user_weights, pure=True)
+    shown = ranked
+    if keep is not None or max_defs is not None:
+        shown = []
+        for key in ranked:
+            if max_defs is not None and len(shown) >= max_defs:
+                break
+            if keep is None or keep(key[0], key[1], def_info[key][0], def_info[key][1]):
+                shown.append(key)
+    notes: dict[tuple, str] = {}
+
+    def line_for(key):
+        start, end, sig = def_info[key]
+        if annotate is not None and key not in notes:
+            notes[key] = annotate(key[0], key[1], start, end)
+        span = f"L{start + 1}" if end <= start else f"L{start + 1}-{end + 1}"
+        return f"{span}: {sig}" + (f"  {notes[key]}" if notes.get(key) else "")
+
+    def render(keys):
+        by_file: dict[str, list] = defaultdict(list)
+        order = []
+        for key in keys:
+            if key[0] not in by_file:
+                order.append(key[0])
+            by_file[key[0]].append(line_for(key))
+        parts = []
+        for path in order:
+            parts.append(f"{path}:")
+            parts.extend(f"  {line}" for line in by_file[path])
+        return "\n".join(parts)
+
+    lo, hi, best, n_best = 0, len(shown), "", 0
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        text = render(shown[:mid])
+        if len(text) / chars_per_token <= token_budget:
+            best, n_best, lo = text, mid, mid + 1
+        else:
+            hi = mid - 1
+    backend_used = "mixed" if len(used) > 1 else (next(iter(used)) if used else "none")
+    top = [(p, n, def_info[(p, n)][0], def_info[(p, n)][1]) for p, n in ranked]
+    return SymbolMap(best, backend_used, len(spans), len(def_info), n_best, top)

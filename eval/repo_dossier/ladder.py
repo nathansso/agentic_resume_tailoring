@@ -20,6 +20,7 @@ list and Python import parser are reused.
 from __future__ import annotations
 
 import json
+import posixpath
 import re
 import subprocess
 from collections import Counter, defaultdict
@@ -105,16 +106,62 @@ def _git(repo: Path, *args: str) -> str:
     return done.stdout
 
 
+_LINKS: dict[str, dict[str, str | None]] = {}
+
+
+def symlinks(repo: Path) -> dict[str, str | None]:
+    """Tracked symlinks -> the tracked file each points at (None if outside the repo or not a
+    file). Read through git, because a Windows checkout without core.symlinks writes a symlink
+    as a one-line file holding its target, where Linux follows it."""
+    key = str(Path(repo).resolve())
+    if key not in _LINKS:
+        links: dict[str, str | None] = {}
+        entries = [ln.split(maxsplit=3) for ln in _git(Path(repo), "ls-files", "-s").splitlines()]
+        tracked = {e[3] for e in entries if len(e) == 4}
+        for e in entries:
+            if len(e) == 4 and e[0] == "120000":
+                target = _git(Path(repo), "cat-file", "-p", e[1]).strip()
+                resolved = posixpath.normpath(posixpath.join(posixpath.dirname(e[3]), target))
+                links[e[3]] = resolved if resolved in tracked and not resolved.startswith("..") else None
+        _LINKS[key] = links
+    return _LINKS[key]
+
+
 def list_files(repo: Path) -> list[str]:
-    """Tracked files, minus vendored, generated and lock files."""
+    """Tracked files, minus vendored, generated and lock files, and symlinks that don't point at
+    a tracked file."""
     out = []
+    links = symlinks(repo)
     for f in _git(repo, "ls-files").splitlines():
         parts = f.split("/")
         if any(p in SKIP_DIRS for p in parts[:-1]) or parts[-1] in SKIP_NAMES:
             continue
-        if (repo / f).is_file():
+        if f in links:
+            if links[f] is not None:
+                out.append(f)
+        elif (repo / f).is_file():
             out.append(f)
     return sorted(out)
+
+
+_SIZES: dict[str, dict[str, int]] = {}
+
+
+def file_size(repo: Path, path: str) -> int:
+    """A file's size as committed (`git ls-tree -l`), not on disk, where a Windows checkout's CRLF
+    makes it larger; on-disk size for anything not in HEAD."""
+    key = str(Path(repo).resolve())
+    if key not in _SIZES:
+        sizes = {}
+        for line in _git(Path(repo), "ls-tree", "-r", "-l", "HEAD").splitlines():
+            meta, _, name = line.partition("	")
+            parts = meta.split()
+            if len(parts) == 4 and parts[3].isdigit():
+                sizes[name] = int(parts[3])
+        _SIZES[key] = sizes
+    path = symlinks(repo).get(path) or path
+    got = _SIZES[key].get(path)
+    return got if got is not None else (Path(repo) / path).stat().st_size
 
 
 def _ext(path: str) -> str:
@@ -126,10 +173,13 @@ def is_text(path: str) -> bool:
 
 
 def read_text(repo: Path, path: str) -> str:
+    path = symlinks(repo).get(path) or path
     data = (repo / path).read_bytes()
     if b"\x00" in data[:4096]:
         return ""
-    return data.decode("utf-8", errors="replace")
+    # a Windows checkout (core.autocrlf) has CRLF where Linux has LF: normalise, so the dossier
+    # is the same bytes whichever way the clone was made
+    return data.decode("utf-8", errors="replace").replace("\r\n", "\n")
 
 
 def notebook_text(raw: str, output_chars: int, code_only: bool = False) -> str:
@@ -165,7 +215,7 @@ def notebook_text(raw: str, output_chars: int, code_only: bool = False) -> str:
 def data_summary(repo: Path, path: str) -> str:
     """A data file shown by its shape, not its rows."""
     try:
-        with open(repo / path, encoding="utf-8", errors="replace") as fh:
+        with open(repo / (symlinks(repo).get(path) or path), encoding="utf-8", errors="replace") as fh:
             head = [next(fh, "") for _ in range(3)]
             rows = 3 + sum(1 for _ in fh)
     except OSError:
@@ -239,7 +289,7 @@ def language_bytes(repo: Path, files: list[str]) -> dict[str, int]:
     for f in files:
         e = _ext(f)
         if e in CODE_EXT:
-            sizes[e.lstrip(".")] += (repo / f).stat().st_size
+            sizes[e.lstrip(".")] += file_size(repo, f)
     return dict(sizes.most_common(8))
 
 
@@ -282,7 +332,7 @@ def metadata_section(repo: Path, files: list[str], meta: dict | None, b: Budgets
 def tree_section(repo: Path, files: list[str], b: Budgets) -> str:
     """Paths with sizes; past the line cap, the deepest directories collapse to file counts."""
     def size(f):
-        n = (repo / f).stat().st_size
+        n = file_size(repo, f)
         return f"{n / 1024:.0f}K" if n >= 1024 else f"{n}B"
 
     lines = [f"{f}  ({size(f)})" for f in files]

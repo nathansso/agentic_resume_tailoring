@@ -39,6 +39,53 @@ picks the cheapest rung whose coverage is at least 95% of full code's and whose 
 is not significantly above full code's (the 95% bootstrap interval of the paired per-repo
 difference reaches zero).
 
+## The variants (finishing #397)
+
+The ladder grows its input rung by rung, so its rungs differ in size as well as content. To
+compare methods head to head, `variants.py` builds **variants at matched token budgets**: the
+same sections (README, metadata with manifests and imports, filtered tree, authorship, symbol
+map, and any attribution layers) fitted to one total budget by one rule (`fit`: each section has
+a share; one that needs less gives the rest back; one that needs more is cut at a line with a
+marker). Tokens are estimated at 3.6 characters each; the writer's real input tokens come from
+the API.
+
+| id | symbol map | attribution layered on #397's per-file authorship | extra dependency |
+|---|---|---|---|
+| `5r-5k`, `5r-10k`, `5r-20k` | regex (#397's pick; `5r-10k` is the baseline) | none | none |
+| `ts-10k` | tree-sitter with each grammar wheel's own `queries/tags.scm` (Aider's method) for Python, JS, TS/TSX, Go | none | `tree-sitter` + 4 grammar wheels |
+| `ast-10k` | Python's stdlib `ast` (exact spans, full signatures, decorators), regex elsewhere | none | none |
+| `ctags-10k` | Universal Ctags JSON (`--fields=+neS`), every language it knows | none | a `ctags` binary (`ART_CTAGS` or PATH) |
+| `pyg-10k` | Pygments lexers (`Name.Function`/`Name.Class` as definitions) | none | `pygments` |
+| `blame-10k`, `blame-20k` | regex, each definition tagged with its `git blame -w -M -C` ownership and introducing commit (`git log -L`) | + "built by other authors" | none |
+| `blame-prs-10k` | regex, ownership-tagged | + "built by other authors" + merged PRs | none (GitHub client) |
+| `blame-20k-s0`, `-s10`, `-s40` | as `blame-20k`, with the map's share of the budget at 0% (no map), 10% or 40% instead of 25% | as `blame-20k` | none |
+| `blame-20k-attrib` | as `blame-20k`, but the map keeps only the user's own definitions (≥50% of lines, or introduced by them) and contested ones (in files the user changed), at most 40 | as `blame-20k` | none |
+| `commits-10k` | regex | per-file commit subjects, Conventional Commits types | none |
+| `prs-10k` | regex | + the user's merged PRs (title, number, merge SHA, size, body, files) | none (GitHub client) |
+| `own-10k`, `own-20k` | regex, ownership-tagged | all three layers | none |
+
+Every variant cites: the header names the commit, symbol lines carry `L<start>-<end>`, authorship
+and ownership lines carry short SHAs, PR lines carry `#<number>` and the merge SHA. Blame is
+bounded (40 files, 6,000 lines each, 25 `git log -L` lookups, best-ranked first) and skipped in
+single-author repos. The variants' judge evidence (`judge_evidence_v2.md`) is the ladder's plus
+the user's merged PRs in full, since PR bodies are material the writer may cite.
+
+**Decision rule for the variants, fixed before the run.** Every comparison is the paired
+per-repo difference from `5r-10k` with a 95% bootstrap interval over repos.
+1. *Symbol backend.* A backend replaces regex only if accuracy or coverage rises with an
+   interval above zero and misattribution does not rise; otherwise regex stays (no dependency).
+2. *Attribution.* A layer is adopted if misattribution (the share of claims that credit the
+   user with another author's work, the headline metric) falls without unsupported claims
+   rising significantly or supported claims about the user's own part falling. With no layer
+   significant, the point estimates and the multi-author repos decide, and the report says so.
+3. *Budget.* The smallest budget whose coverage is at least 95% of full code's and whose
+   unsupported rate is not significantly above it, as in #397.
+
+Metrics stay separate and are never combined: claim accuracy, unsupported, contradicted (fact /
+role), misattribution, supported claims about the user, coverage, writer input tokens; plus
+build time and peak memory on a large repo (`bench`), determinism (`determinism`) and dependency
+sizes (in the results).
+
 ## Rerunning
 
 ```bash
@@ -48,21 +95,44 @@ pip install -r eval/repo_dossier/requirements.txt     # eval-only; not in pyproj
 #    each as <owner>__<repo>. Long Windows paths need a short folder and core.longpaths.
 gh repo clone kennethreitz/records C:/r397/kennethreitz__records -- -c core.longpaths=true
 
-# 2. Build every rung and print sizes plus a spend estimate (no API calls).
+#    Check out each public repo's pinned "commit" (repos.json) so the dossiers match.
+git -C C:/r397/kennethreitz__records checkout -q ea4273695cee6da42edf1cb294d1f2a4505470fc
+
+# 2. Build every rung and variant and print sizes plus a spend estimate for unscored cells
+#    (no API calls; it fetches GitHub metadata, author emails and merged PRs once, through gh,
+#    into the work dir). Stored rungs are kept, so their cached calls stay valid; --rebuild
+#    rebuilds them too. For the ctags variant, point ART_CTAGS at a Universal Ctags binary.
 python -m eval.repo_dossier.run build --clones C:/r397
+python -m eval.repo_dossier.run build --clones C:/r397 --cells 5r-10k,own-10k   # a subset
 
 # 3. Writer, judge and coverage. Responses are cached under the work dir, so a rerun of a
-#    finished cell costs nothing; --limit stops before new spend passes it (USD).
-python -m eval.repo_dossier.run run --clones C:/r397 --limit 25
+#    finished cell costs nothing. By default the calls run through `claude -p` on the signed-in
+#    Claude Code subscription (no API spend; tools, MCP and settings off, run from a temp folder
+#    outside any repo). --samples 3 adds samples to the cells named in --cells.
+python -m eval.repo_dossier.run run --clones C:/r397
+python -m eval.repo_dossier.run run --clones C:/r397 --samples 3 --cells 5r-10k,blame-20k
+#    --backend api uses the Anthropic API instead (billed); --limit stops before new spend
+#    passes it (USD). #397's first run used it, and its cached calls are reused either way.
+python -m eval.repo_dossier.run run --clones C:/r397 --backend api --limit 25
 
-# 4. Draw ~20 claims for a hand check; fill in my_label / my_note in spotcheck.json.
-python -m eval.repo_dossier.run spotcheck
+# 4. Draw 60 claims for a hand check, stratified over method families (ladder, structural,
+#    attribution), role and other claims, supported and not; fill in my_label / my_note in
+#    spotcheck_v2.json. The report pools it with #397's 20 and gives Wilson intervals.
+python -m eval.repo_dossier.run spotcheck --n 60
 
-# 5. Aggregate into eval/results/repo_dossier_<date>.json.
+# 5. Determinism: rebuild every rung and variant in fresh processes under 3 hash seeds. Run it
+#    again on a second OS against the same clones (e.g. WSL, --os-label linux) to compare bytes.
+python -m eval.repo_dossier.run determinism --clones C:/r397 --os-label windows
+
+# 6. Time and peak memory per variant on one large clone (its user is the author ranked
+#    --bench-rank by commits; no email is printed).
+python -m eval.repo_dossier.run bench --clones C:/r397big/kubernetes__kubernetes
+
+# 7. Aggregate into eval/results/repo_dossier_<date>.json.
 python -m eval.repo_dossier.run report
 ```
 
-`ANTHROPIC_API_KEY` comes from the environment or the repo's `.env` (`--env` to point
+With `--backend api`, `ANTHROPIC_API_KEY` comes from the environment or the repo's `.env` (`--env` to point
 elsewhere). It is never printed or logged.
 
 **Privacy.** No email address is committed. `repos.json` names each public repo's user by
