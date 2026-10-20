@@ -119,6 +119,10 @@ company). **Name the job in your own reply** whenever you act on it.
   worth reading, clone one only after they agree, and store what you learn with
   `upsert_items` (`source: github:<repo>`) before you cite it; a repo is not evidence until
   it is stored.
+- Call `list_staged_sources`. A staged source is a repo dossier `artie ingest` read and
+  nobody has turned into records yet. If any are staged, tell the user and offer to process
+  them first, as the setup skill describes, since a repo is not evidence until its records
+  are stored.
 - Call `get_head(job_id)`. If the job already has a version, build on it; the plan's
   `parent` must be its `node_id`. Respect anything under `editor_edits`: the user made
   those changes by hand. When the user edited the `.tex`, `editor_edits[].changes.tex_edits`

@@ -1300,6 +1300,58 @@ class GithubReposOutput(_Output):
     note: Optional[str] = None
 
 
+# ── staged sources (#398) ───────────────────────────────────────────────────
+
+class StagedSourcesInput(_Model):
+    status: Optional[Literal["staged", "processed"]] = Field(
+        "staged", description="Which sources to list: staged (waiting for you, the default), "
+                              "processed, or null for all.")
+    source_id: Optional[str] = Field(
+        None, description="One source's id: returns it with its full dossier in `content`.")
+
+
+class StagedSourceRow(_Model):
+    source_id: str
+    kind: str = Field(description="github_repo, or local_repo for a folder on this machine.")
+    key: str = Field(description="owner/repo, or the folder.")
+    title: str = ""
+    commit: str = Field("", description="The commit the dossier was built at.")
+    status: str
+    evidence_source: str = Field(
+        description="Pass as upsert_items' `source` for every record written from this source.")
+    chars: int = 0
+    est_tokens: Optional[int] = None
+    user_commits: Optional[int] = None
+    authors: Optional[int] = None
+    updated_at: Optional[str] = None
+    processed_at: Optional[str] = None
+    note: Optional[str] = None
+
+
+class StagedSourcesOutput(_Output):
+    sources: List[StagedSourceRow] = Field(default_factory=list)
+    content: Optional[str] = Field(
+        None, description="With source_id: the dossier. Every line cites a path, a line span "
+                          "(L12-40) or a commit; cite those in what you write.")
+    counts: Dict[str, int] = Field(default_factory=dict, description="Sources by status.")
+
+
+class MarkProcessedInput(_Model):
+    source_id: str
+    note: Optional[str] = Field(None, description="What you wrote from it, in a few words.")
+
+
+class MarkProcessedOutput(_Output):
+    sources: List[StagedSourceRow] = Field(default_factory=list)
+    changed: bool = False
+    counts: Dict[str, int] = Field(default_factory=dict)
+
+
+def _sources():
+    from harness import sources
+    return sources
+
+
 def _library():
     from harness import library
     return library
@@ -1715,6 +1767,27 @@ TOOLS: List[ToolSpec] = [
         lambda uid, page=1, per_page=20, include_private=True, include_readme=True:
             _github().list_github_repos(page, per_page, include_private, include_readme),
         needs_user=False, network=True),
+    ToolSpec(
+        "list_staged_sources",
+        "What `artie ingest` read and staged for you: one dossier per GitHub repo, built at a "
+        "commit. Call it when the user asks you to \"process my new sources\", and at setup "
+        "or before tailoring to see if any wait. Pass source_id to get one dossier in "
+        "`content`. From each, write the user's records with upsert_items, source "
+        "`evidence_source`, citing the dossier's paths, line spans and commits. A definition "
+        "tagged `mostly <other author>` is not the user's to claim as built: say \"extended\" "
+        "or \"reworked\" when they changed it, and leave \"built by other authors\" out. "
+        "Then call mark_source_processed.",
+        StagedSourcesInput, StagedSourcesOutput,
+        lambda uid, status="staged", source_id=None:
+            _sources().list_staged_sources(uid, status, source_id)),
+    ToolSpec(
+        "mark_source_processed",
+        "Mark one staged source processed, after you wrote its records with upsert_items. "
+        "Idempotent. A repo rebuilt at a new commit by a later `artie ingest` comes back "
+        "staged. Writes.",
+        MarkProcessedInput, MarkProcessedOutput,
+        lambda uid, source_id, note=None: _sources().mark_source_processed(uid, source_id, note),
+        read_only=False),
 ]
 BY_NAME: Dict[str, ToolSpec] = {t.name: t for t in TOOLS}
 

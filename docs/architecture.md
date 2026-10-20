@@ -1074,7 +1074,7 @@ errors carried as an `error` field. It currently holds **30 tools**, in five gro
 |---|---|
 | Context and memory | `art_briefing`, `art_pins`, `observe`, `record_preference`, `record_rule`, `retract_rule` |
 | Retrieval | `kg_search`, `list_items`, `get_item`, `get_profile` |
-| Ingest, project context, library | `ingest_schema`, `upsert_items`, `list_github_repos`, `suggest_project_contexts`, `set_project_context`, `link_achievement`, `promote_bullet`, `approve_variant`, `save_baseline`, `update_profile` |
+| Ingest, project context, library | `ingest_schema`, `upsert_items`, `list_github_repos`, `list_staged_sources`, `mark_source_processed`, `suggest_project_contexts`, `set_project_context`, `link_achievement`, `promote_bullet`, `approve_variant`, `save_baseline`, `update_profile` |
 | Jobs | `open_job`, `list_jobs`, `suggest_actions` |
 | Execute and history | `execute_plan`, `patch_plan`, `get_head`, `history`, `diff_nodes`, `checkout`, `render` |
 
@@ -1639,6 +1639,17 @@ gate's (§8.6).
   and `keyring` is a default dependency. `list_github_repos` lists the user's own repos, one page at a
   time, with languages, topics, an optional README excerpt and a `clone_command`; it is the only tool
   that needs no bound profile (`needs_user` false).
+- **Repo dossiers and staged sources (#398).** `artie ingest` (`harness/ingest_cmd.py`) lists the
+  user's own repos (forks left out; `--repo`, `--limit`, `--path` for a local folder), keeps a bare
+  clone of each under `<data dir>/repos/` (`github.sync_clone`, the token passed through
+  `GIT_CONFIG_*` only), and builds #397's `blame-20k` dossier at the default branch's commit with
+  `harness/dossier/` (git objects only: CRLF normalised, sizes from `ls-tree`, symlinks through git;
+  a plain-Python PageRank; blame bounded and skipped for one author). The user is matched by every
+  account email, the emails GitHub links to the login on the repo's commits, the machine's git
+  identity, display name and login, and `.mailmap`. Each dossier is a `StagedSource` row, rebuilt
+  only when its commit or `BUILDER_VERSION` changes. The agent reads them with
+  `list_staged_sources` and marks them with `mark_source_processed`. The LinkedIn half joins as one
+  more step in `ingest_cmd.STEPS`.
 - **One identity per skill (#365).** `agents/skill_resolver.py::resolve_skill` finds the `Skill` a name
   belongs to by `skill_fold` (one the user already links, then the global row with the canonical name,
   then any with the same fold), on every path that links a user or a job to a skill. After an ingest,

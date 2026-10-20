@@ -9,6 +9,7 @@
     artie jev status|export|import                 # the Jev decision cache (#193)
     artie connect [--private]                      # GitHub sign-in and your LinkedIn URL (#400)
     artie github login|logout|status               # the GitHub sign-in on its own (#353)
+    artie ingest [--repo owner/name] [--path dir]  # repo dossiers staged for the agent (#398)
     artie export --out backup.zip                  # back up a profile (#195)
     artie import backup.zip                        # restore it into the local store
     artie migrate preferences [--dry-run]          # anchor old preference rows; section rows become rules (#300)
@@ -50,6 +51,7 @@ Commands you run yourself:
   artie ui [--job <job_id>]            open the local editor in your browser
   artie connect [--private]            sign in to GitHub and save your LinkedIn URL
   artie github login|status|logout     just the GitHub sign-in, or check or remove it
+  artie ingest                         read your GitHub repos for your agent to process
   artie export --out <file>.zip        back up your profile
   artie import <file>.zip              restore a backup
   artie --list                         the tools your agent can call, as JSON
@@ -94,6 +96,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if argv[:1] == ["connect"]:
         from harness.connect import main as connect_main
         return connect_main(argv[1:])
+    if argv[:1] == ["ingest"]:
+        from harness.ingest_cmd import main as ingest_main
+        return ingest_main(argv[1:])
     if argv[:1] == ["github"]:
         from harness.github_cli import main as github_main
         return github_main(argv[1:])

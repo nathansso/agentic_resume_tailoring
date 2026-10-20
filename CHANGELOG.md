@@ -14,6 +14,73 @@ Benchmark figures below are labelled with the **execution mode** that produced t
 
 ---
 
+## Issue 398 — `artie ingest`: GitHub repo dossiers staged for the agent (the repo half)
+**Status:** complete for the GitHub half; the LinkedIn half waits on #355 and #396 | **Tests:** 3739 pass on SQLite (39 new: 18 in `tests/test_dossier.py`, 14 in `tests/test_artie_ingest.py`, 7 contract cases), 26 skipped, 2 xfailed, 0 fail; the Postgres leg runs in CI
+
+`artie ingest` is the deterministic half of ingestion. It keeps a bare clone of each repo the user owns, builds #397's `blame-20k` dossier at the default branch's commit, and stages it in the store. It ends by telling the user to ask their agent to "process my new sources". The agent then lists the staged dossiers, writes records from them with `upsert_items`, and marks each one processed. A second run with no new commits builds nothing and writes nothing.
+
+### What shipped
+- **The dossier builder** (`harness/dossier/`): model-free and dependency-free, a port of the eval's `blame-20k` (`eval/repo_dossier/variants.py`). On the eval's own fixture it gives the same bytes in every section but metadata.
+  - **Sections:** a header with the commit; the README; metadata (GitHub's description, topics, homepage and license, languages by committed bytes, first and last commit, up to 12 manifests, detected imports); the filtered tree with committed sizes; the user's authorship; a regex symbol map; and "built by other authors", tests left out.
+  - **The symbol map** is ranked by a plain-Python personalised PageRank seeded with the user's files. Each definition is tagged with `git blame -w -M -C` ownership and its `git log -L` introducer.
+  - **Budget:** fitted to 20K tokens at 2.3 characters a token by `SHARES` (README 30%, metadata 12%, tree 10%, authorship 23%, symbol map 25%, others 6%).
+  - **Bounds from the eval:** at most 3,000 source files (the user's first), references counted per file, no edges for a name with more than 20 definers. Blame covers at most 40 files of at most 6,000 lines each, with 25 `git log -L` lookups; the blames run in parallel, and a single-author repo skips blame.
+  - **Determinism:** the builder reads git objects at the commit, never a working tree. CRLF is normalised, sizes come from `ls-tree`, and symlinks resolve through git. Git runs with the user's and the system's config switched off, everything feeding the ranking is sorted, and scores are rounded. The output is byte-identical across hash seeds and between a CRLF and an LF checkout.
+  - **Citations:** every symbol line carries `L<start>-<end>`; ownership, introducers, authorship and "built by others" carry short SHAs; section headers name their path. No email address reaches a dossier.
+- **Wider identity** (`harness/dossier/identity.py`). The user is any author matching:
+  - every email on the GitHub account (`/user/emails` when the token may read it, else the public one);
+  - both `users.noreply.github.com` forms;
+  - the emails GitHub links to the login on the repo's commits (`/repos/{repo}/commits?author=`);
+  - the machine's `git config` identity;
+  - the display name and login;
+  - the repo's `.mailmap` at the built commit.
+
+  Names the user's own matched commits carry count too. Matching is exact, not `--author`'s regex.
+- **Staging** (`StagedSource`, additive table; `harness/sources.py`). One row per user, kind and key, with the commit, `BUILDER_VERSION`, the dossier and stats. An unchanged commit and builder are left alone; a new commit rebuilds the row and sets it back to `staged`. The table is in the export registry.
+- **Two tools on both adapters**: `list_staged_sources` (summaries with `evidence_source`, or one dossier with `source_id`) and `mark_source_processed` (idempotent, with an optional note). The tool description and both skills tell the agent to write "extended" or "reworked", not "built", for a definition tagged `mostly <other author>`.
+- **`artie ingest`** (`harness/ingest_cmd.py`, dispatched from `artie` and listed in its help).
+  - **Selection:** the user's own repos with forks left out, or `--repo`, `--limit`, `--include-forks`; `--path` takes a local folder; `--json` prints one document.
+  - **Clones:** each repo is kept as a bare clone under `<data dir>/repos/`, cloned or fetched by `github.sync_clone`. The token reaches git only through `GIT_CONFIG_*` in the environment: never argv, a remote URL, the clone's config or an error. The credential helper is off.
+  - **Steps:** the command runs `STEPS` in order; #355's LinkedIn step plugs in as one more.
+- **Skills:** `artie-setup` processes staged sources; `artie-tailor` checks for them before reading the candidate.
+- **Docs:** `docs/harness.md` (ingestion and the tool table) and `docs/architecture.md`.
+- **Tests:** `tests/test_dossier.py` (18) and `tests/test_artie_ingest.py` (14), all offline on fixture repos. They cover:
+  - two authors;
+  - one author with blame skipped;
+  - identity through `.mailmap`, display name and noreply email;
+  - a CRLF checkout and committed CRLF;
+  - a symlinked README and a link out of the repo;
+  - hash-seed identity in fresh processes;
+  - parity with the eval's `blame-20k`;
+  - the cap with cut markers;
+  - the source, definer, blame and introducer bounds;
+  - PageRank against networkx;
+  - no fetch or network import in the builder;
+  - staging and the no-change re-run;
+  - restaging after a new commit;
+  - `--repo`, `--limit` and `--path`;
+  - commit-linked emails;
+  - the not-signed-in message;
+  - the tools on direct, MCP and CLI;
+  - user isolation;
+  - the token kept out of argv, config and errors.
+
+  `tests/test_harness_contract.py` gains cases for both tools; `tests/test_export_import.py` seeds a staged source.
+
+### Deviations from spec
+- **The LinkedIn half is not here.** `artie ingest` has no LinkedIn step until #416 (#355) merges; `ingest_cmd.STEPS` is the seam. So this PR is "Part of #398", though the issue's three acceptance criteria are met.
+- **A full bare clone, not a partial one.** The issue said "a partial clone"; blame and `git log -L` on a blobless clone fetch blobs one at a time over the network. The clone is fetched once and updated incrementally.
+- **The legacy `ingestion/github.py` was not moved.** The dossier works from the clone, so the API fetcher is superseded on the harness path. Its manifest list and Python import parser are copied into `harness/dossier/sections.py`, since the harness may not import that module (it imports an HTTP client and `config`). The legacy CLI keeps it unchanged.
+- **The issue's notebook, CI and outcomes items follow #397's spec instead.** Manifests, imports and the tree carry the stack and practice; notebooks reach the map as code.
+- **No stars, and commit dates instead of GitHub's created and pushed dates.** A dossier is a function of its commit; stars and push times change without one. The metadata block is the one section that differs from the eval's text.
+- **Identity reaches further than #397's spec list.** It also includes the machine's `git config` identity and the names on the user's own matched commits. A shared display name can therefore match another person, which the spec accepts by naming display names.
+- **The single-author check counts people, not emails.** `authors` is counted after identity resolution, so a user with two emails is one author and blame is skipped.
+- **`--path` (local folders) is an addition.** The setup skill already asked for local project folders. Their `evidence_source` is `repo:<folder>`.
+- **`artie connect` still calls `artie ingest` "coming".** #416 rewrites that `next_step` text, so it was left alone here to avoid a conflict. Point it at `artie ingest` once both are merged.
+- **The Postgres leg was not run locally** (no Docker on this machine); CI runs it.
+
+---
+
 ## Issue 397 — How ART should map a repo: the candidates researched, measured head to head, and a recommendation for #398 and #399
 **Status:** complete (all 12 configured repos scored; finishes the provisional spike of PR #405) | **Tests:** 3634 pass on SQLite (26 new, in `tests/test_repo_dossier.py`), 26 skipped, 2 xfailed, 0 fail; the Postgres leg was not run locally (nothing here touches storage)
 
