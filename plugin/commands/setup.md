@@ -1,6 +1,6 @@
 ---
-description: Build or refresh your ART knowledge graph from your resume, LinkedIn export and repos
-argument-hint: [paths to your resume, LinkedIn export or project folders]
+description: Build or refresh your ART knowledge graph from your resume, LinkedIn profile or export, and repos
+argument-hint: [paths to your resume, LinkedIn export or project folders, or your LinkedIn URL]
 ---
 
 Set up or refresh my ART knowledge graph, following the `artie-setup` skill: read my
@@ -42,9 +42,19 @@ install anything without my yes: name the exact command and wait.
 
 If no sources are given above, ask me where they are.
 
-If I want my GitHub repos included, tell me to run this in my own terminal (add `--private`
-for private repos; it also asks for my LinkedIn URL, and `artie github login` is the GitHub
-sign-in alone), then call `list_github_repos`:
+**My LinkedIn profile.** Ask me for my LinkedIn profile URL (`linkedin.com/in/<name>`), unless
+`get_profile` already shows a `linkedin_url` or I gave one above. Then call
+`ingest_linkedin` (with `url`, or with none to use the saved one) and tell me what was added,
+what was skipped and which sections came back empty. Ask me about each of its `candidates`
+(posts, courses, links) before storing anything from them. It needs the GitHub sign-in below,
+it can take a few minutes, and it allows two profiles a day. If it returns an error, tell me
+its message and offer the LinkedIn data export instead; if ART has no `ingest_linkedin`
+tool (an older install), use the export.
+
+If I want my GitHub repos or my LinkedIn profile included, tell me to run this in my own
+terminal (add `--private` for private repos; it also asks for my LinkedIn URL, and
+`artie github login` is the GitHub sign-in alone), then call `list_github_repos` and
+`ingest_linkedin`:
 
 ```bash
 artie connect

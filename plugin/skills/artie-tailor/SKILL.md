@@ -119,6 +119,8 @@ company). **Name the job in your own reply** whenever you act on it.
   worth reading, clone one only after they agree, and store what you learn with
   `upsert_items` (`source: github:<repo>`) before you cite it; a repo is not evidence until
   it is stored.
+- If the user asks to pull in their LinkedIn profile, follow the `artie-setup` skill's
+  LinkedIn step: `ingest_linkedin`, then confirm its `candidates` with them before storing any.
 - Call `get_head(job_id)`. If the job already has a version, build on it; the plan's
   `parent` must be its `node_id`. Respect anything under `editor_edits`: the user made
   those changes by hand. When the user edited the `.tex`, `editor_edits[].changes.tex_edits`

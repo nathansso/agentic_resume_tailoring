@@ -357,20 +357,21 @@ def test_the_token_is_in_no_output_and_not_in_the_database(kg, isolated_engine, 
 
 # ── what to do next ──────────────────────────────────────────────────────────
 
-def test_the_next_step_does_not_promise_ingest_before_it_exists():
+def test_the_next_step_names_the_agent_request_now_that_ingest_linkedin_exists():
     from harness.contract import BY_NAME
-    assert "ingest_linkedin" not in BY_NAME                     # revisit when #355 ships
+    assert "ingest_linkedin" in BY_NAME                         # #355
+    assert connect.next_step(True, URL) == 'Ask your agent to "pull my LinkedIn and GitHub".'
+    assert "Nothing is connected" in connect.next_step(False, None)
     for github, url in ((True, URL), (True, None), (False, URL), (False, None)):
         text = connect.next_step(github, url)
-        assert "pull my LinkedIn" not in text
-        if url:
-            assert "not available yet" in text
+        assert "not available yet" not in text and "artie ingest" not in text
 
 
-def test_the_next_step_names_the_agent_request_once_ingest_linkedin_exists():
-    assert connect.next_step(True, URL, ingest_linkedin=True) == \
-        'Ask your agent to "pull my LinkedIn and GitHub".'
-    assert "Nothing is connected" in connect.next_step(False, None)
+def test_a_saved_url_without_github_says_the_lookup_needs_the_sign_in():
+    """The gateway identifies the caller by the GitHub token (#355), so a URL alone is not enough."""
+    text = connect.next_step(False, URL)
+    assert "GitHub sign-in" in text and "artie connect" in text and "data export" in text
+    assert "add your LinkedIn URL" in connect.next_step(True, None)
 
 
 # ── help and dispatch ────────────────────────────────────────────────────────

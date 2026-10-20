@@ -139,13 +139,12 @@ def test_the_privacy_page_covers_what_the_issue_requires():
         assert phrase in text, f"privacy page does not say {phrase!r}"
 
 
-def test_the_privacy_page_says_the_lookup_is_not_live_yet():
-    """The gateway is not deployed and `ingest_linkedin` (#355) is not built, so the page must not
-    read as if the lookup works today. Drop this, and the notice, when #355 ships."""
+def test_the_privacy_page_does_not_say_github_returns_nothing_else():
+    """GitHub's answer carries public profile details too; the page says the service keeps none
+    of them, not that it reads nothing else. (#355 dropped the "coming soon" notice beside it.)"""
     text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", _read(PRIVACY))).lower()
-    assert "coming soon" in text
-    assert "isn't available yet" in text
-    assert "reads nothing else from your github account" not in text   # GitHub returns profile details
+    assert "reads nothing else from your github account" not in text
+    assert "coming soon" not in text and "isn't available yet" not in text
 
 
 def test_the_privacy_page_claims_match_the_code():

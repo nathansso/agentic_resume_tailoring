@@ -1,6 +1,6 @@
 ---
 name: artie-setup
-description: Build or refresh the user's ART knowledge graph from their resume, LinkedIn export and local project repos, and set their resume header. Use on first use of ART, when the user says their experience, projects or contact details changed, when a tailoring run finds a fact missing or stale, or when ART's tools are missing or fail to start (it installs uv and the `artie` command, with the user's consent).
+description: Build or refresh the user's ART knowledge graph from their resume, LinkedIn profile or export, and local project repos, and set their resume header. Use on first use of ART, when the user says their experience, projects or contact details changed, when a tailoring run finds a fact missing or stale, or when ART's tools are missing or fail to start (it installs uv and the `artie` command, with the user's consent).
 ---
 
 # Set up ART
@@ -82,9 +82,10 @@ install anything without the user's yes.**
 Ask the user where their materials are:
 
 - a resume file (PDF, DOCX, Markdown or LaTeX);
-- a LinkedIn data export;
+- their LinkedIn profile URL (`linkedin.com/in/<name>`), unless `get_profile` already shows a
+  `linkedin_url` (step 3a pulls it in), or a LinkedIn data export;
 - the local folders of projects they want considered;
-- their GitHub repos. If they want these, they run `artie connect` in their own terminal
+- their GitHub repos. If they want these, or their LinkedIn profile, they run `artie connect` in their own terminal
   (`--private` adds private repos; it also asks for their LinkedIn URL, and
   `list_github_repos`'s `not_logged_in` error repeats the command; `artie github login` is
   the GitHub sign-in alone). If `artie` is not on their PATH, the same command is
@@ -133,6 +134,27 @@ Read them yourself. ART does not read files.
 - **Stale facts.** When a stored fact is out of date (a role that ended but still reads
   "Present"), resend that record with `"correct": true` and only the corrected
   fields.
+
+## 3a. Pull their LinkedIn profile
+
+If the user gave a LinkedIn profile URL, or `get_profile` shows one, call
+`ingest_linkedin({url})` (no `url` uses the saved one). It fetches their own profile through
+ART's hosted lookup and stores it like `upsert_items`. Only ever the user's own profile.
+
+- It needs the GitHub sign-in from `artie connect` (the lookup uses it to know who is asking),
+  can take a few minutes, and allows two profiles a day: call it once per setup, not to retry.
+- Read the reply: `added` (new items by kind), `results` (as `upsert_items`' results below),
+  `skipped` (entries with no school, company or name: never fill those in yourself) and
+  `missing` (sections the public profile left empty; experience often is).
+- `candidates` are not stored: recent posts, courses, bio links and the about text. Ask the
+  user about each one that matters before storing anything from it. A post about a hackathon
+  win is a claim to confirm, then store as an `achievement`; a course can go on its degree; a
+  portfolio link goes to `update_profile`'s `portfolio_url` only if they say so.
+- On an error, tell the user its message (it says what went wrong and what to do) and offer
+  the LinkedIn data export, which also carries what a public profile hides. If ART has no
+  `ingest_linkedin` tool (an install older than v0.3.0), use the export.
+- A LinkedIn data export (the archive from LinkedIn's settings) is read like any other source
+  in step 3, with `source: "linkedin"`.
 
 ## 4. Say where each project was done
 

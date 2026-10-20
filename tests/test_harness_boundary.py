@@ -15,11 +15,11 @@ with `ast` so nothing is imported to test it:
    a harness change that starts calling such a function is caught in review,
    not here.
 
-3. **The network is reached through three modules only** (#353, #384): the Jev
-   client (`harness/decisions/client.py`), the GitHub client (`harness/github.py`)
-   and the toolchain downloader (`harness/toolchain.py`, the pinned Tectonic).
-   Any other harness file importing an HTTP or socket library fails
-   `NETWORK_CLIENTS` below; the LinkedIn gateway client (#355) joins that list.
+3. **The network is reached through four modules only** (#353, #384, #355): the Jev
+   client (`harness/decisions/client.py`), the GitHub client (`harness/github.py`),
+   the toolchain downloader (`harness/toolchain.py`, the pinned Tectonic) and the
+   LinkedIn gateway client (`harness/linkedin_gateway.py`). Any other harness file
+   importing an HTTP or socket library fails `NETWORK_CLIENTS` below.
 
 The modules the executor (#197) reuses from `agents/` are held to rule 2 as
 well: `checks` (tailor's checks without the LLM stack), `arbitration` and
@@ -33,17 +33,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 # The network allow-list (#353): the only harness modules that may import an HTTP or socket
-# library. The Jev client (#193), the GitHub client (#353) and the toolchain downloader (#384)
-# are the whole list; the LinkedIn gateway client (#355) joins it in its own change, and nothing
-# else gets in without one.
-NETWORK_CLIENTS = ("harness/decisions/client.py", "harness/github.py", "harness/toolchain.py")
+# library. The Jev client (#193), the GitHub client (#353), the toolchain downloader (#384) and
+# the LinkedIn gateway client (#355) are the whole list; nothing else gets in without its own
+# change.
+NETWORK_CLIENTS = ("harness/decisions/client.py", "harness/github.py", "harness/toolchain.py",
+                   "harness/linkedin_gateway.py")
 NETWORK_MODULES = ("requests", "httpx", "urllib3", "urllib.request", "http.client", "aiohttp",
                    "socket", "ssl", "websockets", "websocket", "ftplib", "smtplib", "imaplib",
                    "poplib", "telnetlib", "xmlrpc.client")
 BANNED_EXACT = {"llm", "langgraph", "openai", "anthropic"}
 BANNED_PREFIX = ("langchain",)
 EXTRA_ENTRIES = ("agents.checks", "agents.arbitration", "agents.tailor_planner",
-                 "agents.keyword_weights", "agents.jd_payload", "agents.kg_store")
+                 "agents.keyword_weights", "agents.jd_payload", "agents.kg_store",
+                 "agents.linkedin_mapping")
 
 
 def _banned(module: str) -> bool:
@@ -168,8 +170,8 @@ def test_importing_harness_or_checks_loads_no_generative_client():
     assert transitive_violations(ROOT, entries) == []
 
 
-def test_the_harness_reaches_the_network_only_through_the_jev_github_and_toolchain_clients():
-    """Exactly those three modules import a network library: a fourth is a new outbound call
+def test_the_harness_reaches_the_network_only_through_the_jev_github_toolchain_and_gateway_clients():
+    """Exactly those four modules import a network library: a fifth is a new outbound call
     path, and it needs the root CLAUDE.md invariant, this list and the docs to say so."""
     assert sorted(network_importers(ROOT)) == sorted(NETWORK_CLIENTS)
 

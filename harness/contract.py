@@ -1300,6 +1300,73 @@ class GithubReposOutput(_Output):
     note: Optional[str] = None
 
 
+# ── ingest_linkedin (#355) ───────────────────────────────────────────────────
+
+class IngestLinkedInInput(_Model):
+    url: Optional[str] = Field(
+        None, description="The user's own public profile URL (linkedin.com/in/<name>). Omitted: "
+                          "the URL saved on the profile (artie connect, or update_profile's "
+                          "linkedin_url).")
+
+
+class LinkedInSkipped(_Model):
+    kind: str
+    label: str = Field(description="What the entry showed, to name it to the user.")
+    reason: str = Field(description="Why it was not stored, e.g. no school, no company.")
+
+
+class LinkedInPost(_Model):
+    text: str
+    truncated: Optional[bool] = None
+    link: Optional[str] = None
+    interaction: Optional[str] = None
+    date: Optional[str] = None
+
+
+class LinkedInCourse(_Model):
+    title: str
+    code: Optional[str] = None
+
+
+class LinkedInLink(_Model):
+    title: Optional[str] = None
+    url: str
+
+
+class LinkedInCandidates(_Model):
+    activity: List[LinkedInPost] = Field(
+        default_factory=list, description="Recent posts. Evidence to confirm with the user, not "
+                                          "facts: a post about a hackathon win is a claim to "
+                                          "check before storing an achievement.")
+    courses: List[LinkedInCourse] = Field(default_factory=list)
+    bio_links: List[LinkedInLink] = Field(default_factory=list)
+    about: Optional[str] = Field(None, description="The about text; often truncated publicly.")
+
+
+class IngestLinkedInOutput(_Output):
+    url: Optional[str] = Field(None, description="The profile URL fetched, normalised.")
+    source: Optional[str] = Field(None, description="The evidence source the records carry.")
+    name: Optional[str] = None
+    headline: Optional[str] = None
+    added: Dict[str, int] = Field(default_factory=dict,
+                                  description="New items stored, by kind.")
+    results: List[UpsertResult] = Field(default_factory=list,
+                                        description="upsert_items' result per stored record.")
+    counts: Dict[str, int] = Field(default_factory=dict)
+    relinked: List[RelinkedPreference] = Field(default_factory=list)
+    skipped: List[LinkedInSkipped] = Field(
+        default_factory=list, description="Incomplete entries not stored (nothing is guessed).")
+    missing: List[str] = Field(
+        default_factory=list, description="Sections the profile returned empty, e.g. experience.")
+    candidates: LinkedInCandidates = Field(default_factory=LinkedInCandidates)
+    note: Optional[str] = None
+
+
+def _linkedin():
+    from harness import linkedin
+    return linkedin
+
+
 def _library():
     from harness import library
     return library
@@ -1715,6 +1782,19 @@ TOOLS: List[ToolSpec] = [
         lambda uid, page=1, per_page=20, include_private=True, include_readme=True:
             _github().list_github_repos(page, per_page, include_private, include_readme),
         needs_user=False, network=True),
+    ToolSpec(
+        "ingest_linkedin",
+        "Pull the user's own LinkedIn profile into the graph through ART's hosted lookup, and "
+        "store it like upsert_items (deduplicated; items the user edited or deleted are left "
+        "alone). Only the user's own profile: pass their URL, or none to use the one saved on "
+        "the profile. Needs the GitHub sign-in (`artie connect`); a fetch can take a few "
+        "minutes, and the quota is two a day. The public profile is often sparse, so read "
+        "missing and skipped, and confirm candidates (posts, courses, links) with the user "
+        "before storing any of them. On an error, relay its message: it names the fix and the "
+        "LinkedIn data export, which works instead. Writes.",
+        IngestLinkedInInput, IngestLinkedInOutput,
+        lambda uid, url=None: _linkedin().ingest_linkedin(uid, url),
+        read_only=False, network=True),
 ]
 BY_NAME: Dict[str, ToolSpec] = {t.name: t for t in TOOLS}
 

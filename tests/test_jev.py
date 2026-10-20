@@ -476,15 +476,16 @@ def test_art_jev_is_dispatched_by_the_console_script(monkeypatch):
 
 # ── the boundary ─────────────────────────────────────────────────────────────
 
-def test_the_jev_github_and_toolchain_clients_are_the_only_network_calls_under_harness():
-    """Also enforced, for every network library, by tests/test_harness_boundary.py (#353, #384)."""
+def test_the_jev_github_toolchain_and_gateway_clients_are_the_only_network_calls_under_harness():
+    """Also enforced, for every network library, by tests/test_harness_boundary.py (#353, #384,
+    #355)."""
     from pathlib import Path
 
     root = Path(__file__).resolve().parent.parent / "harness"
     users = {p.relative_to(root).as_posix() for p in root.rglob("*.py")
              if "import requests" in p.read_text(encoding="utf-8")
              or "from requests" in p.read_text(encoding="utf-8")}
-    assert users == {"decisions/client.py", "github.py", "toolchain.py"}
+    assert users == {"decisions/client.py", "github.py", "toolchain.py", "linkedin_gateway.py"}
 
 
 # ── live (needs a key; skipped without one) ──────────────────────────────────

@@ -27,8 +27,8 @@ An engine the user installed (on PATH, or next to the Python executable) always 
 Tectonic itself downloads its TeX bundle on the first compile; that is Tectonic's own
 network use, outside ART's Python. The `artie-setup` skill warms it with one render.
 
-**This module, the Jev client and the GitHub client are the only network clients under
-`harness/`** (`tests/test_harness_boundary.py`). Nothing here is a generative call.
+**This module, the Jev client, the GitHub client and the LinkedIn gateway client are the
+only network clients under `harness/`** (`tests/test_harness_boundary.py`). Nothing here is a generative call.
 """
 
 from __future__ import annotations

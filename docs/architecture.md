@@ -1068,13 +1068,13 @@ checks and, for a few bounded questions, asks TypeSafe's Jev.
 ### 8.1 Adapters and the contract
 
 `harness/contract.py` declares every tool once, with pydantic input and output models and
-errors carried as an `error` field. It currently holds **30 tools**, in five groups:
+errors carried as an `error` field. It currently holds **31 tools**, in five groups:
 
 | Group | Tools |
 |---|---|
 | Context and memory | `art_briefing`, `art_pins`, `observe`, `record_preference`, `record_rule`, `retract_rule` |
 | Retrieval | `kg_search`, `list_items`, `get_item`, `get_profile` |
-| Ingest, project context, library | `ingest_schema`, `upsert_items`, `list_github_repos`, `suggest_project_contexts`, `set_project_context`, `link_achievement`, `promote_bullet`, `approve_variant`, `save_baseline`, `update_profile` |
+| Ingest, project context, library | `ingest_schema`, `upsert_items`, `list_github_repos`, `ingest_linkedin`, `suggest_project_contexts`, `set_project_context`, `link_achievement`, `promote_bullet`, `approve_variant`, `save_baseline`, `update_profile` |
 | Jobs | `open_job`, `list_jobs`, `suggest_actions` |
 | Execute and history | `execute_plan`, `patch_plan`, `get_head`, `history`, `diff_nodes`, `checkout`, `render` |
 
@@ -1639,6 +1639,11 @@ gate's (§8.6).
   and `keyring` is a default dependency. `list_github_repos` lists the user's own repos, one page at a
   time, with languages, topics, an optional README excerpt and a `clone_command`; it is the only tool
   that needs no bound profile (`needs_user` false).
+- **LinkedIn lookup (#355).** `ingest_linkedin` fetches the user's own profile through the hosted
+  gateway (`harness/linkedin_gateway.py`, the fourth network client under `harness/`), maps it with
+  the shared `agents/linkedin_mapping.py` (which `ResumeParserAgent._save_linkedin_structured` also
+  uses) and stores it through `upsert_items`. Sparse sections are reported, never filled in; posts,
+  courses and links come back as candidates for the agent to confirm.
 - **One identity per skill (#365).** `agents/skill_resolver.py::resolve_skill` finds the `Skill` a name
   belongs to by `skill_fold` (one the user already links, then the global row with the canonical name,
   then any with the same fold), on every path that links a user or a job to a skill. After an ingest,

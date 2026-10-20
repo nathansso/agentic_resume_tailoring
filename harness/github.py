@@ -19,8 +19,9 @@ LinkedIn gateway client (#355) uses to identify the user to #354.
 - **Transport is injectable**, as the Jev client's is: a callable `(method, url,
   headers, form, timeout) -> (status, headers, text)`. Tests pass a fake, so
   nothing here touches the network in the suite.
-- **This module, `harness/decisions/client.py` and `harness/toolchain.py` are the only
-  network clients under `harness/`.** `tests/test_harness_boundary.py` allows exactly those.
+- **This module, `harness/decisions/client.py`, `harness/toolchain.py` and
+  `harness/linkedin_gateway.py` are the only network clients under `harness/`.**
+  `tests/test_harness_boundary.py` allows exactly those.
   Nothing here is a generative call.
 """
 

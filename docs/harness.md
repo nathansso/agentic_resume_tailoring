@@ -692,6 +692,7 @@ carries `job`: the job's id, title and company, so the host names the job it act
 | | `get_item` | key → record, evidence; an experience or project also lists its approved variants (id, text, tags, cites) (#229); its `preferences` (active, keyed to it, any scope) and `job_rules` (#297) |
 | | `get_profile` | → name and contact details for the header (#191), and `default_output_dir`, where `render` saves the user's copy (#394) |
 | | `list_github_repos` | page, per_page, include_private, include_readme → the signed-in user's own repos with languages, topics, stars, last push, fork and archived flags, clone command and README excerpt; needs `artie connect` (or `artie github login`), and no profile (#353) |
+| | `ingest_linkedin` | optional url (else the profile's `linkedin_url`) → the user's own LinkedIn profile through the hosted gateway, mapped by the shared `agents/linkedin_mapping.py` and stored through `upsert_items`; returns what was added, `skipped` (incomplete entries), `missing` sections and `candidates` (posts, courses, links) to confirm before storing; needs `artie connect`'s GitHub sign-in (#355) |
 | Ingest & library | `ingest_schema` | kind → JSON schema the host fills |
 | | `upsert_items` | records with evidence → keys, merges, conflicts; kind `variant` imports the user's curated bullets, approved (#229) |
 | | `promote_bullet` | node, bullet, optional item key and track → a **draft** variant, or the existing one (#229) |
@@ -1234,7 +1235,8 @@ tools `list_jobs`, `get_head`, `history`, `diff_nodes` and `checkout` (#196); th
 `upsert_items` and `open_job` (#192); `render` and `update_profile` (#201); `observe`,
 `record_preference` and `art_pins` (#202); the library's `suggest_actions`, `promote_bullet`,
 `approve_variant` and `save_baseline` (#229); and project context's `suggest_project_contexts`,
-`set_project_context` and `link_achievement` (#230); and `list_github_repos` (#353).
+`set_project_context` and `link_achievement` (#230); `list_github_repos` (#353); and
+`ingest_linkedin` (#355).
 
 **Ingestion and jobs (#192).** The host fills `ingest_schema(kind)` and calls
 `upsert_items`, which stores records through the resume parser's own dedup, merge, heal
@@ -1256,14 +1258,29 @@ ships once the owner has registered the OAuth App: no secret, no server, no redi
 for `read:user`; `--private` adds `repo`. The token is kept as the Keys row above says, and
 `harness/github.py` (`resolve_token()`) is the one place that reads it: the
 LinkedIn gateway client (#355) takes the same token to identify the user to #354.
+
+**LinkedIn (#355).** `ingest_linkedin(url)` posts the user's own profile URL (or the one
+`artie connect` saved) to the hosted gateway (`harness/linkedin_gateway.py`;
+`https://artie-gateway.vercel.app`, overridable with `ART_LINKEDIN_GATEWAY_URL`) with the
+GitHub token as a bearer, waits up to 330 s (the gateway polls Bright Data for up to 280 s),
+and maps Bright Data's record with `agents/linkedin_mapping.py`, the model-free mapping the
+legacy parser uses too. The entities go through `upsert_items` with source
+`linkedin:<url>`, so dedup, tombstones and `manually_edited` apply. Incomplete entries (an
+education with no school, a role with no company) are skipped, not filled in; empty sections
+come back as `missing`; posts, courses, bio links and the about text come back as
+`candidates`, which the agent confirms with the user before storing anything from them. A
+missing sign-in, a 401, a 429 (two profiles a day), a 503 (the spend cap or the gateway down)
+or a timeout comes back as an error that says so and points to the LinkedIn data export,
+which stays the richer path (public scrapes are often sparse: no experience at all).
 `list_github_repos` returns the user's own repos, most recently pushed first, with name,
 description, languages, topics, stars, last push, fork and archived flags, URLs, a clone
 command and a README excerpt capped at 3000 characters. It pages (`next_page`), lists private
 repos only when the token holds `repo`, and needs no profile (`ToolSpec.needs_user` is
 false). It reads nothing from disk: the host picks repos, clones with the user's say-so, and
 stores what it reads with `upsert_items`, source `github:<repo>`. `harness/github.py`, the
-Jev client and the toolchain downloader (`harness/toolchain.py`, #384) are the only network
-clients under `harness/` (`tests/test_harness_boundary.py`).
+Jev client, the toolchain downloader (`harness/toolchain.py`, #384) and the LinkedIn gateway
+client (`harness/linkedin_gateway.py`, #355) are the only network clients under `harness/`
+(`tests/test_harness_boundary.py`).
 
 **Writes.** `checkout` is the first tool that writes. Local SQLite is writable. A remote or
 Postgres database is read-only, and write tools return a `read_only` error, unless the

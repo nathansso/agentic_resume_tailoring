@@ -188,27 +188,20 @@ def _linkedin_step(args, *, user_id, allow_writes, interactive, ask) -> Dict[str
 
 # ── what to do next ──────────────────────────────────────────────────────────
 
-def next_step(github_connected: bool, linkedin_url: Optional[str],
-              ingest_linkedin: Optional[bool] = None) -> str:
-    """One sentence on what to do now. `artie ingest` is not promised: it is #398, and the
-    agent's LinkedIn tool (`ingest_linkedin`, #355) is named only once the contract has it."""
-    if ingest_linkedin is None:
-        from harness.contract import BY_NAME
-        ingest_linkedin = "ingest_linkedin" in BY_NAME
-    if ingest_linkedin and (github_connected or linkedin_url):
+def next_step(github_connected: bool, linkedin_url: Optional[str]) -> str:
+    """One sentence on what to do now. The agent pulls the profile with `ingest_linkedin`
+    (#355), which needs the GitHub sign-in to identify the user to the gateway. `artie ingest`
+    is not promised: it is #398."""
+    if github_connected and linkedin_url:
         return "Ask your agent to \"pull my LinkedIn and GitHub\"."
     if github_connected:
-        text = ("Ask your agent to read your GitHub repos, or run /artie:setup in Claude Code "
-                "($artie-setup in Codex) to build your graph.")
-        if linkedin_url:
-            text += (" Your LinkedIn URL is saved; pulling the profile in is not available yet "
-                     "(`artie ingest`, coming), so give your agent your LinkedIn data export "
-                     "meanwhile.")
-        return text
+        return ("Ask your agent to read your GitHub repos, or run /artie:setup in Claude Code "
+                "($artie-setup in Codex) to build your graph. Run `artie connect` again to add "
+                "your LinkedIn URL.")
     if linkedin_url:
-        return ("Run /artie:setup in Claude Code ($artie-setup in Codex) to build your graph. "
-                "Your LinkedIn URL is saved; pulling the profile in is not available yet "
-                "(`artie ingest`, coming). Run `artie connect` again to add GitHub.")
+        return ("Your LinkedIn URL is saved, but the LinkedIn lookup identifies you by your "
+                "GitHub sign-in: run `artie connect` again to sign in, then ask your agent to "
+                "\"pull my LinkedIn\". Or give your agent your LinkedIn data export.")
     return "Nothing is connected yet. Run `artie connect` again."
 
 
