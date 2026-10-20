@@ -35,9 +35,10 @@ const toc = Object.values(S);
       that isn't there, it asks you.
     </p>
     <p>
-      In Claude Code you run <code>/artie:*</code> commands. Codex has two skills instead, <code>$artie-setup</code> and <code>$artie-tailor</code>,
-      and for everything else you ask in plain words. This page shows the Claude Code command
-      first, then the Codex equivalent.
+      Claude Code has three commands: <code>/artie:setup</code>, <code>/artie:history</code> and
+      <code>/artie:open</code>. Codex has two skills instead, <code>$artie-setup</code> and <code>$artie-tailor</code>.
+      Everything else, tailoring, changing a draft, going back a version, saving the PDF, you
+      ask for in plain words. The plan your agent shows you is the one thing you must approve.
     </p>
     <p>
       Where a step has no command of its own, the page says what to ask your agent and names the
@@ -116,9 +117,13 @@ const toc = Object.values(S);
   </DocSection>
 
   <DocSection section={S.tailor}>
-    <p>Paste the posting, or give a link, to the tailor command:</p>
-    <CommandBlock label="In Claude Code (replace the placeholder with the posting)" lines={block("artie-tailor")} />
-    <p>In Codex, run <code>$artie-tailor</code> and paste the posting.</p>
+    <p>Paste the posting, or give a link, and ask your agent to tailor your resume:</p>
+    <CommandBlock label="Say this to your agent" lines={["Tailor my resume to this posting: <paste the posting or a link>"]} />
+    <p>
+      In Claude Code the <code>artie-tailor</code> skill starts on its own. In Codex, name it:
+      <code>$artie-tailor</code>. If you have several jobs and your words could mean more than one,
+      the agent asks which you mean before it touches one.
+    </p>
     <p>The agent works through these steps, and you can watch each one:</p>
     <ol class="steps">
       <li>
@@ -137,11 +142,13 @@ const toc = Object.values(S);
       </li>
       <li>
         <strong>Shows you a plan and waits.</strong> The plan says which items lead, what each
-        revised bullet will say, what is cut and why, and the skills line. <em>Nothing is
-        changed until you approve it.</em>
+        revised bullet will say, what is cut, the reason for every change, and the skills line.
+        <em>Nothing is changed until you approve it.</em>
       </li>
       <li>
-        <strong>Runs it.</strong> After you approve, <code>execute_plan</code> applies the plan.
+        <strong>Runs it.</strong> After you approve, <code>execute_plan</code> applies exactly the
+        plan you saw, together with your approving words, which ARTie checks against what you
+        actually sent.
         ARTie checks each change and refuses or reverts one that claims more than its source
         supports, mentions a topic you banned, or breaks a rule you set. The agent tells you
         about every one rather than quietly resubmitting it.
@@ -150,7 +157,8 @@ const toc = Object.values(S);
     <Callout title="You are the editor">
       <p>
         Reply to the plan in plain words: "lead with the recommender project", "cut the second
-        internship's last bullet", "approved." The agent revises the plan and shows it again.
+        internship's last bullet", "approved." A change request gets a revised plan, shown again
+        for your approval. To go back, say "go back to the last version" and the agent restores it.
       </p>
     </Callout>
   </DocSection>
@@ -182,18 +190,18 @@ const toc = Object.values(S);
     <p>
       A rule you call absolute ("never") becomes a pin: what it names can never reach the page,
       even in other words. ARTie never saves one without your confirmation. To see what ARTie
-      holds, run <code>/artie:prefs</code> in Claude Code, or ask your agent to show your
-      preferences (<code>art_briefing</code>; <code>art_pins</code> returns the pins word for
-      word).
+      holds, ask your agent to show your preferences (<code>art_briefing</code>;
+      <code>art_pins</code> returns the pins word for word).
     </p>
   </DocSection>
 
   <DocSection section={S.render}>
     <p>
-      The tailor command ends by rendering, so the PDF comes with the plan you approved. To
+      Tailoring ends by rendering, so the PDF comes with the plan you approved. To
       render again after a change, ask your agent to "render the resume" (the <code>render</code> tool).
       It writes <code>resume.tex</code> and <code>resume.pdf</code> to <code>~/.art/applications/&lt;Company&gt;_&lt;Role&gt;/</code>,
-      and the agent tells you the path.
+      and the agent tells you the path. Say where you want your copy ("save it to my Downloads")
+      and ARTie saves it there; the first time you don't, the agent asks once and remembers.
     </p>
     <ul>
       <li>
@@ -223,7 +231,7 @@ const toc = Object.values(S);
   </DocSection>
 
   <DocSection section={S.later}>
-    <p>The Claude Code commands, all in one place:</p>
+    <p>The Claude Code commands, all in one place. They only find a job and show it to you:</p>
     <table>
       <thead>
         <tr><th>Command</th><th>What it does</th></tr>
@@ -238,11 +246,10 @@ const toc = Object.values(S);
       </tbody>
     </table>
     <p>
-      The two skills behind <code>/artie:setup</code> and <code>/artie:tailor</code> also start on
+      The two skills behind them, <code>artie-setup</code> and <code>artie-tailor</code>, also start on
       their own when you ask your agent to tailor a resume or update your experience. In Codex,
       ask for history in plain words; the agent uses <code>history</code> and <code>diff_nodes</code> to
-      show versions and <code>checkout</code> to go back, after it shows you the difference and
-      you confirm.
+      show versions and <code>checkout</code> to go back when you ask it to.
     </p>
   </DocSection>
 </Docs>

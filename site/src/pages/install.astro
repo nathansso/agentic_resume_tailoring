@@ -14,7 +14,7 @@ const S = {
   codex: { id: "codex", title: "Install in Codex" },
   manual: { id: "other-clients", title: "Other MCP clients" },
   verify: { id: "check-it-worked", title: "Check that it worked" },
-  github: { id: "github", title: "Bring in your GitHub repos (optional)" },
+  github: { id: "github", title: "Connect GitHub and LinkedIn (optional)" },
   optional: { id: "optional", title: "Optional extras" },
   jev: { id: "jev", title: "Optional: strengthen the checks with Jev" },
   trouble: { id: "troubleshooting", title: "Troubleshooting" },
@@ -185,9 +185,9 @@ const toc = Object.values(S);
         The answer should include <code>art_briefing</code>, <code>open_job</code>, <code>execute_plan</code> and <code>render</code>.
       </li>
       <li>
-        <strong>Claude Code only: run a read-only command.</strong> <code>/artie:prefs</code> shows
-        your saved preferences. On a fresh install it has none, and that is a good result: it
-        means the agent reached ARTie.
+        <strong>Ask what it has saved.</strong> Say: "What preferences does ARTie have for me?"
+        (the agent calls <code>art_briefing</code>). On a fresh install the answer is none, and that
+        is a good result: it means the agent reached ARTie.
       </li>
     </ol>
     <p>
@@ -200,24 +200,29 @@ const toc = Object.values(S);
   <DocSection section={S.github}>
     <p>
       Skip this if you would rather clone your repositories and hand your agent the folders (see
-      the <a href="/usage">Usage page</a>). Sign in with GitHub once and your agent can list
-      your repositories itself and choose which to read.
+      the <a href="/usage">Usage page</a>). Connect GitHub and your agent can list your
+      repositories itself and choose which to read; give your LinkedIn profile address and ARTie
+      keeps it on your profile.
     </p>
     <p>
       Run this in your own terminal, not through your agent. It prints a code and a GitHub
       page; open the page, type the code and approve. Your password never goes through ARTie.
+      Then it asks for your LinkedIn profile address (<code>linkedin.com/in/your-name</code>);
+      press Enter to skip. Running it again shows what is connected and changes nothing.
     </p>
-    <CommandBlock label="In a terminal" lines={block("github-login")} />
+    <CommandBlock label="In a terminal" lines={block("connect")} />
     <p>
       The first line reads your public repositories. The second, with <code>--private</code>,
       also reads private ones. Run whichever you want; you can run the other later.
+      <code>artie github login</code> is the GitHub sign-in on its own, if you don't want the
+      LinkedIn question.
     </p>
     <p>
       <code>/artie:setup</code> puts the <code>artie</code> command on your <code>PATH</code>. If
       your terminal says it doesn't know <code>artie</code>, run the same lines through
       <code>uvx</code>:
     </p>
-    <CommandBlock label="In a terminal" lines={block("github-login-uvx")} />
+    <CommandBlock label="In a terminal" lines={block("connect-uvx")} />
     <p>
       Nothing else needs installing: the <code>keyring</code> package ships with ARTie, and the
       token it gets is kept in your operating system's keychain (Windows Credential Manager,

@@ -41,19 +41,20 @@ command, and tells you how to restart ART once. It then builds your knowledge gr
 your resume, LinkedIn export and project folders. (In Codex the setup is the `$artie-setup`
 skill.)
 
-To bring in your GitHub repos, sign in once in your own terminal (add `--private` for
-private repos):
+To connect your GitHub repos and save your LinkedIn URL, run this once in your own terminal
+(add `--private` for private repos):
 
 ```bash
-artie github login
+artie connect
 ```
 
 You don't need to install LaTeX: the first time ART renders a PDF, it downloads its own
-pinned engine (Tectonic). Then tailor a resume:
+pinned engine (Tectonic). Then ask your agent in plain words:
 
-```
-/artie:tailor <posting or URL>
-```
+> Tailor my resume to this posting: <paste the posting or a link>
+
+It shows you a plan, with a reason for every change, and waits for your OK before anything is
+saved. "Go back to the last version" and "save it to my Downloads" work the same way.
 
 [`INSTALL.md`](INSTALL.md) covers registering the MCP server by hand, Codex hooks, the
 editor, backups, building from source, and troubleshooting (offline starts and long paths

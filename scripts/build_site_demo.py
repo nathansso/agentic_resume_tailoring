@@ -9,7 +9,7 @@ What it does, in order:
 1. Creates a scratch `ART_DATA_DIR` (a new temp directory, never `~/.art`), strips every
    database, key and `ART_*` variable from the environment, and turns Jev off.
 2. Drives the real `artie` tools through `python -m harness.entry <tool> --args <json>`, the
-   same entry point the `artie` script runs, in the order `/artie:setup` and `/artie:tailor` take:
+   same entry point the `artie` script runs, in the order `/artie:setup` and the plain-language tailoring request take:
    a sample resume and the READMEs of three repos that are not on it go into the graph, a
    sample posting is opened, version 1 is the student's usual one-page resume (the resume's
    content, the repo projects left off, nothing reworded), and the tailoring plan is run

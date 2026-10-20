@@ -28,31 +28,45 @@ Your data lives in `~/.art/art.db`, or `$ART_DATA_DIR`. Rendered resumes go to
 
 ## Use
 
+Three commands, for navigation you want by name:
+
 | Command | What it does |
 |---|---|
 | `/artie:setup [files]` | Build your knowledge graph from your resume, LinkedIn export and project folders, and set your header |
-| `/artie:tailor <posting or URL>` | Plan a tailored resume, wait for your approval, commit it and render the PDF |
-| `/artie:open [job]` | Print the command that opens the local LaTeX editor (`artie ui`, from the release wheel: no build step) |
-| `/artie:history [job]` | List every version and what changed |
-| `/artie:revert <job> [version]` | Make an earlier version current again |
-| `/artie:prefs` | Show your pinned rules, preferences and job-scoped rules |
+| `/artie:open [job]` | Find the job, then print the command that opens the local LaTeX editor (`artie ui`, from the release wheel: no build step) |
+| `/artie:history [job]` | Find the job, then list every version and what changed |
 
-The two skills behind these, `artie-tailor` and `artie-setup`, also trigger on their own
-when you ask Claude to tailor a resume or update your experience.
+Everything else is plain language to Claude, and the `artie-tailor` skill does the work (the
+`artie-setup` skill is behind `/artie:setup`):
 
-## GitHub repos (optional)
+- **Tailor:** "Tailor my resume to this posting: <paste it or a link>." Claude shows you a plan
+  with a reason for every change and stops. Nothing is saved until you approve it.
+- **Revise:** "Make the second bullet shorter", "lead with the recommender project". You get a
+  new plan to approve. "Never mention Kafka" is a lasting rule; Claude confirms how it read it
+  before recording it.
+- **Go back:** "Go back to the last version." Nothing is deleted, so you can undo it.
+- **Ask:** "What do I have about Python?", "Which jobs have I tailored?" Claude answers from
+  ART's records, not from memory. When your words could mean more than one job, it asks which.
+- **Save:** "Save it to my Downloads." The first time you don't say, Claude asks once and ART
+  remembers.
 
-To bring in your GitHub repos, sign in once in your own terminal (add `--private` for private
-repos):
+Both skills also trigger on their own when you ask Claude to tailor a resume or update your
+experience. In Codex they are `$artie-setup` and `$artie-tailor`.
+
+## GitHub repos and LinkedIn (optional)
+
+To connect your GitHub repos and save your LinkedIn URL, run this once in your own terminal
+(add `--private` for private repos). It is safe to run again; `artie github login` is the
+GitHub sign-in on its own:
 
 ```bash
-artie github login
+artie connect
 ```
 
 If `artie` is not on your PATH (you have not run `/artie:setup`'s install step), the same command is:
 
 ```bash
-uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie github login
+uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie connect
 ```
 
 Claude can then call `list_github_repos`, pick the repos

@@ -84,10 +84,11 @@ Ask the user where their materials are:
 - a resume file (PDF, DOCX, Markdown or LaTeX);
 - a LinkedIn data export;
 - the local folders of projects they want considered;
-- their GitHub repos. If they want these, they run `artie github login` in their own terminal
-  (`--private` adds private repos; `list_github_repos`'s `not_logged_in` error repeats the
-  command). If `artie` is not on their PATH, the same command is
-  `uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie github login`.
+- their GitHub repos. If they want these, they run `artie connect` in their own terminal
+  (`--private` adds private repos; it also asks for their LinkedIn URL, and
+  `list_github_repos`'s `not_logged_in` error repeats the command; `artie github login` is
+  the GitHub sign-in alone). If `artie` is not on their PATH, the same command is
+  `uvx --python 3.12 --from "art-mcp[ui] @ https://github.com/nathansso/agentic_resume_tailoring/releases/download/v0.2.0/art_mcp-0.2.0-py3-none-any.whl" artie connect`.
   Then you call `list_github_repos`, pick the repos worth
   reading with them, and clone one only after they agree. Store what you read with
   `source: "github:<repo>"` (each repo's `evidence_source`). Never ask for or handle a token.
@@ -209,6 +210,10 @@ Call `list_items` again and summarize what is stored by kind. Point out anything
 looks duplicated or thin, and ask the user whether to fix it.
 
 End setup with one `render` of the user's baseline (a job with a saved track or committed version; skip it when there is none), so the LaTeX engine and its TeX files are fetched now rather than on the first tailoring.
+
+Then tell the user what to do next, in plain words: paste a job posting or link and ask you
+to tailor their resume. There is no command for it; the `artie-tailor` skill takes it from
+there.
 
 ## 10. Back up, or bring a web-app profile over
 

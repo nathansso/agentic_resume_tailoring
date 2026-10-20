@@ -7,7 +7,8 @@
     artie hook user-prompt < hook.json             # Claude Code plugin hooks (#201)
     artie hooks codex --write                      # the file fallback for Codex without plugin hooks (#203, #290)
     artie jev status|export|import                 # the Jev decision cache (#193)
-    artie github login|logout|status               # GitHub device-flow sign-in (#353)
+    artie connect [--private]                      # GitHub sign-in and your LinkedIn URL (#400)
+    artie github login|logout|status               # the GitHub sign-in on its own (#353)
     artie export --out backup.zip                  # back up a profile (#195)
     artie import backup.zip                        # restore it into the local store
     artie migrate preferences [--dry-run]          # anchor old preference rows; section rows become rules (#300)
@@ -37,6 +38,7 @@ Your coding agent (Claude Code, Codex) does the work; just ask it.
 Things to ask your agent:
   "Tailor my resume to this posting: <paste the posting or a link>"
   "Revise the second bullet under my latest job to lead with what I built"
+  "Never mention Kafka on my resumes"
   "What's in my knowledge graph about Python?"
   "Show my jobs"
   "Go back to the previous version of my resume for <company>"
@@ -46,7 +48,8 @@ First time? In Claude Code run /artie:setup (in Codex, $artie-setup) to build yo
 
 Commands you run yourself:
   artie ui [--job <job_id>]            open the local editor in your browser
-  artie github login|status|logout     sign in to GitHub so your agent can read your repos
+  artie connect [--private]            sign in to GitHub and save your LinkedIn URL
+  artie github login|status|logout     just the GitHub sign-in, or check or remove it
   artie export --out <file>.zip        back up your profile
   artie import <file>.zip              restore a backup
   artie --list                         the tools your agent can call, as JSON
@@ -88,6 +91,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if argv[:1] == ["migrate"]:
         from harness.migrations import main as migrate_main
         return migrate_main(argv[1:])
+    if argv[:1] == ["connect"]:
+        from harness.connect import main as connect_main
+        return connect_main(argv[1:])
     if argv[:1] == ["github"]:
         from harness.github_cli import main as github_main
         return github_main(argv[1:])

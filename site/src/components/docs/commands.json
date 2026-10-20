@@ -52,18 +52,18 @@
         "uvx --python 3.12 --from \"{SOURCE}\" artie ui --job <job_id>"
       ]
     },
-    "github-login": {
+    "connect": {
       "source": "INSTALL.md",
       "lines": [
-        "artie github login",
-        "artie github login --private"
+        "artie connect",
+        "artie connect --private"
       ]
     },
-    "github-login-uvx": {
+    "connect-uvx": {
       "source": "INSTALL.md",
       "lines": [
-        "uvx --python 3.12 --from \"{SOURCE}\" artie github login",
-        "uvx --python 3.12 --from \"{SOURCE}\" artie github login --private"
+        "uvx --python 3.12 --from \"{SOURCE}\" artie connect",
+        "uvx --python 3.12 --from \"{SOURCE}\" artie connect --private"
       ]
     },
     "uv-install-unix": {
@@ -110,12 +110,6 @@
       "lines": [
         "/artie:setup [files]"
       ]
-    },
-    "artie-tailor": {
-      "source": "plugin/README.md",
-      "lines": [
-        "/artie:tailor <posting or URL>"
-      ]
     }
   },
   "slash": [
@@ -125,34 +119,20 @@
       "what": "Build your knowledge graph from your resume, LinkedIn export and project folders, and set your header."
     },
     {
-      "command": "/artie:tailor <posting or URL>",
-      "source": "plugin/README.md",
-      "what": "Plan a tailored resume, wait for your approval, commit it and render the PDF."
-    },
-    {
       "command": "/artie:open [job]",
       "source": "plugin/README.md",
-      "what": "Print the command that opens the local editor (artie ui)."
+      "what": "Find a job and print the command that opens the local editor (artie ui)."
     },
     {
       "command": "/artie:history [job]",
       "source": "plugin/README.md",
-      "what": "List every version and what changed."
-    },
-    {
-      "command": "/artie:revert <job> [version]",
-      "source": "plugin/README.md",
-      "what": "Make an earlier version current again."
-    },
-    {
-      "command": "/artie:prefs",
-      "source": "plugin/README.md",
-      "what": "Show your pinned rules, preferences and job-scoped rules."
+      "what": "Find a job and list every version and what changed."
     }
   ],
   "inline": {
     "_comment": "Short commands and names the pages mention in running text. Each must appear verbatim in its source.",
     "artie jev status": "INSTALL.md",
+    "artie github login": "INSTALL.md",
     "ART_JEV_MODE=off": "INSTALL.md",
     "TYPESAFE_API_KEY": "INSTALL.md",
     "ART_GITHUB_TOKEN": "INSTALL.md",
