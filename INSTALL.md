@@ -265,6 +265,23 @@ unless you ask. `--reauth` signs in to GitHub again, `--linkedin-url <url>` repl
 (and skips the question, for scripts), `--github-only` and `--linkedin-only` skip a step, and
 `--json` prints one JSON document. It only saves the URL: it makes no LinkedIn request.
 
+**Pulling the LinkedIn profile in (#355).** Once you are signed in, ask your agent to "pull my
+LinkedIn". It calls `ingest_linkedin`, which sends your saved URL (or one you give it) to ART's
+hosted lookup, `https://artie-gateway.vercel.app`, with your GitHub token so the lookup knows
+whose daily limit to count. The lookup asks Bright Data for the public profile and returns it;
+ART maps it with no model and stores it through `upsert_items`, so duplicates merge and items
+you edited or deleted are left alone. A fetch can take a few minutes. The limits are two
+profiles a day per GitHub user and a monthly budget, after which the lookup switches off until
+the next month; either way ART says so. What passes through and what is kept (counters only)
+is on the [privacy page](https://artie-sand.vercel.app/privacy). Fetch your own profile only.
+
+A public profile is often sparse: experience can be missing entirely, and an entry with no
+school or company is skipped rather than guessed. The **LinkedIn data export** is the richer
+path and needs no lookup and no GitHub sign-in: request it in LinkedIn under Settings, Data
+privacy, Get a copy of your data, and give your agent the CSV files during `/artie:setup`.
+`ART_LINKEDIN_GATEWAY_URL` points the tool at another gateway (a local
+`python -m artie_gateway.devserver`, see `gateway/README.md`).
+
 `artie github login` is the same GitHub sign-in on its own, and the lower-level commands
 that go with it:
 

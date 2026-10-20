@@ -32,7 +32,7 @@ Three commands, for navigation you want by name:
 
 | Command | What it does |
 |---|---|
-| `/artie:setup [files]` | Build your knowledge graph from your resume, LinkedIn export and project folders, and set your header |
+| `/artie:setup [files]` | Build your knowledge graph from your resume, LinkedIn profile or export, and project folders, and set your header |
 | `/artie:open [job]` | Find the job, then print the command that opens the local LaTeX editor (`artie ui`, from the release wheel: no build step) |
 | `/artie:history [job]` | Find the job, then list every version and what changed |
 
@@ -73,6 +73,14 @@ Claude can then call `list_github_repos`, pick the repos
 worth reading, and clone one only after you agree. The token goes to your OS keychain, never
 the ART database or an export; see "GitHub repos" in [INSTALL.md](../INSTALL.md) for the
 `keyring` requirement and the commands.
+
+With the sign-in done, say "pull my LinkedIn" and Claude calls `ingest_linkedin`: ART's hosted
+lookup fetches your own public profile (it can take a few minutes; two profiles a day) and ART
+stores what it finds, skipping hand-edited and deleted items. A public profile is often sparse,
+so Claude tells you which sections came back empty and asks before using your posts, courses
+or links. The LinkedIn data export (from LinkedIn's settings) carries more and works without
+the lookup: give Claude the archive during `/artie:setup`. What the lookup sends and keeps is
+on the [privacy page](https://artie-sand.vercel.app/privacy).
 
 ## Hooks
 

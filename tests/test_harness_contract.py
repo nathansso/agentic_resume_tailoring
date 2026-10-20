@@ -94,6 +94,10 @@ CALLS = {
     # GitHub (#353). Signed out here, so every adapter returns not_logged_in without a network
     # call; the signed-in paths, on a fake GitHub, are in tests/test_github.py.
     "list_github_repos": [{}, {"page": 2, "per_page": 5, "include_private": False}],
+    # LinkedIn (#355). No saved URL, a bad URL, and signed out: no adapter reaches the gateway;
+    # the fetches, on a fake gateway, are in tests/test_ingest_linkedin.py.
+    "ingest_linkedin": [{}, {"url": "https://example.com/in/someone"},
+                        {"url": "https://www.linkedin.com/in/test-user"}],
 }
 _DUMMY = {"$JOB": "00000000-0000-0000-0000-000000000001",
           "$N0": "00000000-0000-0000-0000-000000000002",
