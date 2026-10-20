@@ -1,6 +1,5 @@
 import logging
 import json
-import re
 from typing import Dict, Any, List
 from sqlmodel import Session, select
 from langchain_core.prompts import ChatPromptTemplate
@@ -14,6 +13,7 @@ from database.db import engine, next_seq
 from database.models import User, Skill, UserSkill, Education, Experience, Project, Achievement, DeletedEntry
 from database.user_utils import require_active_user
 from agents.skill_postprocessor import postprocess_skills, normalize_skill_name
+from agents import linkedin_mapping
 # The save, merge, heal and match logic is model-free and lives in agents/kg_store.py
 # so the harness can reuse it (#192); these names stay importable from here.
 from agents.kg_store import (  # noqa: F401
@@ -90,31 +90,11 @@ class ResumeParserAgent(KGStoreMixin):
 
         logger.info("Parsing complete and saved to DB.")
 
-    @staticmethod
-    def _coerce_records(data: Any, str_key: str | None = None) -> List[Dict]:
-        """Normalize a source's records into a list of dicts.
-
-        Since #142 the LLM extractors return schema-validated Pydantic models, so
-        this only guards the *deterministic* Bright Data / LinkedIn mapping in
-        `_save_linkedin_structured`, whose upstream JSON still arrives wrapped in
-        an object ({"skills": [...]}) or as bare strings — both crash downstream
-        .get() calls if passed through untouched.
-
-        str_key: when set, bare-string items become {str_key: item};
-        otherwise they are dropped.
-        """
-        if isinstance(data, dict):
-            wrapped = next((v for v in data.values() if isinstance(v, list)), None)
-            data = wrapped if wrapped is not None else [data]
-        if not isinstance(data, list):
-            return []
-        records: List[Dict] = []
-        for item in data:
-            if isinstance(item, dict):
-                records.append(item)
-            elif isinstance(item, str) and str_key and item.strip():
-                records.append({str_key: item.strip()})
-        return records
+    # The Bright Data mapping is model-free and shared with the harness's ingest_linkedin
+    # (#355); these names stay importable from here.
+    _coerce_records = staticmethod(linkedin_mapping.coerce_records)
+    _flatten_linkedin_experiences = staticmethod(linkedin_mapping.flatten_experiences)
+    _linkedin_bullets = staticmethod(linkedin_mapping.experience_bullets)
 
     def _extract_experiences(self, text: str) -> List[Dict]:
         prompt = ChatPromptTemplate.from_messages([
@@ -227,63 +207,12 @@ class ResumeParserAgent(KGStoreMixin):
             return []
 
     # ── Deterministic LinkedIn mapping (issue #68 follow-up) ─────────────────
-    # Bright Data returns projects/experiences as structured records; save them
-    # verbatim, merging into rows already ingested from other sources.
-
-    @classmethod
-    def _flatten_linkedin_experiences(cls, experiences: List[Dict]) -> List[Dict]:
-        """Expand Bright Data experience records into one dict per role (issue #96).
-
-        Multiple roles at one employer arrive nested under a ``positions``
-        sub-role array with the company on the parent record; the role's own
-        title/dates/description live on each nested item. Traverse them so a
-        multi-role employer yields one Experience per role instead of silently
-        dropping all but the first. Single-role employers (no ``positions``)
-        pass through unchanged; the parent company backfills a role that omits
-        its own.
-        """
-        flat: List[Dict] = []
-        for rec in experiences:
-            if not isinstance(rec, dict):
-                continue
-            positions = rec.get("positions")
-            if isinstance(positions, list) and positions:
-                company = str(rec.get("company") or rec.get("company_name") or "").strip()
-                for pos in positions:
-                    if not isinstance(pos, dict):
-                        continue
-                    role = dict(pos)
-                    if not str(role.get("company") or "").strip() and company:
-                        role["company"] = company
-                    flat.append(role)
-            else:
-                flat.append(rec)
-        return flat
-
-    @staticmethod
-    def _linkedin_bullets(item: Dict) -> List[str]:
-        """Bullets for a LinkedIn experience role (issue #96).
-
-        Prefers an explicit ``bullets`` list; otherwise splits a multi-line
-        ``description`` into bullet lines (stripping leading glyphs) so a role
-        described as a bulleted blob isn't reduced to a content-empty stub that
-        the tailor drops. A single-line description yields no bullets — it stays
-        as the description rather than being shredded into one bullet.
-        """
-        raw = item.get("bullets")
-        if isinstance(raw, list):
-            out = [str(b).strip() for b in raw if str(b or "").strip()]
-            if out:
-                return out
-        desc = str(item.get("description") or "")
-        lines = [re.sub(r"^[\s•·\-\*]+", "", ln).strip() for ln in desc.splitlines()]
-        lines = [ln for ln in lines if ln]
-        return lines if len(lines) >= 2 else []
+    # Bright Data returns projects/experiences as structured records; the shared
+    # mapping (agents/linkedin_mapping.py) turns them into entities, saved here
+    # verbatim and merged into rows already ingested from other sources.
 
     def _save_linkedin_structured(self, record: Dict[str, Any]) -> None:
-        projects = self._coerce_records(record.get("projects"), str_key="title")
-        experiences = self._coerce_records(record.get("experience"), str_key="title")
-        education = self._coerce_records(record.get("education"), str_key="title")
+        mapped = linkedin_mapping.map_record(record)
 
         with Session(engine) as session:
             uid = self.user.user_id
@@ -293,10 +222,8 @@ class ResumeParserAgent(KGStoreMixin):
             existing_projects = list(session.exec(
                 select(Project).where(Project.user_id == self.user.user_id)
             ).all())
-            for item in projects:
-                name = str(item.get("title") or item.get("name") or "").strip()
-                if not name:
-                    continue
+            for item in mapped["projects"]:
+                name = item["name"]
                 item["start_date"] = _clean_date(item.get("start_date"))
                 item["end_date"] = _clean_date(item.get("end_date"))
                 match = next(
@@ -328,16 +255,14 @@ class ResumeParserAgent(KGStoreMixin):
             existing_exps = list(session.exec(
                 select(Experience).where(Experience.user_id == self.user.user_id)
             ).all())
-            # Flatten multi-role employers so each nested position becomes its
-            # own row instead of being dropped (issue #96).
-            for item in self._flatten_linkedin_experiences(experiences):
-                title = str(item.get("title") or "").strip()
-                company = str(item.get("company") or "").strip()
-                if not title and not company:
-                    continue
+            # The mapping flattens multi-role employers so each nested position
+            # becomes its own row instead of being dropped (issue #96).
+            for item in mapped["experiences"]:
+                title = item.get("title", "")
+                company = item.get("company", "")
                 item["start_date"] = _clean_date(item.get("start_date"))
                 item["end_date"] = _clean_date(item.get("end_date"))
-                bullets = self._linkedin_bullets(item)
+                bullets = item.get("bullets", [])
                 # Same company + same title merges; a missing/placeholder title
                 # on either side still merges on company alone, so a sparse
                 # LinkedIn entry enriches the resume-ingested row.
@@ -393,16 +318,9 @@ class ResumeParserAgent(KGStoreMixin):
             existing_edu = list(session.exec(
                 select(Education).where(Education.user_id == self.user.user_id)
             ).all())
-            for item in education:
-                institution = str(item.get("title") or item.get("institution") or "").strip()
-                if not institution:
-                    continue
-                degree = ", ".join(
-                    p for p in (
-                        str(item.get("degree") or "").strip(),
-                        str(item.get("field") or "").strip(),
-                    ) if p
-                )
+            for item in mapped["education"]:
+                institution = item["institution"]
+                degree = item.get("degree", "")
                 # Match on institution + degree so a second degree at the same
                 # school (M.S. after B.S.) is not dropped as a duplicate.
                 if any(self._education_match(e.institution, e.degree, institution, degree)
@@ -416,8 +334,8 @@ class ResumeParserAgent(KGStoreMixin):
                     user_id=self.user.user_id,
                     institution=institution,
                     degree=degree,
-                    start_date=str(item.get("start_year") or "").strip() or None,
-                    end_date=str(item.get("end_year") or "").strip() or None,
+                    start_date=item.get("start_date"),
+                    end_date=item.get("end_date"),
                     seq=next_seq(session, Education, self.user.user_id),
                 )
                 session.add(edu)
@@ -426,17 +344,12 @@ class ResumeParserAgent(KGStoreMixin):
             # Achievements (honors_and_awards): Bright Data returns title,
             # publication (the issuer), date, and description. Merge on title so a
             # resume-ingested achievement is not duplicated by the LinkedIn one.
-            achievements = self._coerce_records(
-                record.get("honors_and_awards"), str_key="title")
             existing_ach = list(session.exec(
                 select(Achievement).where(Achievement.user_id == self.user.user_id)
             ).all())
-            for item in achievements:
-                title = str(item.get("title") or "").strip()
-                if not title:
-                    continue
-                issuer = str(
-                    item.get("issuer") or item.get("publication") or "").strip() or None
+            for item in mapped["achievements"]:
+                title = item["title"]
+                issuer = item.get("issuer")
                 match = next(
                     (a for a in existing_ach
                      if self._achievements_match(a.title, a.issuer, title, issuer)),
@@ -455,9 +368,9 @@ class ResumeParserAgent(KGStoreMixin):
                 ach = Achievement(
                     user_id=self.user.user_id,
                     title=title,
-                    description=str(item.get("description") or "").strip() or None,
+                    description=item.get("description"),
                     issuer=issuer,
-                    date=str(item.get("date") or "").strip() or None,
+                    date=item.get("date"),
                     seq=next_seq(session, Achievement, self.user.user_id),
                 )
                 session.add(ach)
