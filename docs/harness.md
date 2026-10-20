@@ -173,14 +173,17 @@ resumes the user provides. ART is model-free, so it runs in two halves:
 - **Deterministic (`artie ingest`).**
   - LinkedIn arrives through the hosted Bright Data gateway (#354, deployed in #396) and
     is mapped straight into the graph.
-  - Each repo gets a **dossier** weighted by authorship: the user's files, commits and
-    messages, or their merged PRs in repos they don't own; a tree-sitter symbol map ranked
-    by PageRank seeded from the user's files (the idea behind Aider's repo map); the
-    stack and practice from manifests, CI, infrastructure and tests; notebooks; and only
-    the outcomes the repo itself states.
-  - Every fact carries its source (path, commit SHA or PR number), so bullets cite it
-    through the evidence gate.
-  - Dossiers are staged in the store.
+  - Each repo gets a **dossier**, #397's `blame-20k` (`harness/dossier/`, shipped in #398
+    for owned repos): README, metadata (manifests, imports, committed language shares),
+    the filtered tree, the user's authorship, a regex symbol map ranked by PageRank seeded
+    from the user's files with each definition's blame ownership and introducing commit,
+    and "built by other authors", fitted to a 20K-token cap. Contributed-to repos, with
+    their merged PRs, are #399.
+  - Every fact carries its source (path, line span, commit SHA or PR number), so bullets
+    cite it through the evidence gate.
+  - Dossiers are staged in the store (`StagedSource`), incrementally by the last-seen
+    commit. The agent lists them with `list_staged_sources` and marks each with
+    `mark_source_processed`.
 - **Judgment (the agent).** The agent turns staged dossiers and resumes into records
   through `upsert_items`.
 - **Sizing.** How rich a dossier must be is settled by the #397 spike. A ladder of
@@ -692,6 +695,8 @@ carries `job`: the job's id, title and company, so the host names the job it act
 | | `get_item` | key → record, evidence; an experience or project also lists its approved variants (id, text, tags, cites) (#229); its `preferences` (active, keyed to it, any scope) and `job_rules` (#297) |
 | | `get_profile` | → name and contact details for the header (#191), and `default_output_dir`, where `render` saves the user's copy (#394) |
 | | `list_github_repos` | page, per_page, include_private, include_readme → the signed-in user's own repos with languages, topics, stars, last push, fork and archived flags, clone command and README excerpt; needs `artie connect` (or `artie github login`), and no profile (#353) |
+| | `list_staged_sources` | status, source_id → the dossiers `artie ingest` staged (kind, key, commit, status, `evidence_source`); with source_id, one dossier's text (#398) |
+| | `mark_source_processed` | source_id, note → the source, processed; idempotent, and a rebuilt repo comes back staged (#398) |
 | Ingest & library | `ingest_schema` | kind → JSON schema the host fills |
 | | `upsert_items` | records with evidence → keys, merges, conflicts; kind `variant` imports the user's curated bullets, approved (#229) |
 | | `promote_bullet` | node, bullet, optional item key and track → a **draft** variant, or the existing one (#229) |

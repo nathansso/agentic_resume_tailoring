@@ -95,6 +95,21 @@ Ask the user where their materials are:
 
 Read them yourself. ART does not read files.
 
+**Staged sources.** `artie ingest`, which the user runs in their own terminal after
+`artie connect`, reads every GitHub repo they own into a dossier and stages it for you; it
+ends by telling them to ask you to "process my new sources". Call `list_staged_sources` at
+the start of setup and whenever they ask that. For each staged source:
+
+- read it with `list_staged_sources(source_id=…)`;
+- write the user's records from it (step 3), each with `source` set to its
+  `evidence_source`, citing the dossier's paths, line spans and commits;
+- a definition tagged `mostly <other author>` is not theirs to claim as built: write
+  "extended" or "reworked" when they changed it, and nothing from "Built by other
+  authors";
+- then call `mark_source_processed`.
+
+A repo already staged does not need cloning by hand.
+
 ## 2. See what ART already holds
 
 - Call `list_items` and `get_profile`.
