@@ -901,3 +901,31 @@ class JobRoleFamily(SQLModel, table=True):
     role_family: str
     source: str = Field(default="default")
     updated_at: datetime = Field(default_factory=utc_now)
+
+
+# ── Staged sources (issue #398) ──────────────────────────────────────────────
+# An additive table, so `create_all` picks it up and an older database loads unchanged.
+
+class StagedSource(SQLModel, table=True):
+    """Something `artie ingest` read for the agent to turn into records: today one GitHub
+    repository's dossier (#397's `blame-20k`). One row per (user, kind, key).
+
+    `commit` is the commit the dossier was built at and `builder` the builder's version: a
+    re-run with neither changed leaves the row alone. A new commit rebuilds it and sets it back
+    to `staged`. The agent lists `staged` rows, writes records from them with `upsert_items`,
+    then marks each `processed`.
+    """
+    source_id: UUID = Field(default_factory=uuid4, primary_key=True)
+    user_id: UUID = Field(foreign_key="user.user_id", index=True)
+    kind: str = Field(index=True)            # github_repo | local_repo
+    key: str                                 # owner/repo, or the local folder
+    title: str = ""
+    commit: str = ""
+    builder: str = ""
+    content: str = ""
+    stats: Dict = Field(default={}, sa_column=Column(JSON))
+    status: str = Field(default="staged", index=True)   # staged | processed
+    note: Optional[str] = None               # the agent's note when it marked it processed
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+    processed_at: Optional[datetime] = None

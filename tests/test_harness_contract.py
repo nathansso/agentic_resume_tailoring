@@ -94,6 +94,12 @@ CALLS = {
     # GitHub (#353). Signed out here, so every adapter returns not_logged_in without a network
     # call; the signed-in paths, on a fake GitHub, are in tests/test_github.py.
     "list_github_repos": [{}, {"page": 2, "per_page": 5, "include_private": False}],
+    # Staged sources (#398). Nothing is staged in this store, so every adapter lists the same
+    # empty set and the same not_found; the staged paths are in tests/test_artie_ingest.py.
+    "list_staged_sources": [{}, {"status": None},
+                            {"source_id": "00000000-0000-0000-0000-000000000000"}],
+    "mark_source_processed": [{"source_id": "00000000-0000-0000-0000-000000000000"},
+                              {"source_id": "not-a-uuid", "note": "x"}],
 }
 _DUMMY = {"$JOB": "00000000-0000-0000-0000-000000000001",
           "$N0": "00000000-0000-0000-0000-000000000002",

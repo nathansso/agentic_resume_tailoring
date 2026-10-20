@@ -211,6 +211,7 @@ def specs() -> Tuple[Spec, ...]:
         Spec(m.BulletVariant, "user"),
         Spec(m.TrackBaseline, "user"),
         Spec(m.JobRoleFamily, "user"),
+        Spec(m.StagedSource, "user"),
         Spec(m.JevDecision, "cache"),
         Spec(m.BlockLineCache, "cache"),
     )

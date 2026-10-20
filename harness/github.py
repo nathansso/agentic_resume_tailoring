@@ -360,6 +360,135 @@ class GitHubClient:
         return (text[:max_chars].rstrip(), True) if len(text) > max_chars else (text, False)
 
 
+    # ── for `artie ingest` (#398) ────────────────────────────────────────────
+
+    def account_emails(self) -> List[str]:
+        """Every email the account shows this token: the public one, and all of
+        `/user/emails` when the token may read them (`user:email`; a `read:user` token
+        gets a 404 there, which is not an error). Lowercased, sorted."""
+        found = set()
+        status, _, text = self._get("/user")
+        body = _json(text)
+        if status == 200 and isinstance(body, Mapping) and body.get("email"):
+            found.add(str(body["email"]).lower())
+        try:
+            status, _, text = self._get("/user/emails")
+        except GitHubError as exc:
+            if exc.code == "bad_token":
+                raise
+            return sorted(found)
+        body = _json(text)
+        if status == 200 and isinstance(body, list):
+            found.update(str(e["email"]).lower() for e in body
+                         if isinstance(e, Mapping) and e.get("email"))
+        return sorted(found)
+
+    def commit_emails(self, full_name: str, login: str, pages: int = 3) -> List[str]:
+        """The author emails of the repo's commits that GitHub links to `login`: emails the
+        account verified, private ones included, that the account listing may not show.
+        At most `pages` pages of 100. Empty on any failure."""
+        found = set()
+        for page in range(1, pages + 1):
+            try:
+                status, headers, text = self._get(f"/repos/{full_name}/commits",
+                                                  {"author": login, "per_page": 100, "page": page})
+            except GitHubError as exc:
+                if exc.code == "bad_token":
+                    raise
+                break
+            body = _json(text)
+            if status != 200 or not isinstance(body, list):
+                break
+            for c in body:
+                email = (((c or {}).get("commit") or {}).get("author") or {}).get("email")
+                if email:
+                    found.add(str(email).lower())
+            if 'rel="next"' not in headers.get("link", ""):
+                break
+        return sorted(found)
+
+    def all_repos(self, include_private: bool = False, limit: int = 1000) -> List[Dict[str, Any]]:
+        """Every repo `repos` pages through, most recently pushed first, up to `limit`."""
+        out: List[Dict[str, Any]] = []
+        page: Optional[int] = 1
+        while page and len(out) < limit:
+            rows, page = self.repos(page=page, per_page=100, include_private=include_private)
+            out.extend(dict(r) for r in rows)
+        return out[:limit]
+
+
+# ── clones for `artie ingest` (#398) ─────────────────────────────────────────
+# The dossier builder (`harness/dossier/`) reads git only and never fetches; the clone and
+# every later fetch happen here, so the network stays in this module. The token reaches git
+# through the environment (`GIT_CONFIG_*`), never the command line, a remote URL, the clone's
+# config or an error message; the OS credential helper is switched off so a private repo the
+# token can't read fails instead of opening a sign-in window.
+
+CLONE_HOST = "https://github.com/"
+CLONE_TIMEOUT = 1800.0
+
+
+def clone_url(full_name: str) -> str:
+    return f"{CLONE_HOST}{full_name}.git"
+
+
+def _git_auth_env(token: Optional[str], remote: str) -> Dict[str, str]:
+    env = dict(os.environ)
+    env.update(GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never")
+    pairs = [("credential.helper", "")]
+    if token and remote.startswith(CLONE_HOST):
+        import base64
+        basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+        pairs.append((f"http.{CLONE_HOST}.extraheader", f"AUTHORIZATION: basic {basic}"))
+    env["GIT_CONFIG_COUNT"] = str(len(pairs))
+    for i, (k, v) in enumerate(pairs):
+        env[f"GIT_CONFIG_KEY_{i}"], env[f"GIT_CONFIG_VALUE_{i}"] = k, v
+    return env
+
+
+def _scrub(text: str, token: Optional[str]) -> str:
+    if token:
+        import base64
+        text = text.replace(token, "[token]")
+        text = text.replace(base64.b64encode(f"x-access-token:{token}".encode()).decode(), "[token]")
+    return text.strip()[-500:]
+
+
+def sync_clone(remote: str, dest, *, branch: Optional[str] = None, token: Optional[str] = None,
+               run: Optional[Callable[..., Any]] = None) -> str:
+    """Make `dest` a bare clone of `remote` with every branch current, and return the commit
+    `branch` (else the remote's HEAD) points at. A first call clones; later calls fetch, which
+    changes nothing when nothing was pushed. Raises `GitHubError("clone_failed")`."""
+    import subprocess
+    from pathlib import Path
+    run = run or subprocess.run
+    dest = Path(dest)
+    env = _git_auth_env(token, remote)
+
+    def git(*args: str, cwd: Optional[Path] = None):
+        done = run(["git", *args], cwd=str(cwd) if cwd else None, env=env, capture_output=True,
+                   text=True, encoding="utf-8", errors="replace", timeout=CLONE_TIMEOUT)
+        if done.returncode != 0:
+            raise GitHubError("clone_failed", _scrub(done.stderr or "", token)
+                              or f"git {args[0]} failed")
+        return done.stdout
+
+    if (dest / "HEAD").is_file():
+        git("-C", str(dest), "fetch", "--prune", "--quiet", remote,
+            "+refs/heads/*:refs/heads/*")
+        if branch is None:
+            head = git("ls-remote", "--symref", remote, "HEAD")
+            for line in head.splitlines():
+                if line.startswith("ref: ") and line.endswith("	HEAD"):
+                    git("-C", str(dest), "symbolic-ref", "HEAD", line[5:].split("	")[0])
+                    break
+    else:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        git("clone", "--bare", "--quiet", remote, str(dest))
+    ref = f"refs/heads/{branch}" if branch else "HEAD"
+    return git("-C", str(dest), "rev-parse", "--verify", f"{ref}^{{commit}}").strip()
+
+
 # ── the tool ─────────────────────────────────────────────────────────────────
 
 def login_command(private: bool = False) -> str:

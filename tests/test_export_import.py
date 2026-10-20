@@ -169,6 +169,11 @@ def seed(engine, uid=UID, email="ada@example.org", with_secrets=True):
                               job_id=i("job1"), saved_at=T0))
         s.add(m.JobRoleFamily(job_id=i("job1"), user_id=uid, role_family="data_science",
                               source="host", updated_at=T0))
+        s.add(m.StagedSource(source_id=i("src1"), user_id=uid, kind="github_repo",
+                             key="ada/forecast", title="ada/forecast", commit="a" * 40,
+                             builder="blame-20k/1", content="# Repository dossier: ada/forecast",
+                             stats={"est_tokens": 10}, status="processed", note="3 records",
+                             created_at=T0, updated_at=T0, processed_at=T0))
         s.add(m.JevDecision(cache_key=("k" + tag) * 8, point="variant_choice", question_version="v1",
                             requested_model="m", resolved_model="m1", question={"q": 1},
                             answer={"a": {"x": 0.5}}, input_tokens=10.0, output_tokens=2.0,
